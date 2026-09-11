@@ -1,0 +1,6 @@
+*.pdf binary
+modules/util.py whitespace=cr-at-eol
+modules/ui_components.py whitespace=cr-at-eol
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.bat text eol=crlf

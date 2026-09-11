@@ -1,0 +1,84 @@
+name: Model installer tests
+
+on:
+  pull_request:
+    paths:
+      - "download_*.bat"
+      - "download_*.ps1"
+      - "aikimi-setup.*"
+      - "tools/tests/test_model_setup_launcher.py"
+      - "tools/aikimi_setup.py"
+      - "tools/tests/test_aikimi_setup.py"
+      - "tools/tests/test_anima38_download_script.py"
+      - "tools/tests/test_krea2_download_script.py"
+      - "tools/tests/test_sensenova_u15_download_script.py"
+      - ".github/workflows/installer-tests.yml"
+  push:
+    branches: [neo]
+    paths:
+      - "download_*.bat"
+      - "download_*.ps1"
+      - "aikimi-setup.*"
+      - "tools/tests/test_model_setup_launcher.py"
+      - "tools/aikimi_setup.py"
+      - "tools/tests/test_aikimi_setup.py"
+      - "tools/tests/test_anima38_download_script.py"
+      - "tools/tests/test_krea2_download_script.py"
+      - "tools/tests/test_sensenova_u15_download_script.py"
+      - ".github/workflows/installer-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installer-contracts:
+    name: Installer contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - name: Run downloader and unified setup tests
+        run: >-
+          python -m unittest -v
+          tools.tests.test_aikimi_setup
+          tools.tests.test_model_setup_launcher
+          tools.tests.test_anima38_download_script
+          tools.tests.test_krea2_download_script
+          tools.tests.test_sensenova_u15_download_script
+      - name: Parse downloader PowerShell scripts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $parseFailures = @()
+          $scripts = @(Get-ChildItem -LiteralPath $PWD -File -Filter "download_*.ps1")
+          foreach ($script in $scripts) {
+              $tokens = $null
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                  $script.FullName,
+                  [ref]$tokens,
+                  [ref]$errors
+              ) | Out-Null
+              foreach ($errorItem in $errors) {
+                  $parseFailures += "$($script.Name):$($errorItem.Extent.StartLineNumber): $($errorItem.Message)"
+              }
+          }
+          if ($parseFailures.Count -gt 0) {
+              $parseFailures | Write-Error
+              throw "Downloader PowerShell syntax validation failed"
+          }
+          Write-Host "Parsed $($scripts.Count) downloader scripts"

@@ -1,0 +1,2 @@
+# Direct dependency used only by the Chrome DevTools Protocol smoke tests.
+websockets==15.0.1

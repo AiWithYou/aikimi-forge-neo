@@ -1,0 +1,277 @@
+name: Lint and workflow validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/**/*.yml"
+      - ".github/**/*.yaml"
+      - "**/*.bat"
+      - "**/*.ps1"
+      - "extensions-builtin/aikimi-ui/**/*.js"
+      - "modules/aikimi_capabilities.py"
+      - "modules/aikimi_diagnostics.py"
+      - "modules/aikimi_security/**"
+      - "modules/gradio_compat.py"
+      - "modules/extras_workflow.py"
+      - "modules/grain*.py"
+      - "scripts/postprocessing_grain_cleaner.py"
+      - "tools/tests/test_extras_usability.py"
+      - "modules/gradio_extensions.py"
+      - "modules/gradio_frontend_compat.py"
+      - "modules/gradio_file_url.py"
+      - "modules/gradio_runtime.py"
+      - "extensions-builtin/forge_legacy_preprocessors/annotator/mmpkg/mmcv/fileio/handlers/yaml_handler.py"
+      - "pyproject.toml"
+      - "tools/aikimi_setup.py"
+      - "tools/run_ci_tests.py"
+      - "tools/setup_minimax_h3.py"
+      - "tools/tests/test_minimax_h3_setup.py"
+      - "modules_forge/minimax_h3_runtime.py"
+      - "modules_forge/minimax_h3_setup_ui.py"
+      - "tools/tests/chromium_helpers.py"
+      - "tools/tests/test_additional_module_identity.py"
+      - "tools/tests/test_aikimi_setup.py"
+      - "tools/tests/test_aikimi_diagnostics.py"
+      - "tools/tests/test_aikimi_tabs.py"
+      - "tools/tests/test_aikimi_tabs_chromium.py"
+      - "tools/tests/test_api_public_state.py"
+      - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_ci_workflow_boundaries.py"
+      - "tools/tests/test_gradio_file_security.py"
+      - "tools/tests/test_gradio_file_url_guard.py"
+      - "tools/tests/test_legacy_yaml_security.py"
+      - "tools/tests/test_gradio_compatibility.py"
+      - "tools/tests/test_gradio_frontend_compat.py"
+      - "tools/tests/test_gradio_frontend_compat_chromium.py"
+      - "tools/tests/test_gradio_chromium_smoke.py"
+      - "tools/tests/test_option_migrations.py"
+      - "tools/tests/test_patcher_cleanup.py"
+      - "tools/tests/test_quant_ops_zero_scale.py"
+      - "tools/tests/test_remote_auth_middleware.py"
+      - "tools/tests/test_repository_privacy.py"
+      - "tools/tests/test_run_ci_tests.py"
+      - "tools/tests/test_safe_image_fetch.py"
+      - "tools/tests/test_security_redaction.py"
+      - "tools/tests/test_sysinfo_security.py"
+      - "tools/tests/test_studio_css_boundaries.py"
+      - "tools/tests/test_ui_tempdir_security.py"
+      - "tools/tests/test_upstream_neo_regressions.py"
+  push:
+    branches: [neo]
+    paths:
+      - ".github/**/*.yml"
+      - ".github/**/*.yaml"
+      - "**/*.bat"
+      - "**/*.ps1"
+      - "extensions-builtin/aikimi-ui/**/*.js"
+      - "modules/aikimi_capabilities.py"
+      - "modules/aikimi_diagnostics.py"
+      - "modules/aikimi_security/**"
+      - "modules/gradio_compat.py"
+      - "modules/extras_workflow.py"
+      - "modules/grain*.py"
+      - "scripts/postprocessing_grain_cleaner.py"
+      - "tools/tests/test_extras_usability.py"
+      - "modules/gradio_extensions.py"
+      - "modules/gradio_frontend_compat.py"
+      - "modules/gradio_file_url.py"
+      - "modules/gradio_runtime.py"
+      - "extensions-builtin/forge_legacy_preprocessors/annotator/mmpkg/mmcv/fileio/handlers/yaml_handler.py"
+      - "pyproject.toml"
+      - "tools/aikimi_setup.py"
+      - "tools/run_ci_tests.py"
+      - "tools/setup_minimax_h3.py"
+      - "tools/tests/test_minimax_h3_setup.py"
+      - "modules_forge/minimax_h3_runtime.py"
+      - "modules_forge/minimax_h3_setup_ui.py"
+      - "tools/tests/chromium_helpers.py"
+      - "tools/tests/test_additional_module_identity.py"
+      - "tools/tests/test_aikimi_setup.py"
+      - "tools/tests/test_aikimi_diagnostics.py"
+      - "tools/tests/test_aikimi_tabs.py"
+      - "tools/tests/test_aikimi_tabs_chromium.py"
+      - "tools/tests/test_api_public_state.py"
+      - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_ci_workflow_boundaries.py"
+      - "tools/tests/test_gradio_file_security.py"
+      - "tools/tests/test_gradio_file_url_guard.py"
+      - "tools/tests/test_legacy_yaml_security.py"
+      - "tools/tests/test_gradio_compatibility.py"
+      - "tools/tests/test_gradio_frontend_compat.py"
+      - "tools/tests/test_gradio_frontend_compat_chromium.py"
+      - "tools/tests/test_gradio_chromium_smoke.py"
+      - "tools/tests/test_option_migrations.py"
+      - "tools/tests/test_patcher_cleanup.py"
+      - "tools/tests/test_quant_ops_zero_scale.py"
+      - "tools/tests/test_remote_auth_middleware.py"
+      - "tools/tests/test_repository_privacy.py"
+      - "tools/tests/test_run_ci_tests.py"
+      - "tools/tests/test_safe_image_fetch.py"
+      - "tools/tests/test_security_redaction.py"
+      - "tools/tests/test_sysinfo_security.py"
+      - "tools/tests/test_studio_css_boundaries.py"
+      - "tools/tests/test_ui_tempdir_security.py"
+      - "tools/tests/test_upstream_neo_regressions.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-and-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - name: Update pip to the audited patch release
+        run: python -m pip install --disable-pip-version-check pip==26.2.1
+      - name: Install pinned lint dependencies
+        run: python -m pip install --disable-pip-version-check ruff==0.15.20 PyYAML==6.0.3
+      - name: Lint the new security and setup surface
+        shell: bash
+        run: |
+          files=(
+            modules/aikimi_capabilities.py
+            modules/aikimi_diagnostics.py
+            modules/aikimi_security
+            modules/gradio_compat.py
+            modules/extras_workflow.py
+            modules/grain_cleaner.py
+            modules/grain_selection.py
+            scripts/postprocessing_grain_cleaner.py
+            tools/tests/test_extras_usability.py
+            modules/gradio_extensions.py
+            modules/gradio_frontend_compat.py
+            modules/gradio_file_url.py
+            modules/gradio_runtime.py
+            extensions-builtin/forge_legacy_preprocessors/annotator/mmpkg/mmcv/fileio/handlers/yaml_handler.py
+            tools/aikimi_setup.py
+            tools/run_ci_tests.py
+            tools/setup_minimax_h3.py
+            tools/tests/test_minimax_h3_setup.py
+            modules_forge/minimax_h3_runtime.py
+            modules_forge/minimax_h3_setup_ui.py
+            tools/tests/chromium_helpers.py
+            tools/tests/test_additional_module_identity.py
+            tools/tests/test_aikimi_setup.py
+            tools/tests/test_aikimi_diagnostics.py
+            tools/tests/test_aikimi_tabs.py
+            tools/tests/test_aikimi_tabs_chromium.py
+            tools/tests/test_api_public_state.py
+            tools/tests/test_chromium_helpers.py
+            tools/tests/test_ci_workflow_boundaries.py
+            tools/tests/test_gradio_file_security.py
+            tools/tests/test_gradio_file_url_guard.py
+            tools/tests/test_legacy_yaml_security.py
+            tools/tests/test_gradio_compatibility.py
+            tools/tests/test_gradio_frontend_compat.py
+            tools/tests/test_gradio_frontend_compat_chromium.py
+            tools/tests/test_gradio_chromium_smoke.py
+            tools/tests/test_option_migrations.py
+            tools/tests/test_patcher_cleanup.py
+            tools/tests/test_quant_ops_zero_scale.py
+            tools/tests/test_remote_auth_middleware.py
+            tools/tests/test_repository_privacy.py
+            tools/tests/test_run_ci_tests.py
+            tools/tests/test_safe_image_fetch.py
+            tools/tests/test_security_redaction.py
+            tools/tests/test_sysinfo_security.py
+            tools/tests/test_studio_css_boundaries.py
+            tools/tests/test_ui_tempdir_security.py
+            tools/tests/test_upstream_neo_regressions.py
+          )
+          python -m ruff check "${files[@]}"
+          python -m ruff format --check "${files[@]}"
+      - name: Verify CI path and execution boundaries
+        run: python -m unittest -v tools.tests.test_ci_workflow_boundaries
+      - name: Check Aikimi UI JavaScript syntax
+        run: |
+          node --check extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js
+          node --check extensions-builtin/aikimi-ui/javascript/aikimiStatus.js
+      - name: Validate YAML syntax
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          files = sorted(Path(".github").rglob("*.yml")) + sorted(Path(".github").rglob("*.yaml"))
+          for path in files:
+              yaml.safe_load(path.read_text(encoding="utf-8"))
+          print(f"Parsed {len(files)} YAML files")
+          PY
+      - name: Require immutable third-party Action references
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          uses = re.compile(r"^\s*(?:-\s*)?uses:\s+([^@\s]+)@([^\s#]+)", re.MULTILINE)
+          sha = re.compile(r"[0-9a-f]{40}")
+          errors = []
+          workflow_root = Path(".github/workflows")
+          files = sorted(workflow_root.glob("*.yml")) + sorted(workflow_root.glob("*.yaml"))
+          for path in files:
+              for action, revision in uses.findall(path.read_text(encoding="utf-8")):
+                  if not action.startswith("./") and sha.fullmatch(revision) is None:
+                      errors.append(f"{path}: {action}@{revision}")
+          if errors:
+              raise SystemExit("Mutable Action references:\n" + "\n".join(errors))
+          print("All third-party Actions use full commit SHAs")
+          PY
+      - name: Install and run actionlint
+        shell: bash
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+        run: |
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          directory="$RUNNER_TEMP/actionlint"
+          mkdir -p "$directory"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$directory" actionlint
+          "$directory/actionlint" -color
+
+  powershell-syntax:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Parse every tracked PowerShell script
+        shell: pwsh
+        run: |
+          $parseFailures = @()
+          $scripts = @(git ls-files -- "*.ps1")
+          foreach ($relativePath in $scripts) {
+              $tokens = $null
+              $errors = $null
+              $absolutePath = Join-Path $PWD $relativePath
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                  $absolutePath,
+                  [ref]$tokens,
+                  [ref]$errors
+              ) | Out-Null
+              foreach ($errorItem in $errors) {
+                  $parseFailures += "${relativePath}:$($errorItem.Extent.StartLineNumber): $($errorItem.Message)"
+              }
+          }
+          if ($parseFailures.Count -gt 0) {
+              $parseFailures | Write-Error
+              throw "PowerShell syntax validation failed"
+          }
+          Write-Host "Parsed $($scripts.Count) tracked PowerShell scripts"

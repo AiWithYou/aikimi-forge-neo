@@ -1,0 +1,116 @@
+{
+  "repository": "Mu5hr00moO/ComfyUI-MiniMaxH3-CLIPCached",
+  "revision": "80ef7eb3b01565ff4190b519ce0db2f42b5e14e2",
+  "files": [
+    {
+      "path": "LICENSE",
+      "blob": "546882021d83e9f026b8536e48a276ae0661851c",
+      "bytes": 1067
+    },
+    {
+      "path": "__init__.py",
+      "blob": "a9816e7cf432e6f03a96abdddda937a36eefb430",
+      "bytes": 4496
+    },
+    {
+      "path": "minimaxh3_clipcache/__init__.py",
+      "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "bytes": 0
+    },
+    {
+      "path": "minimaxh3_clipcache/comparison.py",
+      "blob": "7abc7da176c086c9ac9db99d2f801847d3fc3a05",
+      "bytes": 3251
+    },
+    {
+      "path": "minimaxh3_clipcache/embeddings.py",
+      "blob": "1d44994a0cae09b6b65555a4865866be9bb6961d",
+      "bytes": 6193
+    },
+    {
+      "path": "minimaxh3_clipcache/encoder_abi.py",
+      "blob": "eb510679d97a61a0734a5aebcf034d50b353e1be",
+      "bytes": 3219
+    },
+    {
+      "path": "minimaxh3_clipcache/fingerprint.py",
+      "blob": "28f5b4514c7f2165e05b809a5234a87c97fa7042",
+      "bytes": 8420
+    },
+    {
+      "path": "minimaxh3_clipcache/last_used.py",
+      "blob": "0b0b46eef2799ffe89fe77b316dffbe89bea0548",
+      "bytes": 1956
+    },
+    {
+      "path": "minimaxh3_clipcache/loader.py",
+      "blob": "6eba6d95ad633aa51b51b537794c5ba81e669f8f",
+      "bytes": 2277
+    },
+    {
+      "path": "minimaxh3_clipcache/locking.py",
+      "blob": "d27fd804af405a38cffcc9df521436d0356f520c",
+      "bytes": 1470
+    },
+    {
+      "path": "minimaxh3_clipcache/provenance.py",
+      "blob": "37e0b33d46f30265cb5862ee11ba039b6d1df8d8",
+      "bytes": 14177
+    },
+    {
+      "path": "minimaxh3_clipcache/proxy.py",
+      "blob": "00d965e59f9ad4244b22f74ecd1d3efe9c2aaaaa",
+      "bytes": 15205
+    },
+    {
+      "path": "minimaxh3_clipcache/routes.py",
+      "blob": "03288d7d227c1ce92965dd1de3ec419cbce9aced",
+      "bytes": 10250
+    },
+    {
+      "path": "minimaxh3_clipcache/scanner.py",
+      "blob": "b18c0bdb5f1e70705d8b133651e32bc1486eb593",
+      "bytes": 8331
+    },
+    {
+      "path": "minimaxh3_clipcache/serialize.py",
+      "blob": "b8090d6283b3b414092c83390564cb7d7c87cd83",
+      "bytes": 4020
+    },
+    {
+      "path": "minimaxh3_clipcache/store.py",
+      "blob": "e57013cbf35d5eec76061a7a0f3c11b08871181b",
+      "bytes": 21703
+    },
+    {
+      "path": "minimaxh3_clipcache/thumbnails.py",
+      "blob": "0688204a27e4168d7fa925d7b703aaedc5dda1df",
+      "bytes": 5177
+    },
+    {
+      "path": "minimaxh3_clipcache/verbose_store.py",
+      "blob": "a0f878b23af4ccb16e0ebc320b7b096a89bca53c",
+      "bytes": 11273
+    },
+    {
+      "path": "nodes.py",
+      "blob": "1a39f90e4ee93cf08545afcce53cb97dd7af505f",
+      "bytes": 75927
+    },
+    {
+      "path": "pyproject.toml",
+      "blob": "c3c76689a68d03259abc647bc337d9d4aceb1084",
+      "bytes": 1031
+    },
+    {
+      "path": "web/main.js",
+      "blob": "fb549b993985a9e0d2c1b8fc6bfc3f54cbe87e31",
+      "bytes": 91303
+    },
+    {
+      "path": "web/styles.css",
+      "blob": "23eb3c2629424998b0df281cea3393ede67a2cae",
+      "bytes": 15257
+    }
+  ]
+}

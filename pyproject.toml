@@ -1,0 +1,24 @@
+[tool.black]
+line-length = 120
+target-version = ["py313"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+extend-exclude = [
+    "cache",
+    "extensions",
+    "models",
+    "outputs",
+    "repositories",
+    "tmp",
+    "venv",
+]
+
+[tool.ruff.lint]
+select = ["B", "E4", "E7", "E9", "F", "I", "N805", "S", "T", "UP", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+"modules/aikimi_security/remote_access.py" = ["S104"]
+"tools/run_ci_tests.py" = ["T201"]
+"tools/tests/*.py" = ["S101"]

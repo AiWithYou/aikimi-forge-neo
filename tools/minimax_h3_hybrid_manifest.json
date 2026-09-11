@@ -1,0 +1,46 @@
+{
+  "revision": "10a0895f24ab72307fd7f87b6f7dfd92a4a2e706",
+  "files": [
+    {
+      "path": "__init__.py",
+      "blob": "b3e0d021cbb726c5f434a348d8ee3f2d3431b01f",
+      "bytes": 454
+    },
+    {
+      "path": "color.py",
+      "blob": "1368439723aa4f2eb5153993af0ccd934eabfbfa",
+      "bytes": 7255
+    },
+    {
+      "path": "control.py",
+      "blob": "b96f93c634bf6c358d41a3f8463f6afc992b1aaf",
+      "bytes": 3820
+    },
+    {
+      "path": "dependencies.py",
+      "blob": "33404be9923eca1e45d4dd6d0f9cde99242924b4",
+      "bytes": 525
+    },
+    {
+      "path": "joint.py",
+      "blob": "8d28c658127decb73690f79cb4df270aecd2fa45",
+      "bytes": 5364
+    },
+    {
+      "path": "nodes.py",
+      "blob": "c5aafb169c6e7576d02c9fcf882ebef91629c4a2",
+      "bytes": 9578
+    },
+    {
+      "path": "sampler.py",
+      "blob": "6f9d3271442020cc19431c073dd496e21abe8f25",
+      "bytes": 15731
+    },
+    {
+      "path": "windows.py",
+      "blob": "8663c807530d9c6805b23aa71ea36c8ba9af41b3",
+      "bytes": 6414
+    }
+  ],
+  "repository": "Jalen-Brunson/ComfyUI-HybridWindows"
+}

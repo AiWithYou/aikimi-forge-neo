@@ -1,0 +1,121 @@
+{
+  "version": 3,
+  "default_state": "idle",
+  "preload": [
+    "idle",
+    "loading_model",
+    "generating"
+  ],
+  "assets": {
+    "idle": {
+      "animated": "idle.png",
+      "still": "idle-still.webp",
+      "frames": 10,
+      "loop": "ping-pong",
+      "durations_ms": [160, 160, 160, 160, 160, 160, 160, 160, 160, 160]
+    },
+    "loading_model": {
+      "animated": "loading_model.png",
+      "still": "loading_model-still.webp",
+      "frames": 6,
+      "loop": "ping-pong",
+      "durations_ms": [140, 140, 140, 140, 140, 140]
+    },
+    "generating": {
+      "animated": "generating.png",
+      "still": "generating-still.webp",
+      "frames": 10,
+      "loop": "ping-pong",
+      "durations_ms": [90, 90, 90, 90, 90, 90, 90, 90, 90, 90]
+    },
+    "completed": {
+      "animated": "completed.png",
+      "still": "completed-still.webp",
+      "frames": 7,
+      "loop": "once",
+      "durations_ms": [140, 100, 90, 90, 120, 180, 600]
+    },
+    "queued": {
+      "animated": "queued.png",
+      "still": "queued-still.webp",
+      "frames": 6,
+      "loop": "ping-pong",
+      "durations_ms": [180, 180, 180, 180, 180, 180]
+    },
+    "warning": {
+      "animated": "warning.png",
+      "still": "warning-still.webp",
+      "frames": 4,
+      "loop": "once",
+      "durations_ms": [180, 100, 160, 700]
+    },
+    "error": {
+      "animated": "error.png",
+      "still": "error-still.webp",
+      "frames": 4,
+      "loop": "once",
+      "durations_ms": [180, 180, 240, 800]
+    },
+    "out_of_memory": {
+      "animated": "out_of_memory.png",
+      "still": "out_of_memory-still.webp",
+      "frames": 5,
+      "loop": "once",
+      "durations_ms": [160, 130, 150, 240, 850]
+    },
+    "updating": {
+      "animated": "updating.png",
+      "still": "updating-still.webp",
+      "frames": 6,
+      "loop": "ping-pong",
+      "durations_ms": [130, 130, 130, 130, 130, 130]
+    }
+  },
+  "states": {
+    "idle": {
+      "asset": "idle",
+      "message": "いつでもどうぞ……",
+      "tone": "calm"
+    },
+    "loading_model": {
+      "asset": "loading_model",
+      "message": "モデルを読み込んでる……",
+      "tone": "working"
+    },
+    "generating": {
+      "asset": "generating",
+      "message": "生成中……",
+      "tone": "working"
+    },
+    "completed": {
+      "asset": "completed",
+      "message": "できたよ",
+      "tone": "success"
+    },
+    "queued": {
+      "asset": "queued",
+      "message": "まだいっぱいある……",
+      "tone": "waiting"
+    },
+    "warning": {
+      "asset": "warning",
+      "message": "少し確認してね……",
+      "tone": "warning"
+    },
+    "error": {
+      "asset": "error",
+      "message": "何か失敗したみたい……",
+      "tone": "error"
+    },
+    "out_of_memory": {
+      "asset": "out_of_memory",
+      "message": "入りきらない……",
+      "tone": "error"
+    },
+    "updating": {
+      "asset": "updating",
+      "message": "更新してる……",
+      "tone": "working"
+    }
+  }
+}

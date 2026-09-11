@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/hako-mikan/sd-webui-cd-tuner",
+  "commit": "3685692b6a7001d3f34c5dfbec4756ac59884047",
+  "license": "AGPL-3.0",
+  "adaptations": "Native Forge UI; per-job rollback; input validation; 5D hires; no-op and color-map allocation fixes; infotext saturation alignment; per-pass color timing and per-batch metadata cleanup. See docs/cd-tuner-negpip.md."
+}

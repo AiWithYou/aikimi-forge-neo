@@ -1,0 +1,13 @@
+# SenseNova U1.5の固定ランタイム専用。Forge本体とは別の環境へ導入する。
+torch==2.11.0+cu130
+torchvision==0.26.0+cu130
+transformers==4.57.6
+huggingface-hub==0.36.2
+tokenizers==0.22.2
+accelerate==1.14.0
+comfy-kitchen==0.2.31
+safetensors==0.8.0
+numpy==2.3.5
+Pillow==12.3.0
+tqdm==4.70.0
+gguf==0.19.0

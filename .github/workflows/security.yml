@@ -1,0 +1,109 @@
+name: Secret and dependency security
+
+on:
+  pull_request:
+  push:
+    branches: [neo]
+  schedule:
+    - cron: "17 18 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks-full-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the checksum-verified Gitleaks CLI
+        shell: bash
+        env:
+          # v8.30.1 has a published scanner-regression report; v8.30.0 is the
+          # newest verified release that passes the synthetic detection gate.
+          GITLEAKS_VERSION: "8.30.0"
+          GITLEAKS_SHA256: "79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          directory="$RUNNER_TEMP/gitleaks"
+          mkdir -p "$directory"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$directory" gitleaks
+          echo "$directory" >> "$GITHUB_PATH"
+      - name: Prove the scanner detects a synthetic control
+        shell: bash
+        run: |
+          control_left='9f4c3b2a1d8e7f6c5b4a'
+          control_right='39281716f5e4d3c2b1a0'
+          if printf 'api_key = %s%s\n' "$control_left" "$control_right" \
+            | gitleaks stdin --redact --no-banner; then
+            echo "Gitleaks failed to detect the synthetic control" >&2
+            exit 1
+          fi
+      - name: Scan every branch and the full Git history
+        run: gitleaks git --redact --no-banner --verbose .
+
+  pip-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PIP_AUDIT_BASELINE_EXPIRES: "2026-09-30"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - name: Update pip to the audited patch release
+        run: python -m pip install --disable-pip-version-check pip==26.2.1
+      - name: Enforce the temporary vulnerability baseline expiry
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import date
+
+          expiry = date.fromisoformat(os.environ["PIP_AUDIT_BASELINE_EXPIRES"])
+          if date.today() >= expiry:
+              raise SystemExit(f"pip-audit baseline expired on {expiry.isoformat()}")
+          print(f"Temporary pip-audit baseline expires on {expiry.isoformat()}")
+          PY
+      - name: Audit fully pinned runtime dependencies
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+        with:
+          inputs: requirements.txt
+          no-deps: true
+          # Exact temporary baseline only: diskcache has no fixed release,
+          # while setuptools >=83 conflicts with torch 2.11's <82 constraint.
+          # The expiry step above prevents this list from becoming permanent.
+          ignore-vulns: >-
+            PYSEC-2026-2447
+            PYSEC-2026-3447
+          vulnerability-service: PyPI
+      - name: Resolve and audit the isolated asset toolchain
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+        with:
+          inputs: tools/requirements-aikimi-assets.txt
+          vulnerability-service: PyPI
+      - name: Resolve and audit the browser test toolchain
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+        with:
+          inputs: tools/requirements-test.txt
+          vulnerability-service: PyPI
+      - name: Resolve and audit built-in preprocessor dependencies
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+        with:
+          inputs: extensions-builtin/forge_legacy_preprocessors/requirements.txt
+          vulnerability-service: PyPI

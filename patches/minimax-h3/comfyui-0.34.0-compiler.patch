@@ -1,0 +1,178 @@
+diff --git a/comfy/ldm/minimax/model.py b/comfy/ldm/minimax/model.py
+index d7959027..8ca83dfa 100644
+--- a/comfy/ldm/minimax/model.py
++++ b/comfy/ldm/minimax/model.py
+@@ -570,16 +570,25 @@ class MiniMaxH3Model(nn.Module):
+             carry = (sigma_a / sigma_v).to(audio_src.dtype)
+             x = [x[0], audio_src * carry]
+
+-        compile_allocations = comfy.model_prefetch.malloc_graph_enabled(x[0].device)
+-        if compile_allocations:
+-            out = [torch.empty_like(x[0]), torch.empty_like(x[1])]
+-            comfy.model_prefetch.malloc_graph_begin(self, x[0].device)
+-        graph_out = comfy.patcher_extension.WrapperExecutor.new_class_executor(
+-            self._forward,
++        out = comfy.patcher_extension.WrapperExecutor.new_class_executor(
++            self._forward_with_memory_graph,
+             self,
+             comfy.patcher_extension.get_all_wrappers(comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL, transformer_options)
+         ).execute(x, timestep, context, transformer_options, minimax_payload=minimax_payload,
+                   denoise_mask=denoise_mask, audio_denoise_mask=audio_denoise_mask, **kwargs)
++        if scale != 1.0:
++            # d/d(sigma_v) of the carried variable
++            out[1] = ((1.0 - scale) * (audio_src * carry)
++                      + (1.0 + (scale - 1.0) * sigma_a).to(out[1].dtype) * out[1])
++        return out
++
++    def _forward_with_memory_graph(self, x, timestep, context, transformer_options={}, **kwargs):
++        # Wrapper preparation and cleanup can retain tensors across calls; only record the model body.
++        compile_allocations = comfy.model_prefetch.malloc_graph_enabled(x[0].device)
++        if compile_allocations:
++            out = [torch.empty_like(x[0]), torch.empty_like(x[1])]
++            comfy.model_prefetch.malloc_graph_begin(self, x[0].device)
++        graph_out = self._forward(x, timestep, context, transformer_options, **kwargs)
+         if compile_allocations:
+             out[0].copy_(graph_out[0])
+             out[1].copy_(graph_out[1])
+@@ -587,11 +596,6 @@ class MiniMaxH3Model(nn.Module):
+             comfy.model_prefetch.malloc_graph_end()
+         else:
+             out = graph_out
+-
+-        if scale != 1.0:
+-            # d/d(sigma_v) of the carried variable
+-            out[1] = ((1.0 - scale) * (audio_src * carry)
+-                      + (1.0 + (scale - 1.0) * sigma_a).to(out[1].dtype) * out[1])
+         return out
+
+     def _forward(self, x, timestep, context, transformer_options={}, minimax_payload=None, denoise_mask=None, audio_denoise_mask=None, **kwargs):
+diff --git a/requirements.txt b/requirements.txt
+index 8a12a226..c4b04d62 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -23,7 +23,7 @@ SQLAlchemy>=2.0.0
+ filelock
+ av>=17.0.0
+ comfy-kitchen==0.2.33
+-comfy-aimdo==0.5.2
++comfy-aimdo==0.5.3.dev13
+ requests
+ simpleeval>=1.0.0
+ blake3
+diff --git a/tests-unit/comfy_test/test_minimax_compiler_wrappers.py b/tests-unit/comfy_test/test_minimax_compiler_wrappers.py
+new file mode 100644
+--- /dev/null
++++ b/tests-unit/comfy_test/test_minimax_compiler_wrappers.py
+@@ -0,0 +1,112 @@
++import ast
++import importlib.util
++from pathlib import Path
++from types import SimpleNamespace
++import unittest
++
++import torch
++
++
++ROOT = Path(__file__).parents[2]
++
++
++def harness(compiled=True, wrapper=None):
++    spec = importlib.util.spec_from_file_location("patcher_for_test", ROOT / "comfy/patcher_extension.py")
++    patcher = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(patcher)
++    state = {"active": False, "events": []}
++
++    def begin(*args):
++        assert not state["active"]
++        state["active"] = True
++        state["events"].append("begin")
++
++    def end():
++        assert state["active"]
++        state["events"].append("end")
++        state["active"] = False
++
++    prefetch = SimpleNamespace(malloc_graph_enabled=lambda device: compiled, malloc_graph_begin=begin, malloc_graph_end=end)
++    path = ROOT / "comfy/ldm/minimax/model.py"
++    source = ast.parse(path.read_text(encoding="utf-8"))
++    model_class = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == "MiniMaxH3Model")
++    model_class.body = [n for n in model_class.body if isinstance(n, ast.FunctionDef) and n.name in {"forward", "_forward_with_memory_graph"}]
++    tree = ast.Module(body=[model_class], type_ignores=[])
++    namespace = {"torch": torch, "nn": torch.nn, "comfy": SimpleNamespace(model_prefetch=prefetch, patcher_extension=patcher)}
++    exec(compile(tree, str(path), "exec"), namespace)  # noqa: S102 -- CPU-only test of this repository's model methods.
++    model = namespace["MiniMaxH3Model"]()
++
++    def body(x, *args, **kwargs):
++        assert state["active"] == compiled
++        state["events"].append("body")
++        return [x[0] + 1, x[1] - 2]
++
++    model._forward = body
++    options = {}
++    if wrapper is not None:
++        options["wrappers"] = {patcher.WrappersMP.DIFFUSION_MODEL: {None: [lambda executor, *args, **kwargs: wrapper(state, executor, *args, **kwargs)]}}
++    x = [torch.ones(1, 24, 2, 2, 2), torch.ones(1, 32, 2, 8)]
++    return model, state, lambda: model(x, torch.ones(1), torch.zeros(1, 2, 3), options)
++
++
++def test_wrapper_preparation_and_cleanup_are_outside_capture():
++    def wrapper(state, executor, *args, **kwargs):
++        assert not state["active"], "wrapper preparation entered memory capture"
++        state["events"].append("prepare")
++        result = executor(*args, **kwargs)
++        assert not state["active"], "wrapper cleanup entered memory capture"
++        state["events"].append("cleanup")
++        return result
++
++    _, state, call = harness(wrapper=wrapper)
++    call()
++    assert state["events"] == ["prepare", "begin", "body", "end", "cleanup"]
++
++
++def test_wrapper_result_is_preserved_with_and_without_compiler():
++    def wrapper(state, executor, *args, **kwargs):
++        result = executor(*args, **kwargs)
++        return [result[0] * 3, result[1] * 4]
++
++    for compiled in (False, True):
++        _, state, call = harness(compiled=compiled, wrapper=wrapper)
++        result = call()
++        assert torch.equal(result[0], torch.full_like(result[0], 6))
++        assert torch.equal(result[1], torch.full_like(result[1], -4))
++        assert not state["active"]
++
++
++def test_preparation_exception_does_not_open_capture():
++    def wrapper(state, executor, *args, **kwargs):
++        raise RuntimeError("preparation failed")
++
++    _, state, call = harness(wrapper=wrapper)
++    with unittest.TestCase().assertRaisesRegex(RuntimeError, "preparation failed"):
++        call()
++    assert not state["active"]
++    assert state["events"] == []
++
++
++def test_cleanup_exception_leaves_capture_closed():
++    def wrapper(state, executor, *args, **kwargs):
++        executor(*args, **kwargs)
++        raise RuntimeError("cleanup failed")
++
++    _, state, call = harness(wrapper=wrapper)
++    with unittest.TestCase().assertRaisesRegex(RuntimeError, "cleanup failed"):
++        call()
++    assert not state["active"]
++    assert state["events"] == ["begin", "body", "end"]
++
++
++def test_plain_model_still_records_every_forward():
++    _, state, call = harness()
++    call()
++    call()
++    assert state["events"] == ["begin", "body", "end"] * 2
++
++
++if __name__ == "__main__":
++    suite = unittest.TestSuite(unittest.FunctionTestCase(value) for name, value in list(globals().items()) if name.startswith("test_"))
++    result = unittest.TextTestRunner().run(suite)
++    raise SystemExit(not result.wasSuccessful())

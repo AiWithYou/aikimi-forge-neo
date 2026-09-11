@@ -1,0 +1,4 @@
+# Preserve exact upstream bytes, including original CRLF, on every platform.
+__init__.py -text
+minimax_h3_negpip.py -text
+LICENSE -text

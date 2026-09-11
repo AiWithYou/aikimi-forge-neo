@@ -1,0 +1,12 @@
+{
+  "repository": "Comfy-Org/comfy-aimdo",
+  "revision": "f708e317bd2dedfb2d2a8518f7c568fee280bc69",
+  "workflow_run": 34092258110,
+  "artifact_id": 10007294405,
+  "artifact_sha256": "27efcf4d0d1a441276f67415720ef77cff3eac42d2fe038263d12cfbf741ceeb",
+  "version": "0.5.3.dev13",
+  "wheel": "comfy_aimdo-0.5.3.dev13-cp39-abi3-win_amd64.whl",
+  "wheel_sha256": "ed77dfb5a6a6991d6102293ff65c4076e6c9e19129237638f5e69ca8cf9077a5",
+  "upstream_fix": "https://github.com/Comfy-Org/comfy-aimdo/pull/109",
+  "comfyui_base_revision": "efa6c8f804bff78b46a0fd458ebd2e47bba07a30"
+}

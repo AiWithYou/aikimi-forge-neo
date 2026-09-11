@@ -1,0 +1,742 @@
+#sensenova-u15-studio {
+    --sn-bg: #080a0f;
+    --sn-surface: #12151b;
+    --sn-surface-raised: #171b22;
+    --sn-surface-soft: #0d1015;
+    --sn-line: rgba(255, 255, 255, 0.11);
+    --sn-line-strong: rgba(255, 255, 255, 0.18);
+    --sn-text: #f5f7fb;
+    --sn-muted: #a3aab7;
+    --sn-dim: #7f8796;
+    --sn-blue: #0a84ff;
+    --sn-blue-bright: #49a3ff;
+    --sn-blue-soft: rgba(10, 132, 255, 0.16);
+    --sn-ready: #30d5c8;
+    --sn-warn: #ffd16a;
+    --sn-error: #ff6675;
+    --sn-focus: #8fc7ff;
+    --body-text-color: var(--sn-text);
+    --body-text-color-subdued: var(--sn-muted);
+    --background-fill-primary: var(--sn-bg);
+    --background-fill-secondary: var(--sn-surface);
+    --code-background-fill: var(--sn-surface-raised);
+    --block-info-text-color: var(--sn-muted);
+    --block-label-text-color: var(--sn-muted);
+    --block-label-background-fill: var(--sn-surface);
+    --block-title-text-color: var(--sn-text);
+    --input-background-fill: var(--sn-surface-raised);
+    --input-border-color: var(--sn-line-strong);
+    --input-text-color: var(--sn-text);
+    --input-placeholder-color: var(--sn-dim);
+    --button-secondary-background-fill: var(--sn-surface-raised);
+    --button-secondary-text-color: var(--sn-text);
+    --button-secondary-text-color-hover: var(--sn-text);
+    --button-secondary-border-color: var(--sn-line);
+    --link-text-color: var(--sn-blue-bright);
+    box-sizing: border-box;
+    width: min(100%, 1500px);
+    margin: 0 auto;
+    padding: 10px 18px 20px;
+    color: var(--sn-text);
+    background: var(--sn-bg);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+}
+
+#sensenova-u15-studio,
+#sensenova-u15-studio * {
+    box-sizing: border-box;
+}
+
+#sensenova-u15-studio .sn-hero {
+    display: none;
+    min-height: 0;
+    padding: 0 2px 6px;
+    border: 0;
+    background: transparent;
+    text-align: left;
+}
+
+#sensenova-u15-studio .sn-hero::after,
+#sensenova-u15-studio .sn-eyebrow,
+#sensenova-u15-studio .sn-hero-mark {
+    display: none;
+}
+
+#sensenova-u15-studio .sn-hero h2 {
+    margin: 0;
+    color: var(--sn-text);
+    font-size: clamp(1.25rem, 2.2vw, 1.6rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+}
+
+#sensenova-u15-studio .sn-runtime {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0 0 8px;
+    padding: 6px 10px 6px 12px;
+    border: 1px solid var(--sn-line);
+    border-radius: 11px;
+    background: var(--sn-surface);
+}
+
+#sensenova-u15-studio .sn-runtime-summary {
+    display: grid;
+    min-width: 0;
+    flex: 1 1 auto;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+}
+
+#sensenova-u15-studio .sn-runtime-summary strong {
+    color: var(--sn-text);
+    font-size: 0.875rem;
+    font-weight: 680;
+    white-space: nowrap;
+}
+
+#sensenova-u15-studio .sn-runtime-summary p {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--sn-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#sensenova-u15-studio .sn-status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--sn-warn);
+}
+
+#sensenova-u15-studio .sn-runtime-ready .sn-status-dot {
+    background: var(--sn-blue);
+}
+
+#sensenova-u15-studio .sn-runtime-details {
+    flex: 0 0 auto;
+    color: var(--sn-muted);
+    font-size: 0.78rem;
+}
+
+#sensenova-u15-studio .sn-runtime-details summary {
+    min-height: 34px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 620;
+    list-style-position: inside;
+}
+
+#sensenova-u15-studio .sn-runtime-details ul {
+    position: absolute;
+    z-index: 12;
+    right: 32px;
+    width: min(480px, calc(100vw - 48px));
+    margin: 6px 0 0;
+    padding: 12px 14px 12px 30px;
+    border: 1px solid var(--sn-line-strong);
+    border-radius: 10px;
+    color: var(--sn-muted);
+    background: #171b22;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+    line-height: 1.55;
+}
+
+#sensenova-u15-studio .sn-main-grid {
+    align-items: flex-start;
+    gap: 14px;
+    margin-top: 0;
+}
+
+#sensenova-u15-studio .sn-compose,
+#sensenova-u15-studio .sn-result-column {
+    min-width: 0 !important;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--sn-line);
+    border-radius: 12px;
+    background: var(--sn-surface);
+}
+
+#sensenova-u15-studio .sn-section-title {
+    display: flex;
+    align-items: center;
+    margin: 0 0 4px;
+}
+
+#sensenova-u15-studio .sn-section-title > span {
+    display: none;
+}
+
+#sensenova-u15-studio .sn-section-title h3 {
+    margin: 0;
+    color: var(--sn-text);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+
+#sensenova-u15-studio #sn-mode {
+    padding: 4px !important;
+    border: 1px solid var(--sn-line) !important;
+    border-radius: 10px !important;
+    background: var(--sn-surface-soft) !important;
+}
+
+#sensenova-u15-studio #sn-mode > div,
+#sensenova-u15-studio #sn-mode fieldset {
+    gap: 4px !important;
+}
+
+#sensenova-u15-studio #sn-mode label {
+    min-height: 44px;
+    justify-content: center;
+    margin: 0 !important;
+    padding: 9px 12px !important;
+    border: 1px solid transparent !important;
+    border-radius: 8px !important;
+    color: var(--sn-muted) !important;
+    background: transparent !important;
+    font-size: 0.875rem !important;
+    font-weight: 650 !important;
+}
+
+#sensenova-u15-studio #sn-mode label:has(input:checked) {
+    border-color: rgba(10, 132, 255, 0.48) !important;
+    color: #f7fbff !important;
+    background: var(--sn-blue-soft) !important;
+    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.16);
+}
+
+#sensenova-u15-studio #sn-mode input {
+    position: absolute;
+    opacity: 0;
+}
+
+#sensenova-u15-studio .sn-mode-note {
+    display: flex;
+    min-height: 36px;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 2px;
+    color: var(--sn-muted);
+    background: transparent;
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+#sensenova-u15-studio .sn-mode-note b {
+    flex: 0 0 auto;
+    color: var(--sn-blue-bright);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+}
+
+#sensenova-u15-studio .sn-prompt-card,
+#sensenova-u15-studio .sn-reference-card,
+#sensenova-u15-studio .sn-settings-card,
+#sensenova-u15-studio .sn-model-card {
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+#sensenova-u15-studio .sn-prompt-card h3,
+#sensenova-u15-studio .sn-reference-card h3 {
+    margin: 2px 0 3px;
+    color: var(--sn-text);
+    font-size: 0.95rem;
+    font-weight: 680;
+}
+
+#sensenova-u15-studio .sn-prompt-card p,
+#sensenova-u15-studio .sn-reference-card p,
+#sensenova-u15-studio #sn-runtime-setup .prose,
+#sensenova-u15-studio #sn-metadata-panel .prose {
+    margin: 0;
+    color: var(--sn-muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+#sensenova-u15-studio textarea,
+#sensenova-u15-studio input[type="text"],
+#sensenova-u15-studio input[type="number"],
+#sensenova-u15-studio [role="listbox"] {
+    min-height: 44px;
+    border-color: var(--sn-line-strong) !important;
+    border-radius: 9px !important;
+    color: var(--sn-text) !important;
+    background: var(--sn-surface-raised) !important;
+    font-size: 0.875rem !important;
+}
+
+#sensenova-u15-studio textarea {
+    min-height: 132px !important;
+    padding: 11px 12px !important;
+    line-height: 1.55 !important;
+    resize: vertical;
+}
+
+#sensenova-u15-studio textarea::placeholder,
+#sensenova-u15-studio input::placeholder {
+    color: #747d8c !important;
+    opacity: 1;
+}
+
+#sensenova-u15-studio .sn-prompt-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 5px 12px;
+    padding: 7px 2px 2px;
+    color: var(--sn-dim);
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
+#sensenova-u15-studio .sn-reference-card,
+#sensenova-u15-studio .sn-settings-card {
+    margin-top: 4px;
+    padding-top: 12px !important;
+    border-top: 1px solid var(--sn-line) !important;
+}
+
+#sensenova-u15-studio #sn-reference-gallery,
+#sensenova-u15-studio #sn-reference-upload,
+#sensenova-u15-studio #sn-reference-bulk-upload {
+    overflow: hidden;
+    border-color: var(--sn-line-strong) !important;
+    border-radius: 10px !important;
+    background: var(--sn-surface-soft) !important;
+}
+
+#sensenova-u15-studio .sn-reference-order {
+    padding: 9px 10px;
+    border: 1px solid var(--sn-line);
+    border-radius: 9px;
+    background: var(--sn-surface-soft);
+}
+
+#sensenova-u15-studio .sn-reference-order > strong {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--sn-muted);
+    font-size: 0.74rem;
+}
+
+#sensenova-u15-studio .sn-reference-order > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+#sensenova-u15-studio .sn-reference-order span {
+    display: inline-flex;
+    min-height: 30px;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border: 1px solid var(--sn-line);
+    border-radius: 8px;
+    color: #d9e2ef;
+    background: rgba(255, 255, 255, 0.035);
+    font-size: 0.75rem;
+}
+
+#sensenova-u15-studio .sn-reference-order b {
+    color: var(--sn-blue-bright);
+    font-size: 0.72rem;
+}
+
+#sensenova-u15-studio .sn-reference-order [aria-current="true"] {
+    border-color: var(--sn-blue-bright);
+    color: var(--sn-blue-bright);
+    font-weight: 600;
+}
+
+#sensenova-u15-studio .sn-bulk-row {
+    align-items: flex-end;
+}
+
+#sensenova-u15-studio button {
+    min-height: 44px;
+    border-radius: 9px !important;
+    font-size: 0.86rem !important;
+    font-weight: 650 !important;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+#sensenova-u15-studio button:hover:not(:disabled) {
+    border-color: var(--sn-line-strong) !important;
+    background-color: rgba(255, 255, 255, 0.075) !important;
+}
+
+#sensenova-u15-studio button:active:not(:disabled) {
+    opacity: 0.82;
+}
+
+#sensenova-u15-studio button:disabled {
+    opacity: 0.46;
+}
+
+#sensenova-u15-studio #sn-bulk-add {
+    min-height: 44px !important;
+    align-self: flex-end;
+}
+
+#sensenova-u15-studio .sn-reference-empty,
+#sensenova-u15-studio .sn-quant-note {
+    margin: 0;
+    padding: 10px 11px;
+    border-radius: 8px;
+    color: var(--sn-muted);
+    background: var(--sn-surface-soft);
+    font-size: 0.78rem;
+    line-height: 1.55;
+}
+
+#sensenova-u15-studio #sn-advanced,
+#sensenova-u15-studio #sn-metadata-panel,
+#sensenova-u15-studio #sn-runtime-setup {
+    overflow: hidden;
+    border: 1px solid var(--sn-line) !important;
+    border-radius: 9px !important;
+    background: var(--sn-surface-soft) !important;
+}
+
+#sensenova-u15-studio #sn-advanced > button,
+#sensenova-u15-studio #sn-advanced summary,
+#sensenova-u15-studio #sn-metadata-panel > button,
+#sensenova-u15-studio #sn-metadata-panel summary,
+#sensenova-u15-studio #sn-runtime-setup > button,
+#sensenova-u15-studio #sn-runtime-setup summary {
+    min-height: 44px;
+    padding: 10px 12px !important;
+    color: var(--sn-text) !important;
+    font-size: 0.86rem !important;
+    font-weight: 660 !important;
+}
+
+#sensenova-u15-studio .sn-actions {
+    position: sticky;
+    z-index: 6;
+    bottom: 8px;
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+    padding: 7px;
+    border: 1px solid var(--sn-line-strong);
+    border-radius: 11px;
+    background: #11151c;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+}
+
+#sensenova-u15-studio:not([data-sn-busy="true"]) #sn-cancel {
+    display: none;
+}
+
+#sensenova-u15-studio #sn-generate {
+    min-height: 48px;
+    flex: 1 1 auto;
+    border-color: #168cff !important;
+    color: #ffffff !important;
+    background: #087fe8 !important;
+    box-shadow: none;
+    font-size: 0.95rem !important;
+    font-weight: 730 !important;
+}
+
+#sensenova-u15-studio #sn-generate:hover:not(:disabled) {
+    border-color: #49a3ff !important;
+    background: #168cff !important;
+}
+
+#sensenova-u15-studio #sn-cancel {
+    min-width: 126px;
+}
+
+#sensenova-u15-studio .sn-inline-error {
+    margin: 4px 0 0;
+    padding: 9px 11px;
+    border: 1px solid rgba(255, 102, 117, 0.36);
+    border-radius: 8px;
+    color: #ffb0b9;
+    background: rgba(255, 102, 117, 0.08);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+#sensenova-u15-studio #sn-result-image {
+    overflow: hidden;
+    border: 1px solid var(--sn-line) !important;
+    border-radius: 10px !important;
+    background-color: #090c11 !important;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px) !important;
+    background-size: 24px 24px !important;
+}
+
+#sensenova-u15-studio .sn-downloads {
+    gap: 6px;
+}
+
+#sensenova-u15-studio .sn-downloads > div {
+    min-height: 64px !important;
+    height: 64px !important;
+    max-height: 64px !important;
+    overflow: hidden;
+    border: 1px solid var(--sn-line) !important;
+    border-radius: 9px !important;
+    background: var(--sn-surface-raised) !important;
+}
+
+#sensenova-u15-studio .sn-downloads .empty.large {
+    min-height: 0 !important;
+    height: 62px !important;
+    padding: 0 !important;
+}
+
+#sensenova-u15-studio .sn-downloads .empty .icon {
+    width: 19px !important;
+    height: 19px !important;
+}
+
+#sensenova-u15-studio .sn-progress {
+    padding: 10px 12px;
+    border: 1px solid var(--sn-line);
+    border-radius: 9px;
+    background: var(--sn-surface-soft);
+}
+
+#sensenova-u15-studio .sn-progress-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 7px;
+    color: var(--sn-muted);
+    font-size: 0.76rem;
+}
+
+#sensenova-u15-studio .sn-progress-head strong {
+    color: var(--sn-text);
+    font-weight: 620;
+}
+
+#sensenova-u15-studio .sn-progress-track {
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+#sensenova-u15-studio .sn-progress-track i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--sn-blue);
+    transition: width 180ms ease;
+}
+
+#sensenova-u15-studio .sn-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--sn-line);
+    border-radius: 9px;
+    background: var(--sn-line);
+}
+
+#sensenova-u15-studio .sn-summary span {
+    min-width: 0;
+    padding: 8px 10px;
+    overflow: hidden;
+    color: #dfe5ef;
+    background: var(--sn-surface-soft);
+    font-size: 0.76rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#sensenova-u15-studio .sn-summary span:last-child {
+    grid-column: 1 / -1;
+}
+
+#sensenova-u15-studio .sn-summary small {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--sn-dim);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+#sensenova-u15-studio #sn-runtime-setup .sn-model-card {
+    display: flex;
+    gap: 9px;
+    padding: 2px 4px 8px !important;
+}
+
+#sensenova-u15-studio button:focus-visible,
+#sensenova-u15-studio input:focus-visible,
+#sensenova-u15-studio textarea:focus-visible,
+#sensenova-u15-studio [role="listbox"]:focus-visible,
+#sensenova-u15-studio summary:focus-visible,
+#sensenova-u15-studio #sn-mode label:has(input:focus-visible) {
+    outline: 3px solid var(--sn-focus) !important;
+    outline-offset: 2px;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    #sensenova-u15-studio .sn-actions {
+        background: rgba(17, 21, 28, 0.88);
+        -webkit-backdrop-filter: blur(18px) saturate(145%);
+        backdrop-filter: blur(18px) saturate(145%);
+    }
+}
+
+@media (max-width: 980px) {
+    #sensenova-u15-studio {
+        padding-inline: 12px;
+    }
+
+    #sensenova-u15-studio .sn-main-grid {
+        display: grid !important;
+        grid-template-columns: 1fr;
+    }
+
+    #sensenova-u15-studio .sn-result-column {
+        order: 2;
+    }
+
+    #sensenova-u15-studio .sn-runtime-summary p {
+        display: none;
+    }
+}
+
+@media (max-width: 640px) {
+    #sensenova-u15-studio {
+        padding: 10px 8px 82px;
+    }
+
+    #sensenova-u15-studio .sn-hero {
+        padding-bottom: 4px;
+    }
+
+    #sensenova-u15-studio .sn-hero h2 {
+        font-size: 1.25rem;
+    }
+
+    #sensenova-u15-studio .sn-runtime {
+        min-height: 48px;
+        padding: 7px 9px;
+    }
+
+    #sensenova-u15-studio .sn-runtime-summary {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    #sensenova-u15-studio .sn-runtime-summary strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    #sensenova-u15-studio .sn-runtime-details summary {
+        width: 38px;
+        overflow: hidden;
+        color: transparent;
+        white-space: nowrap;
+    }
+
+    #sensenova-u15-studio .sn-runtime-details summary::after {
+        color: var(--sn-muted);
+        content: "…";
+    }
+
+    #sensenova-u15-studio .sn-compose,
+    #sensenova-u15-studio .sn-result-column {
+        padding: 12px;
+    }
+
+    #sensenova-u15-studio .sn-mode-note {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    #sensenova-u15-studio .sn-summary {
+        grid-template-columns: 1fr;
+    }
+
+    #sensenova-u15-studio .sn-summary span:last-child {
+        grid-column: auto;
+    }
+
+    #sensenova-u15-studio .sn-actions {
+        position: fixed;
+        width: auto;
+        right: 10px;
+        bottom: max(8px, env(safe-area-inset-bottom));
+        left: 10px;
+        margin: 0;
+    }
+
+    #sensenova-u15-studio #sn-result-image {
+        min-height: 320px !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #sensenova-u15-studio *,
+    #sensenova-u15-studio *::before,
+    #sensenova-u15-studio *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.001ms !important;
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    #sensenova-u15-studio .sn-actions {
+        background: #11151c;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+}
+
+@media (prefers-contrast: more) {
+    #sensenova-u15-studio {
+        --sn-line: rgba(255, 255, 255, 0.28);
+        --sn-line-strong: rgba(255, 255, 255, 0.46);
+        --sn-muted: #c5cad3;
+    }
+}
+
+@media (forced-colors: active) {
+    #sensenova-u15-studio,
+    #sensenova-u15-studio .sn-compose,
+    #sensenova-u15-studio .sn-result-column,
+    #sensenova-u15-studio .sn-runtime,
+    #sensenova-u15-studio .sn-actions {
+        border: 1px solid CanvasText;
+        color: CanvasText;
+        background: Canvas;
+        forced-color-adjust: auto;
+    }
+}
