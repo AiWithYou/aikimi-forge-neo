@@ -7,6 +7,7 @@ on:
       - "**/*.ps1"
       - "backend/**"
       - "extensions-builtin/aikimi-ui/**"
+      - "extensions-builtin/mobile/**"
       - "extensions-builtin/anima-3-8b/**"
       - "extensions-builtin/hyperweave/**"
       - "extensions-builtin/minimax-h3-studio/**"
@@ -56,6 +57,7 @@ on:
       - "tools/tests/test_aikimi_status.py"
       - "tools/tests/test_aikimi_tabs.py"
       - "tools/tests/test_aikimi_tabs_chromium.py"
+      - "tools/tests/test_mobile_layout_chromium.py"
       - "tools/tests/test_additional_module_identity.py"
       - "tools/tests/test_anima38_extension.py"
       - "tools/tests/test_api_public_state.py"
@@ -98,6 +100,7 @@ on:
       - "**/*.ps1"
       - "backend/**"
       - "extensions-builtin/aikimi-ui/**"
+      - "extensions-builtin/mobile/**"
       - "extensions-builtin/anima-3-8b/**"
       - "extensions-builtin/hyperweave/**"
       - "extensions-builtin/minimax-h3-studio/**"
@@ -147,6 +150,7 @@ on:
       - "tools/tests/test_aikimi_status.py"
       - "tools/tests/test_aikimi_tabs.py"
       - "tools/tests/test_aikimi_tabs_chromium.py"
+      - "tools/tests/test_mobile_layout_chromium.py"
       - "tools/tests/test_additional_module_identity.py"
       - "tools/tests/test_anima38_extension.py"
       - "tools/tests/test_api_public_state.py"
@@ -257,6 +261,7 @@ jobs:
           --module tools.tests.test_aikimi_status
           --module tools.tests.test_aikimi_tabs
           --module tools.tests.test_aikimi_tabs_chromium
+          --module tools.tests.test_mobile_layout_chromium
           --module tools.tests.test_additional_module_identity
           --module tools.tests.test_anima38_extension
           --module tools.tests.test_api_public_state

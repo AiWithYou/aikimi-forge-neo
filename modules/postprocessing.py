@@ -84,7 +84,9 @@ def run_postprocessing(extras_mode, image, image_folder, input_dir, output_dir, 
         else:
             image_data = images.fix_image(image_placeholder) if extras_mode == 1 else image_placeholder
 
-        image_data = image_data if image_data.mode in ("RGBA", "RGB") else image_data.convert("RGB")
+        if image_data.mode not in ("RGBA", "RGB") or "transparency" in image_data.info:
+            has_alpha = "A" in image_data.getbands() or "transparency" in image_data.info
+            image_data = image_data.convert("RGBA" if has_alpha else "RGB")
 
         parameters, existing_pnginfo = images.read_info_from_image(image_data)
         if parameters:
@@ -117,7 +119,8 @@ def run_postprocessing(extras_mode, image, image_folder, input_dir, output_dir, 
             shared.state.assign_current_image(pp.image)
 
             if save_output:
-                fullfn, _ = images.save_image(pp.image, path=outpath, basename=basename, extension=opts.samples_format, info=infotext, short_filename=True, no_prompt=True, grid=False, pnginfo_section_name="postprocessing", existing_info=existing_pnginfo, forced_filename=forced_filename, suffix=suffix)
+                extension = "png" if "Background Removal" in pp.info else opts.samples_format
+                fullfn, _ = images.save_image(pp.image, path=outpath, basename=basename, extension=extension, info=infotext, short_filename=True, no_prompt=True, grid=False, pnginfo_section_name="postprocessing", existing_info=existing_pnginfo, forced_filename=forced_filename, suffix=suffix)
 
             if extras_mode != 2 or show_extras_results:
                 outputs.append(pp.image)
@@ -128,6 +131,12 @@ def run_postprocessing(extras_mode, image, image_folder, input_dir, output_dir, 
 @_extras_job()
 def run_postprocessing_video(_mode, _img, _folder, _in_dir, _out_dir, _show, video_input, *args, save_output: bool = True):
     from modules.video_writer import VideoEncodingCancelled
+
+    for script in scripts.scripts_postproc.scripts_in_preferred_order():
+        if script.name == "Background Removal":
+            values = dict(zip(script.controls, args[script.args_from:script.args_to]))
+            if values.get("enable"):
+                raise ValueError("背景除去は画像タブで実行してください。動画には透過を保存できません。")
 
     outputs: list[np.ndarray] = []
     infotext = ""

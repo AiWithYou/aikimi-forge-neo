@@ -298,7 +298,9 @@ class PostprocessingReliabilityTests(unittest.TestCase):
             "images": image_helpers,
             "shared": SimpleNamespace(state=state, cmd_opts=SimpleNamespace(hide_ui_dir_config=False)),
             "opts": opts,
-            "scripts": SimpleNamespace(scripts_postproc=SimpleNamespace(run=postprocess)),
+            "scripts": SimpleNamespace(
+                scripts_postproc=SimpleNamespace(run=postprocess, scripts_in_preferred_order=lambda: [])
+            ),
             "scripts_postprocessing": SimpleNamespace(
                 PostprocessedImage=lambda image: SimpleNamespace(image=image, info={})
             ),
@@ -335,6 +337,55 @@ class PostprocessingReliabilityTests(unittest.TestCase):
             ns["run_postprocessing_video"](3, None, None, "", "", True, "input.mp4")
         container.close.assert_called_once_with()
         state.end.assert_called_once_with()
+
+    def test_background_removal_video_rejected_before_opening_or_inference(self):
+        ns, state, _, process, _ = self.fixture()
+        script = SimpleNamespace(name="Background Removal", controls={"enable": None}, args_from=0, args_to=1)
+        ns["scripts"].scripts_postproc.scripts_in_preferred_order = lambda: [script]
+        with self.assertRaisesRegex(ValueError, "画像タブ"):
+            ns["run_postprocessing_video"](3, None, None, "", "", True, "input.mp4", True)
+        ns["av"].open.assert_not_called()
+        process.assert_not_called()
+        state.end.assert_called_once_with()
+
+    def test_background_removal_saves_png_in_single_and_batch_modes(self):
+        class Output:
+            def __init__(self, image):
+                self.image = image.convert("RGBA")
+                self.info = {"Background Removal": "BiRefNet HR"}
+                self.extra_images = []
+
+            def get_suffix(self, _):
+                return ""
+
+        for mode in (0, 1, 2):
+            with self.subTest(mode=mode):
+                ns, _, helpers, _, _ = self.fixture()
+                ns["opts"].samples_format = "jpg"
+                ns["opts"].use_original_name_batch = True
+                ns["opts"].enable_pnginfo = False
+                ns["shared"].listfiles = lambda _: ["input.png"]
+                ns["scripts_postprocessing"].PostprocessedImage = Output
+                helpers.save_image.return_value = ("output.png", None)
+                ns["run_postprocessing"](
+                    mode, Image.new("RGB", (16, 16)), [Image.new("RGB", (16, 16))], "in", "", True, ""
+                )
+                self.assertEqual(helpers.save_image.call_args.kwargs["extension"], "png")
+                self.assertEqual(helpers.save_image.call_args.args[0].mode, "RGBA")
+
+    def test_extras_preserves_palette_and_grayscale_transparency_before_processing(self):
+        palette = Image.new("P", (16, 16), 0)
+        palette.info["transparency"] = 0
+        for image in (palette, Image.new("LA", (16, 16), (120, 64))):
+            with self.subTest(mode=image.mode):
+                ns, _, _, process, _ = self.fixture(processor=ValueError("checked"))
+                with self.assertRaisesRegex(ValueError, "checked"):
+                    ns["run_postprocessing"](0, image, None, "", "", True, "", save_output=False)
+                received = process.call_args.args[0].image
+                self.assertEqual(received.mode, "RGBA")
+                self.assertEqual(
+                    received.getchannel("A").getextrema(), image.convert("RGBA").getchannel("A").getextrema()
+                )
 
     def test_save_output_false_does_not_encode_or_write_a_video(self):
         ns, state, image_helpers, process, _ = self.fixture()

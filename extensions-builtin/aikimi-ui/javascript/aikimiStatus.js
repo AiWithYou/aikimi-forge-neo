@@ -13,15 +13,15 @@
         idle: 10,
     };
     const STATUS_LABELS = {
-        idle: "Idle",
-        loading_model: "Loading model",
-        generating: "Generating",
-        completed: "Completed",
-        queued: "Queued",
-        warning: "Warning",
-        error: "Error",
-        out_of_memory: "Out of memory",
-        updating: "Updating",
+        idle: "待機中",
+        loading_model: "モデル読込中",
+        generating: "生成中",
+        completed: "できあがり",
+        queued: "順番待ち",
+        warning: "確認してください",
+        error: "エラー",
+        out_of_memory: "メモリ不足",
+        updating: "更新中",
     };
     const VALID_STATES = new Set(Object.keys(STATE_PRIORITY));
     const VALID_SIZES = new Set(["small", "medium", "large"]);
@@ -62,6 +62,134 @@
     let portraitLoadIssue = null;
     let portraitRequestUrl = null;
     let snapshot = null;
+    let toggleButton = null;
+    let resultButton = null;
+    let lastResultId = null;
+    let drag = null;
+    let suppressClick = false;
+    let petPreferences = {};
+    try { petPreferences = JSON.parse(localStorage.getItem("aikimi-pet") || "{}") || {}; } catch { /* 保存不可でも操作は継続する。 */ }
+    if (typeof petPreferences !== "object" || Array.isArray(petPreferences)) petPreferences = {};
+
+    function savePetPreferences() {
+        try { localStorage.setItem("aikimi-pet", JSON.stringify(petPreferences)); } catch { /* 現在の表示には適用済み。 */ }
+    }
+
+    function setPetVisible(visible) {
+        petPreferences.hidden = !visible;
+        savePetPreferences();
+        if (details) details.open = false;
+        syncVisibility();
+        if (!visible) toggleButton?.focus({ preventScroll: true });
+    }
+
+    function ensureToggle() {
+        const mount = gradioApp().querySelector("#aikimi-feature-nav");
+        if (!mount) return;
+        if (!toggleButton) {
+            toggleButton = document.createElement("button");
+            toggleButton.id = "aikimi-pet-toggle";
+            toggleButton.type = "button";
+            toggleButton.textContent = "あいきみ";
+            toggleButton.setAttribute("aria-controls", "aikimi-status");
+            toggleButton.addEventListener("click", () => setPetVisible(Boolean(petPreferences.hidden)));
+        }
+        if (toggleButton.parentElement !== mount) mount.append(toggleButton);
+        const toggleHidden = opts.aikimi_assistant_enabled === false;
+        if (toggleButton.hidden !== toggleHidden) toggleButton.hidden = toggleHidden;
+        setAttribute(toggleButton, "aria-pressed", !petPreferences.hidden);
+        setAttribute(toggleButton, "title", petPreferences.hidden ? "あいきみを表示" : "あいきみを非表示");
+    }
+
+    function positionPet() {
+        if (!panel) return;
+        const size = { small: 80, medium: 104, large: 128 }[selectedSize];
+        const x = Number.isFinite(petPreferences.x) ? petPreferences.x :
+            opts.aikimi_assistant_position === "bottom-left" ? 16 : window.innerWidth - size - 16;
+        const y = Number.isFinite(petPreferences.y) ? petPreferences.y : window.innerHeight - size - 18;
+        const left = Math.max(8, Math.min(window.innerWidth - size - 8, x));
+        const top = Math.max(8, Math.min(window.innerHeight - size - 8, y));
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+        panel.dataset.side = left < window.innerWidth / 2 ? "left" : "right";
+        panel.dataset.vertical = top < window.innerHeight / 2 ? "below" : "above";
+        panel.style.setProperty("--aikimi-bubble-max", `${panel.dataset.side === "left" ? window.innerWidth - left - 12 : left + size - 12}px`);
+        const popupWidth = Math.min(320, window.innerWidth - 24);
+        panel.style.setProperty("--aikimi-popup-left", `${Math.max(12, Math.min(window.innerWidth - popupWidth - 12, left + size / 2 - popupWidth / 2))}px`);
+        panel.style.setProperty("--aikimi-popup-top", `${top + size + 10}px`);
+        panel.style.setProperty("--aikimi-popup-bottom", `${window.innerHeight - top + 10}px`);
+        panel.style.setProperty("--aikimi-popup-height", `${Math.max(80, panel.dataset.vertical === "above" ? top - 22 : window.innerHeight - top - size - 22)}px`);
+    }
+
+    function bindPetActions(summary, detailPanel) {
+        const actions = document.createElement("div");
+        actions.className = "aikimi-status__actions";
+        const action = (label, callback) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = label;
+            button.addEventListener("click", callback);
+            actions.append(button);
+            return button;
+        };
+        resultButton = action("結果へ移動", () => {
+            const target = lastResultId ? gradioApp().getElementById?.(lastResultId) || document.getElementById(lastResultId) : null;
+            if (!target) return;
+            const tab = target.closest("#tabs > .tabitem");
+            const button = tab && typeof get_uiTopTabButton === "function" ? get_uiTopTabButton(tab.id) : null;
+            if (button && button.getAttribute("aria-selected") !== "true") button.click();
+            details.open = false;
+            requestAnimationFrame(() => target.scrollIntoView({ block: "center", behavior: "instant" }));
+        });
+        resultButton.disabled = true;
+        action("位置を戻す", () => {
+            delete petPreferences.x;
+            delete petPreferences.y;
+            savePetPreferences();
+            positionPet();
+        });
+        action("非表示", () => setPetVisible(false));
+        detailPanel.prepend(actions);
+        summary.title = "クリックで状況を確認・ドラッグで移動";
+        summary.addEventListener("keydown", event => {
+            const delta = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] }[event.key];
+            if (!delta || event.altKey || event.ctrlKey || event.metaKey) return;
+            event.preventDefault();
+            petPreferences.x = parseFloat(panel.style.left) + delta[0];
+            petPreferences.y = parseFloat(panel.style.top) + delta[1];
+            positionPet();
+            savePetPreferences();
+        });
+        summary.addEventListener("pointerdown", event => {
+            if (event.button !== 0) return;
+            drag = { id: event.pointerId, x: event.clientX, y: event.clientY,
+                left: parseFloat(panel.style.left), top: parseFloat(panel.style.top), moved: false };
+            suppressClick = false;
+            summary.setPointerCapture(event.pointerId);
+        });
+        summary.addEventListener("pointermove", event => {
+            if (!drag || drag.id !== event.pointerId) return;
+            const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+            if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+            drag.moved = true;
+            details.open = false;
+            petPreferences.x = drag.left + dx;
+            petPreferences.y = drag.top + dy;
+            positionPet();
+        });
+        const endDrag = () => {
+            if (!drag) return;
+            suppressClick = drag.moved;
+            if (drag.moved) savePetPreferences();
+            drag = null;
+        };
+        summary.addEventListener("pointerup", endDrag);
+        summary.addEventListener("pointercancel", endDrag);
+        summary.addEventListener("lostpointercapture", endDrag);
+        summary.addEventListener("click", event => {
+            if (suppressClick && event.detail !== 0) { event.preventDefault(); suppressClick = false; }
+        });
+    }
 
     const tasks = new Map();
     const interruptedTasks = new Set();
@@ -102,9 +230,9 @@
 
     function formatSeconds(value) {
         if (!Number.isFinite(value) || value < 0) return "—";
-        if (value >= 3600) return `${Math.floor(value / 3600)}h ${Math.floor((value % 3600) / 60)}m`;
-        if (value >= 60) return `${Math.floor(value / 60)}m ${Math.round(value % 60)}s`;
-        return `${value.toFixed(value < 10 ? 2 : 1)} sec`;
+        if (value >= 3600) return `${Math.floor(value / 3600)}時間 ${Math.floor((value % 3600) / 60)}分`;
+        if (value >= 60) return `${Math.floor(value / 60)}分 ${Math.floor(value % 60)}秒`;
+        return `${Math.round(value)}秒`;
     }
 
     function createMetricRow(label, field) {
@@ -135,8 +263,6 @@
     function statusIsActive() {
         return Boolean(
             enabled &&
-                activeFeature &&
-                activeContainer?.isConnected &&
                 panel?.isConnected &&
                 !panel.hidden,
         );
@@ -149,7 +275,7 @@
             return panel;
         }
 
-        const existing = gradioApp().querySelector("#aikimi-status");
+        const existing = document.querySelector("#aikimi-status");
         if (existing) {
             panel = existing;
             details = panel.querySelector("details");
@@ -217,7 +343,7 @@
 
         const disclosureHint = document.createElement("span");
         disclosureHint.className = "aikimi-status__disclosure-hint";
-        disclosureHint.textContent = "Details";
+        disclosureHint.textContent = "状況を確認";
 
         summaryBody.append(eyebrow, message, compactMetrics, progressTrack, disclosureHint);
         summary.append(portraitWrap, summaryBody);
@@ -229,25 +355,26 @@
         const detailHeading = document.createElement("div");
         detailHeading.className = "aikimi-status__details-heading";
         const detailTitle = document.createElement("strong");
-        detailTitle.textContent = "Technical status";
+        detailTitle.textContent = "いまの状況";
         const detailCaption = document.createElement("span");
-        detailCaption.textContent = "Existing logs remain authoritative";
+        detailCaption.textContent = "";
         detailHeading.append(detailTitle, detailCaption);
 
         const metrics = document.createElement("dl");
         metrics.className = "aikimi-status__metrics";
         metrics.append(
-            createMetricRow("Status", "status"),
-            createMetricRow("Model", "model"),
-            createMetricRow("Load time", "load-time"),
-            createMetricRow("Progress", "progress"),
-            createMetricRow("ETA", "eta"),
+            createMetricRow("状態", "status"),
+            createMetricRow("モデル", "model"),
+            createMetricRow("読込時間", "load-time"),
+            createMetricRow("進捗", "progress"),
+            createMetricRow("残り時間", "eta"),
             createMetricRow("VRAM", "vram"),
-            createMetricRow("Queue", "queue"),
-            createMetricRow("Backend", "backend"),
-            createMetricRow("Error details", "error"),
+            createMetricRow("待機", "queue"),
+            createMetricRow("接続", "backend"),
+            createMetricRow("詳細", "error"),
         );
         detailPanel.append(detailHeading, metrics);
+        bindPetActions(summary, detailPanel);
         details.append(summary, detailPanel);
         panel.appendChild(details);
         mountPoint.prepend(panel);
@@ -256,26 +383,9 @@
     }
 
     function validManifest(value) {
-        if (!value || typeof value !== "object" || !value.assets || !value.states) return false;
-        if (!Number.isInteger(value.version) || value.version <= 0) return false;
-        if (!VALID_STATES.has(value.default_state)) return false;
-        if (!Array.isArray(value.preload) || !value.preload.every((state) => VALID_STATES.has(state))) return false;
-
-        const assetKeys = new Set();
-        for (const state of VALID_STATES) {
-            const stateConfig = value.states[state];
-            if (!stateConfig || typeof stateConfig.asset !== "string") return false;
-            const asset = value.assets[stateConfig.asset];
-            if (!asset || typeof asset !== "object") return false;
-            if (typeof asset.animated !== "string" || typeof asset.still !== "string") return false;
-            if (!SAFE_ASSET_NAME.test(asset.animated) || !SAFE_ASSET_NAME.test(asset.still)) return false;
-            if (!Number.isInteger(asset.frames) || asset.frames < 2) return false;
-            if (!Array.isArray(asset.durations_ms) || asset.durations_ms.length !== asset.frames) return false;
-            if (!asset.durations_ms.every((duration) => Number.isInteger(duration) && duration >= 20)) return false;
-            if (!new Set(["ping-pong", "once"]).has(asset.loop)) return false;
-            assetKeys.add(stateConfig.asset);
-        }
-        return assetKeys.size === VALID_STATES.size;
+        return Boolean(value && value.version === 4 && typeof value.portrait === "string" &&
+            SAFE_ASSET_NAME.test(value.portrait) && VALID_STATES.has(value.default_state) &&
+            value.states && [...VALID_STATES].every(state => typeof value.states[state]?.message === "string"));
     }
 
     async function loadManifest() {
@@ -423,20 +533,10 @@
         return url.href;
     }
 
-    function resolvePortrait(state) {
-        const config = manifest?.states?.[state] || manifest?.states?.[manifest?.default_state];
-        const asset = config ? manifest?.assets?.[config.asset] : null;
-        if (!asset) return null;
-
-        const animatedUrl = versionedAssetUrl(asset.animated);
-        const stillUrl = versionedAssetUrl(asset.still);
-        if (stillMode) {
-            return failedAssetUrls.has(stillUrl) ? null : { selected: stillUrl };
-        }
-        if (!failedAssetUrls.has(animatedUrl)) {
-            return { selected: animatedUrl };
-        }
-        return failedAssetUrls.has(stillUrl) ? null : { selected: stillUrl };
+    function resolvePortrait() {
+        if (!manifest) return null;
+        const url = versionedAssetUrl(manifest.portrait);
+        return failedAssetUrls.has(url) ? null : { selected: url };
     }
 
     function clearPreloadedImages() {
@@ -467,7 +567,7 @@
 
     function preloadConfiguredAssets() {
         if (!statusIsActive() || !manifest) return;
-        for (const state of manifest.preload) preloadStateAsset(state);
+        preloadStateAsset(manifest.default_state);
     }
 
     function bindPortraitEvents() {
@@ -519,10 +619,10 @@
         const progressPercent = Number.isFinite(progress) ? Math.round(Math.min(Math.max(progress, 0), 1) * 100) : null;
         const stateMessage = candidate.message || stateConfig.message || STATUS_LABELS[state] || state;
         const portraitDescriptor = resolvePortrait(state);
-        const modelName = model.loaded_name || "Not loaded";
+        const modelName = model.loaded_name || model.selected_name || "未選択";
         const modelLabel =
-            model.reload_pending && model.selected_name
-                ? `${modelName} · selected ${model.selected_name}`
+            model.loaded_name && model.reload_pending && model.selected_name
+                ? `${modelName} → ${model.selected_name}`
                 : modelName;
 
         const isUrgent = state === "error" || state === "out_of_memory";
@@ -539,14 +639,16 @@
         }
 
         syncPortrait(portraitDescriptor);
+        if (resultButton) resultButton.disabled = !lastResultId || !document.getElementById(lastResultId);
 
-        const compact = [`Runtime ${STATUS_LABELS[state] || state}`];
-        compact.push(`Backend ${backend.ready ? "Online" : "Unavailable"}`);
-        compact.push(`Queue ${queueSize}`);
+        const compact = [];
         if (progressPercent != null && ["loading_model", "generating", "updating"].includes(state)) {
             compact.push(`${progressPercent}%`);
+            if (Number.isFinite(eta)) compact.push(`あと ${formatSeconds(eta)}`);
         }
+        if (queueSize) compact.push(`${queueSize} 件待機`);
         setText(compactMetrics, compact.join(" · "));
+        compactMetrics.hidden = !compact.length;
 
         const progressWidth = progressPercent == null ? 0 : progressPercent;
         if (progressValue.style.width !== `${progressWidth}%`) progressValue.style.width = `${progressWidth}%`;
@@ -554,8 +656,8 @@
             details.querySelector("summary"),
             "aria-label",
             dialogueEnabled
-                ? `${STATUS_LABELS[state] || state}: ${stateMessage}. ${details.open ? "Close" : "Open"} technical details.`
-                : `${STATUS_LABELS[state] || state}. ${details.open ? "Close" : "Open"} technical details.`,
+                ? `あいきみ：${stateMessage}。状況を${details.open ? "閉じる" : "開く"}`
+                : `あいきみ：${STATUS_LABELS[state] || state}。状況を${details.open ? "閉じる" : "開く"}`,
         );
 
         setText(field("status"), STATUS_LABELS[state] || state);
@@ -569,9 +671,12 @@
                 ? `${formatBytes(memory.used)} / ${formatBytes(memory.total)} · allocated ${formatBytes(memory.allocated)}`
                 : memory.error || "Unavailable",
         );
-        setText(field("queue"), `${queueSize} waiting${candidate.state === "queued" && candidate.text ? ` · ${candidate.text}` : ""}`);
-        setText(field("backend"), backend.ready ? `Online · uptime ${formatSeconds(backend.uptime_seconds)}` : "Unavailable");
+        setText(field("queue"), `${queueSize} 件${candidate.state === "queued" && candidate.text ? ` · ${candidate.text}` : ""}`);
+        setText(field("backend"), backend.ready ? "接続中" : "再接続待ち");
         setText(field("error"), publicTechnicalDetail(candidate.errorDetails || portraitLoadIssue || "None"));
+        field("error").parentElement.hidden = !candidate.errorDetails && !portraitLoadIssue;
+        field("vram").parentElement.hidden = !memory.available;
+        field("load-time").parentElement.hidden = !Number.isFinite(model.last_load_seconds);
 
     }
 
@@ -590,6 +695,7 @@
         if (!detail.taskId) return;
 
         currentIssue = null;
+        if (detail.sourceElementId?.endsWith("_gallery_container")) lastResultId = detail.sourceElementId;
         completedUntil = 0;
         for (const timer of completionTimers.values()) window.clearTimeout(timer);
         completionTimers.clear();
@@ -607,6 +713,7 @@
         const detail = event.detail || {};
         const response = detail.response || {};
         if (!detail.taskId) return;
+        if (detail.sourceElementId?.endsWith("_gallery_container")) lastResultId = detail.sourceElementId;
 
         if (response.completed) {
             if (interruptedTasks.has(detail.taskId)) {
@@ -762,6 +869,7 @@
         panel.dataset.dialogue = dialogueEnabled ? "on" : "off";
         panel.dataset.motion = !animationEnabled ? "disabled" : reducedMotion.matches ? "reduced" : "animated";
         message.hidden = !dialogueEnabled;
+        positionPet();
 
         if (portraitModeChanged) {
             portraitRequestUrl = null;
@@ -791,27 +899,25 @@
         const featureEvent = event?.type === "aikimi:feature-tab-change";
         const nextNavigationIssue = next.feature && featureEvent ? next.warning : navigationIssue;
         const issueChanged = nextNavigationIssue !== navigationIssue;
-        const mountNeedsRepair = Boolean(
-            next.container && (!panel?.isConnected || panel.parentElement !== next.container),
-        );
+        const mountNeedsRepair = !panel?.isConnected;
         if (!changed && !issueChanged && !mountNeedsRepair) return;
 
         activeFeature = next.feature;
         activeContainer = next.container;
         navigationIssue = next.feature ? nextNavigationIssue : null;
-        if (details && changed) details.open = false;
         lastRenderedState = null;
         syncVisibility();
     }
 
     function syncVisibility() {
         if (!optionsAvailable) return;
-        enabled = opts.aikimi_assistant_enabled !== false;
-        const shouldShow = Boolean(enabled && activeFeature && activeContainer?.isConnected);
+        ensureToggle();
+        enabled = opts.aikimi_assistant_enabled !== false && !petPreferences.hidden;
+        const shouldShow = enabled;
 
-        if (shouldShow && createPanel(activeContainer)) {
+        if (shouldShow && createPanel(gradioApp().querySelector(".gradio-container") || document.body)) {
             syncPreferences();
-            panel.dataset.feature = activeFeature;
+            panel.dataset.feature = activeFeature || "forge";
             panel.hidden = false;
             setAttribute(panel, "aria-hidden", "false");
 
@@ -898,11 +1004,18 @@
         document.addEventListener("keydown", handleDetailsEscape, true);
         document.addEventListener("visibilitychange", handleVisibilityChange);
         document.addEventListener("aikimi:feature-tab-change", syncFeatureContext);
+        window.addEventListener("resize", positionPet);
+        document.addEventListener("pointerdown", event => {
+            if (details?.open && !panel.contains(event.target)) details.open = false;
+        });
         reducedMotion.addEventListener("change", handleReducedMotionChange);
 
         window.AikimiStatus = {
             publish(source, value) {
                 if (!enabled || !source || !value || !VALID_STATES.has(value.state)) return;
+                if (typeof value.resultElementId === "string" && document.getElementById(value.resultElementId)) {
+                    lastResultId = value.resultElementId;
+                }
                 const key = String(source);
                 const existingTimer = publishedTimers.get(key);
                 if (existingTimer) window.clearTimeout(existingTimer);
@@ -939,6 +1052,7 @@
     }
 
     function handleUiUpdate() {
+        if (optionsAvailable) ensureToggle();
         syncFeatureContext();
         if (statusIsActive()) scanOutputErrors();
     }

@@ -476,31 +476,23 @@ options_templates.update(
 
 options_templates.update(
     options_section(
-        ("aikimi-assistant", "Aikimi inline status", "ui"),
+        ("aikimi-assistant", "あいきみ", "ui"),
         {
-            "aikimi_assistant_enabled": OptionInfo(True, "Show status in Aikimi feature tabs").info(
-                "Show the compact status strip only inside the active Aikimi feature. Forge tabs remain unchanged."
-            ),
+            "aikimi_assistant_enabled": OptionInfo(True, "あいきみを表示"),
             "aikimi_assistant_size": OptionInfo(
                 "medium",
-                "Inline character size",
+                "大きさ",
                 gr.Dropdown,
                 {"choices": ("small", "medium", "large")},
-            ).info("Portrait size: small 40 px, medium 52 px, large 64 px."),
-            # Retain the saved key so upgrades do not discard or reject an existing
-            # config.json. Inline status has no position setting, so do not render it.
+            ),
             "aikimi_assistant_position": OptionInfo(
                 "bottom-right",
-                "Legacy assistant position (unused)",
-                gr.Textbox,
-                {"visible": False},
+                "最初の置き場所",
+                gr.Dropdown,
+                {"choices": ("bottom-left", "bottom-right")},
             ),
-            "aikimi_assistant_dialogue_enabled": OptionInfo(True, "Show short status message").info(
-                "Show Aikimi's short message in the strip. Runtime, backend, queue, and technical details remain available."
-            ),
-            "aikimi_assistant_animation_enabled": OptionInfo(True, "Animate Aikimi").info(
-                "Use state animations. The operating system's reduced-motion preference always switches to still images."
-            ),
+            "aikimi_assistant_dialogue_enabled": OptionInfo(True, "短いひとことを表示"),
+            "aikimi_assistant_animation_enabled": OptionInfo(True, "あいきみを動かす"),
         },
     )
 )

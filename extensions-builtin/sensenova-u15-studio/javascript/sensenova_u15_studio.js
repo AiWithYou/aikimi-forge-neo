@@ -124,6 +124,7 @@
         const progressMatch = progressText.match(/(\d+)%/);
         window.AikimiStatus.publish("sensenova-u15", {
             state,
+            resultElementId: "sn-result-image",
             progress: progressMatch ? Number(progressMatch[1]) / 100 : null,
             errorDetails: stage === "error" ? exactError || message : null,
         });

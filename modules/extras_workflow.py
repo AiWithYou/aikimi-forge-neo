@@ -8,6 +8,7 @@ import gradio as gr
 from modules.grain_selection import make_reference_preview, select_reference
 
 ENABLE_KEYS = {
+    "Background Removal": "enable",
     "Upscale": "upscale_enabled",
     "Grain Cleaner": "enable",
     "Color Flatten": "enable",

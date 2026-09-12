@@ -252,6 +252,7 @@
         const progressNow = progressAttribute === null ? Number.NaN : Number(progressAttribute);
         window.AikimiStatus.publish("minimax-h3", {
             state,
+            resultElementId: "h3-result-video",
             progress: Number.isFinite(progressNow) ? progressNow / 100 : null,
             errorDetails: ["validation", "error"].includes(stage) ? message : null,
         });

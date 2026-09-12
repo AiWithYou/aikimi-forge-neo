@@ -98,6 +98,7 @@ class AikimiFixtureHandler(BaseHTTPRequestHandler):
         clear_warning = values.get("clear_warning", ["0"])[0] == "1"
         dialogue = values.get("dialogue", ["1"])[0] != "0"
         animation = values.get("animation", ["1"])[0] != "0"
+        interaction = values.get("interaction", [""])[0]
         options = {
             "aikimi_assistant_enabled": True,
             "aikimi_assistant_size": size,
@@ -107,7 +108,7 @@ class AikimiFixtureHandler(BaseHTTPRequestHandler):
         }
         document = f"""<!doctype html>
 <html><head><meta charset="utf-8"><link rel="stylesheet" href="/extensions-builtin/aikimi-ui/style.css"></head>
-<body><div id="tabs"><div id="aikimi-feature"></div><div id="forge-feature"></div></div><pre id="result">pending</pre>
+<body><nav id="aikimi-feature-nav"></nav><div id="tabs"><div id="aikimi-feature"></div><div id="forge-feature"></div></div><div id="txt2img_gallery_container"></div><pre id="result">pending</pre>
 <script>
 window.opts = {json.dumps(options)};
 window.gradioApp = () => document;
@@ -116,6 +117,8 @@ window.fixtureWarning = {json.dumps(warning)};
 window.fixtureClearWarning = {json.dumps(clear_warning)};
 window.fixtureWarningObserved = false;
 window.fixtureRequests = [];
+window.fixtureInteraction = {json.dumps(interaction)};
+window.fixtureChecks = {{}};
 window.fixtureFetch = window.fetch;
 window.fetch = (...args) => {{
     window.fixtureRequests.push(String(args[0]));
@@ -178,6 +181,47 @@ if (window.fixtureWarning) {{
         return;
     }}
     const message = panel?.querySelector(".aikimi-status__message");
+    if (panel && window.fixtureInteraction && !window.fixtureChecks.done) {{
+        const summary = panel.querySelector('summary');
+        const disclosure = panel.querySelector('details');
+        if (window.fixtureInteraction === 'hide') {{
+            document.querySelector('#aikimi-pet-toggle').click();
+            window.fixtureChecks.hidden = panel.hidden;
+            window.fixtureChecks.saved = JSON.parse(localStorage.getItem('aikimi-pet')).hidden;
+            window.fixtureChecks.srcRemoved = !portrait.hasAttribute('src');
+            document.querySelector('#aikimi-pet-toggle').click();
+            window.fixtureChecks.restored = !panel.hidden;
+        }} else if (window.fixtureInteraction === 'progress') {{
+            window.dispatchEvent(new CustomEvent('webui:task-start', {{detail: {{taskId:'pet-test', sourceElementId:'txt2img_gallery_container'}}}}));
+            window.dispatchEvent(new CustomEvent('webui:task-progress', {{detail: {{taskId:'pet-test', response:{{active:true,progress:0.42,eta:18}}}}}}));
+            window.fixtureChecks.progress = panel.querySelector('[data-field="progress"]').textContent;
+            window.fixtureChecks.resultEnabled = !panel.querySelector('.aikimi-status__actions button').disabled;
+            summary.click();
+            window.fixtureChecks.open = disclosure.open;
+            document.dispatchEvent(new KeyboardEvent('keydown',{{key:'Escape',bubbles:true}}));
+            window.fixtureChecks.closed = !disclosure.open;
+        }} else if (window.fixtureInteraction === 'move') {{
+            const before = parseFloat(panel.style.left);
+            summary.dispatchEvent(new KeyboardEvent('keydown', {{key:'ArrowRight', bubbles:true, cancelable:true}}));
+            window.fixtureChecks.moved = parseFloat(panel.style.left) === before + 20;
+            window.fixtureChecks.saved = JSON.parse(localStorage.getItem('aikimi-pet')).x === before + 20;
+            window.fixtureChecks.closed = !disclosure.open;
+        }} else if (window.fixtureInteraction === 'published') {{
+            const result = document.createElement('div');
+            result.id = 'h3-result-video';
+            result.scrollIntoView = () => {{ window.fixtureChecks.scrolled = true; }};
+            document.body.append(result);
+            window.AikimiStatus.publish('minimax-h3', {{state:'completed', resultElementId:result.id}});
+            window.fixtureChecks.resultEnabled = !panel.querySelector('.aikimi-status__actions button').disabled;
+            // --dump-domの仮想時計に合わせ、遷移後のスクロール処理を実行する。
+            window.requestAnimationFrame = callback => setTimeout(callback, 0);
+            panel.querySelector('.aikimi-status__actions button').click();
+            window.fixtureChecks.done = true;
+            setTimeout(() => report(attempt + 1), 100);
+            return;
+        }}
+        window.fixtureChecks.done = true;
+    }}
     const portraitWrap = panel?.querySelector(".aikimi-status__portrait-wrap");
     const result = document.querySelector("#result");
     result.dataset.ready = "true";
@@ -199,6 +243,17 @@ if (window.fixtureWarning) {{
         summaryHeight: Math.round(panel?.querySelector("summary")?.getBoundingClientRect().height || 0),
         parentId: panel?.parentElement?.id || "",
         statusRequests: window.fixtureRequests.filter((url) => url.includes("/internal/aikimi-status")).length
+        ,checks: window.fixtureChecks
+        ,hitPet: (() => {{
+            if (!panel) return false;
+            const rect = panel.getBoundingClientRect();
+            const obstruction = document.createElement('div');
+            Object.assign(obstruction.style, {{position:'fixed', zIndex:'40', left:rect.left+'px', top:rect.top+'px', width:rect.width+'px', height:rect.height+'px'}});
+            document.body.append(obstruction);
+            const hit = panel.contains(document.elementFromPoint(rect.left+rect.width/2, rect.top+rect.height/2));
+            obstruction.remove();
+            return hit;
+        }})()
     }});
 }})(0);
 </script></body></html>"""
@@ -259,46 +314,65 @@ class AikimiChromiumTests(unittest.TestCase):
         result = self.render_fixture(reduced_motion=True)
 
         self.assertTrue(result["reduced"])
-        self.assertEqual(urlparse(result["src"]).path, "/aikimi-assets/idle-still.webp")
+        self.assertEqual(urlparse(result["src"]).path, "/aikimi-assets/pet.png")
         self.assertEqual(result["motion"], "reduced")
 
     def test_default_preferences_use_animated_asset_in_chromium(self):
         result = self.render_fixture()
 
         self.assertFalse(result["reduced"])
-        self.assertEqual(urlparse(result["src"]).path, "/aikimi-assets/idle.png")
+        self.assertEqual(urlparse(result["src"]).path, "/aikimi-assets/pet.png")
         self.assertEqual(result["size"], "medium")
         self.assertEqual(result["dialogue"], "on")
         self.assertEqual(result["motion"], "animated")
         self.assertFalse(result["messageHidden"])
-        self.assertEqual(result["characterWidth"], 52)
-        self.assertLessEqual(result["summaryHeight"], 64)
-        self.assertEqual(result["parentId"], "aikimi-feature")
+        self.assertEqual(result["characterWidth"], 104)
+        self.assertLessEqual(result["summaryHeight"], 128)
+        self.assertEqual(result["parentId"], "")
+        self.assertTrue(result["hitPet"], "マスコットがGradioのラベルより前で操作できること")
 
     def test_user_preferences_apply_in_chromium(self):
         result = self.render_fixture("size=large&dialogue=0&animation=0")
 
         self.assertFalse(result["reduced"])
-        self.assertEqual(urlparse(result["src"]).path, "/aikimi-assets/idle-still.webp")
+        self.assertEqual(urlparse(result["src"]).path, "/aikimi-assets/pet.png")
         self.assertEqual(result["size"], "large")
         self.assertEqual(result["dialogue"], "off")
         self.assertEqual(result["motion"], "disabled")
         self.assertTrue(result["messageHidden"])
-        self.assertEqual(result["characterWidth"], 64)
+        self.assertEqual(result["characterWidth"], 128)
 
-    def test_normal_forge_tab_does_not_mount_or_poll_status(self):
+    def test_hide_restore_saves_preference_and_releases_image(self):
+        result = self.render_fixture("interaction=hide")
+        self.assertTrue(all(result["checks"][key] for key in ("hidden", "saved", "srcRemoved", "restored")))
+
+    def test_progress_result_link_and_keyboard_disclosure(self):
+        result = self.render_fixture("interaction=progress")
+        self.assertEqual(result["checks"]["progress"], "42%")
+        self.assertTrue(all(result["checks"][key] for key in ("resultEnabled", "open", "closed")))
+
+    def test_keyboard_move_keeps_disclosure_closed_and_saves_position(self):
+        result = self.render_fixture("interaction=move")
+        self.assertTrue(all(result["checks"][key] for key in ("moved", "saved", "closed")))
+
+    def test_studio_published_result_becomes_the_jump_target(self):
+        result = self.render_fixture("interaction=published")
+        self.assertTrue(result["checks"]["resultEnabled"])
+        self.assertTrue(result["checks"]["scrolled"])
+
+    def test_normal_forge_tab_also_mounts_and_polls_pet(self):
         result = self.render_fixture("feature=none")
 
-        self.assertFalse(result["panelPresent"])
-        self.assertEqual(result["statusRequests"], 0)
+        self.assertTrue(result["panelPresent"])
+        self.assertGreater(result["statusRequests"], 0)
 
-    def test_narrow_layout_keeps_the_strip_compact(self):
+    def test_narrow_layout_keeps_idle_pet_quiet(self):
         result = self.render_fixture(window_size="480,800")
 
         self.assertTrue(result["panelPresent"])
-        self.assertLessEqual(result["summaryHeight"], 64)
-        self.assertEqual(result["messageDisplay"], "block")
-        self.assertEqual(result["messageWidth"], 1)
+        self.assertLessEqual(result["summaryHeight"], 128)
+        self.assertEqual(result["messageDisplay"], "inline")
+        self.assertEqual(result["messageWidth"], 0)
 
     def test_navigation_warning_is_visible_and_redacted(self):
         result = self.render_fixture(urlencode({"warning": r"C:\private\model token=abc123456789"}))

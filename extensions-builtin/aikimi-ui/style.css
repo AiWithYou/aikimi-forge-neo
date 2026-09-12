@@ -225,310 +225,150 @@
     line-height: 1.5;
 }
 
-#aikimi-status {
-    --aikimi-accent: var(--primary-500);
-    --aikimi-character-size: 52px;
-    --aikimi-surface: color-mix(in srgb, var(--background-fill-primary, var(--body-background-fill)) 96%, var(--primary-500) 4%);
-    --aikimi-border: color-mix(in srgb, var(--block-border-color) 78%, var(--primary-500) 22%);
-    width: 100%;
-    min-width: 0;
-    margin: 0 0 0.55rem;
-    color: var(--body-text-color);
-}
-
-#aikimi-status[data-size="small"] {
-    --aikimi-character-size: 40px;
-}
-
-#aikimi-status[data-size="medium"] {
-    --aikimi-character-size: 52px;
-}
-
-#aikimi-status[data-size="large"] {
-    --aikimi-character-size: 64px;
-}
-
-#aikimi-status[hidden] {
-    display: none !important;
-}
-
-#aikimi-status[data-state="warning"] {
-    --aikimi-accent: #d99b2b;
-}
-
-#aikimi-status[data-state="error"],
-#aikimi-status[data-state="out_of_memory"] {
-    --aikimi-accent: #d35f6f;
-}
-
-#aikimi-status[data-state="completed"] {
-    --aikimi-accent: #65a98f;
-}
-
-.aikimi-status__disclosure {
-    width: 100%;
-}
-
-#aikimi-status .aikimi-status__summary {
-    display: flex;
-    box-sizing: border-box;
-    width: 100%;
-    height: var(--aikimi-character-size);
-    max-height: 64px;
-    align-items: center;
-    gap: 0.55rem;
-    padding: 0 0.65rem 0 0.25rem;
-    overflow: hidden;
-    border: 1px solid var(--aikimi-border);
-    border-radius: var(--block-radius);
-    background: var(--aikimi-surface);
+#aikimi-pet-toggle {
+    margin-left: auto;
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--block-border-color, #b8c5d0);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--body-text-color-subdued, #748293);
+    font-size: 0.75rem;
     cursor: pointer;
-    list-style: none;
-    transition:
-        border-color 140ms ease,
-        background-color 140ms ease;
 }
-
-.aikimi-status__summary::-webkit-details-marker {
-    display: none;
-}
-
-.aikimi-status__summary:hover {
-    border-color: color-mix(in srgb, var(--aikimi-accent) 58%, var(--block-border-color));
-}
-
-.aikimi-status__summary:focus-visible {
-    outline: 2px solid var(--aikimi-accent);
-    outline-offset: 2px;
-}
-
-.aikimi-status__portrait-wrap {
-    display: grid;
+#aikimi-pet-toggle[aria-pressed="true"] { color: var(--body-text-color, #526c88); }
+#aikimi-pet-toggle[hidden], #aikimi-status[hidden], #aikimi-status [hidden] { display: none !important; }
+#aikimi-status {
+    --aikimi-accent: #89accb;
+    --aikimi-character-size: 104px;
+    --aikimi-surface: var(--background-fill-primary, #fafbfd);
+    --aikimi-border: var(--block-border-color, #cbd8e3);
+    position: fixed;
+    z-index: 500;
     width: var(--aikimi-character-size);
-    min-width: var(--aikimi-character-size);
-    height: 100%;
-    place-items: end center;
+    height: var(--aikimi-character-size);
+    color: var(--body-text-color, #40536b);
+    font-family: inherit;
+    pointer-events: none;
 }
-
+#aikimi-status[data-size="small"] { --aikimi-character-size: 80px; }
+#aikimi-status[data-size="medium"] { --aikimi-character-size: 104px; }
+#aikimi-status[data-size="large"] { --aikimi-character-size: 128px; }
+#aikimi-status[data-state="warning"] { --aikimi-accent: #be965d; }
+#aikimi-status[data-state="error"], #aikimi-status[data-state="out_of_memory"] { --aikimi-accent: #c77f8e; }
+#aikimi-status[data-state="completed"] { --aikimi-accent: #70a18d; }
+.aikimi-status__disclosure { width: 100%; height: 100%; }
+#aikimi-status .aikimi-status__summary {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: grab;
+    list-style: none;
+    touch-action: none;
+    user-select: none;
+    pointer-events: auto;
+    border-radius: 24px;
+}
+.aikimi-status__summary:active { cursor: grabbing; }
+.aikimi-status__summary::-webkit-details-marker { display: none; }
+.aikimi-status__summary:focus-visible, #aikimi-status button:focus-visible, #aikimi-pet-toggle:focus-visible {
+    outline: 2px solid var(--aikimi-accent, #89accb);
+    outline-offset: 3px;
+}
+.aikimi-status__portrait-wrap { display: grid; width: 100%; height: 100%; place-items: center; }
 .aikimi-status__portrait {
     display: block;
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    object-position: center bottom;
-    filter: drop-shadow(0 0.15rem 0.2rem color-mix(in srgb, #000 13%, transparent));
-}
-
-.aikimi-status__summary-body {
-    display: grid;
-    min-width: 0;
-    flex: 1;
-    grid-template-columns: minmax(6rem, 0.65fr) minmax(14rem, 1.6fr) auto;
-    grid-template-areas:
-        "feature metrics details"
-        "message metrics details"
-        "progress progress progress";
-    align-items: center;
-    gap: 0.08rem 0.7rem;
-}
-
-.aikimi-status__eyebrow {
-    grid-area: feature;
-    overflow: hidden;
-    color: color-mix(in srgb, var(--aikimi-accent) 70%, var(--body-text-color) 30%);
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-overflow: ellipsis;
-    text-transform: uppercase;
-    white-space: nowrap;
-}
-
-.aikimi-status__message {
-    grid-area: message;
-    overflow: hidden;
-    color: var(--body-text-color);
-    font-size: 0.73rem;
-    font-weight: 650;
-    line-height: 1.2;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-#aikimi-status .aikimi-status__message[hidden] {
-    display: none;
-}
-
-.aikimi-status__compact-metrics {
-    grid-area: metrics;
-    overflow: hidden;
-    color: color-mix(in srgb, var(--body-text-color) 72%, var(--body-text-color-subdued));
-    font-size: 0.66rem;
-    line-height: 1.3;
-    text-align: right;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.aikimi-status__progress {
-    display: block;
     width: 100%;
-    height: 2px;
-    grid-area: progress;
-    overflow: hidden;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--block-border-color) 72%, transparent);
-}
-
-.aikimi-status__progress-value {
-    display: block;
-    width: 0;
     height: 100%;
-    border-radius: inherit;
-    background: var(--aikimi-accent);
-    transition: width 180ms ease-out;
+    object-fit: contain;
+    pointer-events: none;
+    -webkit-user-drag: none;
 }
-
-.aikimi-status__disclosure-hint {
-    grid-area: details;
-    color: color-mix(in srgb, var(--body-text-color) 72%, var(--body-text-color-subdued));
-    font-size: 0.66rem;
-    white-space: nowrap;
+/* 造形を固定し、画像全体の平行移動だけで小さく動かす。 */
+#aikimi-status[data-motion="animated"][data-state="generating"] .aikimi-status__portrait,
+#aikimi-status[data-motion="animated"][data-state="loading_model"] .aikimi-status__portrait {
+    animation: aikimi-pet-float 2.8s ease-in-out infinite;
 }
-
-.aikimi-status__details {
-    margin-top: 0.35rem;
-    padding: 0.7rem 0.8rem;
-    overflow: auto;
+#aikimi-status[data-motion="animated"][data-state="completed"] .aikimi-status__portrait {
+    animation: aikimi-pet-float 700ms ease-in-out 2;
+}
+@keyframes aikimi-pet-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.aikimi-status__summary-body {
+    position: absolute;
+    bottom: calc(100% + 5px);
+    right: 0;
+    display: grid;
+    gap: 4px;
+    width: max-content;
+    box-sizing: border-box;
+    max-width: min(230px, var(--aikimi-bubble-max, calc(100vw - 32px)));
+    padding: 9px 12px;
     border: 1px solid var(--aikimi-border);
-    border-radius: var(--block-radius);
-    background: var(--background-fill-primary, var(--body-background-fill));
+    border-radius: 14px;
+    background: var(--aikimi-surface);
+    box-shadow: 0 3px 14px #0000000d;
+    pointer-events: none;
 }
-
-.aikimi-status__details-heading {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.6rem;
-    padding-bottom: 0.45rem;
-    border-bottom: 1px solid var(--block-border-color);
+#aikimi-status[data-side="left"] .aikimi-status__summary-body { left: 0; right: auto; }
+#aikimi-status[data-vertical="below"] .aikimi-status__summary-body { top: calc(100% + 5px); bottom: auto; }
+#aikimi-status[data-state="idle"] details:not([open]) .aikimi-status__summary-body { display: none; }
+#aikimi-status[data-dialogue="off"] details:not([open]) .aikimi-status__summary-body { display: none; }
+.aikimi-status__eyebrow, .aikimi-status__disclosure-hint { display: none; }
+.aikimi-status__message { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.aikimi-status__compact-metrics { font-size: 11px; color: var(--body-text-color-subdued, #748293); }
+.aikimi-status__compact-metrics:empty { display: none; }
+.aikimi-status__progress { height: 3px; overflow: hidden; border-radius: 3px; background: var(--aikimi-border); }
+#aikimi-status[data-state="idle"] .aikimi-status__progress { display: none; }
+.aikimi-status__progress-value { display: block; height: 100%; background: var(--aikimi-accent); transition: width 180ms ease-out; }
+.aikimi-status__details {
+    position: fixed;
+    width: min(320px, calc(100vw - 24px));
+    max-height: min(460px, var(--aikimi-popup-height));
+    left: var(--aikimi-popup-left);
+    overflow: auto;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
+    padding: 14px;
+    border: 1px solid var(--aikimi-border);
+    border-radius: 16px;
+    background: var(--aikimi-surface);
+    box-shadow: 0 8px 32px #0000001a;
+    pointer-events: auto;
 }
-
-.aikimi-status__details-heading strong {
-    font-size: 0.78rem;
+#aikimi-status[data-vertical="above"] .aikimi-status__details { bottom: var(--aikimi-popup-bottom); }
+#aikimi-status[data-vertical="below"] .aikimi-status__details { top: var(--aikimi-popup-top); }
+#aikimi-status details[open] .aikimi-status__summary-body { display: none; }
+.aikimi-status__details-heading { margin: 12px 0 6px; font-size: 13px; }
+.aikimi-status__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#aikimi-status .aikimi-status__actions button {
+    padding: 7px 9px;
+    border: 1px solid var(--aikimi-border);
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
 }
-
-.aikimi-status__details-heading span {
-    color: var(--body-text-color-subdued);
-    font-size: 0.62rem;
-}
-
-.aikimi-status__metrics {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
-    gap: 0 1rem;
-    margin: 0.35rem 0 0;
-}
-
-.aikimi-status__metrics > div {
-    display: grid;
-    grid-template-columns: 5.3rem minmax(0, 1fr);
-    gap: 0.45rem;
-    padding: 0.3rem 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--block-border-color) 58%, transparent);
-}
-
-.aikimi-status__metrics dt {
-    color: var(--body-text-color-subdued);
-    font-size: 0.63rem;
-}
-
-.aikimi-status__metrics dd {
-    min-width: 0;
-    margin: 0;
-    overflow-wrap: anywhere;
-    color: var(--body-text-color);
-    font-size: 0.65rem;
-    font-weight: 620;
-    line-height: 1.4;
-}
-
+#aikimi-status .aikimi-status__actions button:hover { background: color-mix(in srgb, var(--aikimi-accent) 12%, transparent); }
+#aikimi-status .aikimi-status__actions button:disabled { opacity: 0.4; cursor: default; }
+.aikimi-status__metrics { margin: 0; }
+.aikimi-status__metrics > div { display: grid; grid-template-columns: 65px minmax(0, 1fr); gap: 8px; padding: 6px 0; }
+.aikimi-status__metrics dt { font-size: 12px; color: color-mix(in srgb, var(--body-text-color, #40536b) 75%, var(--body-text-color-subdued, #748293)); }
+.aikimi-status__metrics dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
 @media (max-width: 720px) {
-    .aikimi-diagnostics-header {
-        flex-direction: column;
-    }
-
-    .aikimi-about dl {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .aikimi-status__summary-body {
-        grid-template-columns: minmax(0, 1fr) auto;
-        grid-template-areas:
-            "feature details"
-            "metrics metrics"
-            "progress progress";
-        column-gap: 0.4rem;
-    }
-
-    .aikimi-status__message {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        clip-path: inset(50%);
-        white-space: nowrap;
-    }
-
-    .aikimi-status__compact-metrics {
-        font-size: 0.59rem;
-        text-align: left;
-    }
-
-    .aikimi-status__details-heading {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 0.1rem;
-    }
+    .aikimi-diagnostics-header { flex-direction: column; }
+    .aikimi-about dl { grid-template-columns: minmax(0, 1fr); }
 }
-
 @media (prefers-reduced-motion: reduce) {
-    .aikimi-status__summary,
-    .aikimi-status__progress-value,
-    .aikimi-status__portrait {
-        animation: none !important;
-        transition: none !important;
-    }
+    .aikimi-status__portrait, .aikimi-status__progress-value { animation: none !important; transition: none !important; }
 }
-
 @media (forced-colors: active) {
-    .aikimi-feature-nav__button {
-        border-color: ButtonText;
-        background: ButtonFace;
-        color: ButtonText;
-    }
-
-    .aikimi-feature-nav__button.aikimi-feature-active {
-        box-shadow: inset 0 -2px 0 Highlight;
-    }
-
-    #aikimi-status {
-        --aikimi-accent: Highlight;
-        --aikimi-border: CanvasText;
-    }
-
-    .aikimi-status__summary,
-    .aikimi-status__details {
-        border-color: CanvasText;
-    }
-
-    .aikimi-status__summary:focus-visible {
-        outline-color: Highlight;
-    }
-
-    .aikimi-status__progress-value {
-        background: Highlight;
-    }
+    .aikimi-feature-nav__button { border-color: ButtonText; background: ButtonFace; color: ButtonText; }
+    .aikimi-feature-nav__button.aikimi-feature-active { box-shadow: inset 0 -2px 0 Highlight; }
+    #aikimi-status { --aikimi-accent: Highlight; --aikimi-border: CanvasText; }
+    .aikimi-status__summary-body, .aikimi-status__details { border-color: CanvasText; }
+    .aikimi-status__summary:focus-visible { outline-color: Highlight; }
 }

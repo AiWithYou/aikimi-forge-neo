@@ -1605,6 +1605,21 @@
     transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
 }
 
+/* 開閉アイコンを伸ばさず、回転しても設定欄の幅に収める。 */
+#h3-studio .gradio-accordion > .label-wrap {
+    align-items: center;
+}
+
+/* 幅いっぱいの入力欄に外側の余白を加算しない。 */
+#h3-studio .gradio-accordion .gradio-slider,
+#h3-studio .gradio-accordion .gradio-textbox {
+    margin-inline: 0;
+}
+
+#h3-studio .gradio-slider .tab-like-container {
+    height: auto;
+}
+
 #h3-studio button:hover:not(:disabled) {
     border-color: var(--h3-line-strong) !important;
     background-color: rgba(255, 255, 255, 0.075) !important;

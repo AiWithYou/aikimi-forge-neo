@@ -2,7 +2,7 @@
 
 **v1.0.0** · [変更履歴](CHANGELOG.md)
 
-<img src="assets/aikimi/idle-still.webp" alt="ちびあいきみ" width="112" align="right">
+<img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
 **Krea2・Anima・SenseNovaの画像生成・編集と、MiniMax H3の音声付き動画を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
 
@@ -48,7 +48,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 |---|---|
 | **Forge画像生成**（継承） | `txt2img`、`img2img`、Extras、モデル読み込みなど、Forgeの基本機能を利用。 |
 | **Aikimiナビゲーション**（追加） | 画面上部のショートカットからKrea2・Anima・SenseNova・MiniMax H3へ移動。既存のForgeタブもそのまま使えます。 |
-| **ちびあいきみ・状態表示**（追加） | 生成状況、順番待ち、実行環境を確認。詳しい情報は展開して表示でき、あいきみの表示や動きはSettingsで調整できます。 |
+| **ちびあいきみ・状態表示**（追加） | 通常のForge画面にも表示できるペット。ドラッグで移動し、クリックで生成状況や順番待ちを確認。上部の「あいきみ」で表示を切り替えられます。 |
 | **Extrasの操作改善**（追加） | 処理順と予定サイズの表示、Grain Cleaner単独設定、見本範囲の選択、結果の要約。同じ画像の再調整では解析結果を再利用します。 |
 | **保存・ジョブ復旧**（追加） | 設定や動画の保存中に失敗した場合の既存ファイル保護、H3ジョブの送信記録と再起動後の照合、Forge・SenseNova・H3間のGPU使用調整。 |
 | **起動設定**（追加） | 通常のローカル起動、低VRAM向け設定、API専用起動、認証付きLAN利用を選択。 |
@@ -60,6 +60,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 |---|---|
 | **HyperWeave 4K／8K**（追加・実験） | 入力画像の構図を制約として、読み込み済みモデルで段階的に再作画。細部はモデルが推定するため、入力から変化します。 |
 | **Grain Cleaner**（追加） | 微細な粒状感を抑えながら細部を保護。自動推定・見本範囲指定・処理マスク・診断画像に対応。追加モデル不要のCPU処理です。 |
+| **背景除去**（追加） | ExtrasでBiRefNet・HR・HR Mattingを使い、透過PNGとマスクを出力。単画像・バッチ・フォルダー一括に対応し、選んだモデルを初回実行時に取得します。 |
 | **Color Flatten・色むら確認**（追加） | 色差のムラ補正、Smooth Gradientによる平滑化、色むらの解析・可視化。 |
 | **CD Tuner**（統合） | `txt2img`／`img2img`のDetail・色・明るさ・彩度・Color Mapを調整。重みの直接編集は対応する浮動小数点層に限ります。 |
 | **SenseNovaの参照優先モード**（追加） | 参照キャッシュのCPU退避とAttentionの分割処理でVRAM使用量を削減。最大8枚・各約1MPの参照と約4MP出力に対応し、CPU RAMと転送時間を使用します。 |
@@ -81,6 +82,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 - [MiniMax H3 Fun ControlNetと実行環境の修正](docs/minimax-h3-fun-control.md)
 - [HyperWeave](extensions-builtin/hyperweave/README.md)
 - [Grain Cleanerガイド](docs/grain-cleaner.md)
+- [背景除去・モデルの事前取得](docs/background-removal.md)
 - [CD Tuner・MiniMax H3 NegPiPガイド](docs/cd-tuner-negpip.md)
 
 <details>
@@ -113,7 +115,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 
 Krea2・Animaを選んでも、操作中の`txt2img`／`img2img`タブは維持されます。他のタブから選んだ場合は`txt2img`へ移動します。
 
-ちびあいきみの状態表示から、進行状況や順番待ち、実行環境を確認できます。詳しい情報は展開して表示し、表示の有無・大きさ・動きはSettingsで調整してください。
+ちびあいきみは通常のForge画面にも表示できます。ドラッグで好きな場所へ移動し、クリックすると進行状況や順番待ち、実行環境を確認できます。上部の「あいきみ」で表示を切り替え、大きさや動きはSettingsで調整してください。位置と表示の切り替えはブラウザーに保存されます。
 
 </details>
 

@@ -65,9 +65,8 @@ jobs:
           tools.tests.test_aikimi_chromium
           tools.tests.test_aikimi_tabs
           tools.tests.test_aikimi_tabs_chromium
-      - name: Verify deployed APNG and still-image contracts
+      - name: Verify the deployed pet and preserved source images
         run: >-
           python -m unittest -v
           tools.tests.test_aikimi_status.AikimiStatusTests.test_manifest_covers_states_and_references_local_assets
           tools.tests.test_aikimi_status.AikimiStatusTests.test_legacy_character_sources_remain_available
-          tools.tests.test_aikimi_status.AikimiStatusTests.test_apng_assets_match_declared_motion_contract
