@@ -376,6 +376,16 @@ class MiniMaxH3WorkflowTests(unittest.TestCase):
 
 
 class MiniMaxH3RuntimeTests(unittest.TestCase):
+    def setUp(self):
+        # 遅延後始末をmockするテストも、実ジョブと同じ所有権を保持する。
+        from modules.fifo_lock import FIFOLock
+        from modules_forge import gpu_ownership
+
+        self.enterContext(mock.patch.object(gpu_ownership, "queue_lock", FIFOLock()))
+        self.enterContext(mock.patch.object(h3_bridge, "_GPU_OWNERSHIPS", {}))
+        self.enterContext(mock.patch.object(h3_bridge, "_ACTIVE_GENERATION_IDS", set()))
+        self.enterContext(mock.patch.object(h3_bridge, "release_forge_vram"))
+
     @staticmethod
     def ready_runtime(runtime_profile: str = RUNTIME_PROFILE_FAST) -> RuntimeReadiness:
         files = {
@@ -1216,7 +1226,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         self.assertEqual(client.job.call_count, 3)
         client.cancel.assert_called_once_with("failing-poll-job")
         schedule_cleanup.assert_called_once()
-        self.assertEqual(_active_generation_count(), 0)
+        self.assertEqual(_active_generation_count(), 1)
 
     @mock.patch("modules_forge.minimax_h3_bridge.cleanup_prepared_media")
     @mock.patch("modules_forge.minimax_h3_bridge._schedule_deferred_cleanup")
@@ -1249,9 +1259,17 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         next(updates)
         next(updates)
         updates.close()
+        cleanup.assert_not_called()
+        from modules_forge.gpu_ownership import GPUOwnership
+
+        next_owner = GPUOwnership()
+        self.assertFalse(next_owner.acquire())
+        client.job.return_value = {"status": "failed"}
+        _cleanup_after_terminal(client, "job-id", {}, Path("runtime"))
+        self.assertTrue(next_owner.acquire())
+        next_owner.release()
         client.cancel.assert_called_once_with("job-id")
         schedule_cleanup.assert_called_once_with(client, "job-id", {"images": []}, Path("runtime"))
-        cleanup.assert_not_called()
 
     @mock.patch("modules_forge.minimax_h3_bridge.cleanup_prepared_media")
     @mock.patch("modules_forge.minimax_h3_bridge._schedule_deferred_cleanup")

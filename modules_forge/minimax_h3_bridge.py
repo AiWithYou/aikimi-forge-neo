@@ -26,6 +26,7 @@ from typing import Any, Iterator, Sequence
 import httpx
 
 from modules.aikimi_security.redaction import sanitized_subprocess_environment
+from modules_forge.gpu_ownership import GPUOwnership, release_forge_vram
 from modules_forge.minimax_h3_runtime import SERVER_URL, installed_runtime_root, managed_runtime_root, model_root, setup_lock
 from modules_forge.minimax_h3_acceleration import FAST_VAE_PACK, SPARSE_COMMIT, H3Acceleration
 from modules_forge.minimax_h3_clipcache import CLIP_CACHE_PACK, CLIP_CACHE_REVISION, require_clipcache
@@ -136,6 +137,7 @@ _CANCELLED_JOB_LOCK = threading.Lock()
 _CANCELLED_JOB_IDS: set[str] = set()
 _ACTIVE_GENERATION_LOCK = threading.Lock()
 _ACTIVE_GENERATION_IDS: set[str] = set()
+_GPU_OWNERSHIPS: dict[str, GPUOwnership] = {}
 _LOG = logging.getLogger(__name__)
 _TERMINAL_JOB_STATUSES = {"completed", "success", "failed", "error", "cancelled", "canceled"}
 
@@ -1647,6 +1649,7 @@ def _cleanup_after_terminal(
                         cleanup_prepared_media(prepared, runtime_root)
                     finally:
                         _clear_cancelled_job(prompt_id)
+                        _finish_gpu_generation(prompt_id)
                     return
             except H3JobNotFound:
                 if _is_cancelled_job(prompt_id):
@@ -1654,6 +1657,7 @@ def _cleanup_after_terminal(
                         cleanup_prepared_media(prepared, runtime_root)
                     finally:
                         _clear_cancelled_job(prompt_id)
+                        _finish_gpu_generation(prompt_id)
                     return
             except H3BridgeError:
                 pass
@@ -2136,6 +2140,44 @@ def run_generation(
     runtime_profile: str = RUNTIME_PROFILE_FAST,
     poll_seconds: float | None = None,
 ) -> Iterator[dict[str, Any]]:
+    ownership = GPUOwnership()
+    waiting_id = str(uuid.uuid4())
+    try:
+        while not ownership.acquire():
+            if _is_cancelled_job(waiting_id):
+                raise H3GenerationCancelled("生成を停止しました。")
+            yield {"stage": "queued", "message": "GPUの使用終了を待っています", "progress": 0.01, "prompt_id": waiting_id}
+            time.sleep(0.1)
+        if _is_cancelled_job(waiting_id):
+            raise H3GenerationCancelled("生成を停止しました。")
+        release_forge_vram()
+        yield from _run_generation(request, runtime_root, server_url, log_directory, output_directory, runtime_profile, poll_seconds, ownership)
+    finally:
+        _clear_cancelled_job(waiting_id)
+        with _ACTIVE_GENERATION_LOCK:
+            retained = ownership in _GPU_OWNERSHIPS.values()
+        if not retained:
+            ownership.release()
+
+
+def _finish_gpu_generation(prompt_id: str) -> None:
+    with _ACTIVE_GENERATION_LOCK:
+        ownership = _GPU_OWNERSHIPS.pop(prompt_id, None)
+        _ACTIVE_GENERATION_IDS.discard(prompt_id)
+    if ownership is not None:
+        ownership.release()
+
+
+def _run_generation(
+    request: H3Request,
+    runtime_root: Path,
+    server_url: str,
+    log_directory: Path,
+    output_directory: Path,
+    runtime_profile: str,
+    poll_seconds: float | None,
+    ownership: GPUOwnership,
+) -> Iterator[dict[str, Any]]:
     validate_request(request)
     yield {
         "stage": "runtime",
@@ -2173,6 +2215,8 @@ def run_generation(
             client = ComfyH3Client(server_url, timeout=hybrid.POLL_TIMEOUT_SECONDS if request.acceleration.hybrid.enabled else 15.0)
             prompt_id = client.submit(workflow)
             _mark_active_generation(prompt_id)
+            with _ACTIVE_GENERATION_LOCK:
+                _GPU_OWNERSHIPS[prompt_id] = ownership
         yield {
             "stage": "queued",
             "message": "ComfyUI のキューに追加しました",
@@ -2290,8 +2334,8 @@ def run_generation(
             if not prompt_id or terminal:
                 cleanup_prepared_media(prepared, runtime_root)
         finally:
-            if prompt_id:
-                _clear_active_generation(prompt_id)
+            if prompt_id and terminal:
+                _finish_gpu_generation(prompt_id)
             if client is not None and not deferred_cleanup_scheduled:
                 try:
                     client.close()
@@ -2301,6 +2345,10 @@ def run_generation(
 
 def cancel_generation(prompt_id: str, server_url: str) -> None:
     if prompt_id:
+        _mark_cancelled_job(prompt_id)
+        with _ACTIVE_GENERATION_LOCK:
+            if prompt_id not in _ACTIVE_GENERATION_IDS:
+                return
         client = ComfyH3Client(server_url)
         try:
             client.cancel(prompt_id)

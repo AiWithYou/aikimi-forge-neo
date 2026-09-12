@@ -10,7 +10,6 @@ import os
 import queue
 import shutil
 import subprocess
-import sys
 import threading
 import time
 import uuid
@@ -29,6 +28,7 @@ from modules.aikimi_security.redaction import (
     sanitized_subprocess_environment,
 )
 from modules_forge.sensenova_u15_environment import WORKER_PYTHON, environment_status
+from modules_forge.gpu_ownership import GPUOwnership, release_forge_vram
 
 MODE_TEXT = "text"
 MODE_EDIT = "edit"
@@ -99,6 +99,7 @@ _ACTIVE_JOB_ID: str | None = None
 _CANCELLED_JOB_IDS: set[str] = set()
 # Only populated when the generator has exited but its worker has not.
 _PENDING_CLEANUP: tuple[str, Path, Path] | None = None
+_GPU_OWNERSHIP: GPUOwnership | None = None
 
 
 def _shutdown_active_worker() -> None:
@@ -648,7 +649,7 @@ def _cleanup_job_directory(job_directory: Path, cache_root: Path) -> None:
 
 def _finish_pending_cleanup() -> None:
     """Reap a stopped worker left behind by a failed generator finalizer."""
-    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS, _PENDING_CLEANUP
+    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS, _PENDING_CLEANUP, _GPU_OWNERSHIP
 
     with _PROCESS_LOCK:
         pending = _PENDING_CLEANUP
@@ -660,26 +661,30 @@ def _finish_pending_cleanup() -> None:
         _ACTIVE_JOB_ID = None
         _ACTIVE_PROCESS = None
         _CANCELLED_JOB_IDS.discard(job_id)
+        ownership, _GPU_OWNERSHIP = _GPU_OWNERSHIP, None
 
     # A stream error must not prevent state recovery or removal of staged inputs.
     try:
         if process is not None and process.stdout is not None:
             process.stdout.close()
     finally:
-        _cleanup_job_directory(job_directory, cache_root)
+        try:
+            _cleanup_job_directory(job_directory, cache_root)
+        finally:
+            if ownership is not None:
+                ownership.release()
+
+
+def _reap_detached_worker(process: subprocess.Popen[str]) -> None:
+    # 停止要求が失敗しても、自然終了したworkerは他backendの待機を解除する。
+    while process.poll() is None:
+        time.sleep(0.5)
+    _finish_pending_cleanup()
 
 
 def _release_forge_vram() -> None:
-    sd_models = sys.modules.get("modules.sd_models")
-    if sd_models is None:
-        # Standalone worker/tests have no in-process Forge model to release.
-        # Avoid importing the complete WebUI loader solely for a no-op.
-        return
     try:
-        from modules import devices
-
-        sd_models.unload_model_weights()
-        devices.torch_gc()
+        release_forge_vram()
     except Exception as exc:
         raise SenseNovaBridgeError(
             f"ForgeモデルのVRAM解放に失敗しました: {exc}"
@@ -829,7 +834,7 @@ def run_generation(
     log_directory: str | os.PathLike[str],
     worker_path: str | os.PathLike[str] = DEFAULT_WORKER_PATH,
 ) -> Iterator[dict[str, Any]]:
-    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS, _PENDING_CLEANUP
+    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS, _PENDING_CLEANUP, _GPU_OWNERSHIP
 
     _finish_pending_cleanup()
     validate_request(request)
@@ -858,6 +863,7 @@ def run_generation(
     metadata_path = output_path.with_suffix(".json")
     log_path = log_root / f"{stamp}_{job_id[:8]}.log"
     process: subprocess.Popen[str] | None = None
+    ownership = GPUOwnership()
 
     with _PROCESS_LOCK:
         if _ACTIVE_JOB_ID is not None:
@@ -891,6 +897,15 @@ def run_generation(
         request_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
+        if job_id in _CANCELLED_JOB_IDS:
+            raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
+        while not ownership.acquire():
+            if job_id in _CANCELLED_JOB_IDS:
+                raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
+            yield {"stage": "queued", "message": "GPUの使用終了を待っています", "progress": 0.04, "job_id": job_id}
+            time.sleep(0.1)
+        with _PROCESS_LOCK:
+            _GPU_OWNERSHIP = ownership
         if job_id in _CANCELLED_JOB_IDS:
             raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
         _release_forge_vram()
@@ -1037,16 +1052,21 @@ def run_generation(
                     if _ACTIVE_PROCESS is process:
                         _ACTIVE_PROCESS = None
                     _CANCELLED_JOB_IDS.discard(job_id)
+                    _GPU_OWNERSHIP = None
                 else:
                     # Retain ownership and inputs until a later cancel/start
                     # confirms exit. Closing a live worker's pipe may also block.
                     _PENDING_CLEANUP = (job_id, job_directory, cache_root)
+                    threading.Thread(target=_reap_detached_worker, args=(process,), daemon=True).start()
             if stopped:
                 try:
                     if process is not None and process.stdout is not None:
                         process.stdout.close()
                 finally:
-                    _cleanup_job_directory(job_directory, cache_root)
+                    try:
+                        _cleanup_job_directory(job_directory, cache_root)
+                    finally:
+                        ownership.release()
 
 
 def cancel_generation(job_id: str | None = None) -> str:

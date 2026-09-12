@@ -4,10 +4,9 @@ import time
 import traceback
 from functools import wraps
 
-from modules import devices, fifo_lock, profiling, progress, shared
+from modules import devices, profiling, progress, shared
 from modules_forge import main_thread
-
-queue_lock = fifo_lock.FIFOLock()
+from modules_forge.gpu_ownership import queue_lock
 
 
 def wrap_queued_call(func):

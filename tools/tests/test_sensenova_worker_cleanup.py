@@ -11,6 +11,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from modules_forge import sensenova_u15_bridge as bridge
+from modules_forge import gpu_ownership
+from modules.fifo_lock import FIFOLock
 
 
 class WorkerOutput(io.StringIO):
@@ -50,6 +52,8 @@ class WorkerProcess:
 
 class WorkerCleanupTests(unittest.TestCase):
     def setUp(self):
+        self.gpu_lock = FIFOLock()
+        self.enterContext(patch.object(gpu_ownership, "queue_lock", self.gpu_lock))
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -65,6 +69,7 @@ class WorkerCleanupTests(unittest.TestCase):
             ("_ACTIVE_PROCESS", None),
             ("_CANCELLED_JOB_IDS", set()),
             ("_PENDING_CLEANUP", None),
+            ("_GPU_OWNERSHIP", None),
         ):
             self.enterContext(patch.object(bridge, name, value, create=True))
         self.enterContext(
@@ -124,6 +129,7 @@ class WorkerCleanupTests(unittest.TestCase):
         self.assertIs(bridge._ACTIVE_PROCESS, process)
         self.assertTrue((directory / "request.json").is_file())
         self.assertFalse(process.stdout.closed)
+        self.assertFalse(self.gpu_lock.acquire(False))
         with self.assertRaisesRegex(bridge.SenseNovaBridgeError, "別のSenseNova"):
             next(self.generation())
 
@@ -133,7 +139,21 @@ class WorkerCleanupTests(unittest.TestCase):
         self.assertIsNone(bridge._ACTIVE_JOB_ID)
         self.assertIsNone(bridge._ACTIVE_PROCESS)
         self.assertFalse(directory.exists())
+        self.assertTrue(self.gpu_lock.acquire(False))
+        self.gpu_lock.release()
         self.assert_next_job_starts()
+
+    def test_waiting_cancel_does_not_unload_forge_or_release_its_lock(self):
+        self.gpu_lock.acquire()
+        self.addCleanup(self.gpu_lock.release)
+        generation = self.generation()
+        job_id = next(generation)["job_id"]
+        self.assertEqual(next(generation)["stage"], "queued")
+        bridge._release_forge_vram.assert_not_called()
+        bridge.cancel_generation(job_id)
+        with self.assertRaises(bridge.SenseNovaGenerationCancelled):
+            next(generation)
+        self.assertFalse(self.gpu_lock.acquire(False))
 
     def test_next_job_reaps_worker_that_exited_after_failed_stop(self):
         generation, process, _, directory = self.running_worker()
