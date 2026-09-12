@@ -8,7 +8,9 @@ import os
 import sys
 import unittest
 from collections.abc import MutableMapping, Sequence
+from contextlib import contextmanager
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -110,6 +112,20 @@ def preload_modules(modules: Sequence[str]) -> None:
         importlib.import_module(module)
 
 
+@contextmanager
+def isolated_h3_records():
+    """CPUテストが利用者の実ジョブを照合・回収しないよう、記録先を隔離する。"""
+    from modules_forge import minimax_h3_pending
+
+    with TemporaryDirectory(prefix="aikimi-ci-h3-") as directory:
+        previous = minimax_h3_pending.DIRECTORY
+        minimax_h3_pending.DIRECTORY = Path(directory)
+        try:
+            yield
+        finally:
+            minimax_h3_pending.DIRECTORY = previous
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     validate_python_version()
@@ -121,14 +137,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     # away from the Forge parser and force its explicit CPU profile.
     sys.argv = [str(Path(__file__).resolve()), "--cpu"]
     os.chdir(REPOSITORY_ROOT)
-    preload_modules(arguments.preload)
-
-    print(
-        "Aikimi CI test profile: Python 3.13, CPU only, external model downloads disabled",
-        flush=True,
-    )
-    suite = load_tests(arguments.start_directory, arguments.pattern, arguments.module)
-    result = unittest.TextTestRunner(verbosity=arguments.verbosity).run(suite)
+    with isolated_h3_records():
+        preload_modules(arguments.preload)
+        print(
+            "Aikimi CI test profile: Python 3.13, CPU only, external model downloads disabled",
+            flush=True,
+        )
+        suite = load_tests(arguments.start_directory, arguments.pattern, arguments.module)
+        result = unittest.TextTestRunner(verbosity=arguments.verbosity).run(suite)
     return 0 if result.wasSuccessful() else 1
 
 

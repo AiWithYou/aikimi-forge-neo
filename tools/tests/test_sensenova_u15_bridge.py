@@ -488,7 +488,8 @@ import sys
 import time
 
 request_path = pathlib.Path(sys.argv[sys.argv.index("--request") + 1])
-json.loads(request_path.read_text(encoding="utf-8"))
+payload = json.loads(request_path.read_text(encoding="utf-8"))
+handles = [open(path, "rb") for path in payload["input_images"]]
 (request_path.parent / "worker.pid").write_text(str(os.getpid()), encoding="ascii")
 print('SENSENOVA_EVENT ' + json.dumps({"stage": "loading", "message": "waiting", "progress": 0.1}), flush=True)
 time.sleep(60)
@@ -499,7 +500,8 @@ time.sleep(60)
             worker.write_text(fake_worker, encoding="utf-8")
             cache = root / "cache"
             request = bridge.SenseNovaRequest(
-                mode=bridge.MODE_TEXT,
+                mode=bridge.MODE_EDIT,
+                input_images=(Image.new("RGB", (512, 512)),),
                 prompt="A lighthouse",
                 generation_profile=bridge.PROFILE_QUALITY,
                 quantization=bridge.QUANT_INT8_CONVROT,
@@ -547,6 +549,14 @@ time.sleep(60)
                         worker_process.wait(timeout=5)
                     updates.close()
             self.assertEqual(list((cache / "jobs").glob("*")), [])
+            # 次回受付まで回復し、前workerの入力ハンドルが削除を妨げない。
+            with mock.patch.object(bridge, "inspect_runtime", return_value=ready):
+                following = bridge.run_generation(
+                    request, output_directory=root / "outputs", cache_directory=cache,
+                    log_directory=root / "logs", worker_path=worker,
+                )
+                self.assertEqual(next(following)["stage"], "prepare")
+                following.close()
 
 
 if __name__ == "__main__":

@@ -67,6 +67,9 @@ class RunCiTestsTests(unittest.TestCase):
         )
 
     def test_main_injects_cpu_argument_before_discovery(self):
+        from modules_forge import minimax_h3_pending
+
+        previous_records = minimax_h3_pending.DIRECTORY
         observed: dict[str, object] = {}
 
         class SuccessfulResult:
@@ -75,6 +78,7 @@ class RunCiTestsTests(unittest.TestCase):
                 return True
 
         def load_tests(start_directory, pattern, modules):
+            observed["pending_records"] = minimax_h3_pending.DIRECTORY
             observed["environment"] = dict(os.environ)
             observed["start_directory"] = start_directory
             observed["pattern"] = pattern
@@ -99,6 +103,9 @@ class RunCiTestsTests(unittest.TestCase):
             exit_code = run_ci_tests.main(["--start-directory", "tools/tests", "--pattern", "test_security*.py"])
 
         self.assertEqual(exit_code, 0)
+        self.assertNotEqual(observed["pending_records"], previous_records)
+        self.assertFalse(observed["pending_records"].exists())
+        self.assertEqual(minimax_h3_pending.DIRECTORY, previous_records)
         self.assertEqual(observed["argv"], [str(Path(run_ci_tests.__file__).resolve()), "--cpu"])
         self.assertEqual(observed["start_directory"], "tools/tests")
         self.assertEqual(observed["pattern"], "test_security*.py")

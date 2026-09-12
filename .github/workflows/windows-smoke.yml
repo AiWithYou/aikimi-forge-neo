@@ -19,6 +19,7 @@ on:
       - "modules/aikimi_status.py"
       - "modules/aikimi_security/**"
       - "modules/api/**"
+      - "modules/call_queue.py"
       - "modules/cmd_args.py"
       - "modules/extras_workflow.py"
       - "modules/grain*.py"
@@ -61,6 +62,10 @@ on:
       - "tools/tests/test_api_script_args.py"
       - "tools/tests/test_chromium_helpers.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
+      - "tools/tests/test_gpu_ownership.py"
+      - "tools/tests/test_minimax_h3_submission.py"
+      - "tools/tests/test_sensenova_worker_cleanup.py"
+      - "tools/tests/test_sensenova_u15_bridge.py"
       - "tools/tests/test_extra_networks_lora_filter.py"
       - "tools/tests/test_gradio_compatibility.py"
       - "tools/tests/test_gradio_frontend_compat.py"
@@ -105,6 +110,7 @@ on:
       - "modules/aikimi_status.py"
       - "modules/aikimi_security/**"
       - "modules/api/**"
+      - "modules/call_queue.py"
       - "modules/cmd_args.py"
       - "modules/extras_workflow.py"
       - "modules/grain*.py"
@@ -147,6 +153,10 @@ on:
       - "tools/tests/test_api_script_args.py"
       - "tools/tests/test_chromium_helpers.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
+      - "tools/tests/test_gpu_ownership.py"
+      - "tools/tests/test_minimax_h3_submission.py"
+      - "tools/tests/test_sensenova_worker_cleanup.py"
+      - "tools/tests/test_sensenova_u15_bridge.py"
       - "tools/tests/test_extra_networks_lora_filter.py"
       - "tools/tests/test_gradio_compatibility.py"
       - "tools/tests/test_gradio_frontend_compat.py"
@@ -253,6 +263,10 @@ jobs:
           --module tools.tests.test_api_script_args
           --module tools.tests.test_chromium_helpers
           --module tools.tests.test_ci_workflow_boundaries
+          --module tools.tests.test_gpu_ownership
+          --module tools.tests.test_minimax_h3_submission
+          --module tools.tests.test_sensenova_worker_cleanup
+          --module tools.tests.test_sensenova_u15_bridge
           --module tools.tests.test_extra_networks_lora_filter
           --module tools.tests.test_extras_usability
           --module tools.tests.test_grain_cleaner

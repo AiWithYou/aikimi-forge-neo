@@ -22,12 +22,17 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
             "backend/**",
             "launch.py",
             "modules_forge/**",
+            "modules/call_queue.py",
             "modules_forge/forge_canvas/**",
             "script.js",
             "tools/run_ci_tests.py",
             "tools/tests/chromium_helpers.py",
             "tools/tests/test_chromium_helpers.py",
             "tools/tests/test_ci_workflow_boundaries.py",
+            "tools/tests/test_gpu_ownership.py",
+            "tools/tests/test_minimax_h3_submission.py",
+            "tools/tests/test_sensenova_worker_cleanup.py",
+            "tools/tests/test_sensenova_u15_bridge.py",
             "tools/tests/test_additional_module_identity.py",
             "tools/tests/test_extra_networks_lora_filter.py",
             "tools/tests/test_gradio_chromium_smoke.py",
@@ -46,6 +51,10 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
             "tools.tests.test_additional_module_identity",
             "tools.tests.test_chromium_helpers",
             "tools.tests.test_ci_workflow_boundaries",
+            "tools.tests.test_gpu_ownership",
+            "tools.tests.test_minimax_h3_submission",
+            "tools.tests.test_sensenova_worker_cleanup",
+            "tools.tests.test_sensenova_u15_bridge",
             "tools.tests.test_extra_networks_lora_filter",
             "tools.tests.test_gradio_chromium_smoke",
             "tools.tests.test_option_migrations",
@@ -99,6 +108,14 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
 
         self.assertIn("scipy==1.18.0", runtime)
         self.assertIn("scipy==1.18.0", assets)
+
+    def test_sensenova_dependency_audit_runs_independently_without_ignores(self):
+        security = self.workflow("security.yml")
+        job = security.split("  sensenova-pip-audit:", 1)[1].split("  gitleaks-full-history:", 1)[0]
+        self.assertIn("inputs: tools/requirements-sensenova.txt", job)
+        self.assertIn("extra-index-urls: https://download.pytorch.org/whl/cu130", job)
+        for bypass in ("ignore-vulns:", "no-deps:", "needs:", "continue-on-error:"):
+            self.assertNotIn(bypass, job)
 
 
 if __name__ == "__main__":
