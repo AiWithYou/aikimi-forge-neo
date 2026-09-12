@@ -1,8 +1,10 @@
 # Aikimi Studio Neo
 
+**v1.0.0** · [変更履歴](CHANGELOG.md)
+
 <img src="assets/aikimi/idle-still.webp" alt="ちびあいきみ" width="112" align="right">
 
-**Forge Neoの使い慣れた画面に、追加モデルの導入支援、画像編集、音声付き動画、4K／8K処理、画像の仕上げをまとめたWindows向け派生版です。**
+**Krea2・Anima・SenseNovaの画像生成・編集と、MiniMax H3の音声付き動画を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
 
 [Stable Diffusion WebUI Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo)を基盤にしています。主な対象はWindows 11・Python 3.13・NVIDIA GPUで、通常起動では自分のPC内だけで利用し、LANやインターネットへ自動公開しません。
 
@@ -12,19 +14,31 @@
 
 **Aikimi Studio Neoは、Forge Neoの生成基盤に、本ブランチ独自の仕上げ処理、専用UI、モデル導入支援、操作・効率の改善を加えたものです。** 本リポジトリの既定ブランチ`neo`で提供しています。
 
-機能一覧では、追加した範囲を次の区分で示します。
-
-| 区分 | 意味 |
+| 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
-| **独自追加** | 本ブランチで追加した処理、操作画面、導入・運用支援。 |
-| **独自統合** | 外部モデルや実行環境を利用するため、本ブランチで用意した拡張・専用UI・連携処理。 |
-| **Forge継承** | 同期基準のForge Neoが備える生成機能やモデル対応。 |
+| **モデルを使う** | Anima 3.8B v1.1の拡張、SenseNova専用Studio、MiniMax H3専用StudioとComfyUI連携。 |
+| **モデルを導入する** | モデルを選ぶだけのセットアップBAT。INT8モデルの取得・変換と、必要な専用環境の準備。 |
+| **画像を仕上げる** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
+| **操作する** | 追加機能へのショートカット、実行状態の表示、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
 
-「独自」の対象は、このブランチで追加・改善したソフトウェア部分です。Krea2、Anima、SenseNova、MiniMax H3などのモデル、ComfyUI、基盤ライブラリ、参考技術の出典と利用条件は、それぞれの開発元に従います。各ガイドと[Third-party notices](THIRD_PARTY_NOTICES.md)に参照先を記載しています。
+Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み、画像編集・動画生成があります。下の一覧では、**Forge継承**は基盤から引き継いだ機能、**独自追加**は本ブランチの追加処理、**独自統合**は外部モデルや実行環境を使うための専用UI・連携を指します。
 
-Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み、画像編集・動画生成があります。区分の比較対象は[同期基準時点のForge Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/0d0cb72951b059c8ea17861ba86db8d0f6098c28)です。ベースの情報は[その他](#その他)を参照してください。
+比較の基準は[Forge Neoの同期元](https://github.com/Haoming02/sd-webui-forge-classic/tree/0d0cb72951b059c8ea17861ba86db8d0f6098c28)です。その後の更新は選んで取り込んでいます。[2026年9月12日の更新確認](docs/upstream-sync.md)に採用・見送りの内容を記載しています。
+
+モデルやComfyUIそのものは各開発元の成果です。出典と利用条件は機能別ガイドと[Third-party notices](THIRD_PARTY_NOTICES.md)を参照してください。
 
 ## 主な機能
+
+### モデル対応と導入
+
+| 機能 | 由来・区分 | できること・本ブランチでの追加部分 | 条件・制約 |
+|---|---|---|---|
+| **かんたんセットアップ** | 独自追加 | BATでモデルを選び、本体の環境から準備。Krea2・Anima・SenseNovaは共通CLIで再開・検証・修復、H3は専用セットアップを実行。 | モデル本体はリポジトリに含みません。 |
+| **Krea2 INT8・高解像度処理** | Forge継承＋独自統合 | ForgeのKrea2対応を利用し、モデル導入手順と4K／8K向けの追加処理を同梱。 | 高解像度処理の一部は実験機能。 |
+| **Anima 3.8B拡張** | Forge継承＋独自統合 | Qwen3.5を使う拡張、v1.1のSemantic Connector v2対応、INT8変換・導入支援を同梱。 | v1／v1.1に対応。導入する版に合ったモデル構成が必要。 |
+| **SenseNova U1.5 Studio** | 独自統合 | テキスト生成用の公式8-Step蒸留LoRA、複数参照の合成、順序変更・役割指定・結果からの継続編集、専用Python環境を統合。 | 8-Stepはテキスト生成用。参照編集はQuality 50-Step。 |
+| **MiniMax H3 Studio** | 独自統合 | 音声付き動画の専用UI。ComfyUI・専用Python・標準モデルをNeoから初回セットアップし、既存モデルの共有にも対応。Turbo・INT8 VAE・Fast Decode・Sparse Attentionの任意設定も用意。 | Windows・NVIDIA CUDA対応GPUが必要。高速化設定には画質・メモリとのトレードオフがあります。 |
+| **MiniMax H3 Image** | 独自統合・実験機能 | `H3 Image`タブでテキストからの静止画生成と参照画像による編集。PNGと生成条件を保存。 | 標準H3の最小5フレーム構成を使用。実モデルでのGPU画像生成・画質・速度は未検証です。 |
 
 ### 画像生成と全体の操作
 
@@ -36,17 +50,6 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **設定・動画保存の保護** | 独自追加 | 一時ファイルへ書き終えてから保存先を置き換え、設定の書き込み失敗や動画変換エラーによる既存ファイルの破損を防止。 | 保存できなかった場合はエラーを表示し、既存ファイルを保持。 |
 | **起動プロファイル・公開制限** | 独自追加 | 用途別の起動設定、ローカル限定の既定動作、外部公開時の認証・許可確認。 | 外部公開は明示的な設定が必要。 |
 | **Diagnostics** | 独自追加 | Python・PyTorch・CUDA・GPU・ディスク・モデル・公開状態の診断。 | SettingsとAPIからReady／Warning／Blockedを確認可能。 |
-
-### モデル対応と導入
-
-| 機能 | 由来・区分 | できること・本ブランチでの追加部分 | 条件・制約 |
-|---|---|---|---|
-| **共通モデル導入CLI** | 独自追加 | Krea2・Anima・SenseNovaの導入、ダウンロード再開、ファイル検証、修復。 | モデル本体はリポジトリに含みません。 |
-| **Krea2 INT8・高解像度処理** | Forge継承＋独自統合 | ForgeのKrea2対応を利用し、モデル導入手順と4K／8K向けの追加処理を同梱。 | 高解像度処理の一部は実験機能。 |
-| **Anima 3.8B拡張** | Forge継承＋独自統合 | Qwen3.5を使う拡張、v1.1のSemantic Connector v2対応、INT8変換・導入支援を同梱。 | v1／v1.1に対応。導入する版に合ったモデル構成が必要。 |
-| **SenseNova U1.5 Studio** | 独自統合 | テキスト生成用の公式8-Step蒸留LoRA、複数参照の合成、順序変更・役割指定・結果からの継続編集、専用Python環境を統合。 | 8-Stepはテキスト生成用。参照編集はQuality 50-Step。 |
-| **MiniMax H3 Studio** | 独自統合 | 音声付き動画の専用UI。ComfyUI・専用Python・標準モデルをNeoから初回セットアップし、既存モデルの共有にも対応。Turbo・INT8 VAE・Fast Decode・Sparse Attentionの任意設定も用意。 | Windows・NVIDIA CUDA対応GPUが必要。高速化設定には画質・メモリとのトレードオフがあります。 |
-| **MiniMax H3 Image** | 独自統合・実験機能 | `H3 Image`タブでテキストからの静止画生成と参照画像による編集。PNGと生成条件を保存。 | 標準H3の最小5フレーム構成を使用。実モデルでのGPU画像生成・画質・速度は未検証です。 |
 
 ### 拡張・仕上げと詳細設定
 
@@ -125,15 +128,19 @@ Krea2・Animaを選んでも、操作中の`txt2img`／`img2img`タブは維持�
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - 対象PyTorch buildに対応したNVIDIA driver
 
-### ダウンロードと起動
+### はじめて使う場合
 
 ```powershell
 git clone --branch neo https://github.com/AiWithYou/aikimi-studio-neo.git
 cd aikimi-studio-neo
-.\aikimi-launch.ps1 -Profile LocalSafe
+.\aikimi-setup.bat
 ```
 
-`aikimi-launch.bat`をダブルクリックした場合も、`LocalSafe`で起動します。起動後に<http://127.0.0.1:7861>を開いてください。
+1. 表示された番号から使いたいモデルを選び、セットアップの完了を待ちます。
+2. 完了後は、フォルダー内の`aikimi-launch.bat`をダブルクリックしてください。
+3. 起動ログにURLが表示されたら、ブラウザーで<http://127.0.0.1:7861>を開きます。
+
+**初回はセットアップBAT、普段は起動BATを使います。** 既存のモデルで始める場合は、セットアップを省いて`aikimi-launch.bat`で起動できます。モデルの配置先は各ガイドを参照してください。
 
 `LocalSafe`は自分のPC内だけで利用する通常起動です。初回は必要なライブラリを自動導入します。既定のPyTorchは`2.11.0+cu130`、torchvisionは`0.26.0+cu130`なので、対応するNVIDIAドライバーを用意してください。
 
@@ -238,7 +245,8 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 | 既定ブランチ | `neo` |
 | ベース | `Haoming02/sd-webui-forge-classic`の`neo` |
 | 最終同期基準 | `0d0cb72951b059c8ea17861ba86db8d0f6098c28`（Forge Neo 2.29後の`arch`更新を含む） |
-| 取り込み時のマージコミット | `661439ba2b44b78346506c9b2f2178bc39275bff` |
+| 最新の確認先 | `76586f6a`（2026-09-12）。[選択取り込みの記録](docs/upstream-sync.md) |
+| Aikimiの配布バージョン | `1.0.0`。Forgeのバージョンとは別に管理 |
 | 主対象 | Windows 11、Python 3.13、NVIDIA GPU |
 | コードのライセンス | AGPL-3.0。モデルとアセットには別条件が適用される場合があります。 |
 
@@ -298,6 +306,8 @@ git pull --ff-only origin neo
 - [Model installation](docs/model-installation.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Contributing](CONTRIBUTING.md)
+- [変更履歴](CHANGELOG.md)
+- [Forge Neo更新の確認記録](docs/upstream-sync.md)
 - [Release checklist](docs/release-checklist.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 

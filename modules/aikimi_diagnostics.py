@@ -90,12 +90,9 @@ def _public_line(value: object, *, limit: int = 320) -> str:
 
 
 def app_version() -> str:
-    try:
-        from modules_forge import forge_version
+    from modules.aikimi_version import VERSION
 
-        return f"Aikimi Studio Neo {forge_version.version} {forge_version.release}"
-    except (AttributeError, ImportError):
-        return "Aikimi Studio Neo"
+    return f"Aikimi Studio Neo v{VERSION}"
 
 
 def _short_commit(root: Path) -> str | None:

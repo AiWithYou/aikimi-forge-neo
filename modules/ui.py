@@ -950,6 +950,7 @@ def versions_html():
     import torch
 
     from backend.memory_management import flash_enabled, sage_enabled, xformers_enabled
+    from modules.aikimi_version import VERSION
     from modules_forge import forge_version
 
     python_version = ".".join([str(x) for x in sys.version_info[0:3]])
@@ -963,7 +964,7 @@ def versions_html():
         _versions.append(f"xformers: {importlib.metadata.version('xformers')}")
 
     return f"""
-Aikimi Studio Neo
+Aikimi Studio Neo v{VERSION}
 &#x2000;•&#x2000;
 engine: <a href="https://github.com/Haoming02/sd-webui-forge-classic/tree/neo">Forge Neo {forge_version.release}</a>
 &#x2000;•&#x2000;
