@@ -249,6 +249,7 @@ class H3SetupLifecycleTests(unittest.TestCase):
         listener.parents.return_value = [parent]
         events = []
         listener.terminate.side_effect = lambda: events.append("listener stopped")
+
         def exited(**_):
             events.append("launcher exited")
             parent.poll.return_value = 0
