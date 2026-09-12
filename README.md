@@ -16,10 +16,10 @@
 
 | 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
-| **モデルを使う** | Anima 3.8B v1.1の拡張、SenseNova専用Studio、MiniMax H3専用StudioとComfyUI連携。 |
-| **モデルを導入する** | モデルを選ぶだけのセットアップBAT。INT8モデルの取得・変換と、必要な専用環境の準備。 |
-| **画像を仕上げる** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
-| **操作する** | 追加機能へのショートカット、実行状態の表示、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
+| **モデル対応** | Anima 3.8B v1.1の拡張、SenseNova専用Studio、MiniMax H3専用StudioとComfyUI連携。 |
+| **導入** | モデルを選ぶだけのセットアップBAT。INT8モデルの取得・変換と、必要な専用環境の準備。 |
+| **仕上げ** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
+| **操作** | 追加機能へのショートカット、実行状態の表示、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
 
 Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み、画像編集・動画生成があります。下の一覧では、**Forge継承**は基盤から引き継いだ機能、**独自追加**は本ブランチの追加処理、**独自統合**は外部モデルや実行環境を使うための専用UI・連携を指します。
 
@@ -31,52 +31,55 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 
 ### モデル対応と導入
 
-| 機能 | 由来・区分 | できること・本ブランチでの追加部分 | 条件・制約 |
-|---|---|---|---|
-| **かんたんセットアップ** | 独自追加 | BATでモデルを選び、本体の環境から準備。Krea2・Anima・SenseNovaは共通CLIで再開・検証・修復、H3は専用セットアップを実行。 | モデル本体はリポジトリに含みません。 |
-| **Krea2 INT8・高解像度処理** | Forge継承＋独自統合 | ForgeのKrea2対応を利用し、モデル導入手順と4K／8K向けの追加処理を同梱。 | 高解像度処理の一部は実験機能。 |
-| **Anima 3.8B拡張** | Forge継承＋独自統合 | Qwen3.5を使う拡張、v1.1のSemantic Connector v2対応、INT8変換・導入支援を同梱。 | v1／v1.1に対応。導入する版に合ったモデル構成が必要。 |
-| **SenseNova U1.5 Studio** | 独自統合 | テキスト生成用の公式8-Step蒸留LoRA、複数参照の合成、順序変更・役割指定・結果からの継続編集、専用Python環境を統合。 | 8-Stepはテキスト生成用。参照編集はQuality 50-Step。 |
-| **MiniMax H3 Studio** | 独自統合 | 音声付き動画の専用UI。ComfyUI・専用Python・標準モデルをNeoから初回セットアップし、既存モデルの共有にも対応。Turbo・INT8 VAE・Fast Decode・Sparse Attentionの任意設定も用意。 | Windows・NVIDIA CUDA対応GPUが必要。高速化設定には画質・メモリとのトレードオフがあります。 |
-| **MiniMax H3 Image** | 独自統合・実験機能 | `H3 Image`タブでテキストからの静止画生成と参照画像による編集。PNGと生成条件を保存。 | 標準H3の最小5フレーム構成を使用。実モデルでのGPU画像生成・画質・速度は未検証です。 |
+| 機能 | 区分 | できること |
+|---|---|---|
+| **かんたんセットアップ** | 独自追加 | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
+| **Krea2** | Forge継承＋独自統合 | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
+| **Anima 3.8B** | Forge継承＋独自統合 | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
+| **SenseNova U1.5 Studio** | 独自統合 | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
+| **MiniMax H3 Studio** | 独自統合 | 音声付き動画を生成。専用ComfyUI・Python・標準INT8モデルのセットアップと、既存モデルの共有に対応します。 |
+| **MiniMax H3 Image** | 独自統合・実験機能 | `H3 Image`タブで静止画生成と参照画像による編集。PNGと生成条件を保存します。実モデルでのGPU画像生成・画質・速度は未検証です。 |
+
+モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
 
 ### 画像生成と全体の操作
 
-| 機能 | 由来・区分 | できること・本ブランチでの追加部分 | 条件・制約 |
-|---|---|---|---|
-| **Forge画像生成** | Forge継承 | 通常の`txt2img`、`img2img`、Extras、モデル読み込み。 | モデルごとの条件に従います。 |
-| **Aikimiナビゲーション・Status** | 独自追加 | 追加機能への入口と、ちびあいきみ・実行環境・待機ジョブ・技術詳細の表示。 | 状態表示はKrea2・Anima・SenseNova・MiniMax H3動画の操作中に限定。 |
-| **Extrasの操作・効率改善** | 独自追加 | 実行順・予定サイズの表示、Grain Cleaner単独設定、画像上の見本範囲選択、解析の再利用、結果要約。 | 見本の画像上選択はSingle Image・Upscaleオフ時。解析キャッシュは直近1画像のみ。 |
-| **設定・動画保存の保護** | 独自追加 | 一時ファイルへ書き終えてから保存先を置き換え、設定の書き込み失敗や動画変換エラーによる既存ファイルの破損を防止。 | 保存できなかった場合はエラーを表示し、既存ファイルを保持。 |
-| **起動プロファイル・公開制限** | 独自追加 | 用途別の起動設定、ローカル限定の既定動作、外部公開時の認証・許可確認。 | 外部公開は明示的な設定が必要。 |
-| **Diagnostics** | 独自追加 | Python・PyTorch・CUDA・GPU・ディスク・モデル・公開状態の診断。 | SettingsとAPIからReady／Warning／Blockedを確認可能。 |
+| 機能 | 区分 | できること |
+|---|---|---|
+| **Forge画像生成** | Forge継承 | `txt2img`、`img2img`、Extras、モデル読み込みなど、Forgeの基本機能を利用。 |
+| **Aikimiナビゲーション** | 独自追加 | 画面上部のショートカットからKrea2・Anima・SenseNova・MiniMax H3へ移動。既存のForgeタブもそのまま使えます。 |
+| **ちびあいきみ・状態表示** | 独自追加 | 生成状況、順番待ち、実行環境を確認。詳しい情報は展開して表示でき、あいきみの表示や動きはSettingsで調整できます。 |
+| **Extrasの操作改善** | 独自追加 | 処理順と予定サイズの表示、Grain Cleaner単独設定、見本範囲の選択、結果の要約。同じ画像の再調整では解析結果を再利用します。 |
+| **保存・ジョブ復旧** | 独自追加 | 設定や動画の保存中に失敗した場合の既存ファイル保護、H3ジョブの送信記録と再起動後の照合、Forge・SenseNova・H3間のGPU使用調整。 |
+| **起動設定** | 独自追加 | 通常のローカル起動、低VRAM向け設定、API専用起動、認証付きLAN利用を選択。 |
+| **Diagnostics** | 独自追加 | SettingsからPython・GPU・モデルの準備状況を確認。APIからも診断結果を取得できます。 |
 
 ### 拡張・仕上げと詳細設定
 
-| 機能 | 由来・区分 | できること・本ブランチでの追加部分 | 条件・制約 |
-|---|---|---|---|
-| **HyperWeave 4K／8K** | 独自追加・実験機能 | 入力画像の構図などを制約にして、読み込み済みの生成モデルで段階的に再作画。 | 細部はモデルによる推定で、入力から変化します。 |
-| **Grain Cleaner** | 独自追加 | 微細な粒状感の抑制、細部保護、自動／見本範囲による推定、処理・保護マスク、診断画像、CLI。 | CPU処理・追加モデル不要。初期状態はオフ。 |
-| **Color Flatten・色むら確認** | 独自追加 | 色差のムラ補正、Smooth Gradientによる平滑化、色むらの解析・可視化。 | 補正方式に応じた設定を表示。結果を出さない色むら解析は省略。 |
-| **CD Tuner** | 独自統合 | txt2img / img2imgでDetail・色・明るさ・彩度・Color Mapを調整。 | 既定オフ。重みの直接編集は対応する浮動小数点層のみ。未対応の量子化層への適用は停止。 |
-| **MiniMax H3 NegPiP** | 独自統合 | H3 Studio / H3 Imageでプロンプト内の負の重みを使用。 | 既定オフ。切替後は実行環境の再起動が必要。Sparse Attentionとの併用は不可。 |
-| **SenseNovaの参照優先モード** | 独自追加 | 参照キャッシュのCPU退避とAttentionの分割処理でVRAMを削減。最大8枚・各約1MPの参照と約4MP出力に対応。 | RTX 3090の8枚・各約0.26MP比較では5.08→2.23 GiB、PNG完全一致。CPU RAMと転送時間を使用。 |
-| **H3 CLIP条件キャッシュ** | 独自統合＋独自追加 | 同じプロンプト・参照素材の条件を再利用し、Qwen3-VLの再ロードと再計算を省略。NegPiP併用にも対応。 | 既定オフ。固定版CLIPCachedの導入が必要。条件はローカルに保存。 |
-| **H3 Fun ControlNet · INT8** | 独自統合 | 元動画からのCanny抽出、または前処理済みDepth・Poseなどの動画で動きと構図を制御。 | 既定オフ。INT8制御モデルと対応ComfyUIが必要。Compiler併用の修正パッチを同梱。 |
-
-**各モデルを使うには、モデルファイルと実行環境の準備が必要です。** 導入条件は下の機能別ガイド、PC側の準備状況はSettingsのDiagnosticsで確認できます。Grain Cleanerは追加モデルなしで利用可能です。
+| 機能 | 区分 | できること |
+|---|---|---|
+| **HyperWeave 4K／8K** | 独自追加・実験機能 | 入力画像の構図を制約として、読み込み済みモデルで段階的に再作画。細部はモデルが推定するため、入力から変化します。 |
+| **Grain Cleaner** | 独自追加 | 微細な粒状感を抑えながら細部を保護。自動推定・見本範囲指定・処理マスク・診断画像に対応。追加モデル不要のCPU処理です。 |
+| **Color Flatten・色むら確認** | 独自追加 | 色差のムラ補正、Smooth Gradientによる平滑化、色むらの解析・可視化。 |
+| **CD Tuner** | 独自統合 | `txt2img`／`img2img`のDetail・色・明るさ・彩度・Color Mapを調整。重みの直接編集は対応する浮動小数点層に限ります。 |
+| **SenseNovaの参照優先モード** | 独自追加 | 参照キャッシュのCPU退避とAttentionの分割処理でVRAM使用量を削減。最大8枚・各約1MPの参照と約4MP出力に対応し、CPU RAMと転送時間を使用します。 |
+| **H3の長尺生成** | 独自統合＋独自追加 | 共通プロンプトと区間ごとの指示から、複数区間をつないだ動画を生成。HybridWindowsを利用する方式も選べます。導入条件と併用できる設定は[長尺生成ガイド](extensions-builtin/minimax-h3-studio/README.md#長尺生成)を参照してください。 |
+| **H3の高速化設定** | 独自統合 | Turbo・INT8 VAE・Fast Decode・Sparse Attentionを必要に応じて選択。画質・メモリ・速度とのトレードオフは[高速化ガイド](docs/minimax-h3-acceleration.md)に記載しています。 |
+| **H3 NegPiP** | 独自統合 | H3 Studio／H3 Imageでプロンプト内の負の重みを使用。切替後は実行環境の再起動が必要で、Sparse Attentionとは併用できません。 |
+| **H3 CLIP条件キャッシュ** | 独自統合＋独自追加 | 同じプロンプト・参照素材の条件を再利用し、Qwen3-VLの再ロードと再計算を省略。固定版CLIPCachedの導入が必要です。 |
+| **H3 Fun ControlNet · INT8** | 独自統合 | 元動画のCannyや前処理済みのDepth・Pose動画で、動きと構図を制御。INT8制御モデルと対応ComfyUIが必要です。 |
 
 ### 機能別ガイド
 
-- [Krea2 high-resolution notes](docs/krea2_local_supersample_detail_ja.md)
-- [Anima 3.8B guide](extensions-builtin/anima-3-8b/README.md)
-- [SenseNova U1.5 Studio guide](extensions-builtin/sensenova-u15-studio/README.md)
+- [Krea2の高解像度処理](docs/krea2_local_supersample_detail_ja.md)
+- [Anima 3.8B](extensions-builtin/anima-3-8b/README.md)
+- [SenseNova U1.5 Studio](extensions-builtin/sensenova-u15-studio/README.md)
 - [MiniMax H3 Studio：動画生成](extensions-builtin/minimax-h3-studio/README.md)
 - [MiniMax H3 Image：実験的な静止画生成](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)
 - [MiniMax H3の任意の高速化設定](docs/minimax-h3-acceleration.md)
 - [MiniMax H3のCLIPキャッシュとNegPiP併用](docs/minimax-h3-clipcache.md)
 - [MiniMax H3 Fun ControlNetと実行環境の修正](docs/minimax-h3-fun-control.md)
-- [HyperWeave guide](extensions-builtin/hyperweave/README.md)
+- [HyperWeave](extensions-builtin/hyperweave/README.md)
 - [Grain Cleanerガイド](docs/grain-cleaner.md)
 - [CD Tuner・MiniMax H3 NegPiPガイド](docs/cd-tuner-negpip.md)
 
@@ -110,7 +113,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 
 Krea2・Animaを選んでも、操作中の`txt2img`／`img2img`タブは維持されます。他のタブから選んだ場合は`txt2img`へ移動します。
 
-追加機能を利用している間は、ちびあいきみが実行状態や待機ジョブを表示します。詳細情報は展開して確認でき、通常のForge画面へ戻ると状態表示も閉じます。
+ちびあいきみの状態表示から、進行状況や順番待ち、実行環境を確認できます。詳しい情報は展開して表示し、表示の有無・大きさ・動きはSettingsで調整してください。
 
 </details>
 
@@ -148,7 +151,7 @@ cd aikimi-studio-neo
 
 ### モデルの導入
 
-Neoを終了し、`aikimi-setup.bat`をダブルクリックしてモデルを選んでください。本体のPython環境・GPUライブラリからモデル、必要な専用環境まで自動で準備します。通常起動を先に済ませる必要はありません。
+セットアップメニューでは、次の4種類を選べます。モデルを追加するときもNeoを終了して`aikimi-setup.bat`を実行してください。
 
 | 選択 | 自動で準備する内容 |
 |---|---|
