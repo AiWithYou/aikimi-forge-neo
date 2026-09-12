@@ -97,6 +97,8 @@ _PROCESS_LOCK = threading.RLock()
 _ACTIVE_PROCESS: subprocess.Popen[str] | None = None
 _ACTIVE_JOB_ID: str | None = None
 _CANCELLED_JOB_IDS: set[str] = set()
+# Only populated when the generator has exited but its worker has not.
+_PENDING_CLEANUP: tuple[str, Path, Path] | None = None
 
 
 def _shutdown_active_worker() -> None:
@@ -644,6 +646,29 @@ def _cleanup_job_directory(job_directory: Path, cache_root: Path) -> None:
             time.sleep(0.1 * (attempt + 1))
 
 
+def _finish_pending_cleanup() -> None:
+    """Reap a stopped worker left behind by a failed generator finalizer."""
+    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS, _PENDING_CLEANUP
+
+    with _PROCESS_LOCK:
+        pending = _PENDING_CLEANUP
+        process = _ACTIVE_PROCESS
+        if pending is None or (process is not None and process.poll() is None):
+            return
+        job_id, job_directory, cache_root = pending
+        _PENDING_CLEANUP = None
+        _ACTIVE_JOB_ID = None
+        _ACTIVE_PROCESS = None
+        _CANCELLED_JOB_IDS.discard(job_id)
+
+    # A stream error must not prevent state recovery or removal of staged inputs.
+    try:
+        if process is not None and process.stdout is not None:
+            process.stdout.close()
+    finally:
+        _cleanup_job_directory(job_directory, cache_root)
+
+
 def _release_forge_vram() -> None:
     sd_models = sys.modules.get("modules.sd_models")
     if sd_models is None:
@@ -804,8 +829,9 @@ def run_generation(
     log_directory: str | os.PathLike[str],
     worker_path: str | os.PathLike[str] = DEFAULT_WORKER_PATH,
 ) -> Iterator[dict[str, Any]]:
-    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS
+    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS, _PENDING_CLEANUP
 
+    _finish_pending_cleanup()
     validate_request(request)
     runtime = inspect_runtime(
         request.source_path,
@@ -994,26 +1020,37 @@ def run_generation(
             "metadata": redact_mapping(metadata),
         }
     finally:
-        if process is not None:
-            if process.poll() is None:
+        try:
+            if process is not None and process.poll() is None:
                 process.terminate()
                 try:
                     process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=10)
-            if process.stdout is not None:
-                process.stdout.close()
-        with _PROCESS_LOCK:
-            if _ACTIVE_JOB_ID == job_id:
-                _ACTIVE_JOB_ID = None
-            if _ACTIVE_PROCESS is process:
-                _ACTIVE_PROCESS = None
-            _CANCELLED_JOB_IDS.discard(job_id)
-        _cleanup_job_directory(job_directory, cache_root)
+        finally:
+            with _PROCESS_LOCK:
+                stopped = process is None or process.poll() is not None
+                if stopped:
+                    if _ACTIVE_JOB_ID == job_id:
+                        _ACTIVE_JOB_ID = None
+                    if _ACTIVE_PROCESS is process:
+                        _ACTIVE_PROCESS = None
+                    _CANCELLED_JOB_IDS.discard(job_id)
+                else:
+                    # Retain ownership and inputs until a later cancel/start
+                    # confirms exit. Closing a live worker's pipe may also block.
+                    _PENDING_CLEANUP = (job_id, job_directory, cache_root)
+            if stopped:
+                try:
+                    if process is not None and process.stdout is not None:
+                        process.stdout.close()
+                finally:
+                    _cleanup_job_directory(job_directory, cache_root)
 
 
 def cancel_generation(job_id: str | None = None) -> str:
+    _finish_pending_cleanup()
     with _PROCESS_LOCK:
         process = _ACTIVE_PROCESS
         active_job = _ACTIVE_JOB_ID
@@ -1031,6 +1068,7 @@ def cancel_generation(job_id: str | None = None) -> str:
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(timeout=10)
+    _finish_pending_cleanup()
     return "キャンセルを受け付けました。モデルworkerを停止しています。"
 
 

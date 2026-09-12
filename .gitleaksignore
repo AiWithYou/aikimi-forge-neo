@@ -5,4 +5,4 @@ e26abf87ecd1eefd9ab0a198eee56f9c643e4001:modules_forge/forge_canvas/canvas.min.j
 0b028c84ab8a8edcf9648622ed3fe4b8ca013334:localizations/it_IT.json:generic-api-key:307
 
 # Synthetic credential-shaped value used only to verify frontend redaction.
-521184c7cdb801735ddc826b85e169fb35669c50:tools/tests/test_aikimi_chromium.py:generic-api-key:304
+c444b8f44e3e77e3f594c07215d03b139c72b346:tools/tests/test_aikimi_chromium.py:generic-api-key:304
