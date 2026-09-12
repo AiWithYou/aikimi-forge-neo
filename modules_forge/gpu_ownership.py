@@ -5,7 +5,41 @@ import threading
 
 from modules.fifo_lock import FIFOLock
 
-queue_lock = FIFOLock()
+
+class GPUQueueLock(FIFOLock):
+    def __init__(self):
+        super().__init__()
+        self._startup_lock = threading.Lock()
+        self._restored = False
+
+    def acquire(self, blocking=True):
+        with self._startup_lock:
+            if not self._restored:
+                from modules_forge import minimax_h3_pending
+
+                records = minimax_h3_pending.read_all()
+                if records:
+                    from modules_forge.minimax_h3_bridge import recover_pending_generations
+
+                    super().acquire()
+                    # 再起動直後も、Forge/APIの最初のGPU操作より先に所有権を復元する。
+                    worker = threading.Thread(
+                        target=recover_pending_generations,
+                        args=(records, self.release),
+                        daemon=True,
+                    )
+                    try:
+                        worker.start()
+                    except BaseException:
+                        super().release()
+                        raise
+                self._restored = True
+        return super().acquire(blocking)
+
+    __enter__ = acquire
+
+
+queue_lock = GPUQueueLock()
 
 
 def release_forge_vram():

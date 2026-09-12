@@ -8,6 +8,7 @@ import tempfile
 import time
 from types import SimpleNamespace
 import unittest
+import uuid
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
@@ -385,6 +386,13 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         self.enterContext(mock.patch.object(h3_bridge, "_GPU_OWNERSHIPS", {}))
         self.enterContext(mock.patch.object(h3_bridge, "_ACTIVE_GENERATION_IDS", set()))
         self.enterContext(mock.patch.object(h3_bridge, "release_forge_vram"))
+        self.enterContext(mock.patch.object(h3_bridge, "_CANCELLED_JOB_IDS", set()))
+        self.enterContext(mock.patch.object(h3_bridge, "_CANCEL_ACK_IDS", set()))
+        self.enterContext(mock.patch.object(h3_bridge.uuid, "uuid4", return_value=uuid.UUID("11111111-1111-4111-8111-111111111111")))
+        self.enterContext(mock.patch.object(h3_bridge.pending_jobs, "write"))
+        self.enterContext(mock.patch.object(h3_bridge.pending_jobs, "update"))
+        self.enterContext(mock.patch.object(h3_bridge.pending_jobs, "remove"))
+        self.enterContext(mock.patch.object(h3_bridge, "_loopback_server_process", return_value=SimpleNamespace(pid=os.getpid(), create_time=lambda: 1.0, parents=lambda: [])))
 
     @staticmethod
     def ready_runtime(runtime_profile: str = RUNTIME_PROFILE_FAST) -> RuntimeReadiness:
@@ -891,9 +899,9 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         ready.return_value = self.ready_runtime()
         client = client_class.return_value
 
-        def submit(_workflow_value):
+        def submit(_workflow_value, _prompt_id):
             self.assertGreater(lifecycle_lock.depth, 0)
-            return "locked-job"
+            return "11111111-1111-4111-8111-111111111111"
 
         client.submit.side_effect = submit
         with mock.patch(
@@ -976,7 +984,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
     ):
         ready.return_value = self.ready_runtime()
         client = client_class.return_value
-        client.submit.return_value = "job-id"
+        client.submit.return_value = "11111111-1111-4111-8111-111111111111"
         client.job.return_value = {"status": "in_progress"}
         request = H3Request(mode=MODE_TEXT, prompt="A scene with stereo ambience.")
         updates = run_generation(
@@ -1013,9 +1021,9 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
     ):
         ready.return_value = self.ready_runtime()
         client = client_class.return_value
-        client.submit.return_value = "pending-job-id"
+        client.submit.return_value = "11111111-1111-4111-8111-111111111111"
         client.job.side_effect = H3JobNotFound("HTTP 404")
-        _mark_cancelled_job("pending-job-id")
+        h3_bridge._CANCEL_ACK_IDS.add("11111111-1111-4111-8111-111111111111")
         updates = run_generation(
             H3Request(mode=MODE_TEXT, prompt="A scene with stereo ambience."),
             Path("runtime"),
@@ -1029,9 +1037,9 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(H3BridgeError, "停止"):
             next(updates)
         cleanup.assert_called_once_with({"images": []}, Path("runtime"))
-        self.assertFalse(_is_cancelled_job("pending-job-id"))
+        self.assertFalse(_is_cancelled_job("11111111-1111-4111-8111-111111111111"))
 
-    def test_cancel_intent_is_visible_before_request_and_cleared_on_failure(self):
+    def test_cancel_intent_survives_lost_cancel_response(self):
         client = ComfyH3Client.__new__(ComfyH3Client)
 
         def assert_intent(_path, _payload):
@@ -1048,7 +1056,8 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         client._request_json = mock.Mock(side_effect=H3BridgeError("cancel failed"))
         with self.assertRaisesRegex(H3BridgeError, "cancel failed"):
             client.cancel("cancel-failure-job")
-        self.assertFalse(_is_cancelled_job("cancel-failure-job"))
+        self.assertTrue(_is_cancelled_job("cancel-failure-job"))
+        _clear_cancelled_job("cancel-failure-job")
 
     @mock.patch("modules_forge.minimax_h3_bridge.time.sleep")
     @mock.patch("modules_forge.minimax_h3_bridge.cleanup_prepared_media")
@@ -1071,7 +1080,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
     ):
         ready.return_value = self.ready_runtime()
         client = client_class.return_value
-        client.submit.return_value = "recovering-job"
+        client.submit.return_value = "11111111-1111-4111-8111-111111111111"
         client.job.side_effect = [
             {"status": "in_progress"},
             H3BridgeError("temporary timeout"),
@@ -1118,7 +1127,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
     ):
         ready.return_value = self.ready_runtime()
         client = client_class.return_value
-        client.submit.return_value = "cancel-poll-race"
+        client.submit.return_value = "11111111-1111-4111-8111-111111111111"
         client.job.side_effect = [
             H3BridgeError("temporary timeout"),
             {"status": "cancelled"},
@@ -1134,7 +1143,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         self.assertEqual(next(updates)["stage"], "runtime")
         self.assertEqual(next(updates)["stage"], "prepare")
         self.assertEqual(next(updates)["stage"], "queued")
-        _mark_cancelled_job("cancel-poll-race")
+        _mark_cancelled_job("11111111-1111-4111-8111-111111111111")
         self.assertEqual(next(updates)["stage"], "reconnecting")
         cleanup.assert_not_called()
 
@@ -1143,7 +1152,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
 
         cleanup.assert_called_once_with({"images": []}, Path("runtime"))
         schedule_cleanup.assert_not_called()
-        self.assertFalse(_is_cancelled_job("cancel-poll-race"))
+        self.assertFalse(_is_cancelled_job("11111111-1111-4111-8111-111111111111"))
 
     @mock.patch("modules_forge.minimax_h3_bridge.time.sleep")
     @mock.patch("modules_forge.minimax_h3_bridge.cleanup_prepared_media")
@@ -1166,7 +1175,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
     ):
         ready.return_value = self.ready_runtime()
         client = client_class.return_value
-        client.submit.return_value = "history-retry-job"
+        client.submit.return_value = "11111111-1111-4111-8111-111111111111"
         client.job.return_value = {"status": "completed"}
         client.history.side_effect = [{}, {"ok": True}]
         extract.side_effect = [H3BridgeError("result is not visible yet"), Path("source.mp4")]
@@ -1208,7 +1217,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
     ):
         ready.return_value = self.ready_runtime()
         client = client_class.return_value
-        client.submit.return_value = "failing-poll-job"
+        client.submit.return_value = "11111111-1111-4111-8111-111111111111"
         client.job.side_effect = H3BridgeError("temporary timeout")
 
         updates = run_generation(
@@ -1224,7 +1233,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(H3BridgeError, "連続して失敗"):
             next(updates)
         self.assertEqual(client.job.call_count, 3)
-        client.cancel.assert_called_once_with("failing-poll-job")
+        client.cancel.assert_called_once_with("11111111-1111-4111-8111-111111111111")
         schedule_cleanup.assert_called_once()
         self.assertEqual(_active_generation_count(), 1)
 
@@ -1245,7 +1254,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
     ):
         ready.return_value = self.ready_runtime()
         client = client_class.return_value
-        client.submit.return_value = "job-id"
+        client.submit.return_value = "11111111-1111-4111-8111-111111111111"
         client.job.return_value = {"status": "in_progress"}
         updates = run_generation(
             H3Request(mode=MODE_TEXT, prompt="A scene with stereo ambience."),
@@ -1265,11 +1274,11 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         next_owner = GPUOwnership()
         self.assertFalse(next_owner.acquire())
         client.job.return_value = {"status": "failed"}
-        _cleanup_after_terminal(client, "job-id", {}, Path("runtime"))
+        _cleanup_after_terminal(client, "11111111-1111-4111-8111-111111111111", {}, Path("runtime"))
         self.assertTrue(next_owner.acquire())
         next_owner.release()
-        client.cancel.assert_called_once_with("job-id")
-        schedule_cleanup.assert_called_once_with(client, "job-id", {"images": []}, Path("runtime"))
+        client.cancel.assert_called_once_with("11111111-1111-4111-8111-111111111111")
+        schedule_cleanup.assert_called_once_with(client, "11111111-1111-4111-8111-111111111111", {"images": []}, Path("runtime"))
 
     @mock.patch("modules_forge.minimax_h3_bridge.cleanup_prepared_media")
     @mock.patch("modules_forge.minimax_h3_bridge._schedule_deferred_cleanup")
@@ -1288,7 +1297,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
     ):
         ready.return_value = self.ready_runtime()
         client = client_class.return_value
-        client.submit.return_value = "job-id"
+        client.submit.return_value = "11111111-1111-4111-8111-111111111111"
         client.job.return_value = {"status": "in_progress"}
         client.cancel.side_effect = H3BridgeError("cancel request failed")
         updates = run_generation(
@@ -1304,8 +1313,8 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         next(updates)
         updates.close()
 
-        client.cancel.assert_called_once_with("job-id")
-        schedule_cleanup.assert_called_once_with(client, "job-id", {"images": []}, Path("runtime"))
+        client.cancel.assert_called_once_with("11111111-1111-4111-8111-111111111111")
+        schedule_cleanup.assert_called_once_with(client, "11111111-1111-4111-8111-111111111111", {"images": []}, Path("runtime"))
         cleanup.assert_not_called()
 
     @mock.patch("modules_forge.minimax_h3_bridge.ComfyH3Client")
@@ -1343,10 +1352,10 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
                 ram_free_gib=8.0,
             )
             client = client_class.return_value
-            client.submit.return_value = "completed-job-1234"
+            client.submit.return_value = "11111111-1111-4111-8111-111111111111"
             client.job.return_value = {"status": "completed"}
             client.history.return_value = {
-                "completed-job-1234": {
+                "11111111-1111-4111-8111-111111111111": {
                     "outputs": {
                         "14": {
                             "videos": [
@@ -1384,7 +1393,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             self.assertEqual(mirrored.read_bytes(), source.read_bytes())
             metadata_text = mirrored.with_suffix(".json").read_text(encoding="utf-8")
             metadata = json.loads(metadata_text)
-            self.assertEqual(metadata["prompt_id"], "completed-job-1234")
+            self.assertEqual(metadata["prompt_id"], "11111111-1111-4111-8111-111111111111")
             self.assertEqual(metadata["seed"], 314159)
             self.assertEqual(metadata["runtime_profile"], RUNTIME_PROFILE_FAST)
             self.assertEqual(metadata["schema_version"], 2)
@@ -1415,7 +1424,13 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
     def test_managed_runtime_timeout_falls_back_to_kill(self):
         process = mock.MagicMock()
         process.poll.return_value = None
-        process.wait.side_effect = [subprocess.TimeoutExpired("comfy", 10), 0]
+        def wait(timeout):
+            if not process.kill.called:
+                raise subprocess.TimeoutExpired("comfy", timeout)
+            process.poll.return_value = 0
+            return 0
+
+        process.wait.side_effect = wait
 
         with (
             mock.patch.object(h3_bridge, "_MANAGED_PROCESS", process),
@@ -1731,7 +1746,7 @@ class MiniMaxH3LiveRuntimeTests(unittest.TestCase):
         workflow["14"]["inputs"]["filename_prefix"] = "video/Forge_Neo_H3_CK_live_smoke"
 
         client = ComfyH3Client()
-        prompt_id = client.submit(workflow)
+        prompt_id = client.submit(workflow, str(uuid.uuid4()))
         started = time.monotonic()
         terminal = False
         try:
@@ -1923,16 +1938,16 @@ class MiniMaxH3PromptHelperTests(unittest.TestCase):
             managed.write_bytes(b"copy")
             client = mock.Mock()
             client.job.side_effect = H3JobNotFound("HTTP 404")
-            _mark_cancelled_job("cancelled-job")
+            h3_bridge._CANCEL_ACK_IDS.add("11111111-1111-4111-8111-111111111111")
             _cleanup_after_terminal(
                 client,
-                "cancelled-job",
+                "11111111-1111-4111-8111-111111111111",
                 {"images": ["forge_h3/copy.png"]},
                 runtime,
                 wait_seconds=0.1,
             )
             self.assertFalse(managed.exists())
-            self.assertFalse(_is_cancelled_job("cancelled-job"))
+            self.assertFalse(_is_cancelled_job("11111111-1111-4111-8111-111111111111"))
 
 
 if __name__ == "__main__":

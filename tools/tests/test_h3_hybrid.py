@@ -115,6 +115,11 @@ class HybridTests(unittest.TestCase):
                 patch.object(bridge, "build_workflow", return_value={}),
                 patch.object(bridge, "cleanup_prepared_media"),
                 patch.object(bridge, "_schedule_deferred_cleanup"),
+                patch.object(bridge, "_loopback_server_process"),
+                patch.object(bridge, "pending_jobs"),
+                patch.object(bridge, "GPUOwnership"),
+                patch.object(bridge, "_GPU_OWNERSHIPS", {}),
+                patch.object(bridge, "_ACTIVE_GENERATION_IDS", set()),
                 patch.object(bridge, "ComfyH3Client") as client,
             ):
                 client.return_value.submit.return_value = "timeout-test"

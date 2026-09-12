@@ -188,6 +188,8 @@ class H3AccelerationTests(unittest.TestCase):
         client.job.return_value = {"status": "cancelled"}
         with (
             patch.object(self.bridge, "ensure_ready", return_value=ready) as ensure,
+            patch.object(self.bridge, "_loopback_server_process"),
+            patch.object(self.bridge, "pending_jobs"),
             patch.object(self.bridge, "prepare_media", return_value={}),
             patch.object(self.bridge, "cleanup_stale_prepared_media"),
             patch.object(self.bridge, "cleanup_prepared_media"),

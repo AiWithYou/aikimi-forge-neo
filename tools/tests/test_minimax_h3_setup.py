@@ -249,7 +249,11 @@ class H3SetupLifecycleTests(unittest.TestCase):
         listener.parents.return_value = [parent]
         events = []
         listener.terminate.side_effect = lambda: events.append("listener stopped")
-        parent.wait.side_effect = lambda **_: events.append("launcher exited")
+        def exited(**_):
+            events.append("launcher exited")
+            parent.poll.return_value = 0
+
+        parent.wait.side_effect = exited
         with (
             mock.patch.object(bridge, "_MANAGED_PROCESS", parent),
             mock.patch.object(

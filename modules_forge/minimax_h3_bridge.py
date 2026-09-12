@@ -27,6 +27,7 @@ import httpx
 
 from modules.aikimi_security.redaction import sanitized_subprocess_environment
 from modules_forge.gpu_ownership import GPUOwnership, release_forge_vram
+from modules_forge import minimax_h3_pending as pending_jobs
 from modules_forge.minimax_h3_runtime import SERVER_URL, installed_runtime_root, managed_runtime_root, model_root, setup_lock
 from modules_forge.minimax_h3_acceleration import FAST_VAE_PACK, SPARSE_COMMIT, H3Acceleration
 from modules_forge.minimax_h3_clipcache import CLIP_CACHE_PACK, CLIP_CACHE_REVISION, require_clipcache
@@ -135,6 +136,7 @@ _RUNTIME_LIFECYCLE_LOCK = threading.RLock()
 _RUNTIME_SETUP_ACTIVE = False
 _CANCELLED_JOB_LOCK = threading.Lock()
 _CANCELLED_JOB_IDS: set[str] = set()
+_CANCEL_ACK_IDS: set[str] = set()
 _ACTIVE_GENERATION_LOCK = threading.Lock()
 _ACTIVE_GENERATION_IDS: set[str] = set()
 _GPU_OWNERSHIPS: dict[str, GPUOwnership] = {}
@@ -152,6 +154,10 @@ class H3GenerationCancelled(H3BridgeError):
 
 class H3JobNotFound(H3BridgeError):
     """A ComfyUI job endpoint no longer knows the requested prompt ID."""
+
+
+class H3SubmissionRejected(H3BridgeError):
+    """固定版の入力検証が投入前に拒否した要求。"""
 
 
 class _WindowsPerformanceInformation(ctypes.Structure):
@@ -206,6 +212,7 @@ def _is_cancelled_job(prompt_id: str) -> bool:
 def _clear_cancelled_job(prompt_id: str) -> None:
     with _CANCELLED_JOB_LOCK:
         _CANCELLED_JOB_IDS.discard(prompt_id)
+        _CANCEL_ACK_IDS.discard(prompt_id)
 
 
 def _mark_active_generation(prompt_id: str) -> None:
@@ -822,6 +829,8 @@ class ComfyH3Client:
             except json.JSONDecodeError:
                 pass
             error_type = H3JobNotFound if response.status_code == 404 else H3BridgeError
+            if path == "/prompt" and response.status_code == 400:
+                error_type = H3SubmissionRejected
             raise error_type(
                 f"ComfyUI が要求を拒否しました (HTTP {response.status_code}): {details[:1200]}"
             )
@@ -871,8 +880,9 @@ class ComfyH3Client:
             nodes.update(value)
         return nodes
 
-    def submit(self, workflow: dict[str, Any]) -> str:
-        prompt_id = str(uuid.uuid4())
+    def submit(self, workflow: dict[str, Any], prompt_id: str) -> str:
+        if str(uuid.UUID(prompt_id)) != prompt_id:
+            raise H3BridgeError("H3のジョブIDが正規形式のUUIDではありません。")
         response = self._request_json(
             "/prompt",
             {
@@ -884,8 +894,8 @@ class ComfyH3Client:
             timeout=90,
         )
         result = response.get("prompt_id") if isinstance(response, dict) else None
-        if not result:
-            raise H3BridgeError("ComfyUI が prompt_id を返しませんでした。")
+        if result != prompt_id:
+            raise H3BridgeError("ComfyUIの応答IDが送信前に記録したIDと一致しません。記録したIDで照合します。")
         return str(result)
 
     def job(self, prompt_id: str) -> dict[str, Any]:
@@ -903,11 +913,12 @@ class ComfyH3Client:
     def cancel(self, prompt_id: str) -> None:
         if prompt_id:
             _mark_cancelled_job(prompt_id)
-            try:
-                self._request_json(f"/api/jobs/{urllib.parse.quote(prompt_id)}/cancel", {})
-            except H3BridgeError:
-                _clear_cancelled_job(prompt_id)
-                raise
+            pending_jobs.update(prompt_id, cancel_requested=True)
+            response = self._request_json(f"/api/jobs/{urllib.parse.quote(prompt_id)}/cancel", {})
+            if isinstance(response, dict) and response.get("cancelled") is True:
+                pending_jobs.update(prompt_id, cancel_ack=True)
+                with _CANCELLED_JOB_LOCK:
+                    _CANCEL_ACK_IDS.add(prompt_id)
 
 
 def _queue_counts(server_url: str) -> tuple[int, int]:
@@ -1261,7 +1272,7 @@ def _stop_managed_runtime(listener: Any | None = None) -> None:
                 "Managed H3 runtime could not be stopped (%s).", type(exc).__name__
             )
     with _PROCESS_LOCK:
-        if _MANAGED_PROCESS is process:
+        if _MANAGED_PROCESS is process and (process is None or process.poll() is not None):
             _MANAGED_PROCESS = None
             _MANAGED_PROCESS_IDENTITY = None
 
@@ -1620,8 +1631,15 @@ def cleanup_stale_prepared_media(
     if not managed_root.is_dir():
         return
     cutoff = time.time() - max(60.0, float(max_age_seconds))
+    protected = {
+        name for record in pending_jobs.read_all()
+        if _same_local_path(Path(record["runtime_root"]), runtime_root)
+        for name in _prepared_media_names(record["prepared"])
+    }
     stale_pattern = re.compile(r"^[0-9a-f]{12}_.+")
     for candidate in managed_root.iterdir():
+        if f"forge_h3/{candidate.name}" in protected:
+            continue
         try:
             if not candidate.is_file() or not stale_pattern.fullmatch(candidate.name):
                 continue
@@ -1637,30 +1655,41 @@ def _cleanup_after_terminal(
     prompt_id: str,
     prepared: dict[str, Any],
     runtime_root: Path,
-    wait_seconds: float = 600.0,
+    wait_seconds: float | None = None,
 ) -> None:
     try:
-        deadline = time.monotonic() + wait_seconds
-        while time.monotonic() < deadline:
+        deadline = None if wait_seconds is None else time.monotonic() + wait_seconds
+        while deadline is None or time.monotonic() < deadline:
             try:
+                if _is_cancelled_job(prompt_id) and not _cancel_confirmed(prompt_id):
+                    client.cancel(prompt_id)
                 status = str(client.job(prompt_id).get("status") or "").lower()
                 if status in _TERMINAL_JOB_STATUSES:
                     try:
                         cleanup_prepared_media(prepared, runtime_root)
+                        pending_jobs.remove(prompt_id)
                     finally:
                         _clear_cancelled_job(prompt_id)
                         _finish_gpu_generation(prompt_id)
                     return
             except H3JobNotFound:
-                if _is_cancelled_job(prompt_id):
+                if _cancel_confirmed(prompt_id):
                     try:
                         cleanup_prepared_media(prepared, runtime_root)
+                        pending_jobs.remove(prompt_id)
                     finally:
                         _clear_cancelled_job(prompt_id)
                         _finish_gpu_generation(prompt_id)
                     return
             except H3BridgeError:
                 pass
+            record = next((record for record in pending_jobs.read_all() if record["prompt_id"] == prompt_id), None)
+            if record is not None and pending_jobs.server_stopped(record):
+                cleanup_prepared_media(prepared, runtime_root)
+                pending_jobs.remove(prompt_id)
+                _clear_cancelled_job(prompt_id)
+                _finish_gpu_generation(prompt_id)
+                return
             time.sleep(1.0)
         _LOG.warning("MiniMax H3 deferred input cleanup timed out for job %s", prompt_id)
     finally:
@@ -1683,6 +1712,35 @@ def _schedule_deferred_cleanup(
         daemon=True,
     )
     worker.start()
+
+
+def _cancel_confirmed(prompt_id: str) -> bool:
+    with _CANCELLED_JOB_LOCK:
+        return prompt_id in _CANCEL_ACK_IDS
+
+
+def recover_pending_generations(records: list[dict], release) -> None:
+    """アプリ再起動後、同じIDを照会する。再送と推測による入力削除は行わない。"""
+    try:
+        for record in records:
+            prompt_id = record["prompt_id"]
+            _mark_active_generation(prompt_id)
+            if record.get("cancel_requested"):
+                _mark_cancelled_job(prompt_id)
+            if record.get("cancel_ack"):
+                with _CANCELLED_JOB_LOCK:
+                    _CANCEL_ACK_IDS.add(prompt_id)
+            if pending_jobs.server_stopped(record):
+                cleanup_prepared_media(record["prepared"], Path(record["runtime_root"]))
+                pending_jobs.remove(prompt_id)
+                _clear_active_generation(prompt_id)
+                continue
+            client = ComfyH3Client(record["server_url"])
+            _cleanup_after_terminal(client, prompt_id, record["prepared"], Path(record["runtime_root"]))
+        release()
+    except Exception:
+        # 記録破損・照会不能で、所有権を推測して返却しない。
+        _LOG.exception("H3の未確定ジョブ照合が停止しました。記録とGPU所有権を保持します。")
 
 
 def prepare_media(request: H3Request, runtime_root: Path) -> dict[str, Any]:
@@ -2151,12 +2209,12 @@ def run_generation(
         if _is_cancelled_job(waiting_id):
             raise H3GenerationCancelled("生成を停止しました。")
         release_forge_vram()
-        yield from _run_generation(request, runtime_root, server_url, log_directory, output_directory, runtime_profile, poll_seconds, ownership)
+        yield from _run_generation(request, runtime_root, server_url, log_directory, output_directory, runtime_profile, poll_seconds, ownership, waiting_id)
     finally:
-        _clear_cancelled_job(waiting_id)
         with _ACTIVE_GENERATION_LOCK:
             retained = ownership in _GPU_OWNERSHIPS.values()
         if not retained:
+            _clear_cancelled_job(waiting_id)
             ownership.release()
 
 
@@ -2177,13 +2235,14 @@ def _run_generation(
     runtime_profile: str,
     poll_seconds: float | None,
     ownership: GPUOwnership,
+    submission_id: str,
 ) -> Iterator[dict[str, Any]]:
     validate_request(request)
     yield {
         "stage": "runtime",
         "message": "H3 backendを確認しています。未起動なら自動起動します（初回は1〜2分）。",
         "progress": 0.03,
-        "prompt_id": "",
+        "prompt_id": submission_id,
     }
     readiness = ensure_ready(
         runtime_root,
@@ -2194,7 +2253,7 @@ def _run_generation(
     )
     _validate_request_runtime_constraints(request, readiness, runtime_profile)
     cleanup_stale_prepared_media(runtime_root)
-    yield {"stage": "prepare", "message": "入力素材を検証しています", "progress": 0.06, "prompt_id": ""}
+    yield {"stage": "prepare", "message": "入力素材を検証しています", "progress": 0.06, "prompt_id": submission_id}
     prepared = prepare_media(request, runtime_root)
     client: ComfyH3Client | None = None
     prompt_id = ""
@@ -2213,10 +2272,31 @@ def _run_generation(
             )
             _validate_request_runtime_constraints(request, readiness, runtime_profile)
             client = ComfyH3Client(server_url, timeout=hybrid.POLL_TIMEOUT_SECONDS if request.acceleration.hybrid.enabled else 15.0)
-            prompt_id = client.submit(workflow)
+            if _is_cancelled_job(submission_id):
+                raise H3GenerationCancelled("生成を停止しました。")
+            server_process = _loopback_server_process(server_url)
+            if server_process is None:
+                raise H3BridgeError("H3の送信先processを確認できません。")
+            pending_jobs.write({
+                "version": 1, "prompt_id": submission_id,
+                "runtime_root": os.fspath(runtime_root.resolve()),
+                "server_url": normalize_loopback_url(server_url),
+                "server_process": {"pid": server_process.pid, "created": server_process.create_time()},
+                "prepared": prepared, "state": "submitting", "cancel_ack": False,
+            })
+            prompt_id = submission_id
             _mark_active_generation(prompt_id)
             with _ACTIVE_GENERATION_LOCK:
                 _GPU_OWNERSHIPS[prompt_id] = ownership
+            try:
+                client.submit(workflow, prompt_id)
+                pending_jobs.update(prompt_id, state="submitted")
+            except H3SubmissionRejected:
+                terminal = True
+                raise
+            except H3BridgeError as exc:
+                # 同じIDでも固定版は重複投入を防がない。送信は一度だけ行う。
+                _LOG.warning("H3の送信応答を確認できません。同じIDで照合します: %s", exc)
         yield {
             "stage": "queued",
             "message": "ComfyUI のキューに追加しました",
@@ -2228,9 +2308,11 @@ def _run_generation(
         consecutive_poll_failures = 0
         while True:
             try:
+                if _is_cancelled_job(prompt_id) and not _cancel_confirmed(prompt_id):
+                    client.cancel(prompt_id)
                 job = client.job(prompt_id)
             except H3JobNotFound:
-                if _is_cancelled_job(prompt_id):
+                if _cancel_confirmed(prompt_id):
                     terminal = True
                     _clear_cancelled_job(prompt_id)
                     raise H3GenerationCancelled("生成を停止しました。") from None
@@ -2333,6 +2415,8 @@ def _run_generation(
                 deferred_cleanup_scheduled = True
             if not prompt_id or terminal:
                 cleanup_prepared_media(prepared, runtime_root)
+                if prompt_id:
+                    pending_jobs.remove(prompt_id)
         finally:
             if prompt_id and terminal:
                 _finish_gpu_generation(prompt_id)
