@@ -10,9 +10,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from modules_forge import sensenova_u15_bridge as bridge
-from modules_forge import gpu_ownership
 from modules.fifo_lock import FIFOLock
+from modules_forge import gpu_ownership
+from modules_forge import sensenova_u15_bridge as bridge
 
 
 class WorkerOutput(io.StringIO):

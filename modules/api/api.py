@@ -704,7 +704,8 @@ class Api:
         return {}
 
     def unloadapi(self):
-        sd_models.unload_model_weights()
+        with self.queue_lock:
+            sd_models.unload_model_weights()
 
         return {}
 

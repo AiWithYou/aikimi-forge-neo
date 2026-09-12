@@ -27,8 +27,8 @@ from modules.aikimi_security.redaction import (
     redact_text,
     sanitized_subprocess_environment,
 )
-from modules_forge.sensenova_u15_environment import WORKER_PYTHON, environment_status
 from modules_forge.gpu_ownership import GPUOwnership, release_forge_vram
+from modules_forge.sensenova_u15_environment import WORKER_PYTHON, environment_status
 
 MODE_TEXT = "text"
 MODE_EDIT = "edit"
