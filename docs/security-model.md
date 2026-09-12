@@ -118,42 +118,13 @@ DiffusersとTransformersの旧版に対するadvisory IDは、CIの例外から�
 - diskcache 5.6.3: `PYSEC-2026-2447`
 - setuptools 81.0.0: `PYSEC-2026-3447`
 
-diskcacheは、最新の5.6.3までが影響対象であり、監査時点では修正版が公開されていません。setuptoolsは83.0.0以降で修正済みですが、PyTorch 2.11が`setuptools<82`を要求するため、安全版との共通範囲がありません。この2件は既存の期限付き例外です。以下の追加防御に対応する例外も含め、列挙したID以外を検出した場合はCIが失敗します。期限までにdiskcacheの新規releaseとPyTorch 2.13以降への移行可否を再検証し、解除できない場合は理由と次回期限を改めて審査します。
+diskcacheは、最新の5.6.3までが影響対象であり、監査時点では修正版が公開されていません。setuptoolsは83.0.0以降で修正済みですが、PyTorch 2.11が`setuptools<82`を要求するため、安全版との共通範囲がありません。CIはこの2件だけを除外し、新しいadvisory IDが追加された場合は即時に失敗します。期限までにdiskcacheの新規releaseとPyTorch 2.13以降への移行可否を再検証し、解除できない場合は理由と次回期限を改めて審査します。
 
-## 2026年9月12日のモデル依存関係への防御
+## ローカル利用と依存監査
 
-### Accelerate
+2026年9月12日、便利さと拡張のしやすさを優先し、v1.0.0で追加したAccelerateのAPI禁止と、SenseNovaの実行前ハッシュ検査・追加ファイル拒否・オフライン強制を撤回しました。Pythonのbytecode cacheも通常どおり利用します。
 
-Accelerate 1.14.0の`PYSEC-2026-3804`は、分割checkpointの`weight_map`によるパス逸脱と特殊ファイル読込の問題です。[1.15.0の実装](https://github.com/huggingface/accelerate/blob/v1.15.0/src/accelerate/utils/modeling.py)にも同じ未検証の結合処理が残っているため、版番号だけを上げて修正済みとは扱いません。
-
-Forge本体の起動時とSenseNova workerのソース読込前に、`load_checkpoint_in_model`と`load_checkpoint_and_dispatch`を拒否します。トップレベル、`big_modeling`、`utils`、`utils.modeling`の公開入口を対象にし、ファイルやモデルへ触る前にエラーを返します。`init_empty_weights`の利用には影響しません。Forge・SenseNova・導入済みDiffusers／Transformers／PEFTの通常経路に、拒否対象APIの呼び出しはありませんでした。
-
-本体とSenseNovaの監査では、この防御を条件に`PYSEC-2026-3804`を2026年9月30日までの例外とします。外部拡張が該当APIを直接使う場合は動作を停止します。別プロセス、独自Python環境、アプリ起動を通さない直接利用にはこの防御は適用されません。
-
-### SenseNova専用環境
-
-Transformers 5.10.4で固定SenseNovaモデルを構築すると、`NEOLLMConfig.rope_theta`が存在せず失敗することを確認しました。現行の4.57.6を維持し、workerで次の条件を実行前に強制します。
-
-- 導入manifestにある推論コード・設定・トークナイザーなど27ファイルについて、サイズとSHA-256を照合。
-- 未登録ファイル、リンク、リビジョン不一致、ファイル不足・改変を拒否。
-- 配布フォルダーのbytecode cacheを使わず、検証済みソースを読み込む。
-- Transformersの読込前にHub・Transformersをオフラインへ固定。
-
-これにより、入力画像・プロンプトから別モデルの設定やコードを指定する経路を設けず、固定したNEO-Unify推論だけを実行します。固定ソースはSafeTensorsから重みを読み、任意モデルの`from_pretrained`、学習再開、checkpoint変換、tokenizerの`save_pretrained`を実行しません。
-
-| 専用環境の例外ID | 対象と利用経路の判断 |
-|---|---|
-| `PYSEC-2025-217` | X-CLIP checkpoint変換。固定推論では使用しません。 |
-| `PYSEC-2026-2288` | Trainerの学習再開。固定推論では使用しません。 |
-| `PYSEC-2026-2289` | 外部設定からのAttentionコード読込。設定のハッシュ照合とオフライン読込で遮断します。 |
-| `PYSEC-2026-2290` | LightGlueのモデル読込。固定NEO-Unifyのみを使用します。 |
-| `PYSEC-2026-3929` | tokenizer／processorの保存先逸脱。固定推論では保存APIを使用しません。 |
-| `PYSEC-2026-3804` | Accelerate。上記のAPI拒否を適用します。 |
-| `PYSEC-2026-3447` | setuptoolsの配布archive作成。専用workerは配布archiveを作りません。PyTorch 2.11の制約は上記と同じです。 |
-
-これらは専用環境の固定用途に限った2026年9月30日までの例外で、ライブラリ自体の修正ではありません。CIでは期限を検査し、新規IDを無条件に許可しません。ソースrevision、依存版、読込・保存経路を変更するときは、この判断も更新してください。利用者と同じ権限で動く悪意あるローカルプログラムや拡張から、Pythonプロセスを隔離する仕組みではありません。
-
-回帰テストは`tools/tests/test_model_dependency_security.py`です。危険APIの全入口、正常なmetaモデル構築、同サイズの設定改変、追加コード・tokenizer、欠落・revision不一致、bytecode cacheとオフライン設定を確認します。
+これらの制限を前提に追加した監査例外も取り消しました。AccelerateやSenseNova専用環境の依存関係で既知の問題が検出されると、GitHubの監査は失敗として報告します。監査の結果や期限を理由に、アプリの起動・生成・拡張を停止する処理はありません。検出内容は未修正として扱い、安全性を確認済みと表示しません。
 
 ## 非目標
 

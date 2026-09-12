@@ -13,10 +13,6 @@ def initialize_forge():
 
     INITIALIZED = True
 
-    from modules.aikimi_security.model_dependencies import restrict_accelerate_checkpoint_loading
-
-    restrict_accelerate_checkpoint_loading()
-
     # region Comfy
     # https://github.com/Comfy-Org/ComfyUI/blob/v0.10.0/main.py
 
