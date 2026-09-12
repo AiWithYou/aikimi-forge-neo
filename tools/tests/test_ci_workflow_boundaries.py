@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -109,13 +110,28 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("scipy==1.18.0", runtime)
         self.assertIn("scipy==1.18.0", assets)
 
-    def test_sensenova_dependency_audit_runs_independently_without_ignores(self):
+    def test_sensenova_dependency_audit_keeps_only_reviewed_expiring_exceptions(self):
         security = self.workflow("security.yml")
         job = security.split("  sensenova-pip-audit:", 1)[1].split("  gitleaks-full-history:", 1)[0]
         self.assertIn("inputs: tools/requirements-sensenova.txt", job)
         self.assertIn("extra-index-urls: https://download.pytorch.org/whl/cu130", job)
-        for bypass in ("ignore-vulns:", "no-deps:", "needs:", "continue-on-error:"):
+        for bypass in ("no-deps:", "needs:", "continue-on-error:"):
             self.assertNotIn(bypass, job)
+        self.assertEqual(
+            set(re.findall(r"PYSEC-\d+-\d+", job)),
+            {
+                "PYSEC-2025-217",
+                "PYSEC-2026-2288",
+                "PYSEC-2026-2289",
+                "PYSEC-2026-2290",
+                "PYSEC-2026-3929",
+                "PYSEC-2026-3804",
+                "PYSEC-2026-3447",
+            },
+        )
+        self.assertIn('PIP_AUDIT_BASELINE_EXPIRES: "2026-09-30"', job)
+        self.assertIn("assert date.today() < date.fromisoformat", job)
+        self.assertLess(job.index("SenseNova security review has expired"), job.index("ignore-vulns:"))
 
 
 if __name__ == "__main__":

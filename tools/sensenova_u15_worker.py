@@ -359,6 +359,9 @@ def _load_runtime(payload: dict[str, Any]):
 
     validate_running_versions()
     source_path = Path(payload["source_path"]).resolve()
+    from modules_forge.sensenova_u15_source_security import prepare_runtime_source
+
+    prepare_runtime_source(source_path)
     package_path = source_path / "SenseNova" / "src" / "sensenova_u1" / "__init__.py"
     inference_path = source_path / "SenseNova" / "examples" / "editing" / "inference.py"
     config_repo = source_path / "SenseNova-U1.5-8B-MoT"
@@ -715,6 +718,9 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
 
 def self_test(source_path: str) -> None:
     source = Path(source_path).resolve()
+    from modules_forge.sensenova_u15_source_security import prepare_runtime_source
+
+    prepare_runtime_source(source)
     package = source / "SenseNova" / "src" / "sensenova_u1" / "__init__.py"
     inference = source / "SenseNova" / "examples" / "editing" / "inference.py"
     config = source / "SenseNova-U1.5-8B-MoT" / "config.json"
