@@ -208,7 +208,7 @@ def cpp_command(binary: Path, models: Path, request: Request, out: Path, index: 
 def safe_environment() -> dict[str, str]:
     # Never pass API keys, proxy credentials, PYTHONPATH or user-site packages to inference.
     keys = ("PATH", "SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP", "TMPDIR",
-            "HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "LANG", "LC_ALL",
+            "HOME", "USERNAME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "LANG", "LC_ALL",
             "CUDA_PATH", "LD_LIBRARY_PATH", "CUDA_VISIBLE_DEVICES")
     result = {k: os.environ[k] for k in keys if k in os.environ}
     result.update(PYTHONNOUSERSITE="1", PYTHONUTF8="1", PYTHONUNBUFFERED="1",

@@ -1,9 +1,9 @@
-# Local validation handoff
+# 実機検証のチェックリスト
 
 以下をWindowsのローカルCodex等へ渡し、実機で確認してください。ネットワーク・大容量取得・GPU使用が発生します。モデル利用条件は利用者本人が確認し、未承諾のまま `--accept-model-terms` を付けないでください。
 
 ```text
-対象: AiWithYou/aikimi-studio-neo の feat/yue2-studio
+対象: AiWithYou/aikimi-studio-neo の neo
 追加機能: YuE2 Music 0.1.0
 
 1. git status と現在のブランチ・コミットを記録する。
@@ -49,5 +49,5 @@
 10. 実画面をデスクトップと狭幅で確認する。余計な横スクロール、ボタンの誤反応、
     遅延、Consoleエラー、誤った完了表示、読めない色、過密な余白を確認する。
     不具合は再現テストを追加して修正する。GPU未実行や聞いていない音質を合格にしない。
-    差分と実行記録を添えて同じfeature branchにコミットし、既存PRを更新する。
+    差分と実行記録を残し、検証した環境・設定と未確認の範囲を区別する。
 ```

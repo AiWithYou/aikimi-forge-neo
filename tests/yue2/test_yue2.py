@@ -86,6 +86,8 @@ def test_output_boundary(tmp_path):
 
 
 def test_environment_does_not_forward_secrets(monkeypatch):
+    monkeypatch.setenv("USERNAME", "yue2-test-user")
+    assert core.safe_environment()["USERNAME"] == "yue2-test-user"
     for key in ("HF_TOKEN", "OPENAI_API_KEY", "HTTP_PROXY", "PYTHONPATH"):
         monkeypatch.setenv(key, "must-not-leak")
     env = core.safe_environment()
@@ -363,14 +365,18 @@ def test_setup_keeps_venv_interpreter_path(tmp_path):
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Job Object")
 @pytest.mark.parametrize("close_only", [False, True])
-def test_windows_job_object_stops_only_owned_tree(tmp_path, close_only):
+@pytest.mark.parametrize("attachment_delay", [0, 0.5])
+def test_windows_job_object_stops_only_owned_tree(tmp_path, close_only, attachment_delay):
     import ctypes
     from ctypes import wintypes
 
+    pytest.importorskip("numpy")
     pid_file = tmp_path / "child.pid"
     code = (
         "import subprocess,sys,time; from pathlib import Path; "
-        "sys.stdin.readline(); "
+        f"sys.path.insert(0, {str(ROOT)!r}); "
+        "from modules_forge.yue2_studio.worker import parent_guard; parent_guard(); "
+        "import numpy; "
         "p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
         "Path(sys.argv[1]).write_text(str(p.pid)); time.sleep(60)"
     )
@@ -383,15 +389,17 @@ def test_windows_job_object_stops_only_owned_tree(tmp_path, close_only):
     kernel.OpenProcess.restype = wintypes.HANDLE
     kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
     try:
+        time.sleep(attachment_delay)
         tree = service.ProcessTree(process)
-        process.stdin.write(b"GO\n")
+        process.stdin.write(tree.handshake())
         process.stdin.flush()
         deadline = time.monotonic() + 10
         while not pid_file.exists() and time.monotonic() < deadline:
             time.sleep(0.05)
         assert pid_file.exists(), "Child did not start"
-        child_handle = kernel.OpenProcess(0x00100000, False, int(pid_file.read_text()))
+        child_handle = kernel.OpenProcess(0x00100001, False, int(pid_file.read_text()))
         assert child_handle
         if close_only:
             tree.close()
@@ -408,6 +416,7 @@ def test_windows_job_object_stops_only_owned_tree(tmp_path, close_only):
         process.wait(timeout=10)
         process.stdin.close()
         if child_handle:
+            kernel.TerminateProcess(child_handle, 1)
             kernel.CloseHandle(child_handle)
         unrelated.kill()
         unrelated.wait(timeout=10)

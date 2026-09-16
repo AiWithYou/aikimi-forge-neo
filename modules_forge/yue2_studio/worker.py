@@ -22,6 +22,13 @@ from modules_forge.yue2_studio.core import (  # noqa: E402
 def parent_guard():
     if sys.stdin.buffer.readline() != b"GO\n":
         raise YuE2Error("YuE2 Studioの監督プロセスから起動してください。")
+    if os.name == "nt":
+        # venvのランチャーがJob割り当て前に実Pythonを起動する競合を防ぐ。
+        # モデルのロード前に、実Python自身も同じJobへ所属することを確認する。
+        join_windows_job(sys.stdin.buffer.readline(128).decode("ascii").strip())
+        # WindowsはJobのkill-on-closeで親の終了を検知する。
+        # CRTのstdinを別スレッドでブロックするとNumPyのDLL初期化が待ち続ける。
+        return
 
     def watch():
         # Raw reads avoid a buffered-stdin daemon lock during normal interpreter shutdown.
@@ -33,6 +40,35 @@ def parent_guard():
         os._exit(130)
 
     threading.Thread(target=watch, daemon=True).start()
+
+
+def join_windows_job(name):
+    import ctypes as c
+    import re
+    from ctypes import wintypes as w
+
+    if not re.fullmatch(r"Local\\AikimiYuE2-[0-9a-f]{32}", name):
+        raise YuE2Error("Windowsのプロセス保護情報がありません。")
+    kernel = c.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenJobObjectW.argtypes = [w.DWORD, w.BOOL, w.LPCWSTR]
+    kernel.OpenJobObjectW.restype = w.HANDLE
+    kernel.GetCurrentProcess.restype = w.HANDLE
+    kernel.IsProcessInJob.argtypes = [w.HANDLE, w.HANDLE, c.POINTER(w.BOOL)]
+    kernel.AssignProcessToJobObject.argtypes = [w.HANDLE, w.HANDLE]
+    kernel.CloseHandle.argtypes = [w.HANDLE]
+    handle = kernel.OpenJobObjectW(0x0001 | 0x0004, False, name)
+    if not handle:
+        raise OSError(c.get_last_error(), "YuE2のプロセス保護を確認できません。")
+    try:
+        process = kernel.GetCurrentProcess()
+        assigned = w.BOOL()
+        if not kernel.IsProcessInJob(process, handle, c.byref(assigned)):
+            raise OSError(c.get_last_error(), "YuE2のプロセス所属を確認できません。")
+        if not assigned.value and not kernel.AssignProcessToJobObject(handle, process):
+            raise OSError(c.get_last_error(), "YuE2の実行Pythonを保護できません。")
+    finally:
+        # 最終ハンドルは監督側だけが保持し、終了時のkill-on-closeを有効にする。
+        kernel.CloseHandle(handle)
 
 
 def native(request: Request, entry: dict, directory: Path, plan_only: bool, report, cancelled):
