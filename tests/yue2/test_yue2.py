@@ -340,3 +340,15 @@ def test_parent_pipe_loss_terminates_worker_tree(cpp_studio):
             process.wait()
         if not process.stdin.closed:
             process.stdin.close()
+
+
+def test_setup_keeps_venv_interpreter_path(tmp_path):
+    from modules_forge.yue2_studio import setup
+    directory = tmp_path / "isolated"
+    python = directory / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    python.parent.mkdir(parents=True)
+    if os.name == "nt":
+        python.write_bytes(b"test-fixture")
+    else:
+        python.symlink_to(sys.executable)
+    assert setup.environment(directory) == python.absolute()

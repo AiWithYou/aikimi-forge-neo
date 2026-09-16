@@ -99,7 +99,7 @@ outputs/yue2/<実行ID>/
 python -m pytest tests/yue2 -q
 ```
 
-2026-09-16、Linux・Python 3.13.5・Gradio 6.5.1で**44件のCPUテストに合格**しました。入力境界、Seed精度、保存、所有者を限定した停止、実worker＋模擬CLIのプロセス連携、後続候補失敗時の保持、親パイプ切断時の終了、公式段階APIの模擬契約、Gradio画面構築・コールバック引数を確認しています。
+2026-09-16、Linux・Python 3.13.5・Gradio 6.5.1で**45件のCPUテストに合格**しました。入力境界、Seed精度、保存、所有者を限定した停止、実worker＋模擬CLIのプロセス連携、後続候補失敗時の保持、親パイプ切断時の終了、公式段階APIの模擬契約、Gradio画面構築・コールバック引数を確認しています。
 
 模擬CLIの音声はテスト用の無音WAVであり、YuE2の実生成成功を示しません。公式段階APIテストもモデルを模擬しています。ブラウザー描画テストは実行環境の `ERR_BLOCKED_BY_ADMINISTRATOR` で停止し、スクリーンショットやレスポンシブ表示の確認は完了していません。Windows/GPU・実音声品質・Forge全体の回帰は[HARDWARE_TEST.md](HARDWARE_TEST.md)を参照してください。
 
