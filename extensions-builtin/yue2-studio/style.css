@@ -1,0 +1,7 @@
+/* Keep the host's colors, typography and density; do not restyle other tabs. */
+#aikimi-yue2 { max-width: 1480px; margin-inline: auto; }
+#aikimi-yue2 audio { width: 100%; }
+#aikimi-yue2 textarea { tab-size: 2; }
+@media (max-width: 720px) {
+  #aikimi-yue2 .gradio-row { gap: 12px; }
+}
