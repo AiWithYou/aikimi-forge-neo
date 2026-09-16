@@ -11,6 +11,8 @@ from PIL import Image
 from safetensors.torch import save_file
 
 from modules_forge import sensenova_u15_bridge as bridge
+from modules_forge import gpu_residency
+from tools.tests.resident_fixtures import worker_script
 
 
 class SenseNovaRequestTests(unittest.TestCase):
@@ -325,6 +327,8 @@ class SenseNovaRuntimeTests(unittest.TestCase):
 
 class SenseNovaWorkerBridgeTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(mock.patch.object(gpu_residency, "policy", return_value="release"))
+        self.addCleanup(bridge._shutdown_active_worker)
         worker_python = mock.patch.object(bridge, "WORKER_PYTHON", Path(sys.executable))
         worker_python.start()
         self.addCleanup(worker_python.stop)
@@ -376,7 +380,7 @@ print('SENSENOVA_EVENT ' + json.dumps({"stage": "complete", "message": "fake don
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             worker = root / "worker.py"
-            worker.write_text(fake_worker, encoding="utf-8")
+            worker.write_text(worker_script(fake_worker), encoding="utf-8")
             output = root / "outputs"
             cache = root / "cache"
             logs = root / "logs"
@@ -497,7 +501,7 @@ time.sleep(60)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             worker = root / "worker.py"
-            worker.write_text(fake_worker, encoding="utf-8")
+            worker.write_text(worker_script(fake_worker), encoding="utf-8")
             cache = root / "cache"
             request = bridge.SenseNovaRequest(
                 mode=bridge.MODE_EDIT,

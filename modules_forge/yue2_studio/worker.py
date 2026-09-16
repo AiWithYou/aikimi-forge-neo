@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 import traceback
+from contextlib import nullcontext
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -71,7 +72,7 @@ def join_windows_job(name):
         kernel.CloseHandle(handle)
 
 
-def native(request: Request, entry: dict, directory: Path, plan_only: bool, report, cancelled):
+def native(request: Request, entry: dict, directory: Path, plan_only: bool, report, cancelled, cache=None):
     import torch
     from yue2 import YuE2Pipeline
     from yue2.pipeline import SongResult
@@ -86,11 +87,21 @@ def native(request: Request, entry: dict, directory: Path, plan_only: bool, repo
     budget = min(request.memory_gib or total, total)
     config = GenerationConfig.from_dict({"ode_steps": request.steps, "semantic": {"max_tokens": request.max_tokens}})
     report("モデルを検証・読み込み中（初回は時間がかかります）")
-    with YuE2Pipeline.from_pretrained(
-        entry["model"], vae=entry["vae"], device="cuda", backend="torch-eager",
-        generation_config=config, memory_budget_gib=budget, offload_ar=request.offload,
-        quantization="fp8" if request.fp8 else "none", local_files_only=True,
-    ) as pipe:
+    key = (tuple(sorted(entry.items())), request.steps, request.max_tokens, budget, request.offload, request.fp8)
+    if cache is not None and cache.get("key") != key:
+        if cache.get("pipe") is not None:
+            cache["pipe"].close()
+        cache.clear()
+    pipe = cache.get("pipe") if cache is not None else None
+    if pipe is None:
+        pipe = YuE2Pipeline.from_pretrained(
+            entry["model"], vae=entry["vae"], device="cuda", backend="torch-eager",
+            generation_config=config, memory_budget_gib=budget, offload_ar=request.offload,
+            quantization="fp8" if request.fp8 else "none", local_files_only=True,
+        )
+        if cache is not None:
+            cache.update(key=key, pipe=pipe)
+    with nullcontext(pipe) if cache is not None else pipe:
         for index in range(request.candidates):
             if cancelled():
                 raise InterruptedError("停止しました。")
@@ -155,7 +166,7 @@ def cpp(request: Request, entry: dict, directory: Path, plan_only: bool, report,
         atomic_json(out / "command.json", {"argv": command})
         report(f"候補 {index + 1}/{request.candidates} · audio.cppで生成中（詳細はログ）")
         process = subprocess.Popen(command, env=safe_environment(), cwd=Path(entry["binary"]).parent,
-                                   stdin=subprocess.DEVNULL, close_fds=True)
+                                   stdin=subprocess.DEVNULL, stdout=sys.stdout, stderr=sys.stderr, close_fds=True)
         try:
             while process.poll() is None:
                 if cancelled():
@@ -178,14 +189,12 @@ def cpp(request: Request, entry: dict, directory: Path, plan_only: bool, report,
         finish_take(out, request, index, None, False, entry)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--runtime", type=Path, required=True)
-    parser.add_argument("--job", type=Path, required=True)
-    args = parser.parse_args()
-    parent_guard()
-    directory = args.job.resolve()
+_PIPE_CACHE = {}
 
+
+def resident_run(payload):
+    directory = Path(payload["job"]).resolve()
+    runtime = Path(payload["runtime"]).resolve()
     def report(message, state="running"):
         atomic_json(directory / "status.json", {"state": state, "message": message})
 
@@ -194,22 +203,35 @@ def main():
         request = Request.from_dict(project["request"])
         if request.seed < 0:
             raise YuE2Error("Seedが未確定です。")
-        entry = runtime_manifest(args.runtime, request.engine)
+        entry = runtime_manifest(runtime, request.engine)
         cancelled = lambda: (directory / "cancel").exists()
         runner = native if request.engine == "official" else cpp
-        runner(request, entry, directory, project.get("plan_only", False), report, cancelled)
+        if runner is native:
+            runner(request, entry, directory, project.get("plan_only", False), report, cancelled, _PIPE_CACHE)
+        else:
+            runner(request, entry, directory, project.get("plan_only", False), report, cancelled)
         report("完了しました。履歴から候補を試聴・比較できます。", "complete")
         return 0
     except InterruptedError as exc:
         report(str(exc), "cancelled")
-        return 130
+        raise
     except Exception as exc:
         traceback.print_exc()
         message = str(exc)
         if "out of memory" in message.lower():
             message = "VRAM不足です。他のGPUアプリを終了し、CPU退避を有効にしてください。16GB環境は実験対応です。"
         report(message, "failed")
-        return 1
+        raise
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--runtime", type=Path, required=True)
+    parser.add_argument("--job", type=Path, required=True)
+    args = parser.parse_args()
+    parent_guard()
+    resident_run({"job": str(args.job), "runtime": str(args.runtime)})
+    return 0
 
 
 if __name__ == "__main__":

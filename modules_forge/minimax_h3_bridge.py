@@ -2199,6 +2199,7 @@ def run_generation(
     poll_seconds: float | None = None,
 ) -> Iterator[dict[str, Any]]:
     ownership = GPUOwnership()
+    ownership.engine = "h3"
     waiting_id = str(uuid.uuid4())
     try:
         while not ownership.acquire():
@@ -2216,6 +2217,22 @@ def run_generation(
         if not retained:
             _clear_cancelled_job(waiting_id)
             ownership.release()
+
+
+def _release_retained_runtime(server_url):
+    # /freeは受付応答だけで、非同期allocatorではメモリ統計から完了を判定できない。
+    # Neo所有の実行環境を終了し、GPUを使うプロセスの終了を確認する。
+    with _RUNTIME_LIFECYCLE_LOCK:
+        with _PROCESS_LOCK:
+            process = _MANAGED_PROCESS
+        listener = _loopback_server_process(server_url)
+        if process is None:
+            if listener is not None:
+                raise H3BridgeError("外部起動のH3実行環境は自動終了できません。終了後にモデルを解放してください。")
+            return
+        _stop_managed_runtime(listener)
+        if process.poll() is None or _loopback_server_process(server_url) is not None:
+            raise H3BridgeError("H3実行環境の終了を確認できません。モデルを解放し直してください。")
 
 
 def _finish_gpu_generation(prompt_id: str) -> None:
@@ -2251,6 +2268,9 @@ def _run_generation(
         runtime_profile=runtime_profile,
         acceleration=request.acceleration,
     )
+    from modules_forge import gpu_residency
+
+    gpu_residency.register("h3", lambda: _release_retained_runtime(server_url), "h3")
     _validate_request_runtime_constraints(request, readiness, runtime_profile)
     cleanup_stale_prepared_media(runtime_root)
     yield {"stage": "prepare", "message": "入力素材を検証しています", "progress": 0.06, "prompt_id": submission_id}

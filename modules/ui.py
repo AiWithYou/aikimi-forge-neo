@@ -901,6 +901,10 @@ def create_ui():
     with gr.Blocks(analytics_enabled=False, title="Aikimi Studio Neo") as demo:
         settings.add_quicksettings()
 
+        from modules.ui_gpu_residency import create_ui as create_gpu_residency_ui
+
+        create_gpu_residency_ui(demo)
+
         parameters_copypaste.connect_paste_params_buttons()
 
         with gr.Tabs(elem_id="tabs") as tabs:

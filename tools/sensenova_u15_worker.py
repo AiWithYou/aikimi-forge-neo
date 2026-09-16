@@ -520,6 +520,38 @@ def _load_runtime(payload: dict[str, Any]):
     )
 
 
+_RESIDENT_RUNTIME = None
+_RESIDENT_KEY = None
+_RESIDENT_MODE = False
+
+
+def resident_run(payload):
+    global _RESIDENT_MODE
+    _RESIDENT_MODE = True
+    return run_request(payload)
+
+
+def _runtime_for_request(payload):
+    global _RESIDENT_RUNTIME, _RESIDENT_KEY
+    if not _RESIDENT_MODE:
+        return _load_runtime(payload)
+    keys = ("source_path", "checkpoint", "model_path", "generation_profile", "lora_path",
+            "vram_mode", "attn_backend", "dtype", "device", "quantization")
+    key = tuple((name, payload.get(name)) for name in keys)
+    files = [Path(payload[name]) for name in ("checkpoint", "lora_path") if payload.get(name)]
+    key += tuple((str(path), path.stat().st_size, path.stat().st_mtime_ns) for path in files)
+    if _RESIDENT_RUNTIME is None or _RESIDENT_KEY != key:
+        _RESIDENT_RUNTIME = None
+        gc.collect()
+        torch.cuda.empty_cache()
+        _RESIDENT_RUNTIME = _load_runtime(payload)
+        _RESIDENT_KEY = key
+        return _RESIDENT_RUNTIME
+    _RESIDENT_RUNTIME[-1].clear()
+    emit("loading", "Loaded model reused", 0.30)
+    return (*_RESIDENT_RUNTIME[:6], 0.0, _RESIDENT_RUNTIME[-1])
+
+
 def run_request(payload: dict[str, Any]) -> dict[str, Any]:
     _validate_payload(payload)
     started = time.monotonic()
@@ -542,7 +574,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         lora_info,
         load_seconds,
         streaming_stats,
-    ) = _load_runtime(payload)
+    ) = _runtime_for_request(payload)
     preparation_started = time.monotonic()
     mode = str(payload["mode"])
     image_paths = [str(value) for value in payload.get("input_images", [])]
@@ -615,7 +647,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                     progress_callback=progress_callback,
                 )
     finally:
-        if full_model:
+        if full_model and not _RESIDENT_MODE:
             engine.model.to("cpu")
             torch.cuda.empty_cache()
     if device.type == "cuda":

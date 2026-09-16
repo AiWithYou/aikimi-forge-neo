@@ -86,7 +86,13 @@ class BackgroundRemover:
         self.model_id = model_id
         return model
 
-    def remove(self, image, model_id, model_root, device):
+    def release(self):
+        if self.model is not None:
+            self.model.to(device="cpu")
+        self.model = None
+        self.model_id = None
+
+    def remove(self, image, model_id, model_root, device, keep_loaded=False):
         import torch
         from torchvision.transforms import InterpolationMode, Normalize, Resize, ToTensor
 
@@ -97,6 +103,7 @@ class BackgroundRemover:
         dtype = torch.float16 if device.type == "cuda" else torch.float32
         tensor = ToTensor()(Resize((spec.resolution, spec.resolution), InterpolationMode.BICUBIC)(image.convert("RGB")))
         tensor = Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(tensor).unsqueeze(0)
+        success = False
         try:
             model.to(device=device, dtype=dtype)
             with torch.inference_mode():
@@ -106,7 +113,10 @@ class BackgroundRemover:
                 raise RuntimeError("背景除去の推定結果が不正です。")
             mask = Image.fromarray((values.clip(0, 1) * 255).round().astype(np.uint8))
             mask = mask.resize(image.size, Image.Resampling.LANCZOS)
-            return apply_alpha(image, mask)
+            result = apply_alpha(image, mask)
+            success = True
+            return result
         finally:
             # 成功・失敗の両方でGPUを返す。CPU上には選択中の1モデルだけ保持する。
-            model.to(device="cpu", dtype=torch.float32)
+            if not keep_loaded or not success:
+                model.to(device="cpu", dtype=torch.float32)

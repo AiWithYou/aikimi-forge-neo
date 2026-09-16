@@ -9,6 +9,12 @@ on:
       - "**/*.ps1"
       - "extensions-builtin/aikimi-ui/**/*.js"
       - "modules/aikimi_capabilities.py"
+      - "modules_forge/gpu_residency.py"
+      - "modules/ui_gpu_residency.py"
+      - "modules_forge/resident_worker.py"
+      - "modules_forge/gpu_ownership.py"
+      - "tools/tests/test_gpu_residency.py"
+      - "tools/tests/resident_fixtures.py"
       - "modules/aikimi_diagnostics.py"
       - "modules/aikimi_security/**"
       - "modules/gradio_compat.py"
@@ -65,6 +71,12 @@ on:
       - "**/*.ps1"
       - "extensions-builtin/aikimi-ui/**/*.js"
       - "modules/aikimi_capabilities.py"
+      - "modules_forge/gpu_residency.py"
+      - "modules/ui_gpu_residency.py"
+      - "modules_forge/resident_worker.py"
+      - "modules_forge/gpu_ownership.py"
+      - "tools/tests/test_gpu_residency.py"
+      - "tools/tests/resident_fixtures.py"
       - "modules/aikimi_diagnostics.py"
       - "modules/aikimi_security/**"
       - "modules/gradio_compat.py"
@@ -141,6 +153,12 @@ jobs:
         run: |
           files=(
             modules/aikimi_capabilities.py
+            modules_forge/gpu_residency.py
+            modules/ui_gpu_residency.py
+            modules_forge/resident_worker.py
+            modules_forge/gpu_ownership.py
+            tools/tests/test_gpu_residency.py
+            tools/tests/resident_fixtures.py
             modules/aikimi_diagnostics.py
             modules/aikimi_security
             modules/gradio_compat.py

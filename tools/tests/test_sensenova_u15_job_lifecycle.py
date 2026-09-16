@@ -10,6 +10,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from modules_forge import sensenova_u15_bridge as bridge
+from modules_forge import gpu_residency
+from tools.tests.resident_fixtures import worker_script
 
 WORKER = """
 import hashlib
@@ -38,6 +40,7 @@ Path(payload["metadata_path"]).write_text(json.dumps(metadata), encoding="utf-8"
 
 class SenseNovaJobLifecycleTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.object(gpu_residency, "policy", return_value="release"))
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -59,7 +62,7 @@ class SenseNovaJobLifecycleTests(unittest.TestCase):
             self.enterContext(patch.object(bridge, name, value))
 
     def write_worker(self, change=""):
-        self.worker.write_text(WORKER.replace("{change}", change), encoding="utf-8")
+        self.worker.write_text(worker_script(WORKER.replace("{change}", change)), encoding="utf-8")
 
     def generation(self):
         updates = bridge.run_generation(

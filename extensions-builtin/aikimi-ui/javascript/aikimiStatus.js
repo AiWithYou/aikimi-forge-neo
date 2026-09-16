@@ -90,7 +90,7 @@
             toggleButton = document.createElement("button");
             toggleButton.id = "aikimi-pet-toggle";
             toggleButton.type = "button";
-            toggleButton.textContent = "あいきみ";
+            toggleButton.textContent = "ちびあいきみ";
             toggleButton.setAttribute("aria-controls", "aikimi-status");
             toggleButton.addEventListener("click", () => setPetVisible(Boolean(petPreferences.hidden)));
         }
@@ -98,7 +98,7 @@
         const toggleHidden = opts.aikimi_assistant_enabled === false;
         if (toggleButton.hidden !== toggleHidden) toggleButton.hidden = toggleHidden;
         setAttribute(toggleButton, "aria-pressed", !petPreferences.hidden);
-        setAttribute(toggleButton, "title", petPreferences.hidden ? "あいきみを表示" : "あいきみを非表示");
+        setAttribute(toggleButton, "title", petPreferences.hidden ? "ちびあいきみを表示" : "ちびあいきみを非表示");
     }
 
     function positionPet() {

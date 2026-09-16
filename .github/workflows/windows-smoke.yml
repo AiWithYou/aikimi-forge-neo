@@ -18,6 +18,7 @@ on:
       - "javascript/**"
       - "launch.py"
       - "modules/aikimi_capabilities.py"
+      - "modules/ui_gpu_residency.py"
       - "modules/aikimi_diagnostics.py"
       - "modules/aikimi_status.py"
       - "modules/aikimi_security/**"
@@ -67,6 +68,8 @@ on:
       - "tools/tests/test_chromium_helpers.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gpu_ownership.py"
+      - "tools/tests/test_gpu_residency.py"
+      - "tools/tests/resident_fixtures.py"
       - "tools/tests/test_minimax_h3_submission.py"
       - "tools/tests/test_sensenova_worker_cleanup.py"
       - "tools/tests/test_sensenova_u15_bridge.py"
@@ -113,6 +116,7 @@ on:
       - "javascript/**"
       - "launch.py"
       - "modules/aikimi_capabilities.py"
+      - "modules/ui_gpu_residency.py"
       - "modules/aikimi_diagnostics.py"
       - "modules/aikimi_status.py"
       - "modules/aikimi_security/**"
@@ -162,6 +166,8 @@ on:
       - "tools/tests/test_chromium_helpers.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gpu_ownership.py"
+      - "tools/tests/test_gpu_residency.py"
+      - "tools/tests/resident_fixtures.py"
       - "tools/tests/test_minimax_h3_submission.py"
       - "tools/tests/test_sensenova_worker_cleanup.py"
       - "tools/tests/test_sensenova_u15_bridge.py"
@@ -275,6 +281,7 @@ jobs:
           --module tools.tests.test_chromium_helpers
           --module tools.tests.test_ci_workflow_boundaries
           --module tools.tests.test_gpu_ownership
+          --module tools.tests.test_gpu_residency
           --module tools.tests.test_minimax_h3_submission
           --module tools.tests.test_sensenova_worker_cleanup
           --module tools.tests.test_sensenova_u15_bridge

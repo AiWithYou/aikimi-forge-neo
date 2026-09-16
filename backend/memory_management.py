@@ -624,6 +624,9 @@ def free_memory(memory_required: float, device: torch.device, keep_loaded: list[
 
 
 def load_models_gpu(models: list["ModelPatcher"], memory_required: float = 0, force_patch_weights: bool = False, minimum_memory_required: float = None, force_full_load: bool = False):
+    from modules_forge import gpu_residency
+
+    gpu_residency.release_resource("background")
     execution_start_time = time.perf_counter()
     cleanup_models_gc(target=models)
 
