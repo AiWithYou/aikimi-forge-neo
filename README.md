@@ -1,6 +1,6 @@
 # Aikimi Studio Neo
 
-**v1.0.0** · [変更履歴](CHANGELOG.md)
+**v1.0.0** · [`neo`の最新更新（2026-09-17）](CHANGELOG.md#未リリース)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -16,8 +16,8 @@
 
 | 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
-| **モデル対応** | Anima 3.8B v1.1の拡張、SenseNova専用Studio、MiniMax H3専用StudioとComfyUI連携。 |
-| **導入** | モデルを選ぶだけのセットアップBAT。INT8モデルの取得・変換と、必要な専用環境の準備。 |
+| **モデル対応** | Anima 3.8B v1.1の拡張、SenseNova専用Studio、MiniMax H3専用StudioとComfyUI連携、YuE2 Musicの作曲・楽譜編集。 |
+| **導入** | 画像・動画モデルを選ぶセットアップBATと、YuE2専用BAT。モデルの取得・変換と、必要な専用環境の準備。 |
 | **仕上げ** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
 | **操作** | 追加機能へのショートカット、実行状態の表示、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
 
@@ -51,7 +51,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **Aikimiナビゲーション**（追加） | 画面上部のショートカットからKrea2・Anima・SenseNova・MiniMax H3へ移動。既存のForgeタブもそのまま使えます。 |
 | **ちびあいきみ・状態表示**（追加） | 通常のForge画面にも表示できるペット。ドラッグで移動し、クリックで生成状況や順番待ちを確認。上部の「あいきみ」で表示を切り替えられます。 |
 | **Extrasの操作改善**（追加） | 処理順と予定サイズの表示、Grain Cleaner単独設定、見本範囲の選択、結果の要約。同じ画像の再調整では解析結果を再利用します。 |
-| **保存・ジョブ復旧**（追加） | 設定や動画の保存中に失敗した場合の既存ファイル保護、H3ジョブの送信記録と再起動後の照合、Forge・SenseNova・H3間のGPU使用調整。 |
+| **保存・ジョブ復旧**（追加） | 設定や動画の保存中に失敗した場合の既存ファイル保護、H3ジョブの送信記録と再起動後の照合、Forge・SenseNova・H3・YuE2間のGPU使用調整。 |
 | **起動設定**（追加） | 通常のローカル起動、低VRAM向け設定、API専用起動、認証付きLAN利用を選択。 |
 | **Diagnostics**（追加） | SettingsからPython・GPU・モデルの準備状況を確認。APIからも診断結果を取得できます。 |
 
@@ -155,16 +155,17 @@ cd aikimi-studio-neo
 
 ### モデルの導入
 
-**YuE2 Musicは専用の `aikimi-yue2-setup.bat` で導入します。** Python 3.12とGitを用意して実行し、`1：公式Python`を選んでください。専用環境とモデルの準備後、普段の起動BATから **YuE2 Music** タブを開けます。最初は候補1・FP8オフで生成してください。保存先は `outputs/yue2/` です。[詳しい手順・利用条件](extensions-builtin/yue2-studio/README.md)を参照してください。
+画像・動画の4モデルは`aikimi-setup.bat`のメニューから選びます。YuE2 Musicは専用BATを使います。モデルを追加するときは、いったんNeoを終了してください。
 
-セットアップメニューでは、次の4種類を選べます。モデルを追加するときもNeoを終了して`aikimi-setup.bat`を実行してください。
+| モデル | 導入方法 | 自動で準備する内容 |
+|---|---|---|
+| Krea2 | `aikimi-setup.bat` → `1` | INT8 ConvRot配布版・エンコーダー・VAE |
+| Anima 3.8B v1.1 | `aikimi-setup.bat` → `2` | BF16取得・INT8 ConvRot変換・エンコーダー・VAE |
+| SenseNova U1.5 | `aikimi-setup.bat` → `3` | INT8 ConvRot配布版・8-Step LoRA・専用Python環境 |
+| MiniMax H3 | `aikimi-setup.bat` → `4` | 標準INT8モデル一式・専用ComfyUI・Python環境 |
+| YuE2 Music | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → `1：公式Python` | YuE2-3B・音声復号モデル・専用Python 3.12環境 |
 
-| 選択 | 自動で準備する内容 |
-|---|---|
-| 1：Krea2 | INT8 ConvRot配布版・エンコーダー・VAE |
-| 2：Anima 3.8B v1.1 | BF16取得・INT8 ConvRot変換・エンコーダー・VAE |
-| 3：SenseNova U1.5 | INT8 ConvRot配布版・8-Step LoRA・専用Python環境 |
-| 4：MiniMax H3 | 標準INT8モデル一式・専用ComfyUI・Python環境 |
+**YuE2 MusicにはPython 3.12とGitが必要です。** 準備後は普段の起動BATから **YuE2 Music** タブを開けます。最初は候補1・FP8オフで生成してください。保存先は `outputs/yue2/` です。[詳しい手順・利用条件](extensions-builtin/yue2-studio/README.md)と[RTX 3090での実機検証記録](docs/yue2-windows-validation.md)を参照してください。
 
 完了後は`aikimi-launch.bat`で起動します。中断時は同じモデルを選び直してください。取得済みのモデルは検証して再利用します。AnimaはNVIDIA GPUで自動変換し、検証に成功するとBF16変換元を削除します。
 
