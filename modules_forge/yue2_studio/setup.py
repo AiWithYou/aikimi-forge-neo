@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from modules_forge.yue2_studio.core import (  # noqa: E402
     GGUF_ID, GGUF_MODELS, MODEL_ID, SIDECARS, SOURCE_REVISION, VAE_ID,
-    YuE2Error, atomic_json, read_json, required_cpp_files, runtime_lock,
+    YuE2Error, atomic_json, read_json, required_cpp_files, runtime_lock, safe_environment,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -93,7 +93,7 @@ def main():
             execute([python, "-m", "pip", "install", "torch==2.10.0", "--index-url", "https://download.pytorch.org/whl/cu128"])
             execute([python, "-m", "pip", "install", f"git+https://github.com/multimodal-art-projection/YuE.git@{SOURCE_REVISION}"])
             execute([python, "-m", "pip", "check"])
-            execute([python, "-c", "import torch; from yue2 import YuE2Pipeline; print('CUDA:',torch.cuda.is_available()); print('PyTorch:',torch.__version__)"])
+            execute([python, "-c", "import torch; from yue2 import YuE2Pipeline; from yue2.modeling_yue2 import YuE2ForCausalLM; print('CUDA:',torch.cuda.is_available()); print('PyTorch:',torch.__version__)"], env=safe_environment())
             patterns = ["*.json", "*.safetensors", "qwen.tiktoken", "LICENSE*", "MODEL_LICENSE*", "THIRD_PARTY_NOTICES.md", "licenses/*"]
             model, vae = RUNTIME / "models" / "YuE2-3B", RUNTIME / "models" / "YuE2-Vae"
             model_rev = download(MODEL_ID, model, patterns, python)

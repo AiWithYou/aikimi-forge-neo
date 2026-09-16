@@ -21,6 +21,7 @@ class ProcessTree:
     def __init__(self, process: subprocess.Popen):
         self.process = process
         self.handle = None
+        self.name = None
         if os.name != "nt":
             return
         import ctypes as c
@@ -41,10 +42,10 @@ class ProcessTree:
         self.kernel.CreateJobObjectW.argtypes = [c.c_void_p, w.LPCWSTR]
         self.kernel.CreateJobObjectW.restype = w.HANDLE
         self.kernel.SetInformationJobObject.argtypes = [w.HANDLE, c.c_int, c.c_void_p, w.DWORD]
-        self.kernel.AssignProcessToJobObject.argtypes = [w.HANDLE, w.HANDLE]
         self.kernel.TerminateJobObject.argtypes = [w.HANDLE, w.UINT]
         self.kernel.CloseHandle.argtypes = [w.HANDLE]
-        handle = self.kernel.CreateJobObjectW(None, None)
+        self.name = "Local\\AikimiYuE2-" + uuid.uuid4().hex
+        handle = self.kernel.CreateJobObjectW(None, self.name)
         if not handle:
             raise OSError(c.get_last_error(), "Windows Job Objectを作成できません。")
         info = Extended()
@@ -52,10 +53,12 @@ class ProcessTree:
         if not self.kernel.SetInformationJobObject(handle, 9, c.byref(info), c.sizeof(info)):
             self.kernel.CloseHandle(handle)
             raise OSError(c.get_last_error(), "Windows Job Objectの保護設定に失敗しました。")
-        if not self.kernel.AssignProcessToJobObject(handle, w.HANDLE(process._handle)):
-            self.kernel.CloseHandle(handle)
-            raise OSError(c.get_last_error(), "YuE2を保護付きプロセスに割り当てられません。")
+        # venvランチャーには独自のJobがあるため、ここでは空のJobを作る。
+        # 実PythonがGOを受けた後、自身を登録してからモデルを読み込む。
         self.handle = handle
+
+    def handshake(self):
+        return b"GO\n" + ((self.name + "\n").encode("ascii") if self.name else b"")
 
     def terminate(self):
         if self.handle is not None:
@@ -160,7 +163,7 @@ class Studio:
                     raise
                 with job.guard:
                     job.process, job.tree = process, tree
-                process.stdin.write(b"GO\n")
+                process.stdin.write(tree.handshake())
                 process.stdin.flush()
                 cancelled_at = None
                 while process.poll() is None:
