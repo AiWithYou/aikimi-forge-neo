@@ -31,7 +31,8 @@ def environment(root: Path) -> Path:
     python = root / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not python.is_file():
         venv.EnvBuilder(with_pip=True).create(root)
-    return python.resolve()
+    # Do not resolve the venv interpreter symlink: doing so can bypass the venv on POSIX.
+    return python.absolute()
 
 
 def download(repo: str, destination: Path, patterns: list[str], python: Path) -> str:
