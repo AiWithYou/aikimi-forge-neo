@@ -4,7 +4,7 @@
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
-**Krea2・Anima・SenseNovaの画像生成・編集と、MiniMax H3の音声付き動画を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
+**Krea2・Anima・SenseNovaの画像生成・編集、MiniMax H3の音声付き動画、YuE2の作曲を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
 
 [Stable Diffusion WebUI Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo)を基盤にしています。主な対象はWindows 11・Python 3.13・NVIDIA GPUで、通常起動では自分のPC内だけで利用し、LANやインターネットへ自動公開しません。
 
@@ -38,6 +38,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
 | **MiniMax H3 Studio**（統合） | 音声付き動画を生成。専用ComfyUI・Python・標準INT8モデルのセットアップと、既存モデルの共有に対応します。 |
+| **YuE2 Music**（統合） | 歌詞と曲調から作曲。ABC楽譜の生成・編集、別アレンジの生成、複数候補のA/B試聴、Seed・生成条件の保存と復元に対応。公式Python版と任意のaudio.cpp／GGUF版を専用環境で実行します。 |
 | **MiniMax H3 Image**（統合・実験） | `H3 Image`タブで静止画生成と参照画像による編集。PNGと生成条件を保存します。実モデルでのGPU画像生成・画質・速度は未検証です。 |
 
 モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
@@ -75,6 +76,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 - [Krea2の高解像度処理](docs/krea2_local_supersample_detail_ja.md)
 - [Anima 3.8B](extensions-builtin/anima-3-8b/README.md)
 - [SenseNova U1.5 Studio](extensions-builtin/sensenova-u15-studio/README.md)
+- [YuE2 Music：作曲・楽譜編集・GGUF](extensions-builtin/yue2-studio/README.md)
 - [MiniMax H3 Studio：動画生成](extensions-builtin/minimax-h3-studio/README.md)
 - [MiniMax H3 Image：実験的な静止画生成](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)
 - [MiniMax H3の任意の高速化設定](docs/minimax-h3-acceleration.md)
@@ -152,6 +154,8 @@ cd aikimi-studio-neo
 <a id="model-setup"></a>
 
 ### モデルの導入
+
+**YuE2 Musicは専用の `aikimi-yue2-setup.bat` で導入します。** Python 3.12とGitを用意して実行し、`1：公式Python`を選んでください。専用環境とモデルの準備後、普段の起動BATから **YuE2 Music** タブを開けます。最初は候補1・FP8オフで生成してください。保存先は `outputs/yue2/` です。[詳しい手順・利用条件](extensions-builtin/yue2-studio/README.md)を参照してください。
 
 セットアップメニューでは、次の4種類を選べます。モデルを追加するときもNeoを終了して`aikimi-setup.bat`を実行してください。
 
