@@ -63,3 +63,5 @@ jobs:
           echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
       - name: Run the offline CPU suite
         run: python tools/run_ci_tests.py --verbosity 1
+      - name: Run YuE2 contracts without model downloads
+        run: python -m pytest tests/yue2 -q
