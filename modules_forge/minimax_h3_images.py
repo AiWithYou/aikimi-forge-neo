@@ -328,6 +328,33 @@ def run_image_generation(
     log_directory: Path, output_directory: Path, runtime_profile: str = "fast",
     *, poll_seconds: float = 2.0,
 ) -> Iterator[dict[str, Any]]:
+    from modules_forge.gpu_ownership import GPUOwnership
+
+    bridge = _bridge()
+    ownership = GPUOwnership()
+    ownership.engine = "h3"
+    submission_id = str(uuid.uuid4())
+    try:
+        while not ownership.acquire():
+            if bridge._is_cancelled_job(submission_id):
+                raise H3ImageCancelled("画像生成を停止しました。")
+            yield {"stage": "queued", "message": "GPUの使用終了を待っています", "prompt_id": submission_id}
+            time.sleep(0.1)
+        bridge.release_forge_vram()
+        yield from _run_image_generation(request, runtime_root, server_url, log_directory,
+                                         output_directory, runtime_profile, poll_seconds,
+                                         ownership, submission_id)
+    finally:
+        with bridge._ACTIVE_GENERATION_LOCK:
+            retained = ownership in bridge._GPU_OWNERSHIPS.values()
+        if not retained:
+            if bridge._is_cancelled_job(submission_id):
+                bridge._clear_cancelled_job(submission_id)
+            ownership.release()
+
+
+def _run_image_generation(request, runtime_root, server_url, log_directory, output_directory,
+                          runtime_profile, poll_seconds, ownership, submission_id):
     request.validate()
     bridge = _bridge()
     root = bridge.resolve_runtime_root(runtime_root)
@@ -339,6 +366,9 @@ def run_image_generation(
     )
     yield {"stage": "runtime", "message": "画像生成用のH3環境を確認しています。", "prompt_id": ""}
     readiness = bridge.ensure_ready(root, url, log_directory, runtime_profile=runtime_profile, acceleration=request.runtime_acceleration)
+    from modules_forge import gpu_residency
+
+    gpu_residency.register("h3", lambda: bridge._release_retained_runtime(url), "h3")
     validate_image_runtime(request, readiness, runtime_profile)
     bridge.cleanup_stale_prepared_media(root)
     prepared = bridge.prepare_media(native_request, root)
@@ -351,15 +381,33 @@ def run_image_generation(
             validate_image_runtime(request, readiness, runtime_profile)
             client = bridge.ComfyH3Client(url)
             check_image_nodes(client)
-            prompt_id = client.submit(graph)
+            server_process = bridge._loopback_server_process(url)
+            if server_process is None:
+                raise H3ImageError("H3の送信先processを確認できません。")
+            bridge.pending_jobs.write({
+                "version": 1, "prompt_id": submission_id, "runtime_root": os.fspath(root.resolve()),
+                "server_url": url, "server_process": {"pid": server_process.pid, "created": server_process.create_time()},
+                "prepared": prepared, "state": "submitting", "cancel_ack": False,
+            })
+            prompt_id = submission_id
             bridge._mark_active_generation(prompt_id)
+            with bridge._ACTIVE_GENERATION_LOCK:
+                bridge._GPU_OWNERSHIPS[prompt_id] = ownership
+            try:
+                client.submit(graph, prompt_id)
+                bridge.pending_jobs.update(prompt_id, state="submitted")
+            except bridge.H3SubmissionRejected:
+                terminal = True
+                raise
+            except bridge.H3BridgeError:
+                _LOG.warning("H3 image submission response missing; reconciling the same job ID.")
         started, failures = time.monotonic(), 0
         yield {"stage": "queued", "message": "画像生成をキューに追加しました。", "prompt_id": prompt_id, "seed": seed}
         while True:
             try:
                 job = client.job(prompt_id)
             except bridge.H3JobNotFound:
-                if bridge._is_cancelled_job(prompt_id):
+                if bridge._cancel_confirmed(prompt_id):
                     terminal = True
                     raise H3ImageCancelled("画像生成を停止しました。") from None
                 raise
@@ -412,6 +460,8 @@ def run_image_generation(
                 bridge.cleanup_prepared_media(prepared, root)
             if prompt_id and terminal:
                 bridge._clear_cancelled_job(prompt_id)
+                bridge.pending_jobs.remove(prompt_id)
+                bridge._finish_gpu_generation(prompt_id)
         finally:
             if prompt_id:
                 bridge._clear_active_generation(prompt_id)

@@ -100,19 +100,12 @@ _CANCELLED_JOB_IDS: set[str] = set()
 # Only populated when the generator has exited but its worker has not.
 _PENDING_CLEANUP: tuple[str, Path, Path] | None = None
 _GPU_OWNERSHIP: GPUOwnership | None = None
+_RESIDENT_WORKER = None
 
 
 def _shutdown_active_worker() -> None:
-    with _PROCESS_LOCK:
-        process = _ACTIVE_PROCESS
-    if process is None or process.poll() is not None:
-        return
-    process.terminate()
-    try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=5)
+    if _RESIDENT_WORKER is not None:
+        _RESIDENT_WORKER.close()
 
 
 atexit.register(_shutdown_active_worker)
@@ -834,7 +827,7 @@ def run_generation(
     log_directory: str | os.PathLike[str],
     worker_path: str | os.PathLike[str] = DEFAULT_WORKER_PATH,
 ) -> Iterator[dict[str, Any]]:
-    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS, _PENDING_CLEANUP, _GPU_OWNERSHIP
+    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS, _PENDING_CLEANUP, _GPU_OWNERSHIP, _RESIDENT_WORKER
 
     _finish_pending_cleanup()
     validate_request(request)
@@ -864,6 +857,8 @@ def run_generation(
     log_path = log_root / f"{stamp}_{job_id[:8]}.log"
     process: subprocess.Popen[str] | None = None
     ownership = GPUOwnership()
+    ownership.engine = "sensenova"
+    success = False
 
     with _PROCESS_LOCK:
         if _ACTIVE_JOB_ID is not None:
@@ -928,83 +923,55 @@ def run_generation(
                 "TOKENIZERS_PARALLELISM": "false",
             }
         )
-        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        from modules_forge.resident_worker import ResidentWorker
+        from modules_forge import gpu_residency
+
         with _PROCESS_LOCK:
-            # キャンセル確認、起動、所有processの登録を一つの操作にする。
             if job_id in _CANCELLED_JOB_IDS:
                 raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
-            process = subprocess.Popen(
-                [
-                    os.fspath(WORKER_PYTHON),
-                    "-B",
-                    os.fspath(worker),
-                    "--request",
-                    os.fspath(request_path),
-                ],
-                cwd=os.fspath(_ROOT),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
-                env=environment,
-                creationflags=creationflags,
-            )
+            if _RESIDENT_WORKER is None:
+                _RESIDENT_WORKER = ResidentWorker("sensenova", cache_root / "sessions")
+            resident = _RESIDENT_WORKER
+            reused = resident.start(WORKER_PYTHON, worker, environment, payload, log_path)
+            process = resident.process
             _ACTIVE_PROCESS = process
-
-        event_queue: queue.Queue[str | None] = queue.Queue()
-        reader = threading.Thread(
-            target=_read_process_output, args=(process, event_queue), daemon=True
-        )
-        reader.start()
-        output_closed = False
-        log_tail: list[str] = []
-        last_event: dict[str, Any] = {
-            "stage": "loading",
-            "message": "SenseNova U1.5を読み込んでいます",
-            "progress": 0.06,
-        }
+        last_event = {"stage": "loading", "message": "SenseNova U1.5を読み込んでいます", "progress": 0.06}
+        log_tail = []
         last_yield = time.monotonic()
-
-        with log_path.open("w", encoding="utf-8", newline="\n") as log_stream:
-            while not output_closed or process.poll() is None:
+        buffer = ""
+        with log_path.open("r", encoding="utf-8", errors="replace") as log_stream:
+            while True:
+                if job_id in _CANCELLED_JOB_IDS:
+                    raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
                 try:
-                    line = event_queue.get(timeout=0.5)
-                except queue.Empty:
-                    line = ""
-                if line is None:
-                    output_closed = True
-                elif line:
+                    response = resident.result()
+                except RuntimeError as exc:
+                    if job_id in _CANCELLED_JOB_IDS:
+                        raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。") from exc
+                    raise SenseNovaBridgeError(str(exc)) from exc
+                buffer += log_stream.read()
+                lines = buffer.split("\n")
+                buffer = lines.pop()
+                for line in lines:
                     safe_line = redact_text(line)
-                    log_stream.write(safe_line + "\n")
-                    log_stream.flush()
                     log_tail.append(safe_line)
                     del log_tail[:-20]
                     event = _parse_event(line)
                     if event is not None:
-                        event = redact_mapping(event)
-                        last_event = event
+                        last_event = redact_mapping(event)
                         if event["stage"] != "complete":
-                            event["elapsed"] = time.monotonic() - started
-                            event["job_id"] = job_id
-                            yield event
+                            yield {**last_event, "elapsed": time.monotonic() - started, "job_id": job_id,
+                                   "worker_reused": reused}
                             last_yield = time.monotonic()
-
-                now = time.monotonic()
-                if (
-                    process.poll() is None
-                    and last_event.get("stage") != "complete"
-                    and now - last_yield >= 5.0
-                ):
-                    heartbeat = dict(last_event)
-                    heartbeat["elapsed"] = now - started
-                    heartbeat["job_id"] = job_id
-                    yield heartbeat
-                    last_yield = now
-
-        return_code = process.wait()
+                if response is not None:
+                    return_code = 0 if response["ok"] else 1
+                    break
+                if job_id in _CANCELLED_JOB_IDS:
+                    raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
+                if time.monotonic() - last_yield >= 5:
+                    yield {**last_event, "elapsed": time.monotonic() - started, "job_id": job_id}
+                    last_yield = time.monotonic()
+                time.sleep(0.1)
         if job_id in _CANCELLED_JOB_IDS:
             raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
         if return_code != 0:
@@ -1024,6 +991,8 @@ def run_generation(
         ):
             raise SenseNovaBridgeError("worker出力が許可された保存先の外にあります。")
         metadata = _validate_worker_result(output_path, metadata_path, request)
+        success = True
+        gpu_residency.register("sensenova", resident.close, "sensenova")
         yield {
             "stage": "complete",
             "message": "生成が完了しました",
@@ -1036,16 +1005,11 @@ def run_generation(
         }
     finally:
         try:
-            if process is not None and process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=10)
+            if not success and process is not None and _RESIDENT_WORKER is not None:
+                _RESIDENT_WORKER.close()
         finally:
             with _PROCESS_LOCK:
-                stopped = process is None or process.poll() is not None
+                stopped = success or process is None or process.poll() is not None
                 if stopped:
                     if _ACTIVE_JOB_ID == job_id:
                         _ACTIVE_JOB_ID = None
@@ -1081,13 +1045,10 @@ def cancel_generation(job_id: str | None = None) -> str:
         _CANCELLED_JOB_IDS.add(active_job)
         if process is None or process.poll() is not None:
             return "キャンセルを受け付けました。worker起動前に停止します。"
-        process.terminate()
+        if _RESIDENT_WORKER is None:
+            raise SenseNovaBridgeError("実行workerの管理情報がありません。")
+        _RESIDENT_WORKER.close()
 
-    try:
-        process.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=10)
     _finish_pending_cleanup()
     return "キャンセルを受け付けました。モデルworkerを停止しています。"
 

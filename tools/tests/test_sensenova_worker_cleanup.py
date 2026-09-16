@@ -50,6 +50,24 @@ class WorkerProcess:
         return self.returncode
 
 
+class ResidentFixture:
+    def __init__(self, process):
+        self.process = process
+
+    def start(self, python, script, environment, payload, log_path):
+        log_path.write_text(self.process.stdout.getvalue(), encoding="utf-8")
+        return False
+
+    def result(self):
+        return None
+
+    def close(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+            self.process.wait(timeout=15)
+
+
+
 class WorkerCleanupTests(unittest.TestCase):
     def setUp(self):
         self.gpu_lock = FIFOLock()
@@ -70,6 +88,7 @@ class WorkerCleanupTests(unittest.TestCase):
             ("_CANCELLED_JOB_IDS", set()),
             ("_PENDING_CLEANUP", None),
             ("_GPU_OWNERSHIP", None),
+            ("_RESIDENT_WORKER", None),
         ):
             self.enterContext(patch.object(bridge, name, value, create=True))
         self.enterContext(
@@ -89,7 +108,7 @@ class WorkerCleanupTests(unittest.TestCase):
     def running_worker(self):
         process = WorkerProcess()
         self.addCleanup(process.stdout.close)
-        self.enterContext(patch.object(bridge.subprocess, "Popen", return_value=process))
+        self.enterContext(patch.object(bridge, "_RESIDENT_WORKER", ResidentFixture(process)))
         generation = self.generation()
         self.addCleanup(generation.close)
         self.assertEqual(next(generation)["stage"], "prepare")

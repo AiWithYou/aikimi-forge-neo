@@ -34,7 +34,28 @@ class GPUQueueLock(FIFOLock):
                         super().release()
                         raise
                 self._restored = True
-        return super().acquire(blocking)
+        acquired = super().acquire(blocking)
+        if acquired:
+            from modules_forge import gpu_residency
+
+            self._manage_residency = gpu_residency._engine.get() is not None
+            try:
+                if self._manage_residency:
+                    gpu_residency.begin(gpu_residency._engine.get())
+            except BaseException:
+                super().release()
+                raise
+        return acquired
+
+    def release(self):
+        try:
+            if getattr(self, "_manage_residency", False):
+                from modules_forge import gpu_residency
+
+                gpu_residency.finish()
+        finally:
+            self._manage_residency = False
+            super().release()
 
     __enter__ = acquire
 
@@ -56,6 +77,7 @@ class GPUOwnership:
     """HTTPやgeneratorの寿命から切り離して保持できる、同じqueue_lockの所有権。"""
 
     def __init__(self):
+        self.engine = "forge"
         self._lock = queue_lock
         self._guard = threading.Lock()
         self._owned = False
@@ -63,7 +85,10 @@ class GPUOwnership:
     def acquire(self, blocking=False):
         with self._guard:
             if not self._owned:
-                self._owned = self._lock.acquire(blocking)
+                from modules_forge.gpu_residency import engine_scope
+
+                with engine_scope(self.engine):
+                    self._owned = self._lock.acquire(blocking)
             return self._owned
 
     def release(self):

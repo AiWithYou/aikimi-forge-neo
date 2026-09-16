@@ -258,6 +258,7 @@ def test_native_contract_with_fake_pipeline(tmp_path, monkeypatch):
             events.append('load'); return cls()
         def __enter__(self): return self
         def __exit__(self, *args): events.append('close')
+        def close(self): events.append('close')
         def plan(self, **kwargs): events.append('plan'); return Plan()
         def generate_semantic(self, plan, **kwargs): events.append('semantic'); return types.SimpleNamespace(timing={})
         def synthesize(self, semantic, **kwargs): events.append('synthesize'); return []
@@ -280,6 +281,15 @@ def test_native_contract_with_fake_pipeline(tmp_path, monkeypatch):
     assert core.read_json(tmp_path / 'take-1' / 'studio-result.json')['truncated'] is True
     with pytest.raises(core.YuE2Error):
         worker.native(request(seed=42, fp8=True), {}, tmp_path, False, lambda _: None, lambda: False)
+    events.clear()
+    cache = {}
+    for index, steps in enumerate((32, 32, 16)):
+        directory = tmp_path / f"cached-{index}"
+        directory.mkdir()
+        worker.native(request(seed=42, steps=steps), {"model": "model", "vae": "vae"},
+                      directory, False, lambda _: None, lambda: False, cache)
+    assert events.count("load") == 2
+    assert events.count("close") == 1
 
 
 def load_ui(monkeypatch, tmp_path):

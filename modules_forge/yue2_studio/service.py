@@ -98,6 +98,8 @@ class Studio:
         self._ownership_factory, self._release_vram = ownership_factory, release_vram
         self._guard = threading.Lock()
         self._jobs: dict[str, Job] = {}
+        self._resident = None
+        self._runtime_lock = None
         atexit.register(self.shutdown)
 
     def start(self, request: Request, owner: str, plan_only: bool = False) -> str:
@@ -112,13 +114,21 @@ class Studio:
         with self._guard:
             if any(not job.done.is_set() for job in self._jobs.values()):
                 raise YuE2Error("YuE2は実行中です。完了または停止確認後に再実行してください。")
-            lock = runtime_lock(self.runtime)
+            lock = None
             lease = factory()
+            lease.engine = "yue2"
             job = None
             try:
                 runtime_manifest(self.runtime, request.engine)
                 if not lease.acquire(blocking=False):
                     raise YuE2Error("別の生成がGPUを使用中です。完了後に再実行してください。")
+                if self._runtime_lock is None:
+                    from modules_forge import gpu_residency
+
+                    # UI再構築前のStudioが保持していた待機workerを回収する。
+                    gpu_residency.release_resource("yue2")
+                    self._runtime_lock = runtime_lock(self.runtime)
+                lock = self._runtime_lock
                 directory = self.outputs / uuid.uuid4().hex
                 directory.mkdir(parents=True, exist_ok=False)
                 job = Job(directory.name, owner, directory)
@@ -132,12 +142,24 @@ class Studio:
                 if job is not None:
                     self._jobs.pop(job.identifier, None)
                 lease.release()
-                lock.close()
+                if lock is not None:
+                    self._release_idle()
                 raise
             return job.identifier
 
+    def _release_idle(self):
+        if self._resident is not None:
+            self._resident.close()
+            self._resident = None
+        if self._runtime_lock is not None:
+            self._runtime_lock.close()
+            self._runtime_lock = None
+
     def _run(self, job: Job, request: Request, lease, release, lock):
-        process = None
+        from modules_forge import gpu_residency
+        from modules_forge.resident_worker import ResidentWorker
+
+        success = False
         try:
             if job.cancel.is_set():
                 raise InterruptedError("開始前に停止しました。")
@@ -147,69 +169,60 @@ class Studio:
             python = entry["python"] if request.engine == "official" else sys.executable
             if not Path(python).is_file():
                 raise YuE2Error("専用Pythonがありません。YuE2を再セットアップしてください。")
-            args = [str(python), "-u", str(Path(__file__).with_name("worker.py")),
-                    "--runtime", str(self.runtime.resolve()), "--job", str(job.directory.resolve())]
-            with (job.directory / "worker.log").open("wb") as log:
-                process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT,
-                                           env=safe_environment(), cwd=job.directory,
-                                           start_new_session=os.name != "nt", close_fds=True,
-                                           creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
-                # The worker waits for GO before loading any model or launching a native child.
-                try:
-                    tree = ProcessTree(process)
-                except BaseException:
-                    process.kill()
-                    process.wait()
-                    raise
-                with job.guard:
-                    job.process, job.tree = process, tree
-                process.stdin.write(tree.handshake())
-                process.stdin.flush()
-                cancelled_at = None
-                while process.poll() is None:
-                    if job.cancel.wait(0.25):
-                        if cancelled_at is None:
-                            (job.directory / "cancel").touch()
-                            cancelled_at = time.monotonic()
-                        if time.monotonic() - cancelled_at >= 3:
-                            tree.terminate()
-                            process.wait()  # Never return the lease before confirmed process exit.
-                            break
-                saved = read_json(job.directory / "status.json")
-                if job.cancel.is_set():
-                    final = {"state": "cancelled", "message": "停止しました。完了済みの候補は履歴に残っています。"}
-                elif process.returncode != 0 or saved.get("state") != "complete":
-                    final = {"state": "failed", "message": "生成は完了しませんでした: " + saved.get("message", "ログを確認してください。")}
-                else:
-                    final = saved
+            if self._resident is None:
+                self._resident = ResidentWorker("yue2", self.runtime / "sessions")
+            resident = self._resident
+            reused = resident.start(python, Path(__file__).with_name("worker.py"), safe_environment(),
+                                    {"runtime": str(self.runtime.resolve()), "job": str(job.directory.resolve())},
+                                    job.directory / "worker.log")
+            atomic_json(job.directory / "worker-session.json", {"reused": reused, "pid": resident.process.pid})
+            with job.guard:
+                job.process, job.tree = resident.process, resident.tree
+            cancelled_at = None
+            while True:
+                result = resident.result()
+                if result is not None:
+                    break
+                if job.cancel.wait(0.1):
+                    if cancelled_at is None:
+                        (job.directory / "cancel").touch()
+                        cancelled_at = time.monotonic()
+                    if time.monotonic() - cancelled_at >= 3:
+                        resident.close()
+                        raise InterruptedError("停止しました。完了済みの候補は履歴に残っています。")
+            saved = read_json(job.directory / "status.json")
+            if job.cancel.is_set():
+                raise InterruptedError("停止しました。完了済みの候補は履歴に残っています。")
+            if not result["ok"] or saved.get("state") != "complete":
+                raise YuE2Error(result.get("error") or saved.get("message", "ログを確認してください。"))
+            final = saved
+            success = True
         except BaseException as exc:
             final = {"state": "cancelled" if job.cancel.is_set() else "failed", "message": str(exc)}
         finally:
-            # A failed termination must not release the GPU while a worker can still run.
-            if process is not None:
-                if process.poll() is None:
-                    try:
-                        if job.tree:
-                            job.tree.terminate()
-                        else:
-                            process.kill()
-                    except OSError:
-                        pass
-                    process.wait()
-                if process.stdin:
-                    process.stdin.close()
-                with job.guard:
-                    if job.tree:
-                        job.tree.close()
             try:
+                if success and request.engine == "official":
+                    gpu_residency.register("yue2", self._release_idle, "yue2")
+                else:
+                    # 停止失敗時も実プロセスが終了するまではGPU所有権を保持する。
+                    while job.process is not None and job.process.poll() is None:
+                        try:
+                            self._release_idle()
+                        except (OSError, subprocess.TimeoutExpired):
+                            atomic_json(job.directory / "status.json", {
+                                "state": "running", "message": "workerの終了確認を待っています。",
+                            })
+                            time.sleep(0.5)
+                    self._release_idle()
                 if final["state"] == "failed":
                     final["message"] += f"  ログ: {job.directory / 'worker.log'}"
                 job.final = final
                 atomic_json(job.directory / "status.json", final)
             finally:
-                lease.release()
-                lock.close()
-                job.done.set()
+                try:
+                    lease.release()
+                finally:
+                    job.done.set()
 
     def status(self, identifier: str, owner: str) -> dict:
         with self._guard:
@@ -239,6 +252,8 @@ class Studio:
                             job.tree.terminate()
                         except OSError:
                             pass
+
+        self._release_idle()
 
     def history(self) -> list[tuple[str, str]]:
         entries = []

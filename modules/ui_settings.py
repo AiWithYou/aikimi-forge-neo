@@ -5,7 +5,7 @@ import gradio as gr
 
 from modules import aikimi_diagnostics, script_callbacks, scripts, sd_models, shared, shared_items, sysinfo, timer, ui_common
 from modules.call_queue import wrap_gradio_call_no_job
-from modules.options import options_section
+from modules.options import OptionRow, options_section
 from modules.shared import opts
 from modules.ui_components import FormRow
 from modules.ui_gradio_extensions import reload_javascript
@@ -48,7 +48,7 @@ def create_setting_component(key, is_quicksettings=False):
 
     if comp == gr.State:
         return gr.State(fun())
-    elif comp == FormRow:
+    elif isinstance(info, OptionRow) or comp == FormRow:
         global CURRENT_ROW
 
         if CURRENT_ROW is None:

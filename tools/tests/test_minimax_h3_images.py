@@ -44,7 +44,7 @@ def fake_bridge():
     client.submit.return_value = "job-1"
     client.object_info.return_value = SCHEMAS
     bridge = SimpleNamespace(
-        H3BridgeError=Error, H3JobNotFound=Missing,
+        H3BridgeError=Error, H3JobNotFound=Missing, H3SubmissionRejected=Error,
         H3Request=lambda **kw: SimpleNamespace(**kw),
         H3_FL_MODEL=MODELS["fl2va"], H3_REF_MODEL=MODELS["ref2va"],
         H3_TEXT_ENCODER=MODELS["clip"], H3_VIDEO_VAE=MODELS["vae"],
@@ -57,7 +57,19 @@ def fake_bridge():
         _clear_active_generation=Mock(), _clear_cancelled_job=Mock(),
         _is_cancelled_job=Mock(return_value=False), _schedule_deferred_cleanup=Mock(),
         _execution_error=lambda job: "generation failed",
+        release_forge_vram=Mock(), _release_retained_runtime=Mock(),
+        _loopback_server_process=Mock(return_value=SimpleNamespace(pid=1, create_time=lambda: 1.0)),
+        pending_jobs=Mock(), _ACTIVE_GENERATION_LOCK=threading.RLock(), _GPU_OWNERSHIPS={},
+        _cancel_confirmed=Mock(return_value=False),
     )
+    def finish(identifier):
+        ownership = bridge._GPU_OWNERSHIPS.pop(identifier, None)
+        if ownership:
+            ownership.release()
+    bridge._finish_gpu_generation = finish
+    def deferred_cleanup(client, identifier, prepared, root):
+        finish(identifier)
+    bridge._schedule_deferred_cleanup.side_effect = deferred_cleanup
     return bridge, client
 
 
@@ -284,8 +296,8 @@ class LifecycleTests(unittest.TestCase):
         with patch.object(images, "_bridge", return_value=bridge), patch.object(images, "extract_image_outputs", return_value=([Path("one.png")], [])), patch.object(images, "save_image_result", return_value={"path": "saved.png"}):
             events = list(self.run_job(bridge))
         self.assertEqual(events[-1]["stage"], "complete")
-        bridge._mark_active_generation.assert_called_once_with("job-1")
-        bridge._clear_active_generation.assert_called_once_with("job-1")
+        bridge._mark_active_generation.assert_called_once_with(client.submit.call_args.args[1])
+        bridge._clear_active_generation.assert_called_once_with(client.submit.call_args.args[1])
         bridge.cleanup_prepared_media.assert_called_once()
         client.cancel.assert_not_called()
         client.close.assert_called_once()
@@ -297,11 +309,11 @@ class LifecycleTests(unittest.TestCase):
             next(generator)
             next(generator)
             generator.close()
-        client.cancel.assert_called_once_with("job-1")
+        client.cancel.assert_called_once_with(client.submit.call_args.args[1])
         bridge._schedule_deferred_cleanup.assert_called_once()
         bridge.cleanup_prepared_media.assert_not_called()
         client.close.assert_not_called()
-        bridge._clear_active_generation.assert_called_once_with("job-1")
+        bridge._clear_active_generation.assert_called_once_with(client.submit.call_args.args[1])
 
     def test_cancelled_job_is_not_success(self):
         bridge, client = fake_bridge()
@@ -317,7 +329,7 @@ class LifecycleTests(unittest.TestCase):
         with patch.object(images, "_bridge", return_value=bridge), patch.object(images.time, "sleep"), self.assertRaises(bridge.H3BridgeError):
             list(self.run_job(bridge))
         self.assertEqual(client.job.call_count, 3)
-        client.cancel.assert_called_once_with("job-1")
+        client.cancel.assert_called_once_with(client.submit.call_args.args[1])
         bridge._schedule_deferred_cleanup.assert_called_once()
 
     def test_readiness_failure_does_not_submit_or_copy(self):

@@ -40,12 +40,16 @@ class ScriptPostprocessingBackgroundRemoval(scripts_postprocessing.ScriptPostpro
             return
         shared.state.textinfo = f"背景除去: {MODELS[model_id].label}"
         memory_management.unload_all_models()
+        from modules_forge import gpu_residency
+
+        gpu_residency.register("background", self.remover.release, "forge")
         try:
             output, mask = self.remover.remove(
                 pp.image,
                 model_id,
                 os.path.join(paths.models_path, "background_removal"),
                 memory_management.get_torch_device(),
+                keep_loaded=gpu_residency.policy() != gpu_residency.RELEASE,
             )
         finally:
             devices.torch_gc()
