@@ -34,7 +34,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
-| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。生成モデルとテキストエンコーダーのbitsandbytes INT8、BF16、CPU退避に対応。専用BATで公式モデルと固定版Diffusersを導入します。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
+| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。画面で対象を色付きペンで囲む指定編集と、生成結果からの連続編集に対応。生成モデルとテキストエンコーダーのbitsandbytes INT8、BF16、CPU退避を選べます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
@@ -260,7 +260,7 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 | ベース | `Haoming02/sd-webui-forge-classic`の`neo` |
 | 最終同期基準 | `0d0cb72951b059c8ea17861ba86db8d0f6098c28`（Forge Neo 2.29後の`arch`更新を含む） |
 | 最新の確認先 | `76586f6a`（2026-09-12）。[選択取り込みの記録](docs/upstream-sync.md) |
-| Aikimiの配布バージョン | `1.1.0`。Forgeのバージョンとは別に管理 |
+| Aikimiの配布バージョン | `1.2.0`。Forgeのバージョンとは別に管理 |
 | 主対象 | Windows 11、Python 3.13、NVIDIA GPU |
 | コードのライセンス | AGPL-3.0。モデルとアセットには別条件が適用される場合があります。 |
 

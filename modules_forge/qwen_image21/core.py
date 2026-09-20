@@ -101,6 +101,8 @@ class Request:
     precision: str = "int8"
     memory_mode: str = "offload"
     input_images: tuple[str, ...] = ()
+    annotation_reference: int = -1
+    annotation_layers: tuple[str, ...] = ()
 
     def resolved(self) -> Request:
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 12000:
@@ -117,6 +119,19 @@ class Request:
             raise QwenImage21Error("メモリ設定が不正です。")
         if not isinstance(self.transparent, bool):
             raise QwenImage21Error("透過背景の指定が不正です。")
+        inputs = validate_images(self.input_images)
+        reference = integer(self.annotation_reference, "描画対象", -1, MAX_REFERENCE_IMAGES - 1)
+        if not isinstance(self.annotation_layers, (list, tuple)):
+            raise QwenImage21Error("描画レイヤーの形式が不正です。")
+        if (reference == -1) != (not self.annotation_layers):
+            raise QwenImage21Error("描画対象と描画レイヤーを一緒に指定してください。")
+        layers = ()
+        if reference != -1:
+            if reference >= len(inputs):
+                raise QwenImage21Error("描画対象の参照画像がありません。選択し直してください。")
+            from .annotations import validate_annotation_layers
+
+            layers, _ = validate_annotation_layers(inputs[reference], self.annotation_layers)
         return replace(
             self,
             prompt=self.prompt.strip(),
@@ -124,7 +139,9 @@ class Request:
             height=height,
             steps=steps,
             seed=secrets.randbits(63) if seed == -1 else seed,
-            input_images=validate_images(self.input_images),
+            input_images=inputs,
+            annotation_reference=reference,
+            annotation_layers=layers,
         )
 
     def to_dict(self) -> dict:

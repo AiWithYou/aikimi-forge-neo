@@ -8,6 +8,7 @@ import gradio as gr
 
 from modules import gradio_compat, script_callbacks
 from modules.paths import data_path, script_path
+from modules_forge.qwen_image21.annotations import annotation_preview, reference_index, resolve_annotation
 from modules_forge.qwen_image21.core import (
     MAX_REFERENCE_IMAGES,
     QwenImage21Error,
@@ -21,6 +22,8 @@ STUDIO = Studio(RUNTIME, Path(data_path) / "outputs" / "qwen-image-2.1")
 PRIVATE = {"api_visibility": "private", "show_progress": "hidden"}
 RESOLUTIONS = [
     ("1024 × 1024 · 1:1", "1024x1024"),
+    ("1024 × 1280 · 4:5", "1024x1280"),
+    ("1280 × 1024 · 5:4", "1280x1024"),
     ("2048 × 2048 · 1:1 · 2K", "2048x2048"),
     ("2400 × 1792 · 4:3 · 2K", "2400x1792"),
     ("1792 × 2400 · 3:4 · 2K", "1792x2400"),
@@ -79,14 +82,77 @@ def remove_reference(gallery, selected):
     )
 
 
-def start(prompt, gallery, resolution, transparent, precision, memory_mode, seed, steps, request: gr.Request):
+def open_annotation(gallery, selected):
+    paths = reference_paths(gallery)
+    if len(paths) == 1:
+        selected = 0
+    if not isinstance(selected, int) or not 0 <= selected < len(paths):
+        raise gr.Error("大きく表示する参照画像を選んでください。")
+    path = paths[selected]
+    background = annotation_preview(path)
+    return (
+        path,
+        gr.update(value=background, label=f"Image {selected + 1} · 変更したい場所を囲む"),
+        gr.update(visible=True),
+    )
+
+
+def close_annotation():
+    return "", None, gr.update(visible=gradio_compat.keep_hidden_component_mounted(False))
+
+
+def refresh_references(gallery, annotation_target):
+    # Keep removal available even if one upload exceeds the ten-reference limit.
+    paths = [str(value[0] if isinstance(value, (tuple, list)) else value) for value in (gallery or [])]
+    if annotation_target:
+        try:
+            index = reference_index(paths, annotation_target)
+            return (
+                reference_controls_visibility(paths),
+                paths[index],
+                gr.update(label=f"Image {index + 1} · 変更したい場所を囲む"),
+                gr.update(visible=True),
+            )
+        except QwenImage21Error:
+            pass
+    return reference_controls_visibility(paths), *close_annotation()
+
+
+def continue_edit(identifier, request: gr.Request):
+    path = str(STUDIO.artifact(identifier, owner(request)))
+    target, editor, panel = open_annotation([path], 0)
+    return (
+        gr.update(value=reference_gallery([path]), selected_index=0),
+        0,
+        gr.update(visible=True),
+        target,
+        editor,
+        panel,
+    )
+
+
+def start(
+    prompt,
+    gallery,
+    resolution,
+    transparent,
+    precision,
+    memory_mode,
+    seed,
+    steps,
+    request: gr.Request,
+    annotation_target="",
+    annotation_editor=None,
+):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
             raise QwenImage21Error("出力サイズを選択してください。")
         width, height = (int(value) for value in resolution.split("x"))
+        paths = reference_paths(gallery)
+        annotation_reference, annotation_layers = resolve_annotation(paths, annotation_target, annotation_editor)
         generation = Request(
             prompt=prompt,
-            input_images=tuple(reference_paths(gallery)),
+            input_images=tuple(paths),
             width=width,
             height=height,
             transparent=transparent,
@@ -94,6 +160,8 @@ def start(prompt, gallery, resolution, transparent, precision, memory_mode, seed
             memory_mode=memory_mode,
             seed=seed,
             steps=steps,
+            annotation_reference=annotation_reference,
+            annotation_layers=annotation_layers,
         )
         identifier = STUDIO.start(generation, owner(request))
         return (
@@ -105,14 +173,15 @@ def start(prompt, gallery, resolution, transparent, precision, memory_mode, seed
             None,
             gr.update(value=None, visible=gradio_compat.keep_hidden_component_mounted(False)),
             gr.update(interactive=False),
+            gr.update(interactive=False),
         )
     except Exception as exc:
-        return gr.update(), str(exc), *[gr.update() for _ in range(6)]
+        return gr.update(), str(exc), *[gr.update() for _ in range(7)]
 
 
 def poll(identifier, request: gr.Request):
     if not identifier:
-        return [gr.update()] * 7
+        return [gr.update()] * 8
     done = False
     try:
         state = STUDIO.status(identifier, owner(request))
@@ -131,6 +200,7 @@ def poll(identifier, request: gr.Request):
             output,
             files,
             gr.update(interactive=usable),
+            gr.update(interactive=usable),
         )
     except JobNotFound as exc:
         return (
@@ -140,6 +210,7 @@ def poll(identifier, request: gr.Request):
             gr.update(active=False),
             gr.update(),
             gr.update(),
+            gr.update(interactive=False),
             gr.update(interactive=False),
         )
     except Exception as exc:
@@ -152,8 +223,9 @@ def poll(identifier, request: gr.Request):
                 gr.update(),
                 gr.update(),
                 gr.update(interactive=False),
+                gr.update(interactive=False),
             )
-        return str(exc), *[gr.update() for _ in range(6)]
+        return str(exc), *[gr.update() for _ in range(7)]
 
 
 def cancel(identifier, request: gr.Request):
@@ -193,7 +265,7 @@ def on_ui_tabs():
                     type="filepath",
                     format="png",
                     columns=5,
-                    height=180,
+                    height=200,
                     object_fit="contain",
                     allow_preview=False,
                     file_types=["image"],
@@ -203,10 +275,42 @@ def on_ui_tabs():
                     elem_id="qwen21-references",
                 )
                 with gr.Row(visible=False, elem_id="qwen21-reference-controls") as reference_controls:
+                    annotate = gr.Button("選択画像を開く・囲む", size="sm", elem_id="qwen21-open-annotation")
                     previous = gr.Button("選択画像を前へ", size="sm")
                     following = gr.Button("選択画像を後へ", size="sm")
                     remove = gr.Button("選択画像を削除", size="sm")
                     clear = gr.Button("参照をクリア", size="sm")
+                with gr.Group(
+                    visible=gradio_compat.keep_hidden_component_mounted(False), elem_id="qwen21-annotation-panel"
+                ) as annotation_panel:
+                    gr.Markdown(
+                        "**色付きのペンで囲み、変更内容を上の指示欄へ。** 例：赤い囲みの布団を黄色に。\n\n"
+                        "囲みは次の生成に使用します。元画像は変更せず、囲み線は結果から消すよう指示します。"
+                        "範囲外を完全に固定するマスクではありません。"
+                    )
+                    annotation_editor = gr.ImageEditor(
+                        type="filepath",
+                        image_mode="RGBA",
+                        format="png",
+                        sources=[],
+                        transforms=(),
+                        layers=False,
+                        fixed_canvas=False,
+                        height=440,
+                        min_width=160,
+                        brush=gr.Brush(
+                            default_size=12,
+                            colors=["#ef4444", "#3b82f6", "#22c55e"],
+                            default_color="#ef4444",
+                            color_mode="fixed",
+                        ),
+                        eraser=gr.Eraser(default_size=30),
+                        label="変更したい場所を囲む",
+                        interactive=True,
+                        buttons=["fullscreen"],
+                        elem_id="qwen21-annotation-editor",
+                    )
+                    close_editor = gr.Button("囲みを使わず閉じる", size="sm")
                 with gr.Row():
                     resolution = gr.Dropdown(RESOLUTIONS, value="1024x1024", label="出力サイズ")
                     transparent = gr.Checkbox(value=False, label="透過背景を指示（RGBA PNG）")
@@ -247,7 +351,9 @@ def on_ui_tabs():
                     buttons=["download", "fullscreen"],
                     elem_id="qwen21-output",
                 )
-                use = gr.Button("この結果を参照画像に追加", interactive=False)
+                with gr.Row():
+                    edit_result = gr.Button("この画像を続けて編集", interactive=False, elem_id="qwen21-edit-result")
+                    use = gr.Button("参照画像に追加", interactive=False)
                 files = gr.File(
                     label="PNG・生成条件を保存",
                     file_count="multiple",
@@ -255,31 +361,68 @@ def on_ui_tabs():
                     visible=gradio_compat.keep_hidden_component_mounted(False),
                 )
                 gr.Markdown("保存先: `outputs/qwen-image-2.1/`。透過はPNGのアルファチャンネルに保持します。")
-        job, selected = gr.State(""), gr.State(-1)
+        job, selected, annotation_target = gr.State(""), gr.State(-1), gr.State("")
         back, forward = gr.State(-1), gr.State(1)
         timer = gr.Timer(1, active=False)
         generate.click(
             start,
-            inputs=[prompt, gallery, resolution, transparent, precision, memory_mode, seed, steps],
-            outputs=[job, status, generate, stop, timer, output, files, use],
+            inputs=[
+                prompt,
+                gallery,
+                resolution,
+                transparent,
+                precision,
+                memory_mode,
+                seed,
+                steps,
+                annotation_target,
+                annotation_editor,
+            ],
+            outputs=[job, status, generate, stop, timer, output, files, use, edit_result],
             concurrency_limit=1,
             concurrency_id="qwen-image21-submit",
             trigger_mode="once",
             **PRIVATE,
         )
-        timer.tick(poll, inputs=job, outputs=[status, generate, stop, timer, output, files, use], **PRIVATE)
+        timer.tick(
+            poll, inputs=job, outputs=[status, generate, stop, timer, output, files, use, edit_result], **PRIVATE
+        )
         stop.click(cancel, inputs=job, outputs=[status, stop], queue=False, **PRIVATE)
         gallery.select(select_reference, outputs=selected, **PRIVATE)
-        gallery.change(reference_controls_visibility, inputs=gallery, outputs=reference_controls, **PRIVATE)
+        gallery.change(
+            refresh_references,
+            inputs=[gallery, annotation_target],
+            outputs=[reference_controls, annotation_target, annotation_editor, annotation_panel],
+            **PRIVATE,
+        )
+        annotate.click(
+            open_annotation,
+            inputs=[gallery, selected],
+            outputs=[annotation_target, annotation_editor, annotation_panel],
+            **PRIVATE,
+        )
+        close_editor.click(
+            close_annotation,
+            outputs=[annotation_target, annotation_editor, annotation_panel],
+            **PRIVATE,
+        )
         previous.click(move_reference, inputs=[gallery, selected, back], outputs=[gallery, selected], **PRIVATE)
         following.click(move_reference, inputs=[gallery, selected, forward], outputs=[gallery, selected], **PRIVATE)
         remove.click(
             remove_reference, inputs=[gallery, selected], outputs=[gallery, selected, reference_controls], **PRIVATE
         )
         clear.click(
-            lambda: ([], -1, gr.update(visible=False)), outputs=[gallery, selected, reference_controls], **PRIVATE
+            lambda: ([], -1, gr.update(visible=False), *close_annotation()),
+            outputs=[gallery, selected, reference_controls, annotation_target, annotation_editor, annotation_panel],
+            **PRIVATE,
         )
         use.click(use_result, inputs=[job, gallery], outputs=[gallery, selected, reference_controls], **PRIVATE)
+        edit_result.click(
+            continue_edit,
+            inputs=job,
+            outputs=[gallery, selected, reference_controls, annotation_target, annotation_editor, annotation_panel],
+            **PRIVATE,
+        )
         check.click(check_runtime, outputs=environment, **PRIVATE)
     return [(tab, "Qwen Image 2.1", "qwen_image21_studio")]
 

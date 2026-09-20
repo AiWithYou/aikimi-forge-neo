@@ -133,6 +133,25 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                     self.assertEqual(png["header"], [137, 80, 78, 71, 13, 10, 26, 10])
                     self.assertEqual(metadata["status"], 200)
                     self.assertEqual(metadata["json"], {"seed": 123})
+                    page.evaluate("document.querySelector('#qwen21-edit-result').click()")
+                    self.assertTrue(
+                        page.evaluate(
+                            _wait_expression(
+                                "#qwen21-annotation-panel",
+                                "element.getBoundingClientRect().height > 0 && "
+                                "element.innerText.includes('Image 1') && "
+                                "document.querySelector('#qwen21-references img') !== null",
+                            )
+                        ),
+                        page.evaluate("document.body.innerText"),
+                    )
+                    # Wait for the Gallery change event after it moves the
+                    # artifact into Gradio's cache. The panel must stay open.
+                    self.assertTrue(
+                        page.evaluate("""new Promise(resolve => setTimeout(() => resolve(
+                            document.querySelector('#qwen21-annotation-panel').getBoundingClientRect().height > 0
+                        ), 1200))""")
+                    )
 
 
 if __name__ == "__main__":

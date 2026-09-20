@@ -1,0 +1,31 @@
+/* Keep references completely visible instead of scrolling inside a large thumbnail. */
+#qwen21-references .grid-container {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)) !important;
+    grid-auto-rows: 128px !important;
+}
+
+#qwen21-references .gallery-item {
+    height: 128px;
+    min-width: 0;
+}
+
+#qwen21-references .thumbnail-item {
+    height: 100%;
+    width: 100%;
+    min-height: 0;
+    aspect-ratio: auto;
+}
+
+#qwen21-annotation-panel {
+    min-width: 0;
+}
+
+#qwen21-reference-controls button {
+    min-width: 116px;
+}
+
+@media (max-width: 600px) {
+    #qwen21-references .grid-container {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+}
