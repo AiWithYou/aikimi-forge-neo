@@ -11,6 +11,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from .annotations import snapshot_annotation
 from .core import (
     QwenImage21Error,
     Request,
@@ -114,7 +115,15 @@ class Studio:
                 directory.mkdir(parents=True, exist_ok=False)
                 job = Job(directory.name, owner, directory)
                 payload = request.to_dict()
-                payload["input_images"] = copy_inputs(request.input_images, directory)
+                clean_paths = copy_inputs(request.input_images, directory)
+                model_paths, instruction, annotation = snapshot_annotation(
+                    clean_paths, request.annotation_reference, request.annotation_layers, directory
+                )
+                payload["input_images"] = model_paths
+                payload["user_prompt"] = request.prompt
+                payload["prompt"] = request.prompt + instruction
+                payload["annotation"] = annotation
+                payload["annotation_layers"] = annotation.get("layer_paths", [])
                 atomic_json(directory / "request.json", payload)
                 atomic_json(directory / "status.json", {"state": "running", "message": job.message})
                 self._jobs = dict(list(self._jobs.items())[-MAX_FINISHED_JOBS:])
