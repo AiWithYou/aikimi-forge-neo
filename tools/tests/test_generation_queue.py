@@ -71,6 +71,20 @@ class GenerationQueueTests(unittest.TestCase):
         )[0]
         self.assertNotIn("localSet", queue_function)
 
+    def test_finishing_a_cancelled_waiter_does_not_clear_another_running_task(self):
+        progress.add_task_to_queue("task(active)")
+        progress.add_task_to_queue("task(cancelled)")
+        progress.start_task("task(active)")
+
+        progress.finish_task("task(cancelled)")
+
+        self.assertEqual(progress.current_task, "task(active)")
+        self.assertEqual(list(progress.pending_tasks), [])
+        response = progress.progressapi(progress.ProgressRequest(id_task="task(cancelled)"))
+        self.assertFalse(response.active)
+        self.assertFalse(response.queued)
+        self.assertTrue(response.completed)
+
     def test_interrupt_wiring_remains_common_to_all_toprows(self):
         tree = ast.parse(
             (ROOT / "modules" / "ui_toprow.py").read_text(encoding="utf-8")

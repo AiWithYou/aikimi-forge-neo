@@ -328,6 +328,7 @@ def run_image_generation(
     log_directory: Path, output_directory: Path, runtime_profile: str = "fast",
     *, poll_seconds: float = 2.0,
 ) -> Iterator[dict[str, Any]]:
+    request.validate()
     from modules_forge.gpu_ownership import GPUOwnership
 
     bridge = _bridge()
@@ -340,6 +341,8 @@ def run_image_generation(
                 raise H3ImageCancelled("画像生成を停止しました。")
             yield {"stage": "queued", "message": "GPUの使用終了を待っています", "prompt_id": submission_id}
             time.sleep(0.1)
+        if bridge._is_cancelled_job(submission_id):
+            raise H3ImageCancelled("画像生成を停止しました。")
         bridge.release_forge_vram()
         yield from _run_image_generation(request, runtime_root, server_url, log_directory,
                                          output_directory, runtime_profile, poll_seconds,
@@ -355,7 +358,6 @@ def run_image_generation(
 
 def _run_image_generation(request, runtime_root, server_url, log_directory, output_directory,
                           runtime_profile, poll_seconds, ownership, submission_id):
-    request.validate()
     bridge = _bridge()
     root = bridge.resolve_runtime_root(runtime_root)
     url = bridge.normalize_loopback_url(server_url)
@@ -364,7 +366,7 @@ def _run_image_generation(request, runtime_root, server_url, log_directory, outp
         scheduler=request.scheduler, reference_images=request.reference_images,
         acceleration=request.runtime_acceleration,
     )
-    yield {"stage": "runtime", "message": "画像生成用のH3環境を確認しています。", "prompt_id": ""}
+    yield {"stage": "runtime", "message": "画像生成用のH3環境を確認しています。", "prompt_id": submission_id}
     readiness = bridge.ensure_ready(root, url, log_directory, runtime_profile=runtime_profile, acceleration=request.runtime_acceleration)
     from modules_forge import gpu_residency
 
@@ -381,6 +383,8 @@ def _run_image_generation(request, runtime_root, server_url, log_directory, outp
             validate_image_runtime(request, readiness, runtime_profile)
             client = bridge.ComfyH3Client(url)
             check_image_nodes(client)
+            if bridge._is_cancelled_job(submission_id):
+                raise H3ImageCancelled("画像生成を停止しました。")
             server_process = bridge._loopback_server_process(url)
             if server_process is None:
                 raise H3ImageError("H3の送信先processを確認できません。")
@@ -405,6 +409,8 @@ def _run_image_generation(request, runtime_root, server_url, log_directory, outp
         yield {"stage": "queued", "message": "画像生成をキューに追加しました。", "prompt_id": prompt_id, "seed": seed}
         while True:
             try:
+                if bridge._is_cancelled_job(prompt_id) and not bridge._cancel_confirmed(prompt_id):
+                    client.cancel(prompt_id)
                 job = client.job(prompt_id)
             except bridge.H3JobNotFound:
                 if bridge._cancel_confirmed(prompt_id):
@@ -461,8 +467,9 @@ def _run_image_generation(request, runtime_root, server_url, log_directory, outp
             if prompt_id and terminal:
                 bridge._clear_cancelled_job(prompt_id)
                 bridge.pending_jobs.remove(prompt_id)
-                bridge._finish_gpu_generation(prompt_id)
         finally:
+            if prompt_id and terminal:
+                bridge._finish_gpu_generation(prompt_id)
             if prompt_id:
                 bridge._clear_active_generation(prompt_id)
             if client is not None and not deferred:

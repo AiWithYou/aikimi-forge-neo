@@ -531,27 +531,32 @@ class Api:
 
         add_task_to_queue(task_id)
 
-        with self.queue_lock:
-            with closing(StableDiffusionProcessingTxt2Img(sd_model=shared.sd_model, **args)) as p:
-                p.is_api = True
-                p.scripts = script_runner
-                p.outpath_grids = opts.outdir_txt2img_grids
-                p.outpath_samples = opts.outdir_txt2img_samples
-
+        acquired = False
+        try:
+            with self.queue_lock:
+                acquired = True
                 try:
                     shared.state.begin(job="scripts_txt2img")
                     start_task(task_id)
-                    processed = _run_api_processing(
-                        p,
-                        scripts.scripts_txt2img,
-                        selectable_scripts,
-                        script_args,
-                    )
-                    process_extra_images(processed)
-                    finish_task(task_id)
+                    with closing(StableDiffusionProcessingTxt2Img(sd_model=shared.sd_model, **args)) as p:
+                        p.is_api = True
+                        p.scripts = script_runner
+                        p.outpath_grids = opts.outdir_txt2img_grids
+                        p.outpath_samples = opts.outdir_txt2img_samples
+                        processed = _run_api_processing(
+                            p,
+                            scripts.scripts_txt2img,
+                            selectable_scripts,
+                            script_args,
+                        )
+                        process_extra_images(processed)
                 finally:
+                    finish_task(task_id)
                     shared.state.end()
                     shared.total_tqdm.clear()
+        finally:
+            if not acquired:
+                finish_task(task_id)
 
         b64images = list(map(encode_pil_to_base64, processed.images + processed.extra_images)) if send_images else []
 
@@ -604,28 +609,33 @@ class Api:
 
         add_task_to_queue(task_id)
 
-        with self.queue_lock:
-            with closing(StableDiffusionProcessingImg2Img(sd_model=shared.sd_model, **args)) as p:
-                p.init_images = [decode_base64_to_image(x) for x in init_images]
-                p.is_api = True
-                p.scripts = script_runner
-                p.outpath_grids = opts.outdir_img2img_grids
-                p.outpath_samples = opts.outdir_img2img_samples
-
+        acquired = False
+        try:
+            with self.queue_lock:
+                acquired = True
                 try:
                     shared.state.begin(job="scripts_img2img")
                     start_task(task_id)
-                    processed = _run_api_processing(
-                        p,
-                        scripts.scripts_img2img,
-                        selectable_scripts,
-                        script_args,
-                    )
-                    process_extra_images(processed)
-                    finish_task(task_id)
+                    with closing(StableDiffusionProcessingImg2Img(sd_model=shared.sd_model, **args)) as p:
+                        p.init_images = [decode_base64_to_image(x) for x in init_images]
+                        p.is_api = True
+                        p.scripts = script_runner
+                        p.outpath_grids = opts.outdir_img2img_grids
+                        p.outpath_samples = opts.outdir_img2img_samples
+                        processed = _run_api_processing(
+                            p,
+                            scripts.scripts_img2img,
+                            selectable_scripts,
+                            script_args,
+                        )
+                        process_extra_images(processed)
                 finally:
+                    finish_task(task_id)
                     shared.state.end()
                     shared.total_tqdm.clear()
+        finally:
+            if not acquired:
+                finish_task(task_id)
 
         b64images = list(map(encode_pil_to_base64, processed.images + processed.extra_images)) if send_images else []
 

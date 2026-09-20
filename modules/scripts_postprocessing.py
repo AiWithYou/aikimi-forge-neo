@@ -182,17 +182,21 @@ class ScriptPostprocessingRunner:
             scripts.append((script, process_args))
 
         for script, process_args in scripts:
+            if shared.state.skipped or shared.state.interrupted:
+                break
             script.process_firstpass(pp, **process_args)
 
         all_images = [pp]
 
         for script, process_args in scripts:
-            if shared.state.skipped:
+            if shared.state.skipped or shared.state.interrupted:
                 break
 
             shared.state.job = script.name
 
             for single_image in all_images.copy():
+                if shared.state.skipped or shared.state.interrupted:
+                    break
 
                 if not single_image.disable_processing:
                     script.process(single_image, **process_args)

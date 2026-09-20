@@ -171,6 +171,25 @@ class FeatureNavigationLifecycleTests(unittest.TestCase):
         self.page.wait_for_function("document.getElementById('aikimi-tab-minimax-h3').hidden")
         self.assertTrue(self.page.locator("#aikimi-tab-krea2").is_visible())
 
+    def test_qwen_lazy_mount_navigation_and_removal_preserve_forge_preset(self):
+        self.assertTrue(self.page.locator("#aikimi-tab-qwen-image21").is_hidden())
+        self.page.evaluate("addNative('tab_qwen_image21_studio', 'Qwen Image 2.1')")
+        self.page.wait_for_function("!document.getElementById('aikimi-tab-qwen-image21').hidden")
+        self.page.locator("#aikimi-tab-qwen-image21").click()
+        self.page.wait_for_function("AikimiTabs.getActiveFeature() === 'qwen_image21'")
+        self.assertTrue(self.page.locator("#tab_qwen_image21_studio").is_visible())
+        self.assertEqual(self.page.locator("#aikimi-tab-qwen-image21").get_attribute("aria-current"), "page")
+        self.assertEqual(self.page.evaluate("presetWrites"), [])
+        self.assertEqual(self.page.evaluate("accordionWrites"), [])
+        self.page.locator("#native-nav button[aria-controls='tab_extras']").click()
+        self.page.wait_for_function("AikimiTabs.getActiveFeature() === null")
+        self.page.evaluate("""() => {
+            document.getElementById('tab_qwen_image21_studio').remove();
+            document.querySelector('#native-nav button[aria-controls=tab_qwen_image21_studio]').remove();
+        }""")
+        self.page.wait_for_function("document.getElementById('aikimi-tab-qwen-image21').hidden")
+        self.assertTrue(self.page.locator("#aikimi-tab-krea2").is_visible())
+
     def test_anima_uses_current_img2img_panel_and_keyboard_navigation(self):
         self.page.evaluate("mountAccordion('img2img')")
         self.page.locator("#native-nav button[aria-controls='tab_img2img']").click()

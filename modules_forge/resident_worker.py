@@ -114,12 +114,19 @@ class ResidentWorker:
     def close(self):
         process = self.process
         if process is not None:
-            if process.poll() is None:
+            deadline = time.monotonic() + 15
+            while process.poll() is None:
                 if self.tree is not None:
                     self.tree.terminate()
                 else:
                     process.kill()
-                process.wait(timeout=15)
+                try:
+                    process.wait(timeout=min(0.1, max(0, deadline - time.monotonic())))
+                except subprocess.TimeoutExpired:
+                    if time.monotonic() >= deadline:
+                        raise
+                    # Windowsの実Pythonが起動用Jobへ参加する前に停止を
+                    # 要求した場合も、参加後の終了まで確認する。
             if process.stdin is not None:
                 process.stdin.close()
             if self.tree is not None:

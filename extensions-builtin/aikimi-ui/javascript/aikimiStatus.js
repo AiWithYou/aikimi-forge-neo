@@ -257,6 +257,7 @@
             anima38: "Anima 3.8B",
             sensenova: "SenseNova",
             minimax_h3: "MiniMax H3",
+            qwen_image21: "Qwen Image 2.1",
         }[feature] || "Aikimi";
     }
 
@@ -912,6 +913,7 @@
     function syncVisibility() {
         if (!optionsAvailable) return;
         ensureToggle();
+        const wasEnabled = enabled;
         enabled = opts.aikimi_assistant_enabled !== false && !petPreferences.hidden;
         const shouldShow = enabled;
 
@@ -945,6 +947,9 @@
             completionTimers.clear();
             for (const timer of publishedTimers.values()) window.clearTimeout(timer);
             publishedTimers.clear();
+        }
+        if (wasEnabled !== enabled) {
+            document.dispatchEvent(new CustomEvent("aikimi:status-visibility-change"));
         }
     }
 

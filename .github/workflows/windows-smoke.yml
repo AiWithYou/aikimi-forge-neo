@@ -14,6 +14,10 @@ on:
       - "extensions-builtin/sd_forge_controlnet/**"
       - "extensions-builtin/sensenova-u15-studio/**"
       - "extensions-builtin/yue2-studio/**"
+      - "extensions-builtin/qwen-image21-studio/**"
+      - "tools/*qwen_image21*.py"
+      - "tools/tests/test_qwen_image21*.py"
+      - "tools/requirements-qwen-image21.txt"
       - "tests/yue2/**"
       - "javascript/**"
       - "launch.py"
@@ -112,6 +116,10 @@ on:
       - "extensions-builtin/sd_forge_controlnet/**"
       - "extensions-builtin/sensenova-u15-studio/**"
       - "extensions-builtin/yue2-studio/**"
+      - "extensions-builtin/qwen-image21-studio/**"
+      - "tools/*qwen_image21*.py"
+      - "tools/tests/test_qwen_image21*.py"
+      - "tools/requirements-qwen-image21.txt"
       - "tests/yue2/**"
       - "javascript/**"
       - "launch.py"
@@ -280,6 +288,10 @@ jobs:
           --module tools.tests.test_api_script_args
           --module tools.tests.test_chromium_helpers
           --module tools.tests.test_ci_workflow_boundaries
+          --module tools.tests.test_qwen_image21_setup
+          --module tools.tests.test_qwen_image21_service
+          --module tools.tests.test_qwen_image21_ui_chromium
+          --module tools.tests.test_qwen_image21_worker
           --module tools.tests.test_gpu_ownership
           --module tools.tests.test_gpu_residency
           --module tools.tests.test_minimax_h3_submission

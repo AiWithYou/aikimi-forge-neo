@@ -20,6 +20,7 @@
     let h3PromptDraftTimer = null;
     let h3LastPromptValue = null;
     let h3LastProgressAnnouncement = null;
+    let h3LastPublishedProgress = null;
     let h3InitializationTrigger = null;
 
     function setH3Text(node, value) {
@@ -223,14 +224,22 @@
         if (!progress || !announcer || !stage) return;
         const message = progress.querySelector("strong")?.textContent?.trim() ?? "";
         const signature = `${stage}:${message}`;
-        if (signature === h3LastProgressAnnouncement) return;
-        h3LastProgressAnnouncement = signature;
-        const label = progress.querySelector(".h3-progress-copy span")?.textContent?.trim() ?? stage;
-        setH3Attribute(announcer, "role", stage === "error" ? "alert" : "status");
-        setH3Attribute(announcer, "aria-live", stage === "error" ? "assertive" : "polite");
-        setH3Text(announcer, `${label}: ${message}`);
+        const alreadyAnnounced = signature === h3LastProgressAnnouncement;
+        if (!alreadyAnnounced) {
+            h3LastProgressAnnouncement = signature;
+            const label = progress.querySelector(".h3-progress-copy span")?.textContent?.trim() ?? stage;
+            setH3Attribute(announcer, "role", stage === "error" ? "alert" : "status");
+            setH3Attribute(announcer, "aria-live", stage === "error" ? "assertive" : "polite");
+            setH3Text(announcer, `${label}: ${message}`);
+        }
 
         if (!window.AikimiStatus) return;
+        const progressbar = progress.querySelector("[role='progressbar']");
+        const progressAttribute = progressbar?.getAttribute("aria-valuenow");
+        const progressNow = progressAttribute === null ? Number.NaN : Number(progressAttribute);
+        const publishedSignature = JSON.stringify([stage, message, progressNow]);
+        if (publishedSignature === h3LastPublishedProgress) return;
+        h3LastPublishedProgress = publishedSignature;
         if (["idle", "cancelled"].includes(stage)) {
             window.AikimiStatus.clear("minimax-h3");
             return;
@@ -247,9 +256,6 @@
             active: "generating",
         }[stage];
         if (!state) return;
-        const progressbar = progress.querySelector("[role='progressbar']");
-        const progressAttribute = progressbar?.getAttribute("aria-valuenow");
-        const progressNow = progressAttribute === null ? Number.NaN : Number(progressAttribute);
         window.AikimiStatus.publish("minimax-h3", {
             state,
             resultElementId: "h3-result-video",
@@ -482,8 +488,15 @@
     });
     onAfterUiUpdate(syncH3DynamicState);
 
+    document.addEventListener("aikimi:status-visibility-change", function () {
+        h3LastPublishedProgress = null;
+        syncH3ProgressAnnouncement();
+    });
+
     document.addEventListener("keydown", function (event) {
-        if (!isH3StudioActive() || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+        if (event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229) return;
+        if (event.key !== "Escape" && !((event.ctrlKey || event.metaKey) && event.key === "Enter")) return;
+        if (!isH3StudioActive()) return;
 
         const app = gradioApp();
         if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {

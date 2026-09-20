@@ -15,6 +15,7 @@ from tools.aikimi_setup import (
     ArtifactSpec,
     DiskSpaceError,
     DownloadError,
+    GeneratedArtifactSpec,
     Installer,
     IntegrityError,
     ManifestError,
@@ -338,6 +339,34 @@ class AikimiSetupTests(unittest.TestCase):
                 report = installer.verify(["fixture"])
                 self.assertTrue(report["ok"])
                 self.assertEqual("ready", report["profiles"][0]["artifacts"][0]["state"])
+
+    def test_repair_quarantines_orphaned_conversion_checksums_before_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generated = GeneratedArtifactSpec(
+                "models/fixture/int8.safetensors", 1, (), (), "models/fixture/int8.sha256"
+            )
+            profile = ProfileSpec("fixture", "generated fixture", (), (), 1, generated=generated)
+            sidecar = root / generated.sidecar_relative_path
+            sidecar.parent.mkdir(parents=True)
+            sidecar.write_text("stale checksum", encoding="ascii")
+            partial = Path(f"{sidecar}.part")
+            partial.write_text("interrupted checksum", encoding="ascii")
+            installer = self.make_installer(root, profile)
+
+            def retry(*_args, **_kwargs):
+                self.assertFalse(sidecar.exists())
+                self.assertFalse(partial.exists())
+                return {"ok": True}
+
+            with mock.patch.object(installer, "install", side_effect=retry):
+                result = installer.repair("fixture", dry_run=False, keep_source=False)
+
+            self.assertEqual(len(result["quarantined"]), 2)
+            self.assertEqual(
+                {(root / path).read_text(encoding="ascii") for path in result["quarantined"]},
+                {"stale checksum", "interrupted checksum"},
+            )
 
     def test_existing_symlink_escape_is_rejected(self) -> None:
         with fixture_server() as (server, _handler):

@@ -20,9 +20,21 @@ def wrap_queued_call(func):
 
 
 def wrap_gradio_gpu_call(func, extra_outputs=None):
+    def run(id_task, *args, **kwargs):
+        try:
+            shared.state.begin(job=id_task)
+            progress.start_task(id_task)
+            res = func(*args, **kwargs)
+            progress.record_results(id_task, res)
+            return res
+        finally:
+            progress.finish_task(id_task)
+            shared.state.end()
+
+    wrapped = wrap_gradio_call(run, extra_outputs=extra_outputs, add_stats=True)
+
     @wraps(func)
     def f(*args, **kwargs):
-
         # if the first argument is a string that says "task(...)", it is treated as a job id
         if args and type(args[0]) == str and args[0].startswith("task(") and args[0].endswith(")"):
             id_task = args[0]
@@ -30,21 +42,17 @@ def wrap_gradio_gpu_call(func, extra_outputs=None):
         else:
             id_task = None
 
-        with queue_lock:
-            shared.state.begin(job=id_task)
-            progress.start_task(id_task)
-
-            try:
-                res = func(*args, **kwargs)
-                progress.record_results(id_task, res)
-            finally:
+        acquired = False
+        try:
+            with queue_lock:
+                acquired = True
+                # Finish state, memory monitoring and cleanup before the next job starts.
+                return wrapped(id_task, *args, **kwargs)
+        finally:
+            if not acquired and id_task is not None:
                 progress.finish_task(id_task)
 
-            shared.state.end()
-
-        return res
-
-    return wrap_gradio_call(f, extra_outputs=extra_outputs, add_stats=True)
+    return f
 
 
 def wrap_gradio_call(func, extra_outputs=None, add_stats=False):

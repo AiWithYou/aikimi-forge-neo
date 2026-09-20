@@ -34,10 +34,14 @@ class AikimiTabsTests(unittest.TestCase):
             'buttonId: "aikimi-tab-anima38"',
             'buttonId: "aikimi-tab-sensenova"',
             'buttonId: "aikimi-tab-minimax-h3"',
+            'buttonId: "aikimi-tab-qwen-image21"',
         )
         positions = [self.javascript.index(value) for value in expected]
         self.assertEqual(positions, sorted(positions))
-        self.assertIn('"krea2",\n        "anima38",\n        "sensenova",\n        "minimax_h3"', self.javascript)
+        self.assertIn(
+            '"krea2",\n        "anima38",\n        "sensenova",\n        "minimax_h3",\n        "qwen_image21"',
+            self.javascript,
+        )
 
     def test_aliases_reuse_forge_generation_tabs(self):
         self.assertIn('containerId: "tab_txt2img"', self.javascript)

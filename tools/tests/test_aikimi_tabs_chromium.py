@@ -77,6 +77,7 @@ class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
             ("extras", "Extras"),
             ("sensenova_u15_studio", "SenseNova U1.5"),
             ("minimax_h3_studio", "H3 Studio"),
+            ("qwen_image21_studio", "Qwen Image 2.1"),
             ("settings", "Settings"),
             ("extensions", "Extensions"),
         ]
@@ -471,7 +472,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 4
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 5
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -652,7 +653,8 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
 
     const studioPanelsWereLazyBeforeVisit =
         !document.querySelector("#tab_sensenova_u15_studio") &&
-        !document.querySelector("#tab_minimax_h3_studio");
+        !document.querySelector("#tab_minimax_h3_studio") &&
+        !document.querySelector("#tab_qwen_image21_studio");
     let nativeLazyResults = null;
     if ({json.dumps(lazy_panels)}) {{
         const sensenova = document.querySelector("#aikimi-tab-sensenova");
@@ -673,6 +675,40 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
             }}
         }};
     }}
+
+    const presetBeforeQwen = presetInput?.value || null;
+    const presetEventsBeforeQwen = window.fixturePresetEvents.selectedValues.length;
+    document.querySelector("#aikimi-tab-qwen-image21").click();
+    await waitFor(() => window.AikimiTabs.getActiveContainer()?.id === "tab_qwen_image21_studio");
+    const qwenResult = {{
+        active: window.AikimiTabs.getActiveFeature(),
+        container: window.AikimiTabs.getActiveContainer()?.id || null,
+        presetUnchanged: (presetInput?.value || null) === presetBeforeQwen,
+        presetEventsUnchanged: window.fixturePresetEvents.selectedValues.length === presetEventsBeforeQwen
+    }};
+    const qwenNativeButton = fixtureNativeButton("tab_qwen_image21_studio");
+    const qwenPanel = document.getElementById("tab_qwen_image21_studio");
+    const nextQwenButton = qwenNativeButton.nextSibling;
+    const nextQwenPanel = qwenPanel.nextSibling;
+    fixtureNativeButton("tab_extras").click();
+    qwenNativeButton.remove();
+    qwenPanel.remove();
+    const qwenHiddenAfterRemoval = Boolean(await waitFor(() =>
+        document.querySelector("#aikimi-tab-qwen-image21").hidden
+    ));
+    tabList.insertBefore(qwenNativeButton, nextQwenButton);
+    tabs.insertBefore(qwenPanel, nextQwenPanel);
+    const qwenVisibleAfterRemount = Boolean(await waitFor(() =>
+        !document.querySelector("#aikimi-tab-qwen-image21").hidden
+    ));
+    document.querySelector("#aikimi-tab-qwen-image21").click();
+    const qwenActiveAfterRemount = Boolean(await waitFor(() =>
+        window.AikimiTabs.getActiveFeature() === "qwen_image21"
+    ));
+    const narrowNav = document.querySelector("#aikimi-feature-nav");
+    narrowNav.style.width = "320px";
+    const narrowNavFits = narrowNav.scrollWidth === narrowNav.clientWidth;
+    narrowNav.style.removeProperty("width");
 
     window.AikimiTabs?.refresh();
     window.AikimiTabs?.refresh();
@@ -719,6 +755,11 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         mountedPanelsBeforeClicks,
         studioPanelsWereLazyBeforeVisit,
         nativeLazyResults,
+        qwenResult,
+        qwenHiddenAfterRemoval,
+        qwenVisibleAfterRemount,
+        qwenActiveAfterRemount,
+        narrowNavFits,
         tabListClass: tabList.className,
         mutationRepairCount: repairedRow ? document.querySelectorAll("#aikimi-feature-nav").length : 0,
         externalRowBeforeTabs: document.querySelector("#aikimi-feature-nav")?.nextElementSibling === tabs,
@@ -732,7 +773,8 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
             .some((button) => button.id?.startsWith("aikimi-tab-")),
         nativeStudioButtonsHidden: {{
             sensenova: getComputedStyle(fixtureNativeButton("tab_sensenova_u15_studio")).display === "none",
-            minimax: getComputedStyle(fixtureNativeButton("tab_minimax_h3_studio")).display === "none"
+            minimax: getComputedStyle(fixtureNativeButton("tab_minimax_h3_studio")).display === "none",
+            qwen: getComputedStyle(fixtureNativeButton("tab_qwen_image21_studio")).display === "none"
         }},
         ariaTargetsExist: Array.from(
             document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button:not([hidden])")
@@ -802,7 +844,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
         self.assertEqual(result["animaCount"], 1)
         self.assertEqual(
             result["featureLabels"],
-            ["Krea2", "Anima", "SenseNova", "MiniMax H3"],
+            ["Krea2", "Anima", "SenseNova", "MiniMax H3", "Qwen Image 2.1"],
         )
         self.assertTrue(result["externalRowBeforeTabs"])
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])
@@ -811,9 +853,22 @@ class AikimiTabsChromiumTests(unittest.TestCase):
         self.assertFalse(result["nativeContainsAikimiButtons"])
         self.assertEqual(
             result["nativeStudioButtonsHidden"],
-            {"sensenova": True, "minimax": True},
+            {"sensenova": True, "minimax": True, "qwen": True},
         )
         self.assertTrue(result["ariaTargetsExist"])
+        self.assertTrue(result["qwenHiddenAfterRemoval"])
+        self.assertTrue(result["qwenVisibleAfterRemount"])
+        self.assertTrue(result["qwenActiveAfterRemount"])
+        self.assertTrue(result["narrowNavFits"])
+        self.assertEqual(
+            result["qwenResult"],
+            {
+                "active": "qwen_image21",
+                "container": "tab_qwen_image21_studio",
+                "presetUnchanged": True,
+                "presetEventsUnchanged": True,
+            },
+        )
         self.assertEqual(
             result["kreaTxt2imgResult"],
             {
@@ -967,7 +1022,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
         self.assertEqual(result["animaCount"], 1)
         self.assertEqual(
             result["featureLabels"],
-            ["Krea2", "Anima", "SenseNova", "MiniMax H3"],
+            ["Krea2", "Anima", "SenseNova", "MiniMax H3", "Qwen Image 2.1"],
         )
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])
         self.assertTrue(result["nativeOrderUnchanged"])
@@ -987,6 +1042,8 @@ class AikimiTabsChromiumTests(unittest.TestCase):
             result["nativeLazyResults"]["minimax"],
             {"active": "minimax_h3", "container": "tab_minimax_h3_studio"},
         )
+        self.assertEqual(result["qwenResult"]["active"], "qwen_image21")
+        self.assertEqual(result["qwenResult"]["container"], "tab_qwen_image21_studio")
         self.assertEqual(result["errors"], [])
 
     def test_legacy_direct_tab_nav_remains_supported(self):

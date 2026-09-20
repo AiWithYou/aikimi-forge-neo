@@ -95,6 +95,8 @@ def run_postprocessing(extras_mode, image, image_folder, input_dir, output_dir, 
         initial_pp = scripts_postprocessing.PostprocessedImage(image_data)
 
         scripts.scripts_postproc.run(initial_pp, args)
+        if shared.state.interrupted:
+            break
         display_info = initial_pp.info
 
         if shared.state.skipped:
@@ -102,6 +104,8 @@ def run_postprocessing(extras_mode, image, image_folder, input_dir, output_dir, 
 
         used_suffixes = {}
         for pp in [initial_pp, *initial_pp.extra_images]:
+            if shared.state.interrupted:
+                break
             suffix = pp.get_suffix(used_suffixes)
 
             if opts.use_original_name_batch and name is not None:

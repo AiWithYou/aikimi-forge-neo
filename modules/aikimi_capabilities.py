@@ -320,6 +320,30 @@ def _minimax_h3_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     )
 
 
+def _qwen_image21_check(paths: DiagnosticPaths) -> DiagnosticCheck:
+    try:
+        from modules_forge.qwen_image21.core import runtime_manifest
+
+        runtime_manifest(paths.models_root / "Qwen-Image-2.1")
+    except Exception:
+        return DiagnosticCheck(
+            "qwen_image21",
+            "Qwen Image 2.1",
+            CheckState.BLOCKED,
+            "The pinned Qwen Image 2.1 runtime or model files are unavailable.",
+            "Run aikimi-qwen-image21-setup.bat, then open Qwen Image 2.1 Studio.",
+            available=False,
+        )
+    return DiagnosticCheck(
+        "qwen_image21",
+        "Qwen Image 2.1",
+        CheckState.READY,
+        "The pinned Qwen Image 2.1 setup is registered for BF16 and INT8. No generation was run.",
+        "Open Qwen Image 2.1 Studio to check status and generate.",
+        available=True,
+    )
+
+
 def feature_checks(paths: DiagnosticPaths) -> tuple[DiagnosticCheck, ...]:
     """Return capability state without downloads, full hashes, or network calls."""
 
@@ -328,6 +352,7 @@ def feature_checks(paths: DiagnosticPaths) -> tuple[DiagnosticCheck, ...]:
         _anima38_check(paths),
         _sensenova_check(paths),
         _minimax_h3_check(paths),
+        _qwen_image21_check(paths),
         _implementation_check(
             paths,
             check_id="forge_canvas",

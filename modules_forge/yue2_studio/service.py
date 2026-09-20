@@ -14,6 +14,12 @@ from pathlib import Path
 
 from .core import Request, YuE2Error, atomic_json, inside, read_json, runtime_manifest, runtime_lock, safe_environment
 
+MAX_FINISHED_JOBS = 64
+
+
+class JobNotFound(YuE2Error):
+    """The browser no longer owns a job tracked by this Studio instance."""
+
 
 class ProcessTree:
     """Only the process tree created here can be terminated. Windows fails closed."""
@@ -134,7 +140,9 @@ class Studio:
                 job = Job(directory.name, owner, directory)
                 atomic_json(directory / "project.json", {"schema": 1, "request": asdict(request), "plan_only": plan_only})
                 atomic_json(directory / "status.json", {"state": "running", "message": "実行環境を準備中"})
-                self._jobs = {k: v for k, v in self._jobs.items() if not v.done.is_set()}
+                # A different browser may not have polled its terminal status yet.
+                # Retain a bounded history instead of discarding every finished job.
+                self._jobs = dict(list(self._jobs.items())[-MAX_FINISHED_JOBS:])
                 self._jobs[job.identifier] = job
                 thread = threading.Thread(target=self._run, args=(job, request, lease, release, lock), daemon=True)
                 thread.start()
@@ -228,7 +236,7 @@ class Studio:
         with self._guard:
             job = self._jobs.get(identifier)
         if job is None or job.owner != owner:
-            raise YuE2Error("この画面の実行ジョブが見つかりません。履歴を更新してください。")
+            raise JobNotFound("この画面の実行ジョブが見つかりません。履歴を更新してください。")
         state = job.final if job.done.is_set() else read_json(job.directory / "status.json")
         return {**state, "elapsed": time.monotonic() - job.started, "done": job.done.is_set()}
 

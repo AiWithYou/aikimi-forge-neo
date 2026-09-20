@@ -32,6 +32,7 @@
 | Anima 3.8B | lylogummy/Anima-3.8B、circlestone-labs/Anima、Qwen | 各model card、CircleStone Labs license、Qwen license |
 | SenseNova U1.5 | SenseNova、starsFriday、joyfox | 各固定revisionのmodel cardとruntime LICENSE |
 | MiniMax H3 | MiniMaxAI、ComfyUI | MiniMax H3 Community LicenseとComfyUI側のnotice |
+| Qwen Image 2.1 | Qwen、Hugging Face Diffusers、bitsandbytes | [Qwen Research License](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/b3179ad355be050328e483a9dfdd9e60cd62adfa/LICENSE)（研究・評価目的の非商用利用。商用は別途許諾）、Diffusers Apache-2.0、bitsandbytes MIT |
 
 Animaの配布repositoryは、upstream AnimaとNVIDIA由来条件の確認を求めています。条件を短く言い換えて断定せず、利用時点の原文を確認してください。Krea2にも独自のcommunity licenseがあります。
 
