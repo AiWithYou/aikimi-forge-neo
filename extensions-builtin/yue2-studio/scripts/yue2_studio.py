@@ -8,7 +8,7 @@ import gradio as gr
 from modules import script_callbacks
 from modules.paths import data_path, script_path
 from modules_forge.yue2_studio.core import Request, YuE2Error, import_project, inside, integer, read_json, runtime_manifest
-from modules_forge.yue2_studio.service import Studio
+from modules_forge.yue2_studio.service import JobNotFound, Studio
 
 RUNTIME = Path(script_path) / "extensions-builtin" / "yue2-studio" / "runtime"
 STUDIO = Studio(RUNTIME, Path(data_path) / "outputs" / "yue2")
@@ -57,17 +57,26 @@ def poll(identifier, request: gr.Request):
         text = f"{state['message']}  経過 {state['elapsed']:.0f} 秒"
         done = state["done"]
         choices = STUDIO.history() if done else None
-        latest = choices[0][1] if choices else None
+        latest = next((key for _, key in (choices or []) if key.startswith(f"{identifier}/")), None)
         return (text, gr.update(interactive=done), gr.update(interactive=done), gr.update(interactive=not done),
                 gr.update(active=not done),
                 gr.update(choices=choices, value=latest) if done else gr.update(),
                 gr.update(choices=choices, value=None) if done else gr.update())
+    except JobNotFound as exc:
+        # Another session can start a job before this browser sees its completion.
+        return (str(exc), gr.update(interactive=True), gr.update(interactive=True),
+                gr.update(interactive=False), gr.update(active=False), gr.update(), gr.update())
     except Exception as exc:
         return str(exc), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
 
 def cancel(identifier, request: gr.Request):
     return "停止を要求しました。終了確認中です。" if STUDIO.cancel(identifier, owner(request)) else "この画面で停止できる実行中ジョブはありません。"
+
+
+def refresh_history():
+    choices = STUDIO.history()
+    return gr.update(choices=choices, value=None), gr.update(choices=choices, value=None)
 
 
 def load_result(key):
@@ -212,8 +221,7 @@ def on_ui_tabs():
         stop.click(cancel, inputs=job, outputs=status, queue=False, **PRIVATE)
         history.change(load_result, inputs=history, outputs=[audio, score_result, files, warning], **PRIVATE)
         comparison.change(lambda key: load_result(key)[0], inputs=comparison, outputs=audio_b, **PRIVATE)
-        refresh.click(lambda: (gr.update(choices=STUDIO.history(), value=None), gr.update(choices=STUDIO.history(), value=None)),
-                      outputs=[history, comparison], **PRIVATE)
+        refresh.click(refresh_history, outputs=[history, comparison], **PRIVATE)
         restore_button.click(restore, inputs=history, outputs=ordered, **PRIVATE)
         project_file.change(restore_file, inputs=project_file, outputs=ordered, **PRIVATE)
         score_file.change(lambda path: read_score(Path(path)) if path else gr.update(), inputs=score_file, outputs=abc, **PRIVATE)

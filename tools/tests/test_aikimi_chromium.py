@@ -185,6 +185,10 @@ if (window.fixtureWarning) {{
         const summary = panel.querySelector('summary');
         const disclosure = panel.querySelector('details');
         if (window.fixtureInteraction === 'hide') {{
+            window.fixtureChecks.visibilityEvents = [];
+            document.addEventListener('aikimi:status-visibility-change', () => {{
+                window.fixtureChecks.visibilityEvents.push(panel.hidden);
+            }});
             document.querySelector('#aikimi-pet-toggle').click();
             window.fixtureChecks.hidden = panel.hidden;
             window.fixtureChecks.saved = JSON.parse(localStorage.getItem('aikimi-pet')).hidden;
@@ -345,6 +349,7 @@ class AikimiChromiumTests(unittest.TestCase):
     def test_hide_restore_saves_preference_and_releases_image(self):
         result = self.render_fixture("interaction=hide")
         self.assertTrue(all(result["checks"][key] for key in ("hidden", "saved", "srcRemoved", "restored")))
+        self.assertEqual(result["checks"]["visibilityEvents"], [True, False])
 
     def test_progress_result_link_and_keyboard_disclosure(self):
         result = self.render_fixture("interaction=progress")

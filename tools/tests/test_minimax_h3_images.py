@@ -349,6 +349,38 @@ class LifecycleTests(unittest.TestCase):
         bridge.cleanup_prepared_media.assert_called_once()
         client.close.assert_called_once()
 
+    def test_invalid_request_does_not_acquire_or_release_another_engines_gpu(self):
+        bridge, _ = fake_bridge()
+        with patch.object(images, "_bridge", return_value=bridge), patch("modules_forge.gpu_ownership.GPUOwnership") as owner:
+            with self.assertRaises(images.H3ImageError):
+                list(images.run_image_generation(images.H3ImageRequest(" "), Path("runtime"), "http://127.0.0.1:8188", Path("logs"), Path("out")))
+        owner.assert_not_called()
+        bridge.release_forge_vram.assert_not_called()
+
+    def test_runtime_progress_can_cancel_before_submission(self):
+        bridge, client = fake_bridge()
+        with patch.object(images, "_bridge", return_value=bridge):
+            generator = self.run_job(bridge)
+            event = next(generator)
+            self.assertEqual(event["stage"], "runtime")
+            self.assertTrue(event["prompt_id"])
+            bridge._is_cancelled_job.side_effect = lambda identifier: identifier == event["prompt_id"]
+            with self.assertRaises(images.H3ImageCancelled):
+                list(generator)
+        client.submit.assert_not_called()
+        bridge.cleanup_prepared_media.assert_called_once()
+        client.close.assert_called_once()
+
+    def test_terminal_cleanup_failure_still_releases_gpu_ownership(self):
+        bridge, client = fake_bridge()
+        client.job.return_value = {"status": "cancelled"}
+        bridge.cleanup_prepared_media.side_effect = OSError("cleanup failed")
+        with patch.object(images, "_bridge", return_value=bridge), self.assertRaisesRegex(OSError, "cleanup failed"):
+            list(self.run_job(bridge))
+        self.assertEqual(bridge._GPU_OWNERSHIPS, {})
+        bridge._clear_active_generation.assert_called_once()
+        client.close.assert_called_once()
+
 
 class UITests(unittest.TestCase):
     def test_real_gradio_component_graph_without_starting_backend(self):

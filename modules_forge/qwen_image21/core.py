@@ -1,0 +1,206 @@
+"""Validated Qwen Image 2.1 requests and local runtime/artifact boundaries."""
+
+from __future__ import annotations
+
+import math
+import os
+import secrets
+from dataclasses import asdict, dataclass, replace
+from pathlib import Path
+
+from PIL import Image, ImageOps
+
+from modules_forge.yue2_studio.core import atomic_json as atomic_json
+from modules_forge.yue2_studio.core import read_json
+from modules_forge.yue2_studio.core import runtime_lock as _runtime_lock
+from modules_forge.yue2_studio.core import safe_environment as safe_environment
+
+MODEL_ID = "Qwen/Qwen-Image-2.1"
+MODEL_REVISION = "b3179ad355be050328e483a9dfdd9e60cd62adfa"
+DIFFUSERS_REVISION = "6256aa7666cedd47443adc8f82da9a10e110b09c"
+MAX_REFERENCE_IMAGES = 10
+MAX_IMAGE_PIXELS = 40_000_000
+MAX_OUTPUT_PIXELS = 2400 * 1792
+SETUP_COMMAND = "aikimi-qwen-image21-setup.bat"
+
+
+class QwenImage21Error(ValueError):
+    """An actionable input, runtime, or artifact error."""
+
+
+def integer(value, label: str, lower: int, upper: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise QwenImage21Error(f"{label}は整数で指定してください。")
+    try:
+        number = int(value)
+        if isinstance(value, str):
+            if value.strip() != str(number):
+                raise ValueError
+        elif not math.isfinite(value) or number != value:
+            raise ValueError
+    except (ValueError, OverflowError):
+        raise QwenImage21Error(f"{label}は整数で指定してください。") from None
+    if not lower <= number <= upper:
+        raise QwenImage21Error(f"{label}は{lower}〜{upper}の範囲です。")
+    return number
+
+
+def inside(root: Path, path: Path) -> Path:
+    root, path = root.resolve(), path.resolve()
+    if not path.is_relative_to(root):
+        raise QwenImage21Error("Qwen Image 2.1の保存先の外側は参照できません。")
+    return path
+
+
+def validate_images(paths) -> tuple[str, ...]:
+    if not isinstance(paths, (list, tuple)) or len(paths) > MAX_REFERENCE_IMAGES:
+        raise QwenImage21Error(f"参照画像は最大{MAX_REFERENCE_IMAGES}枚です。")
+    checked = []
+    for index, value in enumerate(paths, 1):
+        if not isinstance(value, (str, Path)):
+            raise QwenImage21Error(f"参照画像{index}をアップロードし直してください。")
+        path = Path(value)
+        try:
+            if not path.is_file() or path.stat().st_size > 64 * 1024 * 1024:
+                raise ValueError("画像が見つからないか、64 MBを超えています。")
+            with Image.open(path) as source:
+                if source.width * source.height > MAX_IMAGE_PIXELS:
+                    raise ValueError("画像は4000万画素以内にしてください。")
+                if getattr(source, "n_frames", 1) != 1:
+                    raise ValueError("アニメーションは使用できません。静止画像を指定してください。")
+                source.verify()
+        except (OSError, ValueError, Image.DecompressionBombError) as exc:
+            raise QwenImage21Error(f"参照画像{index}: {exc}") from exc
+        checked.append(str(path.resolve()))
+    return tuple(checked)
+
+
+def copy_inputs(paths, directory: Path) -> list[str]:
+    """Snapshot ordered references before the browser can remove its uploads."""
+    paths = validate_images(paths)
+    result = []
+    for index, value in enumerate(paths, 1):
+        destination = inside(directory, directory / f"reference-{index:02d}.png")
+        with Image.open(value) as source:
+            source.load()
+            image = ImageOps.exif_transpose(source)
+            has_alpha = "A" in image.getbands() or "transparency" in image.info
+            image.convert("RGBA" if has_alpha else "RGB").save(destination, format="PNG")
+        result.append(str(destination))
+    return result
+
+
+@dataclass(frozen=True)
+class Request:
+    prompt: str
+    width: int = 1024
+    height: int = 1024
+    steps: int = 40
+    seed: int = -1
+    transparent: bool = False
+    precision: str = "int8"
+    memory_mode: str = "offload"
+    input_images: tuple[str, ...] = ()
+
+    def resolved(self) -> Request:
+        if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 12000:
+            raise QwenImage21Error("プロンプトを1〜12000文字で入力してください。")
+        width = integer(self.width, "幅", 256, 4096)
+        height = integer(self.height, "高さ", 256, 4096)
+        if width % 32 or height % 32 or width * height > MAX_OUTPUT_PIXELS:
+            raise QwenImage21Error("幅・高さは32の倍数、総画素数は約430万画素（2400×1792）以内で指定してください。")
+        steps = integer(self.steps, "Steps", 1, 100)
+        seed = integer(self.seed, "Seed", -1, 2**63 - 1)
+        if self.precision not in {"int8", "bf16"}:
+            raise QwenImage21Error("精度はINT8またはBF16を指定してください。")
+        if self.memory_mode not in {"offload", "gpu"}:
+            raise QwenImage21Error("メモリ設定が不正です。")
+        if not isinstance(self.transparent, bool):
+            raise QwenImage21Error("透過背景の指定が不正です。")
+        return replace(
+            self,
+            prompt=self.prompt.strip(),
+            width=width,
+            height=height,
+            steps=steps,
+            seed=secrets.randbits(63) if seed == -1 else seed,
+            input_images=validate_images(self.input_images),
+        )
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def runtime_manifest(root: Path) -> dict:
+    """Read only installed, revision-matched local assets; never trigger downloads."""
+    try:
+        manifest = read_json(root / "runtime.json")
+    except (OSError, ValueError) as exc:
+        raise QwenImage21Error(f"未導入です。{SETUP_COMMAND}を実行してください。") from exc
+    if not isinstance(manifest, dict) or manifest.get("schema") != 1:
+        raise QwenImage21Error(f"実行環境の登録が不正です。{SETUP_COMMAND}を再実行してください。")
+    if manifest.get("model_revision") != MODEL_REVISION or manifest.get("diffusers_revision") != DIFFUSERS_REVISION:
+        raise QwenImage21Error(f"実行環境のバージョンが一致しません。{SETUP_COMMAND}を再実行してください。")
+    python = root / "worker-env" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    model = root / "model"
+    if not isinstance(manifest.get("python"), str) or not isinstance(manifest.get("model"), str):
+        raise QwenImage21Error(f"Python・モデルの登録が不正です。{SETUP_COMMAND}を再実行してください。")
+    if Path(manifest["python"]).absolute() != python.absolute() or Path(manifest["model"]).resolve() != model.resolve():
+        raise QwenImage21Error(f"専用環境の保存先が一致しません。{SETUP_COMMAND}を再実行してください。")
+    if not python.is_file() or not model.is_dir():
+        raise QwenImage21Error(f"専用Pythonまたはモデルが不足しています。{SETUP_COMMAND}を再実行してください。")
+    try:
+        index = read_json(model / "model_index.json")
+        if not isinstance(index, dict) or index.get("_class_name") != "QwenImage21Pipeline":
+            raise ValueError("QwenImage21Pipelineが見つかりません。")
+    except (OSError, ValueError) as exc:
+        raise QwenImage21Error(f"Qwen Image 2.1モデルが不完全です。{SETUP_COMMAND}を再実行してください。") from exc
+    try:
+        inventory = read_json(root / "model-files.json")
+        if not isinstance(inventory, dict) or inventory.get("revision") != MODEL_REVISION:
+            raise ValueError("モデルファイルの記録が一致しません。")
+        files = inventory.get("files")
+        if not isinstance(files, list) or not files:
+            raise ValueError("モデルファイルの記録がありません。")
+        seen, components = set(), set()
+        for item in files:
+            if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+                raise ValueError("モデルファイルの記録が不正です。")
+            relative = Path(item["path"])
+            size = item.get("size")
+            if (
+                relative.is_absolute()
+                or relative in seen
+                or isinstance(size, bool)
+                or not isinstance(size, int)
+                or size <= 0
+            ):
+                raise ValueError("モデルファイルの記録が不正です。")
+            seen.add(relative)
+            path = inside(model, model / relative)
+            if not path.is_file() or path.stat().st_size != size:
+                raise ValueError(f"不足またはサイズ不一致: {relative}")
+            if relative.suffix in {".safetensors", ".bin"} and len(relative.parts) > 1:
+                components.add(relative.parts[0])
+        if not {"transformer", "text_encoder", "vae"}.issubset(components):
+            raise ValueError("Transformer・テキストエンコーダー・VAEの記録が不足しています。")
+    except (OSError, ValueError) as exc:
+        raise QwenImage21Error(f"モデルの検証に失敗しました（{exc}）。{SETUP_COMMAND}を再実行してください。") from exc
+    return {**manifest, "python": str(python.absolute()), "model": str(model.resolve())}
+
+
+def runtime_status(root: Path) -> str:
+    try:
+        runtime_manifest(root)
+    except QwenImage21Error as exc:
+        return str(exc)
+    return "導入済み。INT8 / BF16を選んで生成できます。"
+
+
+def runtime_lock(root: Path):
+    try:
+        return _runtime_lock(root)
+    except ValueError as exc:
+        raise QwenImage21Error(
+            "Qwen Image 2.1のセットアップまたは実行環境が使用中です。終了後に再実行してください。"
+        ) from exc

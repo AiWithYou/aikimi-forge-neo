@@ -625,7 +625,7 @@ def create_ui():
                 available_extensions_table = gr.HTML()
 
                 refresh_available_extensions_button.click(
-                    fn=modules.ui.wrap_gradio_call(refresh_available_extensions, extra_outputs=[gr.skip(), gr.skip(), gr.skip(), gr.skip()]),
+                    fn=modules.ui.wrap_gradio_call_no_job(refresh_available_extensions, extra_outputs=[gr.skip(), gr.skip(), gr.skip(), gr.skip()]),
                     inputs=[available_extensions_index, selected_tags, showing_type, filtering_type, sort_column],
                     outputs=[available_extensions_index, available_extensions_table, selected_tags, search_extensions_text, install_result],
                 )

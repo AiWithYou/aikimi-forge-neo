@@ -1,0 +1,7 @@
+# Separate Qwen Image 2.1 runtime; do not install into Forge's environment.
+diffusers @ git+https://github.com/huggingface/diffusers.git@6256aa7666cedd47443adc8f82da9a10e110b09c
+transformers==5.17.0
+bitsandbytes==0.50.2
+accelerate==1.15.0
+Pillow==12.3.0
+safetensors==0.8.0

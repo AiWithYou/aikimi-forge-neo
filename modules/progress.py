@@ -42,6 +42,7 @@ def finish_task(id_task):
         current_task = None
         _preview_cache = {}
 
+    pending_tasks.pop(id_task, None)
     finished_tasks.append(id_task)
     if len(finished_tasks) > 16:
         finished_tasks.pop(0)
@@ -126,15 +127,16 @@ def _encode_live_preview(image, image_format, preview_id, cache):
 def progressapi(req: ProgressRequest):
     preview_cache = _preview_cache
     active = current_task is not None and req.id_task == current_task
-    queued = req.id_task in pending_tasks
+    # Capture the FIFO once: another request may start while we format its position.
+    queued_tasks = tuple(pending_tasks)
+    queued = req.id_task in queued_tasks
     completed = req.id_task in finished_tasks
 
     if not active:
         textinfo = "Waiting..."
         if queued:
-            sorted_queued = sorted(pending_tasks.keys(), key=lambda x: pending_tasks[x])
-            queue_index = sorted_queued.index(req.id_task)
-            textinfo = "In queue: {}/{}".format(queue_index + 1, len(sorted_queued))
+            queue_index = queued_tasks.index(req.id_task)
+            textinfo = "In queue: {}/{}".format(queue_index + 1, len(queued_tasks))
         return ProgressResponse(active=active, queued=queued, completed=completed, id_live_preview=-1, textinfo=textinfo)
 
     progress = 0

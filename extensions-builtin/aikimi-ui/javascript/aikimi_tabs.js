@@ -37,12 +37,19 @@
             label: "MiniMax H3",
             kind: "native",
         }),
+        qwen_image21: Object.freeze({
+            buttonId: "aikimi-tab-qwen-image21",
+            containerId: "tab_qwen_image21_studio",
+            label: "Qwen Image 2.1",
+            kind: "native",
+        }),
     });
     const FEATURE_ORDER = Object.freeze([
         "krea2",
         "anima38",
         "sensenova",
         "minimax_h3",
+        "qwen_image21",
     ]);
 
     if (window.AikimiTabs?.apiVersion === API_VERSION) {

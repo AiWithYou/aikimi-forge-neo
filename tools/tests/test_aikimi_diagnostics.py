@@ -48,6 +48,31 @@ class AikimiDiagnosticsTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(set(payload), {"api_version", "app_version", "status"})
 
+    def test_qwen_capability_uses_lightweight_pinned_setup_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self.paths(Path(directory))
+            with mock.patch("modules_forge.qwen_image21.core.runtime_manifest", return_value={}) as inspect_setup:
+                check = capabilities._qwen_image21_check(paths)
+        inspect_setup.assert_called_once_with(paths.models_root / "Qwen-Image-2.1")
+        self.assertEqual(check.id, "qwen_image21")
+        self.assertEqual(check.state, diagnostics.CheckState.READY)
+        self.assertTrue(check.available)
+        self.assertIn("No generation was run", check.summary)
+
+    def test_qwen_capability_fails_closed_without_leaking_setup_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self.paths(Path(directory))
+            with mock.patch(
+                "modules_forge.qwen_image21.core.runtime_manifest",
+                side_effect=ValueError("private token=secret H:/private/model"),
+            ):
+                check = capabilities._qwen_image21_check(paths)
+        self.assertEqual(check.state, diagnostics.CheckState.BLOCKED)
+        self.assertFalse(check.available)
+        self.assertIn("aikimi-qwen-image21-setup.bat", check.action)
+        self.assertNotIn("secret", check.summary)
+        self.assertNotIn("private", check.summary)
+
     def test_status_whitelists_runtime_fields_and_drops_secrets_and_paths(self):
         sentinel = "diagnostic-secret-123"
         payload = diagnostics.status_payload(

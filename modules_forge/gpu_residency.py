@@ -104,9 +104,11 @@ def release_idle():
         if not queue_lock.acquire(False):
             return "生成中です。終了後に解放してください。"
         try:
+            forge_registered = "forge" in _resources
             for name in list(_resources):
                 release_resource(name)
-            release_forge_vram()
+            if not forge_registered:
+                release_forge_vram()
             return "待機中のモデルを解放しました。"
         finally:
             queue_lock.release()

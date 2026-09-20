@@ -9,6 +9,11 @@ on:
       - "**/*.ps1"
       - "extensions-builtin/aikimi-ui/**/*.js"
       - "modules/aikimi_capabilities.py"
+      - "modules_forge/qwen_image21/**"
+      - "modules_forge/qwen_image21_environment.py"
+      - "tools/*qwen_image21*.py"
+      - "tools/tests/test_qwen_image21*.py"
+      - "extensions-builtin/qwen-image21-studio/**"
       - "modules_forge/gpu_residency.py"
       - "modules/ui_gpu_residency.py"
       - "modules_forge/resident_worker.py"
@@ -71,6 +76,11 @@ on:
       - "**/*.ps1"
       - "extensions-builtin/aikimi-ui/**/*.js"
       - "modules/aikimi_capabilities.py"
+      - "modules_forge/qwen_image21/**"
+      - "modules_forge/qwen_image21_environment.py"
+      - "tools/*qwen_image21*.py"
+      - "tools/tests/test_qwen_image21*.py"
+      - "extensions-builtin/qwen-image21-studio/**"
       - "modules_forge/gpu_residency.py"
       - "modules/ui_gpu_residency.py"
       - "modules_forge/resident_worker.py"
@@ -153,6 +163,12 @@ jobs:
         run: |
           files=(
             modules/aikimi_capabilities.py
+            modules_forge/qwen_image21
+            modules_forge/qwen_image21_environment.py
+            tools/setup_qwen_image21.py
+            tools/qwen_image21_worker.py
+            tools/tests/test_qwen_image21*.py
+            extensions-builtin/qwen-image21-studio/scripts/qwen_image21_studio.py
             modules_forge/gpu_residency.py
             modules/ui_gpu_residency.py
             modules_forge/resident_worker.py

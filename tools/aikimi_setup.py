@@ -1125,15 +1125,22 @@ class Installer:
         generated_status = self._verify_generated(profile)
         if profile.generated is not None and generated_status is not None:
             generated = profile.generated
+            checksum_remnants = []
+            if generated_status.state != "ready":
+                for relative in (generated.sidecar_relative_path, f"{generated.sidecar_relative_path}.part"):
+                    sidecar = self._target(relative)
+                    if sidecar.is_symlink() or (sidecar.exists() and not sidecar.is_file()):
+                        raise SetupError("Refusing to repair an unsafe conversion checksum record")
+                    if sidecar.exists():
+                        checksum_remnants.append(sidecar)
             if generated_status.state == "invalid":
                 target = self._target(generated.relative_path)
-                sidecar = self._target(generated.sidecar_relative_path)
-                if target.is_symlink() or sidecar.is_symlink():
+                if target.is_symlink():
                     raise SetupError("Refusing to repair a symbolic-link conversion output")
                 if target.exists():
                     quarantined.append(self._quarantine(profile, target, dry_run=dry_run))
-                if sidecar.exists():
-                    quarantined.append(self._quarantine(profile, sidecar, dry_run=dry_run))
+            for sidecar in checksum_remnants:
+                quarantined.append(self._quarantine(profile, sidecar, dry_run=dry_run))
             partial = Path(f"{self._target(generated.relative_path)}.part")
             if partial.exists():
                 if partial.is_symlink() or not partial.is_file():

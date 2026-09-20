@@ -1,10 +1,10 @@
 # Aikimi Studio Neo
 
-**v1.1.0** · [変更履歴](CHANGELOG.md)
+**v1.2.0** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
-**Krea2・Anima・SenseNovaの画像生成・編集、MiniMax H3の音声付き動画、YuE2の作曲を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
+**Qwen Image 2.1・Krea2・Anima・SenseNovaの画像生成・編集、MiniMax H3の音声付き動画、YuE2の作曲を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
 
 [Stable Diffusion WebUI Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo)を基盤にしています。主な対象はWindows 11・Python 3.13・NVIDIA GPUで、通常起動では自分のPC内だけで利用し、LANやインターネットへ自動公開しません。
 
@@ -16,8 +16,8 @@
 
 | 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
-| **モデル対応** | Anima 3.8B v1.1の拡張、SenseNova専用Studio、MiniMax H3専用StudioとComfyUI連携、YuE2 Musicの作曲・楽譜編集。 |
-| **導入** | 画像・動画モデルを選ぶセットアップBATと、YuE2専用BAT。モデルの取得・変換と、必要な専用環境の準備。 |
+| **モデル対応** | Qwen Image 2.1の専用画面とINT8、Anima 3.8B v1.1の拡張、SenseNova専用Studio、MiniMax H3専用StudioとComfyUI連携、YuE2 Musicの作曲・楽譜編集。 |
+| **導入** | 画像・動画モデルを選ぶセットアップBATと、Qwen Image 2.1・YuE2の専用BAT。モデルの取得・変換と、必要な専用環境の準備。 |
 | **仕上げ** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
 | **操作** | 追加機能へのショートカット、実行状態の表示、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
 
@@ -34,6 +34,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
+| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。生成モデルとテキストエンコーダーのbitsandbytes INT8、BF16、CPU退避に対応。専用BATで公式モデルと固定版Diffusersを導入します。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
@@ -48,11 +49,11 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **Forge画像生成**（継承） | `txt2img`、`img2img`、Extras、モデル読み込みなど、Forgeの基本機能を利用。 |
-| **Aikimiナビゲーション**（追加） | 画面上部のショートカットからKrea2・Anima・SenseNova・MiniMax H3へ移動。既存のForgeタブもそのまま使えます。 |
+| **Aikimiナビゲーション**（追加） | 画面上部のショートカットからKrea2・Anima・SenseNova・MiniMax H3・Qwen Image 2.1へ移動。既存のForgeタブもそのまま使えます。 |
 | **モデル保持・連続生成**（追加） | 全画面共通の「GPU・モデル保持」で、自動・連続生成優先・毎回解放を選択。同じエンジンのモデルを再利用し、別の機能へ切り替える前に待機モデルを解放します。[使い方](docs/model-retention.md) |
 | **ちびあいきみ・状態表示**（追加） | 通常のForge画面にも表示できるペット。ドラッグで移動し、クリックで生成状況や順番待ちを確認。上部の「ちびあいきみ」で表示を切り替えられます。 |
 | **Extrasの操作改善**（追加） | 処理順と予定サイズの表示、Grain Cleaner単独設定、見本範囲の選択、結果の要約。同じ画像の再調整では解析結果を再利用します。 |
-| **保存・ジョブ復旧**（追加） | 設定や動画の保存中に失敗した場合の既存ファイル保護、H3ジョブの送信記録と再起動後の照合、Forge・SenseNova・H3・YuE2間のGPU使用調整。 |
+| **保存・ジョブ復旧**（追加） | 設定や動画の保存中に失敗した場合の既存ファイル保護、H3ジョブの送信記録と再起動後の照合、Forge・SenseNova・H3・YuE2・Qwen Image 2.1間のGPU使用調整。 |
 | **起動設定**（追加） | 通常のローカル起動、低VRAM向け設定、API専用起動、認証付きLAN利用を選択。 |
 | **Diagnostics**（追加） | SettingsからPython・GPU・モデルの準備状況を確認。APIからも診断結果を取得できます。 |
 
@@ -75,6 +76,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 ### 機能別ガイド
 
 - [Krea2の高解像度処理](docs/krea2_local_supersample_detail_ja.md)
+- [Qwen Image 2.1：画像生成・編集・透過PNG・INT8](extensions-builtin/qwen-image21-studio/README.md)
 - [Anima 3.8B](extensions-builtin/anima-3-8b/README.md)
 - [SenseNova U1.5 Studio](extensions-builtin/sensenova-u15-studio/README.md)
 - [YuE2 Music：作曲・楽譜編集・GGUF](extensions-builtin/yue2-studio/README.md)
@@ -114,7 +116,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 
 - **Krea2**：画像生成用のPreset`krea`への切り替え。
 - **Anima**：Preset`anima`への切り替えと、専用設定欄の表示。
-- **SenseNova・MiniMax H3**：それぞれの専用Studioの表示。
+- **SenseNova・MiniMax H3・Qwen Image 2.1**：それぞれの専用画面の表示。
 
 Krea2・Animaを選んでも、操作中の`txt2img`／`img2img`タブは維持されます。他のタブから選んだ場合は`txt2img`へ移動します。
 
@@ -156,10 +158,11 @@ cd aikimi-studio-neo
 
 ### モデルの導入
 
-画像・動画の4モデルは`aikimi-setup.bat`のメニューから選びます。YuE2 Musicは専用BATを使います。モデルを追加するときは、いったんNeoを終了してください。
+Krea2・Anima・SenseNova・H3は`aikimi-setup.bat`のメニューから選びます。Qwen Image 2.1とYuE2 Musicは専用BATを使います。モデルを追加するときは、いったんNeoを終了してください。
 
 | モデル | 導入方法 | 自動で準備する内容 |
 |---|---|---|
+| Qwen Image 2.1 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) | 公式モデル一式（約33GB）・INT8対応の専用Python環境 |
 | Krea2 | `aikimi-setup.bat` → `1` | INT8 ConvRot配布版・エンコーダー・VAE |
 | Anima 3.8B v1.1 | `aikimi-setup.bat` → `2` | BF16取得・INT8 ConvRot変換・エンコーダー・VAE |
 | SenseNova U1.5 | `aikimi-setup.bat` → `3` | INT8 ConvRot配布版・8-Step LoRA・専用Python環境 |

@@ -3,6 +3,7 @@
     let draftTimer = null;
     let chromeFrame = null;
     let lastPromptValue = null;
+    let lastStatusSignature = null;
 
     function studioIsActive() {
         const studio = gradioApp().querySelector("#sensenova-u15-studio");
@@ -55,7 +56,8 @@
         const counter = gradioApp().querySelector("#sn-prompt-count");
         if (!prompt || !counter) return;
         const length = Array.from(prompt.value).length;
-        counter.textContent = `${length.toLocaleString()} / 20,000`;
+        const text = `${length.toLocaleString()} / 20,000`;
+        if (counter.textContent !== text) counter.textContent = text;
         counter.dataset.overLimit = String(length > 20000);
         if (lastPromptValue !== null && lastPromptValue !== prompt.value) scheduleDraftSave();
         lastPromptValue = prompt.value;
@@ -106,6 +108,12 @@
         generate.setAttribute("aria-busy", String(busy));
 
         if (!window.AikimiStatus) return;
+        const message = progress.querySelector("strong")?.textContent?.trim() || "";
+        const exactError = gradioApp().querySelector("#sn-validation .sn-inline-error")?.textContent?.trim() || "";
+        const progressText = progress.querySelector(".sn-progress-head span")?.textContent || "";
+        const signature = JSON.stringify([stage, message, exactError, progressText]);
+        if (signature === lastStatusSignature) return;
+        lastStatusSignature = signature;
         if (["idle", "cancelled", "cancel"].includes(stage)) {
             window.AikimiStatus.clear("sensenova-u15");
             return;
@@ -118,9 +126,6 @@
             error: "error",
         }[stage] || (busy ? "generating" : null);
         if (!state) return;
-        const message = progress.querySelector("strong")?.textContent?.trim() || "";
-        const exactError = gradioApp().querySelector("#sn-validation .sn-inline-error")?.textContent?.trim() || "";
-        const progressText = progress.querySelector(".sn-progress-head span")?.textContent || "";
         const progressMatch = progressText.match(/(\d+)%/);
         window.AikimiStatus.publish("sensenova-u15", {
             state,
@@ -158,8 +163,15 @@
         syncControlSemantics();
     });
 
+    document.addEventListener("aikimi:status-visibility-change", function () {
+        lastStatusSignature = null;
+        syncBusyState();
+    });
+
     document.addEventListener("keydown", function (event) {
-        if (!studioIsActive() || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+        if (event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229) return;
+        if (event.key !== "Escape" && !((event.ctrlKey || event.metaKey) && event.key === "Enter")) return;
+        if (!studioIsActive()) return;
         if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
             const generate = buttonElement("sn-generate");
             if (generate && !generate.disabled && generate.getAttribute("aria-busy") !== "true") {

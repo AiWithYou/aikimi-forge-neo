@@ -72,11 +72,9 @@ def rgb_to_lab_float(rgb: np.ndarray) -> np.ndarray:
     if rgb.dtype != np.uint8 or rgb.ndim != 3 or rgb.shape[2] != 3:
         raise ValueError("rgb_to_lab_float expects an RGB uint8 image")
 
-    lab8 = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
-    lab = np.empty_like(lab8, dtype=np.float32)
-    lab[..., 0] = lab8[..., 0] * (100.0 / 255.0)
-    lab[..., 1] = lab8[..., 1] - 128.0
-    lab[..., 2] = lab8[..., 2] - 128.0
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+    lab[..., 0] *= 100.0 / 255.0
+    lab[..., 1:] -= 128.0
     return lab
 
 
@@ -106,13 +104,16 @@ def _analysis_rgba(image: Image.Image, analysis_long_edge: int) -> np.ndarray:
     # Resize premultiplied color and alpha separately. Straight-alpha resizing lets
     # arbitrary hidden RGB from transparent pixels bleed into visible boundaries.
     alpha = rgba[..., 3].astype(np.float32) / 255.0
-    premultiplied = rgba[..., :3].astype(np.float32) * alpha[..., None]
+    premultiplied = rgba[..., :3].astype(np.float32)
+    premultiplied *= alpha[..., None]
     resized_alpha = cv2.resize(
         alpha, (target_width, target_height), interpolation=cv2.INTER_AREA
     )
+    del alpha
     resized_premultiplied = cv2.resize(
         premultiplied, (target_width, target_height), interpolation=cv2.INTER_AREA
     )
+    del premultiplied
     resized_rgb = np.zeros_like(resized_premultiplied, dtype=np.float32)
     np.divide(
         resized_premultiplied,
@@ -719,9 +720,11 @@ def _component_filter(
     area_ok = (areas >= min_area) & (areas <= max_area)
     span_ok = (widths <= max_span) & (heights <= max_span)
     selected = area_ok & span_ok
-    keep_lookup = np.zeros(num_labels, dtype=bool)
-    keep_lookup[1:] = selected
-    filtered = np.where(keep_lookup[labels], 255, 0).astype(np.uint8)
+    # Map labels directly to the output byte values; np.where with integer
+    # literals creates a full-resolution int64 intermediate on large images.
+    keep_lookup = np.zeros(num_labels, dtype=np.uint8)
+    keep_lookup[1:] = selected.astype(np.uint8) * 255
+    filtered = keep_lookup[labels]
     kept = int(np.count_nonzero(selected))
     rejected_area = int(np.count_nonzero(~area_ok))
     rejected_span = int(np.count_nonzero(area_ok & ~span_ok))
@@ -769,17 +772,19 @@ def build_adaptive_speckle_mask(
 
     residual = np.max(np.abs(rgb.astype(np.int16) - median.astype(np.int16)), axis=2)
     rgb_float = rgb.astype(np.float32)
-    median_float = median.astype(np.float32)
     source_luma = (
         rgb_float[..., 0] * 0.299
         + rgb_float[..., 1] * 0.587
         + rgb_float[..., 2] * 0.114
     )
+    del rgb_float
+    median_float = median.astype(np.float32)
     median_luma = (
         median_float[..., 0] * 0.299
         + median_float[..., 1] * 0.587
         + median_float[..., 2] * 0.114
     )
+    del median_float
     luma_delta = source_luma - median_luma
 
     guide = cv2.GaussianBlur(median_luma, (0, 0), sigmaX=0.8, sigmaY=0.8)
