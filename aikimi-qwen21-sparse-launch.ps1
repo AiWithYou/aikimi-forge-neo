@@ -6,7 +6,7 @@ param(
     [ValidateRange(64,1048576)][int]$MinTokens = 1024,
     [ValidateRange(1,100)][int]$Warmup = 1,
     [ValidateRange(1,100)][int]$Interval = 4,
-    [ValidateRange(0,8)][int]$MaxCalls = 4,
+    [ValidateRange(0,8)][int]$MaxCalls = 1,
     [ValidateRange(0.5,20)][double]$Timeout = 3
 )
 $ErrorActionPreference = "Stop"
@@ -26,11 +26,8 @@ try {
     Write-Host "[Qwen 2.1 Sparse] $Mode / target keep $Keep%. Existing Qwen Image 2.1 tab; restart Neo to switch modes."
     if ($Mode -eq "jev" -and $MaxCalls -gt 0) {
         Write-Host "Qwen layer statistics will be sent to https://api.typesafe.ai. No prompts, images or weights are sent. API charges may apply."
-        if ((Read-Host "Allow this external transfer? [y/N]") -ne "y") { throw "Cloud mode cancelled. Use -Mode fixed for an offline comparison." }
-        $Secure = Read-Host "TYPESAFE_API_KEY (session only)" -AsSecureString
-        $Ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
-        $env:TYPESAFE_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Ptr)
-        $env:AIKIMI_JEV_ALLOW_CLOUD = "1"
+        . (Join-Path $PSScriptRoot 'tools/jev_credentials.ps1')
+        Enable-AikimiJevCredential
     }
     & (Join-Path $PSScriptRoot "aikimi-launch.ps1")
 } finally {

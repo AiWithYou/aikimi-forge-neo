@@ -34,6 +34,8 @@ __pycache__
 /params.txt
 /repositories
 /secrets/
+jev-api-key
+jev-api-key.dpapi
 /styles.csv
 /styles.csv.bak
 /sysinfo*.json

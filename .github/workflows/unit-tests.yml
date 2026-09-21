@@ -65,3 +65,5 @@ jobs:
         run: python tools/run_ci_tests.py --verbosity 1
       - name: Run YuE2 contracts without model downloads
         run: python -m pytest tests/yue2 -q
+      - name: Run Jev contracts without API calls or models
+        run: python -m pytest tests/jev_sparse -q

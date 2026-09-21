@@ -10,6 +10,12 @@ on:
       - "extensions-builtin/aikimi-ui/**/*.js"
       - "modules/aikimi_capabilities.py"
       - "modules_forge/qwen_image21/**"
+      - "modules_forge/jev_sparse/**"
+      - "extensions-builtin/jev-sparse-experiments/**"
+      - "tests/jev_sparse/**"
+      - "tools/*jev_sparse*.py"
+      - "tools/benchmark_*sparse.py"
+      - "tools/tests/test_h3_ram_profile.py"
       - "modules_forge/forge_canvas/**"
       - "tools/tests/test_forge_canvas_transport.py"
       - "modules_forge/qwen_image21_environment.py"
@@ -79,6 +85,12 @@ on:
       - "extensions-builtin/aikimi-ui/**/*.js"
       - "modules/aikimi_capabilities.py"
       - "modules_forge/qwen_image21/**"
+      - "modules_forge/jev_sparse/**"
+      - "extensions-builtin/jev-sparse-experiments/**"
+      - "tests/jev_sparse/**"
+      - "tools/*jev_sparse*.py"
+      - "tools/benchmark_*sparse.py"
+      - "tools/tests/test_h3_ram_profile.py"
       - "modules_forge/forge_canvas/**"
       - "tools/tests/test_forge_canvas_transport.py"
       - "modules_forge/qwen_image21_environment.py"
@@ -168,6 +180,16 @@ jobs:
           files=(
             modules/aikimi_capabilities.py
             modules_forge/qwen_image21
+            modules_forge/jev_sparse
+            extensions-builtin/jev-sparse-experiments/scripts
+            tools/qwen_image21_sparse_worker.py
+            tools/benchmark_qwen21_sparse.py
+            tools/benchmark_anima_sparse.py
+            tools/benchmark_h3_sparse.py
+            tools/setup_jev_sparse.py
+            tools/report_jev_sparse.py
+            tests/jev_sparse
+            tools/tests/test_h3_ram_profile.py
             modules_forge/forge_canvas/canvas.py
             tools/tests/test_forge_canvas_transport.py
             modules_forge/qwen_image21_environment.py

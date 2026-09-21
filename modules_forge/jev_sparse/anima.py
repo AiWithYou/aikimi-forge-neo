@@ -4,6 +4,7 @@ Kernel contract: ComfyUI 7a0b5eed nodes_sparse_attention.py, make_attention_over
 The existing Q/K/V projections, norms, RoPE, output projection and cross-attention
 are preserved. No global attention function is replaced.
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -15,6 +16,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .common import AnimaOptions, ExperimentCancelled, JevClient, RunLog, sdk_python
+from .credentials import cloud_source
 
 _ACTIVE = contextvars.ContextVar("aikimi_anima_sparse_run", default=None)
 
@@ -57,22 +59,47 @@ class AnimaRun:
         self.last_decision = self.evaluation
         if opt.mode == "rules":
             order = sorted(self.observations, key=lambda i: self.observations[i]["relative_output_norm"])
-            self.keeps = {layer: (50.0 if rank < self.layers / 3 else 75.0 if rank < 2 * self.layers / 3 else 100.0) for rank, layer in enumerate(order)}
+            self.keeps = {
+                layer: (50.0 if rank < self.layers / 3 else 75.0 if rank < 2 * self.layers / 3 else 100.0)
+                for rank, layer in enumerate(order)
+            }
             self.log.write("decision", evaluation=self.evaluation, source="rules", keep_percent=self.keeps)
             return
         try:
-            self.keeps = self.client.decide({
-                "target": "Anima image self-attention", "next_model_evaluation": self.evaluation,
-                "constraints": "Choose 50, 75 or 100 percent. Text cross-attention is unchanged. No reference-image tokens are present. All transformer layers execute. Statistics are uncalibrated output-norm/drift proxies, not measured quality or sparse approximation error. Prefer 100 under uncertainty.",
-                "blocks": self.observations, "current_keep": self.keeps,
-            }, {str(i): (50.0, 75.0, 100.0) for i in range(self.layers)}, 100.0)
-            self.log.write("decision", evaluation=self.evaluation, source="jev", keep_percent=self.keeps, api_calls=self.client.calls, api_wait_seconds=self.client.wait_seconds)
+            self.keeps = self.client.decide(
+                {
+                    "target": "Anima image self-attention",
+                    "next_model_evaluation": self.evaluation,
+                    "constraints": "SPEED-FIRST profile: choose 25,50,75,100 percent. Text cross-attention is unchanged. No reference-image tokens are present. All transformer layers execute. Compare output-norm/drift proxies with peers: favor 25 for weak/stable contributions, 50 for typical/ambiguous contributions, 75 for unusually strong contributions. Reserve 100 for extreme contributions with supporting measurements. Visually good results matter; different fine details and compositions are acceptable. Missing first drift alone does not require 100. These are proxies, not measured visual quality. No forced quota.",
+                    "blocks": self.observations,
+                    "current_keep": self.keeps,
+                },
+                {str(i): (25.0, 50.0, 75.0, 100.0) for i in range(self.layers)},
+                100.0,
+            )
+            self.log.write(
+                "decision",
+                evaluation=self.evaluation,
+                source="jev",
+                keep_percent=self.keeps,
+                api_calls=self.client.calls,
+                api_wait_seconds=self.client.wait_seconds,
+                controller_policy="speed_v3",
+                diagnostics=getattr(self.client, "last_diagnostics", {}),
+                observations=self.observations,
+            )
         except ExperimentCancelled:
             raise
         except Exception as exc:
             self.circuit_open = True
             self.keeps = {str(i): 100.0 for i in range(self.layers)}
-            self.log.write("decision", evaluation=self.evaluation, source="dense_fallback", error_type=type(exc).__name__, keep_percent=self.keeps)
+            self.log.write(
+                "decision",
+                evaluation=self.evaluation,
+                source="dense_fallback",
+                error_type=type(exc).__name__,
+                keep_percent=self.keeps,
+            )
 
     def keep(self, layer: int) -> float:
         if self.closed or self.evaluation < self.options.warmup_evaluations:
@@ -80,22 +107,32 @@ class AnimaRun:
         return self.keeps[str(layer)]
 
     def observe(self, layer, result, v):
+        if result.shape[1] < self.options.min_tokens:
+            return
+        if self.options.mode == "jev" and self.client is not None and self.client.calls >= self.options.max_calls:
+            return
         if self.options.mode not in {"rules", "jev"} or self.circuit_open:
             return
         import torch
+
         with torch.no_grad():
             stride = max(1, result.shape[1] // 32)
             sample = result[0, ::stride, :16][:32].detach().float().clone()
             vs = v[0, ::stride, 0, :16][:32].detach().float()
             relative = sample.norm() / vs.norm().clamp_min(1e-8)
             prior = self.previous.get(layer)
-            drift = sample.new_tensor(-1.0) if prior is None or prior.shape != sample.shape else (sample - prior).norm() / prior.norm().clamp_min(1e-8)
+            drift = (
+                sample.new_tensor(-1.0)
+                if prior is None or prior.shape != sample.shape
+                else (sample - prior).norm() / prior.norm().clamp_min(1e-8)
+            )
             self.previous[layer] = sample
             self.pending[layer] = torch.stack((relative, drift))
 
     def end_evaluation(self):
         if self.pending:
             import torch
+
             ids = sorted(self.pending)
             rows = torch.stack([self.pending[i] for i in ids]).detach().cpu().tolist()
             if not all(math.isfinite(v) for row in rows for v in row):
@@ -104,9 +141,18 @@ class AnimaRun:
                 self.observations = {}
                 self.log.write("nonfinite_statistics", action="dense_for_remaining_evaluations")
             else:
-                self.observations = {str(i): {"relative_output_norm": row[0], "cross_evaluation_drift": None if row[1] < 0 else row[1]} for i, row in zip(ids, rows)}
+                self.observations = {
+                    str(i): {"relative_output_norm": row[0], "cross_evaluation_drift": None if row[1] < 0 else row[1]}
+                    for i, row in zip(ids, rows, strict=True)
+                }
         self.total_counts.update(self.counts)
-        self.log.write("evaluation", evaluation=self.evaluation, counts=dict(self.counts), keep_percent={str(i): self.keep(i) for i in range(self.layers)}, circuit_open=self.circuit_open)
+        self.log.write(
+            "evaluation",
+            evaluation=self.evaluation,
+            counts=dict(self.counts),
+            keep_percent={str(i): self.keep(i) for i in range(self.layers)},
+            circuit_open=self.circuit_open,
+        )
         self.pending.clear()
 
     def close(self, status="completed"):
@@ -115,12 +161,21 @@ class AnimaRun:
             self.previous.clear()
             self.pending.clear()
             self.observations.clear()
-            self.log.finish(status, timing_scope="sum_instrumented_model_evaluations", model_seconds=self.model_seconds, model_evaluations=self.evaluation + 1, attention_calls=dict(self.total_counts), api_calls=self.client.calls if self.client else 0, api_wait_seconds=self.client.wait_seconds if self.client else 0)
+            self.log.finish(
+                status,
+                timing_scope="sum_instrumented_model_evaluations",
+                model_seconds=self.model_seconds,
+                model_evaluations=self.evaluation + 1,
+                attention_calls=dict(self.total_counts),
+                api_calls=self.client.calls if self.client else 0,
+                api_wait_seconds=self.client.wait_seconds if self.client else 0,
+            )
 
 
 def sparse_attention(q, k, v, keep, *, kernel=None):
     """B,N,H,D -> B,N,H,D. Use a real block-sparse kernel, never a dense mask."""
     import torch
+
     ck = kernel if kernel is not None else importlib.import_module("comfy_kitchen")
     if q.device.type != "cuda":
         raise RuntimeError("Anima SparseはCUDA専用です。CPUで高速化済みとは扱いません。")
@@ -129,11 +184,23 @@ def sparse_attention(q, k, v, keep, *, kernel=None):
     if q.dtype != k.dtype or q.dtype != v.dtype or q.dtype not in (torch.float16, torch.bfloat16, torch.float32):
         raise RuntimeError("Unsupported Q/K/V dtype")
     if not hasattr(ck, "sol_attn_is_available") or not ck.sol_attn_is_available(q.device):
-        raise RuntimeError("このGPU用のComfy-Kitchen sol_attnカーネルがありません。通常モードを使うか対応版を導入してください。")
+        raise RuntimeError(
+            "このGPU用のComfy-Kitchen sol_attnカーネルがありません。通常モードを使うか対応版を導入してください。"
+        )
     dtype = q.dtype
     if dtype == torch.float32:
         q, k, v = (t.to(torch.bfloat16) for t in (q, k, v))
-    return ck.sol_attn(q.contiguous(), k.contiguous(), v.contiguous(), tau=1.3, scale=None, sink_blocks=[0, 0], sink_q=[0, 0], topk_ratio=keep / 100.0, token_aug=0).to(dtype)
+    return ck.sol_attn(
+        q.contiguous(),
+        k.contiguous(),
+        v.contiguous(),
+        tau=1.3,
+        scale=None,
+        sink_blocks=[0, 0],
+        sink_q=[0, 0],
+        topk_ratio=keep / 100.0,
+        token_aug=0,
+    ).to(dtype)
 
 
 def make_attention_patch(module, original, layer, run, kernel_fn=sparse_attention):
@@ -154,6 +221,7 @@ def make_attention_patch(module, original, layer, run, kernel_fn=sparse_attentio
         run.counts[reason] += 1
         run.observe(layer, result, v)
         return result
+
     return compute
 
 
@@ -166,6 +234,7 @@ def attach(unet, options: AnimaOptions, log_root: Path, *, prompt="", cancelled=
     if type(model).__name__ != "Anima" or type(model).__module__ != "backend.nn.anima":
         raise ValueError("この実験はAnima専用です。別モデルではOFFにしてください。")
     from backend.args import dynamic_args
+
     if dynamic_args.ref_latents:
         raise ValueError("Anima Sparseの初版は参照latentなしに限定しています。参照画像を間引く設定ではありません。")
     if unet.model_options.get("aikimi_anima_sparse"):
@@ -175,9 +244,19 @@ def attach(unet, options: AnimaOptions, log_root: Path, *, prompt="", cancelled=
     if options.mode not in {"dense", "off"}:
         ck = importlib.import_module("comfy_kitchen")
         import torch
-        if any(block.self_attn.head_dim != 128 for block in model.blocks) or not hasattr(ck, "sol_attn_is_available") or not torch.cuda.is_available() or not ck.sol_attn_is_available(unet.load_device):
+
+        if (
+            any(block.self_attn.head_dim != 128 for block in model.blocks)
+            or not hasattr(ck, "sol_attn_is_available")
+            or not torch.cuda.is_available()
+            or not ck.sol_attn_is_available(unet.load_device)
+        ):
             raise RuntimeError("Anima Sparseにはhead_dim=128と、このGPUで使えるComfy-Kitchen sol_attnが必要です。")
-    client = JevClient(sdk_python(), options.timeout, cancelled) if options.mode == "jev" else None
+    client = (
+        JevClient(sdk_python(), options.timeout, cancelled, environment=cloud_source())
+        if options.mode == "jev" and options.max_calls
+        else None
+    )
     log = RunLog(log_root, "anima", asdict(options), prompt)
     run = AnimaRun(options, len(model.blocks), log, client, cancelled)
     try:
@@ -189,9 +268,15 @@ def attach(unet, options: AnimaOptions, log_root: Path, *, prompt="", cancelled=
             original = unet.get_model_object(name)
             patched.add_object_patch(name, make_attention_patch(block.self_attn, original, i, run))
         previous = patched.model_options.get("model_function_wrapper")
+
         def wrapper(apply_model, args):
             def delegate():
-                return previous(apply_model, args) if previous else apply_model(args["input"], args["timestep"], **args["c"])
+                return (
+                    previous(apply_model, args)
+                    if previous
+                    else apply_model(args["input"], args["timestep"], **args["c"])
+                )
+
             if run.closed:
                 return delegate()
             # Recheck at execution: another extension may add references after setup.
@@ -199,10 +284,13 @@ def attach(unet, options: AnimaOptions, log_root: Path, *, prompt="", cancelled=
                 run.close("rejected_references")
                 raise ValueError("Anima Sparse does not support reference latents")
             import torch
+
             device = getattr(args["input"], "device", None)
+
             def sync():
                 if device is not None and device.type == "cuda":
                     torch.cuda.synchronize(device)
+
             sync()
             started = time.perf_counter()
             token = _ACTIVE.set(run)
@@ -218,6 +306,7 @@ def attach(unet, options: AnimaOptions, log_root: Path, *, prompt="", cancelled=
                 raise
             finally:
                 _ACTIVE.reset(token)
+
         patched.set_model_unet_function_wrapper(wrapper)
         patched.model_options["aikimi_anima_sparse"] = True
         return patched, run
