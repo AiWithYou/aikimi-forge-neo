@@ -171,7 +171,7 @@ class WorkerJobTests(unittest.TestCase):
         rewritten = {"enabled": True, "applied": True, "rewritten_prompt": "Expanded glass bird", "wh_ratio": "1:1"}
         with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt", return_value=rewritten) as rewrite:
             result, _ = self.run_job()
-        self.assertEqual(rewrite.call_args.args[:5], (self.model.parent, "a glass bird", 256, 320, 123))
+        self.assertEqual(rewrite.call_args.args[:5], (self.model.parent.resolve(), "a glass bird", 256, 320, 123))
         self.assertIn("Expanded glass bird", self.pipe.calls[0]["prompt"])
         self.assertIn("background is transparent", self.pipe.calls[0]["prompt"])
         self.assertEqual(result["metadata"]["prompt"], "a glass bird")
