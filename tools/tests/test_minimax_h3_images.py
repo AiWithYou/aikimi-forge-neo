@@ -27,7 +27,7 @@ SCHEMAS = {
 
 def readiness():
     return SimpleNamespace(
-        ready_for_ref2va=True, ram_free_gib=32.0, commit_free_gib=32.0,
+        ready_for_fl2va=True, ready_for_ref2va=True, ram_free_gib=32.0, commit_free_gib=32.0,
         node_schemas={}, core_revision="a" * 40, comfy_version="test",
         package_versions={"comfy-kitchen": "test"}, runtime_profile="fast",
     )
@@ -180,6 +180,10 @@ class WorkflowTests(unittest.TestCase):
             ready = readiness()
             images.validate_image_runtime(images.H3ImageRequest("x"), ready, "fast")
             bridge.validate_readiness.assert_called_once_with(ready, "fast")
+            ready.ready_for_fl2va = False
+            with self.assertRaisesRegex(images.H3ImageError, "FL2VA"):
+                images.validate_image_runtime(images.H3ImageRequest("x"), ready, "fast")
+            ready.ready_for_fl2va = True
             ready.ram_free_gib = 0.1
             with self.assertRaises(images.H3ImageError):
                 images.validate_image_runtime(images.H3ImageRequest("x"), ready, "fast")

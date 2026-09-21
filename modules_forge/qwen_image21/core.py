@@ -103,6 +103,7 @@ class Request:
     input_images: tuple[str, ...] = ()
     annotation_reference: int = -1
     annotation_layers: tuple[str, ...] = ()
+    rewrite_prompt: bool = False
 
     def resolved(self) -> Request:
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 12000:
@@ -113,12 +114,14 @@ class Request:
             raise QwenImage21Error("幅・高さは32の倍数、総画素数は約430万画素（2400×1792）以内で指定してください。")
         steps = integer(self.steps, "Steps", 1, 100)
         seed = integer(self.seed, "Seed", -1, 2**63 - 1)
-        if self.precision not in {"int8", "bf16"}:
-            raise QwenImage21Error("精度はINT8またはBF16を指定してください。")
+        if self.precision not in {"int8", "bf16", "w4a8"}:
+            raise QwenImage21Error("精度はINT8・W4A8・BF16から指定してください。")
         if self.memory_mode not in {"offload", "gpu"}:
             raise QwenImage21Error("メモリ設定が不正です。")
         if not isinstance(self.transparent, bool):
             raise QwenImage21Error("透過背景の指定が不正です。")
+        if not isinstance(self.rewrite_prompt, bool):
+            raise QwenImage21Error("プロンプト書き換えの指定が不正です。")
         inputs = validate_images(self.input_images)
         reference = integer(self.annotation_reference, "描画対象", -1, MAX_REFERENCE_IMAGES - 1)
         if not isinstance(self.annotation_layers, (list, tuple)):
@@ -211,7 +214,7 @@ def runtime_status(root: Path) -> str:
         runtime_manifest(root)
     except QwenImage21Error as exc:
         return str(exc)
-    return "導入済み。INT8 / BF16を選んで生成できます。"
+    return "導入済み。INT8 / W4A8 / BF16を選べます。W4A8の追加環境はセットアップBATの --runtime-only で準備できます。"
 
 
 def runtime_lock(root: Path):

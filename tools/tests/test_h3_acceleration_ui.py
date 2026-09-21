@@ -23,7 +23,7 @@ CONTROL_COUNT = len(H3Acceleration().values())
 def load_ui(directory: str):
     bridge = load_bridge()
     package = ModuleType("modules")
-    package.__path__ = []
+    package.__path__ = [str(ROOT / "modules")]
     callbacks = ModuleType("modules.script_callbacks")
     callbacks.on_ui_tabs = lambda *args, **kwargs: None
     paths = ModuleType("modules.paths")

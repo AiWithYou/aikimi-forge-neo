@@ -144,6 +144,7 @@ class QwenCoreTests(unittest.TestCase):
             {"width": 513},
             {"transparent": "yes"},
             {"precision": "fp8"},
+            {"rewrite_prompt": "yes"},
         ):
             with self.subTest(fields=fields), self.assertRaises(core.QwenImage21Error):
                 core.Request("test", **fields).resolved()
@@ -245,6 +246,21 @@ class QwenServiceTests(unittest.TestCase):
         self.assertFalse(self.lease.owned)
         self.assertEqual(self.lease.releases, 0)
         self.assertFalse(self.worker.started.is_set())
+
+    def test_rewriter_model_required_only_for_enabled_t2i(self):
+        with patch.object(service, "rewriter_manifest", side_effect=core.QwenImage21Error("missing rewriter")) as check:
+            with self.assertRaisesRegex(core.QwenImage21Error, "missing rewriter"):
+                self.studio.start(self.request(rewrite_prompt=True), "owner")
+            self.assertEqual(check.call_count, 1)
+            self.assertEqual(self.worker.starts, 0)
+        image = self.root / "edit.png"
+        Image.new("RGB", (16, 16)).save(image)
+        with patch.object(service, "rewriter_manifest") as check:
+            identifier = self.studio.start(self.request(rewrite_prompt=True, input_images=(str(image),)), "owner")
+            self.assertEqual(self.wait_done(identifier)["state"], "complete")
+        check.assert_not_called()
+        self.assertFalse(self.lease.owned)
+        self.assertEqual(self.lease.releases, 1)
 
     def test_failed_input_snapshot_and_lock_close_still_return_unused_gpu(self):
         lock = Mock()
@@ -354,10 +370,12 @@ class QwenServiceTests(unittest.TestCase):
         self.studio._worker_factory = LocalResident
         first = self.studio.start(self.request(), "owner")
         self.assertTrue(self.studio._jobs[first].done.wait(15))
-        self.assertEqual(self.studio.status(first, "owner")["state"], "complete")
+        first_state = self.studio.status(first, "owner")
+        self.assertEqual(first_state["state"], "complete", first_state)
         process = self.studio._resident.process
         second = self.studio.start(self.request(), "owner")
-        self.assertEqual(self.wait_done(second)["state"], "complete")
+        second_state = self.wait_done(second)
+        self.assertEqual(second_state["state"], "complete", second_state)
         self.assertEqual(self.studio._resident.process.pid, process.pid)
         second_path = self.studio.artifact(second, "owner")
         self.assertEqual(core.read_json(second_path.with_name("result.json"))["count"], 2)
@@ -399,6 +417,8 @@ class QwenUiTests(unittest.TestCase):
         output = next(component for component in tab.blocks.values() if isinstance(component, gr.Image))
         self.assertIsNone(output.image_mode)
         self.assertFalse(props["qwen21-stop"]["interactive"])
+        self.assertFalse(props["qwen21-rewrite-prompt"]["value"])
+        self.assertFalse(props["qwen21-effective-prompt"]["interactive"])
         self.assertEqual(gr.utils.get_type_hints(self.ui.start)["request"], gr.Request)
         files = next(component for component in tab.blocks.values() if isinstance(component, gr.File))
         self.assertEqual(files.visible, "hidden")
@@ -434,7 +454,13 @@ class QwenUiTests(unittest.TestCase):
     def test_completed_poll_reveals_both_downloads_and_stops_timer(self):
         request = SimpleNamespace(session_hash="session", username=None)
         output = Path("completed-job/output.png").resolve()
-        state = {"done": True, "state": "complete", "message": "完了", "elapsed": 2.5}
+        state = {
+            "done": True,
+            "state": "complete",
+            "message": "完了",
+            "elapsed": 2.5,
+            "effective_prompt": "Expanded scene",
+        }
         with (
             patch.object(self.ui.STUDIO, "status", return_value=state),
             patch.object(self.ui.STUDIO, "artifact", return_value=output),
@@ -447,6 +473,7 @@ class QwenUiTests(unittest.TestCase):
         )
         self.assertFalse(result[3]["active"])
         self.assertTrue(result[6]["interactive"])
+        self.assertEqual(result[9]["value"], "Expanded scene")
 
     def test_new_generation_hides_downloads_without_unmounting(self):
         request = SimpleNamespace(session_hash="session", username=None)

@@ -17,6 +17,10 @@ from modules_forge import minimax_h3_negpip_cache as negpip_cache
 from modules_forge import minimax_h3_hybrid as hybrid
 
 TURBO_MODEL = "minimax_h3_fused_refdelta_r1024_turbo8_mystic07_int8_convrot.safetensors"
+W4A8_MODELS = {
+    "FL2VA": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+    "Ref2VA": "minimax_h3_ref2va_pruned_w4a8_mixed.safetensors",
+}
 INT8_VIDEO_VAE = "minimax_h3_video_vae_int8_convrot.safetensors"
 FAST_VAE_NODE = "MiniMaxH3FastVAEDecode"
 FAST_VAE_PACK = "ComfyUI-MiniMax-H3-MotionCache"
@@ -44,7 +48,7 @@ class H3Acceleration:
             raise ValueError("長尺設定の形式が不正です。")
         self.hybrid.validate()
         for name, allowed in (
-            ("model_variant", {"base", "fused_turbo"}),
+            ("model_variant", {"base", "fused_turbo", "w4a8"}),
             ("video_vae", {"fp16", "int8"}),
             ("decode_mode", {"standard", "fast"}),
             ("attention", {"dense", "sol", "sla"}),
@@ -114,6 +118,9 @@ class H3Acceleration:
         result = dict(base)
         if self.model_variant == "fused_turbo":
             result["FL2VA"] = result["Ref2VA"] = ("diffusion_models", TURBO_MODEL)
+        elif self.model_variant == "w4a8":
+            for mode, filename in W4A8_MODELS.items():
+                result[mode] = ("diffusion_models", filename)
         if self.video_vae == "int8":
             result["Video VAE"] = ("vae", INT8_VIDEO_VAE)
         return result

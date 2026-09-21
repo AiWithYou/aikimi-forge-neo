@@ -16,6 +16,8 @@ def acceleration_note(*values) -> str:
     except ValueError as exc:
         return f'<div role="alert">{html.escape(str(exc))}</div>'
     notes = []
+    if option.model_variant == "w4a8":
+        notes.append("W4A8は生成モデルの重みを約12GBへ縮小します。初回はdownload_minimax_h3_w4a8_models.batで導入してください。画質・動き・音を同じSeedで比較してください。Stepsは自動変更しません。")
     if option.model_variant == "fused_turbo":
         notes.append("MATLOWAI版はTurboとMysticを焼き込んだ派生モデルです。動き・質感・音が標準と変わります。モデル選択だけではStepsを変えません。4/8 Stepsボタンで明示適用してください。")
     if option.video_vae == "int8":
@@ -59,9 +61,9 @@ def create_acceleration_controls(duration):
     with gr.Accordion("高速化 · 任意設定 / 画質・メモリとの比較", open=False, elem_id="h3-acceleration"):
         gr.Markdown("生成・デコードの高速化とCLIP条件の再利用を選べます。まず1つずつ同じSeedで比較してください。標準設定は自動変更しません。")
         model = gr.Dropdown(
-            choices=[("標準 · モード別公式INT8モデル", "base"), ("MATLOWAI Fused Turbo · 派生モデル", "fused_turbo")],
+            choices=[("標準 · モード別公式INT8モデル", "base"), ("W4A8 · メモリ節約（試験対応）", "w4a8"), ("MATLOWAI Fused Turbo · 派生モデル", "fused_turbo")],
             value=defaults.model_variant, label="1. 生成モデル", interactive=False,
-            info="統合済みINT8 ConvRotモデルをmodels/diffusion_modelsへ配置します。配布元は下のリンクから確認できます。", elem_id="h3-model-variant",
+            info="W4A8は専用ダウンロードBATで導入できます。既存モデルはそのまま選べます。", elem_id="h3-model-variant",
         )
         with gr.Row():
             turbo4 = gr.Button("Turbo + 4 Stepsを適用", interactive=False, elem_id="h3-turbo-4")

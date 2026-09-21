@@ -6,6 +6,7 @@ import os
 import re
 import secrets
 import subprocess
+import time
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -54,7 +55,19 @@ def atomic_json(path: Path, value) -> None:
             json.dump(value, stream, ensure_ascii=False, indent=2, allow_nan=False)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        # Windows readers briefly prevent replacement of an existing file even
+        # though the new contents are already safely written. Resident workers
+        # and their supervisors read these records concurrently. Keep the old
+        # complete record until replacement succeeds; never unlink it first.
+        deadline = time.monotonic() + 1.0
+        while True:
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError as exc:
+                if getattr(exc, "winerror", None) not in {5, 32, 33} or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
     finally:
         temporary.unlink(missing_ok=True)
 

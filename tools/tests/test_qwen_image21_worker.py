@@ -157,6 +157,100 @@ class WorkerJobTests(unittest.TestCase):
         self.assertIsNone(self.pipe.calls[0]["image"])
         self.assertEqual(result["metadata"]["output_mode"], "RGBA")
 
+    def test_rewrite_off_does_not_load_optional_model(self):
+        with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt") as rewrite:
+            result, _ = self.run_job()
+        rewrite.assert_not_called()
+        self.assertEqual(
+            result["metadata"]["prompt_rewrite"], {"enabled": False, "applied": False, "reason": "disabled"}
+        )
+
+    def test_rewrite_on_feeds_expansion_to_pipeline_then_adds_transparency(self):
+        self.request["rewrite_prompt"] = True
+        self.write_request()
+        rewritten = {"enabled": True, "applied": True, "rewritten_prompt": "Expanded glass bird", "wh_ratio": "1:1"}
+        with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt", return_value=rewritten) as rewrite:
+            result, _ = self.run_job()
+        self.assertEqual(rewrite.call_args.args[:5], (self.model.parent, "a glass bird", 256, 320, 123))
+        self.assertIn("Expanded glass bird", self.pipe.calls[0]["prompt"])
+        self.assertIn("background is transparent", self.pipe.calls[0]["prompt"])
+        self.assertEqual(result["metadata"]["prompt"], "a glass bird")
+        self.assertEqual(result["metadata"]["prompt_rewrite"], rewritten)
+        self.assertEqual((result["metadata"]["width"], result["metadata"]["height"]), (256, 320))
+
+    def test_reference_edit_skips_t2i_rewriter_even_when_enabled(self):
+        path = self.root / "reference.png"
+        Image.new("RGB", (8, 8)).save(path)
+        self.request.update(rewrite_prompt=True, input_images=[str(path)])
+        self.write_request()
+        with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt") as rewrite:
+            result, _ = self.run_job()
+        rewrite.assert_not_called()
+        self.assertEqual(result["metadata"]["prompt_rewrite"]["reason"], "image_edit")
+
+    def test_turning_rewrite_off_keeps_cached_image_model_but_uses_the_new_original_prompt(self):
+        self.request.update(rewrite_prompt=True, transparent=False)
+        self.write_request()
+        expanded = {"enabled": True, "applied": True, "rewritten_prompt": "Expanded first prompt"}
+        with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt", return_value=expanded):
+            self.run_job()
+        self.request.update(rewrite_prompt=False, prompt="Unmodified second prompt")
+        self.write_request()
+        with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt") as rewrite:
+            result, loader = self.run_job()
+        rewrite.assert_not_called()
+        loader.assert_not_called()
+        self.assertEqual(self.pipe.calls[-1]["prompt"], "Unmodified second prompt")
+        self.assertEqual(result["metadata"]["prompt_rewrite"]["reason"], "disabled")
+
+    def test_rewrite_failure_or_cancel_never_runs_diffusion(self):
+        self.request["rewrite_prompt"] = True
+        self.write_request()
+        for error in (ValueError("invalid JSON"), worker.GenerationCancelled("cancelled while rewriting")):
+            with (
+                self.subTest(error=error),
+                mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt", side_effect=error),
+                mock.patch.object(worker, "_load_runtime") as loader,
+            ):
+                with self.assertRaises(type(error)):
+                    worker.resident_run(self.payload)
+            loader.assert_not_called()
+            self.assertFalse((self.job / "result.json").exists())
+            self.assertIsNone(worker._RESIDENT_RUNTIME)
+
+    def test_resident_image_model_is_offloaded_then_reused_after_rewrite(self):
+        self.pipe.maybe_free_model_hooks = mock.Mock()
+        self.run_job()
+        self.request["rewrite_prompt"] = True
+        self.write_request()
+        rewritten = {"enabled": True, "applied": True, "rewritten_prompt": "Expanded", "wh_ratio": "1:1"}
+
+        def rewrite(*args):
+            self.pipe.maybe_free_model_hooks.assert_called_once()
+            return rewritten
+
+        with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt", side_effect=rewrite):
+            result, loader = self.run_job()
+        loader.assert_not_called()
+        self.assertTrue(result["metadata"]["reused_model"])
+
+    def test_gpu_resident_image_model_is_parked_before_rewrite_and_restored_afterward(self):
+        self.payload["memory_mode"] = "gpu"
+        self.pipe.to = mock.Mock()
+        self.run_job()
+        self.request["rewrite_prompt"] = True
+        self.write_request()
+
+        def rewrite(*args):
+            self.pipe.to.assert_called_once_with("cpu")
+            return {"enabled": True, "applied": True, "rewritten_prompt": "Expanded"}
+
+        with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt", side_effect=rewrite):
+            result, loader = self.run_job()
+        self.assertEqual(self.pipe.to.call_args_list, [mock.call("cpu"), mock.call("cuda:0")])
+        loader.assert_not_called()
+        self.assertTrue(result["metadata"]["reused_model"])
+
     def test_offload_releases_unused_cache_without_touching_model_or_saved_pixels(self):
         self.fake_torch.cuda.is_initialized = lambda: True
         self.fake_torch.cuda.synchronize = mock.Mock()

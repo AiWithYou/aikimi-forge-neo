@@ -202,6 +202,8 @@ def validate_image_runtime(request: H3ImageRequest, readiness: Any, profile: str
         raise H3ImageError("画像のNegPiP設定と実行環境の確認結果が一致しません。再確認してください。")
     if request.mode == "references" and not readiness.ready_for_ref2va:
         raise H3ImageError("参照画像編集用のRef2VAモデルを導入してください。")
+    if request.mode != "references" and not readiness.ready_for_fl2va:
+        raise H3ImageError("画像生成用のFL2VAモデルを導入してください。")
     required = request.width * request.height * FRAMES * 3 * 4 / 1024**3
     required += 4.0 if profile == bridge.RUNTIME_PROFILE_FAST else 2.0
     for label, free in (("空きRAM", readiness.ram_free_gib), ("OS commit余力", readiness.commit_free_gib)):

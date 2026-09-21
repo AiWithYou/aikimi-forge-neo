@@ -23,6 +23,7 @@ from .core import (
     runtime_manifest,
     safe_environment,
 )
+from .prompt_rewriter import rewriter_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKER = ROOT / "tools" / "qwen_image21_worker.py"
@@ -92,6 +93,8 @@ class Studio:
         if not isinstance(owner, str) or not owner:
             raise QwenImage21Error("ブラウザーのQwen Image 2.1タブから操作してください。")
         runtime_manifest(self.runtime)
+        if request.rewrite_prompt and not request.input_images:
+            rewriter_manifest(self.runtime)
         self._dependencies()
         with self._guard:
             if self._closed:
@@ -111,6 +114,8 @@ class Studio:
                     self._runtime_lock = runtime_lock(self.runtime)
                     new_lock = True
                 entry = runtime_manifest(self.runtime)
+                if request.rewrite_prompt and not request.input_images:
+                    rewriter_manifest(self.runtime)
                 directory = self.outputs / uuid.uuid4().hex
                 directory.mkdir(parents=True, exist_ok=False)
                 job = Job(directory.name, owner, directory)
@@ -228,12 +233,19 @@ class Studio:
                 if job.cancel.is_set():
                     raise InterruptedError("停止しました。")
                 self._residency.register(ENGINE, self._release_idle, ENGINE)
+                metadata = result.get("metadata", {})
+                rewrite = metadata.get("prompt_rewrite", {})
+                rewrite_message = " · 書き換え4bit" if rewrite.get("applied") else ""
+                if request.rewrite_prompt and request.input_images:
+                    rewrite_message = " · 編集のため書き換え省略"
                 final = {
                     "state": "complete",
-                    "message": f"完了 · Seed {request.seed} · {request.width}×{request.height} · {request.precision.upper()}",
+                    "message": f"完了 · Seed {request.seed} · {request.width}×{request.height} · {request.precision.upper()}{rewrite_message}",
                     "output_path": str(output),
                     "seed": request.seed,
                     "progress": 1.0,
+                    "effective_prompt": metadata.get("effective_prompt", request.prompt),
+                    "prompt_rewrite": rewrite,
                 }
                 job.completion_committed = True
                 success = True

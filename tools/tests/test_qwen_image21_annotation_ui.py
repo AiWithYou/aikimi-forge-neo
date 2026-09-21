@@ -113,6 +113,7 @@ class AnnotationUiTests(unittest.TestCase):
             background,
             foreground,
             None,
+            True,
         ]
         with patch.object(self.ui.STUDIO, "start", return_value="accepted") as submit:
             result = asyncio.run(demo.call_function(function_id, values, requests=self.request))
@@ -120,6 +121,7 @@ class AnnotationUiTests(unittest.TestCase):
         generation, owner = submit.call_args.args
         self.assertEqual(owner, ":browser-owner")
         self.assertEqual(generation.annotation_reference, 1)
+        self.assertTrue(generation.rewrite_prompt)
         self.assertEqual(len(generation.annotation_layers), 1)
         self.assertFalse(Path(generation.annotation_layers[0]).exists())
 
@@ -145,7 +147,7 @@ class AnnotationUiTests(unittest.TestCase):
     def test_missing_job_stops_timer_and_disables_both_result_actions(self):
         with patch.object(self.ui.STUDIO, "status", side_effect=JobNotFound("gone")):
             values = self.ui.poll("missing", self.request)
-        self.assertEqual(len(values), 9)
+        self.assertEqual(len(values), 10)
         self.assertFalse(values[3]["active"])
         self.assertFalse(values[6]["interactive"])
         self.assertFalse(values[7]["interactive"])

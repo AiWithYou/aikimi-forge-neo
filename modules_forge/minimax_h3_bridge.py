@@ -294,9 +294,8 @@ class RuntimeReadiness:
     acceleration: H3Acceleration = field(default_factory=H3Acceleration)
     node_schemas: dict[str, Any] = field(default_factory=dict)
 
-    @property
-    def ready_for_fl2va(self) -> bool:
-        required = ("FL2VA", "Qwen3-VL 32B", "Video VAE", "Audio VAE")
+    def _ready_for_model(self, model: str) -> bool:
+        required = (model, "Qwen3-VL 32B", "Video VAE", "Audio VAE")
         return (
             self.connected
             and not self.missing_nodes
@@ -307,12 +306,12 @@ class RuntimeReadiness:
         )
 
     @property
+    def ready_for_fl2va(self) -> bool:
+        return self._ready_for_model("FL2VA")
+
+    @property
     def ready_for_ref2va(self) -> bool:
-        return (
-            self.ready_for_fl2va
-            and bool(self.model_files.get("Ref2VA"))
-            and bool(self.server_model_files.get("Ref2VA"))
-        )
+        return self._ready_for_model("Ref2VA")
 
 
 @dataclass(frozen=True)
@@ -1450,6 +1449,8 @@ def validate_readiness(
         )
     if acceleration.attention != "dense" and _version_tuple(kitchen) < (0, 2, 33):
         raise H3BridgeError("Sparse Attentionにはcomfy-kitchen 0.2.33以上が必要です。ComfyUIのrequirementsを更新してください。")
+    if acceleration.model_variant == "w4a8" and _version_tuple(kitchen) < (0, 2, 31):
+        raise H3BridgeError("W4A8にはcomfy-kitchen 0.2.31以上が必要です。H3専用環境を更新してください。")
     try:
         acceleration.validate_nodes(readiness.node_schemas)
         if acceleration.hybrid.enabled:
@@ -1460,8 +1461,8 @@ def validate_readiness(
                 negpip_cache.verify(readiness.runtime_root)
     except ValueError as exc:
         raise H3BridgeError(str(exc)) from exc
-    if not readiness.ready_for_fl2va:
-        required = ("FL2VA", "Qwen3-VL 32B", "Video VAE", "Audio VAE")
+    if not (readiness.ready_for_fl2va or readiness.ready_for_ref2va):
+        required = ("FL2VA", "Ref2VA", "Qwen3-VL 32B", "Video VAE", "Audio VAE")
         selected = acceleration.model_files(MODEL_FILES)
         missing_local = [f"{name}: models/{selected[name][0]}/{selected[name][1]}" for name in required if not readiness.model_files.get(name)]
         missing_server = [f"{name}: {selected[name][1]}" for name in required if not readiness.server_model_files.get(name)]
@@ -2145,6 +2146,8 @@ def _validate_request_runtime_constraints(
         raise H3BridgeError("生成要求と確認済みの高速化構成が一致しません。状態を再確認してください。")
     if request.mode == MODE_REFERENCES and not readiness.ready_for_ref2va:
         raise H3BridgeError("参照モード用 Ref2VA モデルがありません。")
+    if request.mode != MODE_REFERENCES and not readiness.ready_for_fl2va:
+        raise H3BridgeError("テキスト・画像モード用 FL2VA モデルがありません。")
     if request.control.enabled:
         control_client = ComfyH3Client(readiness.server_url)
         try:

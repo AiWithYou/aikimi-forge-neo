@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import traceback
+from functools import partial
 from pathlib import Path
 from types import MethodType
 from typing import Any
@@ -37,10 +38,9 @@ class GenerationCancelled(RuntimeError):
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    partial = path.with_name(path.name + ".part")
-    partial.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(partial, path)
+    from modules_forge.yue2_studio.core import atomic_json
+
+    atomic_json(path, payload)
 
 
 def _progress(job: Path, stage: str, message: str, progress: float, **extra: Any) -> None:
@@ -95,7 +95,7 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     if not isinstance(request, dict):
         raise ValueError("request.json must contain an object.")
     for key, default, allowed in (
-        ("precision", "int8", {"int8", "bf16"}),
+        ("precision", "int8", {"int8", "bf16", "w4a8"}),
         ("memory_mode", "offload", {"offload", "gpu"}),
     ):
         value = payload.get(key, request.get(key, default))
@@ -127,6 +127,8 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     request["seed"] = seed
     if not isinstance(request.get("transparent", False), bool):
         raise ValueError("transparent must be a boolean.")
+    if not isinstance(request.get("rewrite_prompt", False), bool):
+        raise ValueError("rewrite_prompt must be a boolean.")
     images = request.get("input_images", [])
     if not isinstance(images, list) or len(images) > 10:
         raise ValueError("input_images must contain at most ten local image paths.")
@@ -205,6 +207,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     started = time.monotonic()
     components: dict[str, Any] = {}
     counts: dict[str, int] = {}
+    w4a8_stats: dict[str, dict] = {}
     if request["precision"] == "int8":
         loaders = (
             (
@@ -239,6 +242,40 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             components[name] = component
             torch.cuda.empty_cache()
             _check_cancel(job)
+    elif request["precision"] == "w4a8":
+        from modules_forge.qwen_image21.w4a8 import load_model, validate_dependency
+
+        validate_dependency()
+        for name, model_class in (
+            ("transformer", QwenImage21Transformer2DModel),
+            ("text_encoder", Qwen3VLForConditionalGeneration),
+        ):
+            _check_cancel(job)
+            component_progress = 0.08 if name == "transformer" else 0.18
+            _progress(job, "loading", f"{name} を W4A8 へ変換するため読み込み中", component_progress)
+            folder = model_path / name
+            if name == "transformer":
+                config = model_class.load_config(str(folder), local_files_only=True)
+                factory = partial(model_class.from_config, config)
+            else:
+                config = model_class.config_class.from_pretrained(str(folder), local_files_only=True)
+                factory = partial(model_class, config)
+
+            last_progress = -1
+
+            def packing_progress(done, total, component_name=name, base_progress=component_progress):
+                nonlocal last_progress
+                _check_cancel(job)
+                if done != last_progress and (done % 16 == 0 or done == total):
+                    _progress(
+                        job, "loading", f"{component_name} W4A8変換 {done}/{total}", base_progress + 0.10 * done / total
+                    )
+                    last_progress = done
+
+            component, w4a8_stats[name] = load_model(folder, name, factory, progress=packing_progress)
+            components[name] = component
+            torch.cuda.empty_cache()
+            _check_cancel(job)
     pipe = QwenImage21Pipeline.from_pretrained(
         str(model_path),
         torch_dtype=torch.bfloat16,
@@ -253,7 +290,16 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         pipe.to("cuda:0")
     pipe.set_progress_bar_config(disable=True)
     _check_cancel(job)
-    return {"pipe": pipe, "int8_layers": counts, "versions": _versions(), "load_seconds": time.monotonic() - started}
+    versions = _versions()
+    if w4a8_stats:
+        versions["comfy-kitchen"] = importlib.metadata.version("comfy-kitchen")
+    return {
+        "pipe": pipe,
+        "int8_layers": counts,
+        "w4a8": w4a8_stats,
+        "versions": versions,
+        "load_seconds": time.monotonic() - started,
+    }
 
 
 def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -> tuple[dict[str, Any], bool]:
@@ -276,6 +322,36 @@ def _load_images(paths: list[str]) -> list[Any]:
         with Image.open(path) as source:
             images.append(ImageOps.exif_transpose(source).convert("RGBA"))
     return images
+
+
+def _rewrite_for_request(model_path: Path, request: dict[str, Any], job: Path) -> dict:
+    enabled = request.get("rewrite_prompt", False)
+    if not enabled or request["input_images"]:
+        return {"enabled": enabled, "applied": False, "reason": "image_edit" if enabled else "disabled"}
+    from modules_forge.qwen_image21.prompt_rewriter import rewrite_prompt
+
+    # Preserve a reusable image pipeline on CPU while the small helper owns CUDA.
+    # The same GPU lease covers rewriting, diffusion, cancellation, and cleanup.
+    restore_gpu = False
+    if _RESIDENT_RUNTIME is not None:
+        if _RESIDENT_KEY[2] == "offload":
+            _RESIDENT_RUNTIME["pipe"].maybe_free_model_hooks()
+        else:
+            _RESIDENT_RUNTIME["pipe"].to("cpu")
+            restore_gpu = True
+    result = rewrite_prompt(
+        model_path.parent,
+        request["prompt"].strip(),
+        request["width"],
+        request["height"],
+        request["seed"],
+        lambda: _check_cancel(job),
+        lambda message: _progress(job, "rewriting", message, 0.03),
+    )
+    _check_cancel(job)
+    if restore_gpu:
+        _RESIDENT_RUNTIME["pipe"].to("cuda:0")
+    return result
 
 
 def _idle_cuda_memory(torch, memory_mode: str) -> dict:
@@ -312,11 +388,12 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
 
         if torch.cuda.is_initialized():
             torch.cuda.reset_peak_memory_stats()
+        rewrite = _rewrite_for_request(model_path, request, job)
         runtime, reused = _runtime_for_request(model_path, request, job)
         _check_cancel(job)
 
         images = _load_images(request["input_images"])
-        prompt = request["prompt"].strip()
+        prompt = rewrite["rewritten_prompt"] if rewrite["applied"] else request["prompt"].strip()
         if request.get("transparent", False):
             prompt = (
                 f"This is an RGBA image with transparency. {prompt}. "
@@ -378,6 +455,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "diffusers_revision": DIFFUSERS_REVISION,
             "prompt": request["prompt"],
             "effective_prompt": prompt,
+            "prompt_rewrite": rewrite,
             "width": image.width,
             "height": image.height,
             "steps": request["steps"],
@@ -393,6 +471,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "input_image_count": len(images),
             "input_image_names": [Path(path).name for path in request["input_images"]],
             "int8_layers": runtime["int8_layers"],
+            "w4a8": runtime.get("w4a8", {}),
             "int8_skip_modules": list(INT8_SKIP_MODULES) if request["precision"] == "int8" else [],
             "versions": runtime["versions"],
             "reused_model": reused,
