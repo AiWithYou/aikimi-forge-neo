@@ -1,6 +1,6 @@
 # Aikimi Studio Neo
 
-**v1.2.0** · [変更履歴](CHANGELOG.md)
+**v1.3.0** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -16,14 +16,14 @@
 
 | 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
-| **モデル対応** | Qwen Image 2.1の専用画面とINT8、Anima 3.8B v1.1の拡張、SenseNova専用Studio、MiniMax H3専用StudioとComfyUI連携、YuE2 Musicの作曲・楽譜編集。 |
+| **モデル対応** | Qwen Image 2.1のINT8・W4A8と任意の4bitプロンプト書き換え、Anima 3.8B v1.1、SenseNova、MiniMax H3の専用Studio、YuE2 Musicの作曲・楽譜編集。 |
 | **導入** | 画像・動画モデルを選ぶセットアップBATと、Qwen Image 2.1・YuE2の専用BAT。モデルの取得・変換と、必要な専用環境の準備。 |
 | **仕上げ** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
 | **操作** | 追加機能へのショートカット、実行状態の表示、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
 
 Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み、画像編集・動画生成があります。下の一覧では、**継承**はForgeから引き継いだ機能、**追加**は本ブランチの追加処理、**統合**は外部モデルや実行環境を使うための専用UI・連携を指します。
 
-比較の基準は[Forge Neoの同期元](https://github.com/Haoming02/sd-webui-forge-classic/tree/0d0cb72951b059c8ea17861ba86db8d0f6098c28)です。その後の更新は選んで取り込んでいます。[2026年9月12日の更新確認](docs/upstream-sync.md)に採用・見送りの内容を記載しています。
+比較の基準は[Forge Neoの同期元](https://github.com/Haoming02/sd-webui-forge-classic/tree/0d0cb72951b059c8ea17861ba86db8d0f6098c28)です。その後の更新は選んで取り込んでいます。[2026年9月21日までの更新確認](docs/upstream-sync.md)に採用・見送りの内容を記載しています。
 
 モデルやComfyUIそのものは各開発元の成果です。出典と利用条件は機能別ガイドと[Third-party notices](THIRD_PARTY_NOTICES.md)を参照してください。
 
@@ -34,11 +34,11 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
-| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。i2iと共通の描画ツールで対象を囲み、生成結果から続けて編集できます。編集元と結果の切り替え、拡大、ペン・消しゴム・Undo/Redoに対応。bitsandbytes INT8、BF16、CPU退避を選べ、描画欄のメモリ削減と生成後のGPUキャッシュ解放も実装しています。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
+| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。i2iと共通の描画ツールで対象を囲み、生成結果から続けて編集できます。編集元と結果の切り替え、拡大、ペン・消しゴム・Undo/Redoに対応。INT8、W4A8（試験対応）、BF16、CPU退避を選べます。任意の4bitプロンプト書き換えはON/OFFと使用文の確認に対応。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
-| **MiniMax H3 Studio**（統合） | 音声付き動画を生成。専用ComfyUI・Python・標準INT8モデルのセットアップと、既存モデルの共有に対応します。 |
+| **MiniMax H3 Studio**（統合） | 音声付き動画を生成。専用ComfyUI・Python・標準INT8モデルのセットアップと既存モデルの共有に対応。任意でW4A8モデルを追加できます（試験対応、動画全体の実生成は未検証）。 |
 | **YuE2 Music**（統合） | 歌詞と曲調から作曲。ABC楽譜の生成・編集、別アレンジの生成、複数候補のA/B試聴、Seed・生成条件の保存と復元に対応。公式Python版と任意のaudio.cpp／GGUF版を専用環境で実行します。 |
 | **MiniMax H3 Image**（統合・実験） | `H3 Image`タブで静止画生成と参照画像による編集。PNGと生成条件を保存します。実モデルでのGPU画像生成・画質・速度は未検証です。 |
 
@@ -83,6 +83,8 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 - [MiniMax H3 Studio：動画生成](extensions-builtin/minimax-h3-studio/README.md)
 - [MiniMax H3 Image：実験的な静止画生成](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)
 - [MiniMax H3の任意の高速化設定](docs/minimax-h3-acceleration.md)
+- [MiniMax H3・Qwen Image 2.1のW4A8量子化（試験対応）](docs/w4a8.md)
+- [Qwen Image 2.1：INT8とW4A8の実画像・実測比較](docs/assets/qwen-image21-v1.3.0/README.md)
 - [MiniMax H3のCLIPキャッシュとNegPiP併用](docs/minimax-h3-clipcache.md)
 - [MiniMax H3 Fun ControlNetと実行環境の修正](docs/minimax-h3-fun-control.md)
 - [HyperWeave](extensions-builtin/hyperweave/README.md)
@@ -162,12 +164,16 @@ Krea2・Anima・SenseNova・H3は`aikimi-setup.bat`のメニューから選び�
 
 | モデル | 導入方法 | 自動で準備する内容 |
 |---|---|---|
-| Qwen Image 2.1 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) | 公式モデル一式（約33GB）・INT8対応の専用Python環境 |
+| Qwen Image 2.1 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) | 公式モデル一式（約33GB）・INT8/W4A8対応の専用Python環境 |
 | Krea2 | `aikimi-setup.bat` → `1` | INT8 ConvRot配布版・エンコーダー・VAE |
 | Anima 3.8B v1.1 | `aikimi-setup.bat` → `2` | BF16取得・INT8 ConvRot変換・エンコーダー・VAE |
 | SenseNova U1.5 | `aikimi-setup.bat` → `3` | INT8 ConvRot配布版・8-Step LoRA・専用Python環境 |
 | MiniMax H3 | `aikimi-setup.bat` → `4` | 標準INT8モデル一式・専用ComfyUI・Python環境 |
 | YuE2 Music | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → `1：公式Python` | YuE2-3B・音声復号モデル・専用Python 3.12環境 |
+
+Qwenの導入済み環境にW4A8用ライブラリだけを追加する場合は `aikimi-qwen-image21-setup.bat --runtime-only`、任意のプロンプト書き換えは `--prompt-rewriter-only` を使います。書き換えは導入時に約19GBの元重みを取得し、検証後は約6.13GBのNF4版を保持します。通常の画像生成には書き換えモデルは不要です。[詳細](extensions-builtin/qwen-image21-studio/README.md)
+
+H3の追加W4A8モデルは [`download_minimax_h3_w4a8_models.bat`](download_minimax_h3_w4a8_models.bat) で取得できます（両モードで約24.3GB、途中再開とSHA-256検証に対応）。標準INT8を初期設定として保持します。[導入と検証範囲](docs/w4a8.md)
 
 **YuE2 MusicにはPython 3.12とGitが必要です。** 準備後は普段の起動BATから **YuE2 Music** タブを開けます。最初は候補1・FP8オフで生成してください。保存先は `outputs/yue2/` です。[詳しい手順・利用条件](extensions-builtin/yue2-studio/README.md)と[RTX 3090での実機検証記録](docs/yue2-windows-validation.md)を参照してください。
 
@@ -259,8 +265,8 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 | 既定ブランチ | `neo` |
 | ベース | `Haoming02/sd-webui-forge-classic`の`neo` |
 | 最終同期基準 | `0d0cb72951b059c8ea17861ba86db8d0f6098c28`（Forge Neo 2.29後の`arch`更新を含む） |
-| 最新の確認先 | `76586f6a`（2026-09-12）。[選択取り込みの記録](docs/upstream-sync.md) |
-| Aikimiの配布バージョン | `1.2.0`。Forgeのバージョンとは別に管理 |
+| 最新の確認先 | `41359cd4`（2026-09-21に確認）。[選択取り込みの記録](docs/upstream-sync.md) |
+| Aikimiの配布バージョン | `1.3.0`。Forgeのバージョンとは別に管理 |
 | 主対象 | Windows 11、Python 3.13、NVIDIA GPU |
 | コードのライセンス | AGPL-3.0。モデルとアセットには別条件が適用される場合があります。 |
 

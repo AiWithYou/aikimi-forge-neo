@@ -157,6 +157,7 @@ def start(
     annotation_target="",
     annotation_editor=None,
     previous_output=None,
+    rewrite_prompt=False,
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
@@ -176,6 +177,7 @@ def start(
             steps=steps,
             annotation_reference=annotation_reference,
             annotation_layers=annotation_layers,
+            rewrite_prompt=rewrite_prompt,
         )
         identifier = STUDIO.start(generation, owner(request))
         return (
@@ -188,14 +190,15 @@ def start(
             gr.update(value=None, visible=gradio_compat.keep_hidden_component_mounted(False)),
             gr.update(interactive=False),
             gr.update(interactive=False),
+            gr.update(value=""),
         )
     except Exception as exc:
-        return gr.update(), str(exc), *[gr.update() for _ in range(7)]
+        return gr.update(), str(exc), *[gr.update() for _ in range(8)]
 
 
 def poll(identifier, request: gr.Request):
     if not identifier:
-        return [gr.update()] * 9
+        return [gr.update()] * 10
     done = False
     try:
         state = STUDIO.status(identifier, owner(request))
@@ -218,6 +221,7 @@ def poll(identifier, request: gr.Request):
             gr.update(interactive=usable),
             gr.update(interactive=usable),
             gr.update(value="result") if usable else gr.update(),
+            gr.update(value=state.get("effective_prompt", "")) if usable else gr.update(),
         )
     except JobNotFound as exc:
         return (
@@ -229,6 +233,7 @@ def poll(identifier, request: gr.Request):
             gr.update(),
             gr.update(interactive=False),
             gr.update(interactive=False),
+            gr.update(),
             gr.update(),
         )
     except Exception as exc:
@@ -243,8 +248,9 @@ def poll(identifier, request: gr.Request):
                 gr.update(interactive=False),
                 gr.update(interactive=False),
                 gr.update(),
+                gr.update(),
             )
-        return str(exc), *[gr.update() for _ in range(8)]
+        return str(exc), *[gr.update() for _ in range(9)]
 
 
 def cancel(identifier, request: gr.Request):
@@ -266,7 +272,9 @@ def use_result(identifier, gallery, request: gr.Request):
 
 
 def check_runtime():
-    return runtime_status(RUNTIME)
+    from modules_forge.qwen_image21.prompt_rewriter import rewriter_status
+
+    return runtime_status(RUNTIME) + "\n" + rewriter_status(RUNTIME)
 
 
 def _canvas_updates(editor):
@@ -314,6 +322,7 @@ def start_canvas(
     background=None,
     foreground=None,
     previous_output=None,
+    rewrite_prompt=False,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
@@ -340,9 +349,10 @@ def start_canvas(
                 annotation_target,
                 editor,
                 previous_output,
+                rewrite_prompt,
             )
     except Exception as exc:
-        return gr.update(), str(exc), *[gr.update() for _ in range(7)]
+        return gr.update(), str(exc), *[gr.update() for _ in range(8)]
 
 
 def switch_workspace(view):
@@ -432,6 +442,14 @@ def on_ui_tabs():
                         visible=gradio_compat.keep_hidden_component_mounted(False),
                     )
                     gr.Markdown("保存先: `outputs/qwen-image-2.1/`")
+                    effective_prompt = gr.Textbox(
+                        label="使用したプロンプト",
+                        lines=4,
+                        max_lines=8,
+                        interactive=False,
+                        buttons=["copy"],
+                        elem_id="qwen21-effective-prompt",
+                    )
             with gr.Column(scale=3, min_width=280, elem_id="qwen21-controls"):
                 gr.Markdown("### Qwen Image 2.1")
                 prompt = gr.Textbox(
@@ -441,6 +459,12 @@ def on_ui_tabs():
                     placeholder="例：赤い囲みの中を消して、背景になじませて。参照なしなら新規生成。",
                     elem_id="qwen21-prompt",
                 )
+                rewrite_prompt = gr.Checkbox(
+                    value=False,
+                    label="プロンプトを書き換える（4bit）",
+                    info="新規生成用。参照画像がある編集では自動で省略します。",
+                    elem_id="qwen21-rewrite-prompt",
+                )
                 with gr.Row():
                     generate = gr.Button("生成・編集", variant="primary", elem_id="qwen21-generate")
                     stop = gr.Button("停止", interactive=False, elem_id="qwen21-stop")
@@ -448,9 +472,10 @@ def on_ui_tabs():
                     value="未実行", label="進行状況", lines=2, interactive=False, elem_id="qwen21-status"
                 )
                 precision = gr.Radio(
-                    [("INT8 · メモリ節約", "int8"), ("BF16", "bf16")],
+                    [("INT8 · メモリ節約", "int8"), ("W4A8 · さらに節約（試験対応）", "w4a8"), ("BF16", "bf16")],
                     value="int8",
                     label="精度",
+                    info="W4A8は初回読み込み時に変換します。画質差を確認して使ってください。",
                 )
                 resolution = gr.Dropdown(RESOLUTIONS, value="1024x1024", label="出力サイズ")
                 transparent = gr.Checkbox(value=False, label="透過背景を指示（RGBA PNG）")
@@ -465,6 +490,7 @@ def on_ui_tabs():
                     gr.Markdown("2K・複数参照・BF16は必要メモリが増えます。最初は1024px程度で確認してください。")
                 with gr.Accordion("実行環境", open=False):
                     gr.Markdown("初回は `aikimi-qwen-image21-setup.bat` で専用環境とモデルを準備します。")
+                    gr.Markdown("書き換えを追加: `aikimi-qwen-image21-setup.bat --prompt-rewriter-only`")
                     check = gr.Button("導入状態を確認", size="sm")
                     environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=2)
         job, selected, annotation_target = gr.State(""), gr.State(-1), gr.State("")
@@ -486,8 +512,9 @@ def on_ui_tabs():
                 annotation_canvas.background,
                 annotation_canvas.foreground,
                 output,
+                rewrite_prompt,
             ],
-            outputs=[job, status, generate, stop, timer, output, files, use, edit_result],
+            outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,
             concurrency_id="qwen-image21-submit",
             trigger_mode="once",
@@ -496,7 +523,7 @@ def on_ui_tabs():
         timer.tick(
             poll,
             inputs=job,
-            outputs=[status, generate, stop, timer, output, files, use, edit_result, workspace_view],
+            outputs=[status, generate, stop, timer, output, files, use, edit_result, workspace_view, effective_prompt],
             **PRIVATE,
         )
         stop.click(cancel, inputs=job, outputs=[status, stop], queue=False, **PRIVATE)

@@ -1,12 +1,13 @@
 # MiniMax H3: optional acceleration
 
-Verified against upstream sources on 2026-09-06. These controls are in **H3 Studio > 高速化**. They do not change the resolution presets or silently enable other optimizations.
+Baseline controls verified against upstream sources on 2026-09-06; the optional [W4A8 model path](w4a8.md) was added and checked on 2026-09-21. These controls are in **H3 Studio > 高速化**. They do not change the resolution presets or silently enable other optimizations.
 
 ## Acceleration and conditioning reuse
 
 | Axis | Default | Opt-in alternative | Trade-off |
 | --- | --- | --- | --- |
 | Diffusion model | Mode-specific official INT8 ConvRot weights | MATLOWAI Fused Turbo | Baked-in Turbo and Mystic change the model and its visual/audio behavior. |
+| Diffusion weight storage | Mode-specific official INT8 ConvRot weights | Kijai W4A8 | Optional 4-bit weights with INT8 activations. See [installation and validation](w4a8.md). Does not change steps or enable Turbo. |
 | Video VAE | FP16 | Kijai INT8 ConvRot | Quantization can change pixels and depends on GPU compatibility. |
 | Video decoding | VAEDecode | MiniMax H3 Fast VAE Decode | Batched spatial tiles use more VRAM and can be slower. |
 | Attention | Comfy Kitchen dense | Sol-Attn or SLA via official BlockSparseAttention | Approximate attention can change motion, detail and audio. |

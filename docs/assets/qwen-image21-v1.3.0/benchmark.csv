@@ -1,0 +1,3 @@
+﻿precision,peak_pytorch_gpu_allocation_mib,generation_seconds,load_seconds,seed,steps
+int8,9699.0,59.46,828.671,9212026,40
+w4a8,7404.5,49.53,858.544,9212026,40

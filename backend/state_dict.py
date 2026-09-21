@@ -108,6 +108,22 @@ def detect_quantization(state_dict: dict[str, torch.Tensor], *, is_unet: bool = 
     return None
 
 
+def _quantization_layer_names(state_dict, layers):
+    """Adapt upstream 3baffa8b without guessing among duplicate suffixes."""
+    resolved = {}
+    weight_names = [name[:-7] for name in state_dict if name.endswith(".weight")]
+    for layer in layers:
+        if layer + ".weight" in state_dict:
+            resolved[layer] = layer
+            continue
+        candidates = [name for name in weight_names if name.endswith("." + layer)]
+        if len(candidates) > 1:
+            raise ValueError(f"Ambiguous quantization metadata layer: {layer}")
+        # Keep the previous handling of metadata for absent/ignored layers.
+        resolved[layer] = candidates[0] if candidates else layer
+    return resolved
+
+
 def convert_quantization(state_dict: dict[str, torch.Tensor], metadata: dict) -> tuple[dict[str, torch.Tensor], dict]:
     # https://github.com/Comfy-Org/ComfyUI/blob/v0.19.0/comfy/utils.py#L1358
     if metadata is None:
@@ -170,7 +186,8 @@ def convert_quantization(state_dict: dict[str, torch.Tensor], metadata: dict) ->
         quant_metadata = {"layers": layers}
 
     if layers := quant_metadata.get("layers", None):
+        layer_names = _quantization_layer_names(state_dict, layers)
         for k, v in layers.items():
-            state_dict["{}.comfy_quant".format(k)] = torch.tensor(list(json.dumps(v).encode("utf-8")), dtype=torch.uint8)
+            state_dict[f"{layer_names[k]}.comfy_quant"] = torch.tensor(list(json.dumps(v).encode("utf-8")), dtype=torch.uint8)
 
     return state_dict, metadata

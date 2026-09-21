@@ -59,11 +59,14 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 "state": "complete" if done else "running",
                 "message": f"完了 · {identifier}" if done else "生成中 · fixture",
                 "elapsed": float(cls.poll_counts[identifier]),
+                "effective_prompt": "A detailed glass bird on a wooden table.",
             }
 
         cls.submitted = []
+        cls.rewrite_settings = []
 
         def submit(request, owner):
+            cls.rewrite_settings.append(request.rewrite_prompt)
             bounds = None
             if request.annotation_layers:
                 with Image.open(request.annotation_layers[0]) as layer:
@@ -116,7 +119,9 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
         with cdp_page(self.chromium, self.url) as page:
             peak_rss = 0
             peak_private = 0
-            self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true")))
+            # Leave transport headroom after the DOM deadline, including cold
+            # browser startup while the full offline suite is running.
+            self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 25000), timeout=30))
             page.evaluate(
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
@@ -132,6 +137,8 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             })()""")
             for generation in range(2):
                 with self.subTest(generation=generation):
+                    if generation == 1:
+                        page.evaluate("document.querySelector('#qwen21-rewrite-prompt input').click()")
                     previous_src = page.evaluate("document.querySelector('#qwen21-output img')?.src || null")
                     page.evaluate("document.querySelector('#qwen21-generate').click()")
                     self.assertTrue(
@@ -161,6 +168,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                             )
                         )
                     )
+                    self.assertEqual(self.rewrite_settings[-1], generation == 1)
                     self.assertTrue(
                         page.evaluate(
                             _wait_expression(
@@ -171,6 +179,16 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                             )
                         ),
                         page.evaluate("document.body.innerText"),
+                    )
+                    self.assertTrue(
+                        page.evaluate(
+                            _wait_expression(
+                                "#qwen21-effective-prompt textarea",
+                                "element.value === 'A detailed glass bird on a wooden table.'",
+                                5000,
+                            )
+                        ),
+                        str(page.exceptions) + str(page.evaluate("document.body.innerText")),
                     )
                     links = page.evaluate(
                         "Array.from(document.querySelectorAll('#qwen21-downloads a[href]'))"

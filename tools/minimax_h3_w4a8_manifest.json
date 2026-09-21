@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "model_repository": "Kijai/MiniMax-H3-experimental",
+  "model_revision": "f4cac997f880e93cf6940af61ee8d58ef31ff7f3",
+  "model_license": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE",
+  "models": [
+    {
+      "mode": "fl2va",
+      "filename": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+      "size": 12540858008,
+      "sha256": "01aa7b92c007c599890461c325f9b7e3c96fb06c36f242f95b62f7f20e538dec"
+    },
+    {
+      "mode": "ref2va",
+      "filename": "minimax_h3_ref2va_pruned_w4a8_mixed.safetensors",
+      "size": 11770657048,
+      "sha256": "de2c6c29c4ee702b45e48e40daae3834aeee58ab681c732d9152589a87c89910"
+    }
+  ]
+}
