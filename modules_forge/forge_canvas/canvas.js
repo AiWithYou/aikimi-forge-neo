@@ -1,12 +1,16 @@
 class GradioTextAreaBind {
     constructor(id, className) {
-        this.target = document.querySelector(`#${id}.${className} textarea`);
+        this.id = id;
+        this.selector = `#${id}.${className} textarea`;
+        this.target = document.querySelector(this.selector);
         this.sync_lock = false;
         this.previousValue = "";
     }
 
     set_value(value) {
         if (this.sync_lock) return;
+        if (!this.target?.isConnected) this.target = document.querySelector(this.selector);
+        if (!this.target) return;
         this.sync_lock = true;
         this.target.value = value;
         this.previousValue = value;
@@ -18,7 +22,15 @@ class GradioTextAreaBind {
     }
 
     listen(callback) {
-        setInterval(() => {
+        const timer = setInterval(() => {
+            if (!document.getElementById(`container_${this.id}`)) {
+                clearInterval(timer);
+                this.target = null;
+                this.previousValue = "";
+                return;
+            }
+            if (!this.target?.isConnected) this.target = document.querySelector(this.selector);
+            if (!this.target) return;
             if (this.target.value !== this.previousValue) {
                 this.previousValue = this.target.value;
                 if (this.sync_lock) return;
@@ -49,7 +61,6 @@ class ForgeCanvas {
         scribbleSoftness = 0,
         scribbleSoftnessFixed = false,
     ) {
-        this.gradio_config = gradio_config;
         this.uuid = uuid;
 
         this.no_upload = no_upload;
@@ -604,25 +615,34 @@ class ForgeCanvas {
     }
 
     loadImage(base64) {
-        if (typeof this.gradio_config !== "undefined") {
-            if (!this.gradio_config.version.startsWith("4.")) return;
-        } else {
-            return;
+        let cachedFile = false;
+        if (typeof base64 === "string" && base64.startsWith("forge-file:")) {
+            const reference = JSON.parse(base64.slice("forge-file:".length));
+            const url = new URL(reference.url, window.location.href);
+            if (url.origin !== window.location.origin) return;
+            base64 = url.href;
+            cachedFile = true;
         }
-
         const image = new Image();
         image.onload = () => {
+            const canvas = document.getElementById(`drawingCanvas_${this.uuid}`);
+            if (cachedFile && this.img !== base64) {
+                // A Qwen reference is a new editing source. Its Undo history
+                // must not bring marks from the previous source back.
+                this.history = [];
+                this.historyIndex = -1;
+                canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+            }
             this.img = base64;
             this.orgWidth = image.width;
             this.orgHeight = image.height;
-            const canvas = document.getElementById(`drawingCanvas_${this.uuid}`);
             if (canvas.width !== image.width || canvas.height !== image.height) {
                 canvas.width = image.width;
                 canvas.height = image.height;
             }
             this.adjustInitialPositionAndScale();
             this.drawImage();
-            this.updateBackgroundImageData();
+            if (!cachedFile) this.updateBackgroundImageData();
             this.saveState();
             this.updateUndoRedoButtons();
             document.getElementById(`imageInput_${this.uuid}`).value = null;
@@ -822,6 +842,7 @@ class ForgeCanvas {
         container.style.left = "0";
         container.style.position = "fixed";
         container.style.zIndex = "1000";
+        container.classList.add("forge-maximized");
         maxButton.style.display = "none";
         minButton.style.display = "inline-block";
         this.maximized = true;
@@ -839,6 +860,7 @@ class ForgeCanvas {
         container.style.left = this.originalState.left;
         container.style.position = this.originalState.position;
         container.style.zIndex = this.originalState.zIndex;
+        container.classList.remove("forge-maximized");
         maxButton.style.display = "inline-block";
         minButton.style.display = "none";
         this.maximized = false;

@@ -278,6 +278,29 @@ def _load_images(paths: list[str]) -> list[Any]:
     return images
 
 
+def _idle_cuda_memory(torch, memory_mode: str) -> dict:
+    """Release only unused allocator blocks; resident model tensors stay intact."""
+    if not torch.cuda.is_initialized():
+        return {}
+    torch.cuda.synchronize()
+    before = torch.cuda.memory_reserved()
+    allocated = torch.cuda.memory_allocated()
+    peak = torch.cuda.max_memory_allocated()
+    peak_reserved = torch.cuda.max_memory_reserved()
+    if memory_mode == "offload":
+        torch.cuda.empty_cache()
+    after = torch.cuda.memory_reserved()
+    return {
+        "peak_allocated_mib": round(peak / 2**20, 1),
+        "peak_reserved_mib": round(peak_reserved / 2**20, 1),
+        "idle_allocated_mib": round(allocated / 2**20, 1),
+        "idle_reserved_before_mib": round(before / 2**20, 1),
+        "idle_reserved_after_mib": round(after / 2**20, 1),
+        "released_cache_mib": round(max(0, before - after) / 2**20, 1),
+        "note": "PyTorch allocator only; peak includes this request's model loading; not total device memory or system RAM.",
+    }
+
+
 def run_request(payload: dict[str, Any]) -> dict[str, Any]:
     started = time.monotonic()
     job = Path(payload["job_dir"]).resolve()
@@ -285,9 +308,12 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         job, model_path, request = _read_request(payload)
         _check_cancel(job)
+        import torch
+
+        if torch.cuda.is_initialized():
+            torch.cuda.reset_peak_memory_stats()
         runtime, reused = _runtime_for_request(model_path, request, job)
         _check_cancel(job)
-        import torch
 
         images = _load_images(request["input_images"])
         prompt = request["prompt"].strip()
@@ -344,6 +370,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         image.save(partial, format="PNG")
         _check_cancel(job)
         os.replace(partial, output_path)
+        memory = _idle_cuda_memory(torch, request["memory_mode"])
         metadata = {
             "model": MODEL_ID,
             "model_path": str(model_path),
@@ -369,6 +396,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "int8_skip_modules": list(INT8_SKIP_MODULES) if request["precision"] == "int8" else [],
             "versions": runtime["versions"],
             "reused_model": reused,
+            "memory": memory,
             "timings": {
                 "load_seconds": 0.0 if reused else round(runtime["load_seconds"], 3),
                 "sampling_seconds": round(sampling_seconds, 3),

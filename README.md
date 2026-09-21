@@ -34,7 +34,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
-| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。画面で対象を色付きペンで囲む指定編集と、生成結果からの連続編集に対応。生成モデルとテキストエンコーダーのbitsandbytes INT8、BF16、CPU退避を選べます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
+| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。i2iと共通の描画ツールで対象を囲み、生成結果から続けて編集できます。編集元と結果の切り替え、拡大、ペン・消しゴム・Undo/Redoに対応。bitsandbytes INT8、BF16、CPU退避を選べ、描画欄のメモリ削減と生成後のGPUキャッシュ解放も実装しています。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |

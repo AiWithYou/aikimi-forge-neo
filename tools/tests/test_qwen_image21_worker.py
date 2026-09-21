@@ -157,6 +157,36 @@ class WorkerJobTests(unittest.TestCase):
         self.assertIsNone(self.pipe.calls[0]["image"])
         self.assertEqual(result["metadata"]["output_mode"], "RGBA")
 
+    def test_offload_releases_unused_cache_without_touching_model_or_saved_pixels(self):
+        self.fake_torch.cuda.is_initialized = lambda: True
+        self.fake_torch.cuda.synchronize = mock.Mock()
+        self.fake_torch.cuda.reset_peak_memory_stats = mock.Mock()
+        self.fake_torch.cuda.memory_reserved = mock.Mock(side_effect=[8000 * 2**20, 300 * 2**20])
+        self.fake_torch.cuda.memory_allocated = lambda: 200 * 2**20
+        self.fake_torch.cuda.max_memory_allocated = lambda: 7000 * 2**20
+        self.fake_torch.cuda.max_memory_reserved = lambda: 8000 * 2**20
+        self.pipe.before_callback = self.fake_torch.cuda.empty_cache.reset_mock
+        result, _ = self.run_job()
+        self.fake_torch.cuda.empty_cache.assert_called_once()
+        self.assertEqual(result["metadata"]["memory"]["released_cache_mib"], 7700.0)
+        self.assertIs(worker._RESIDENT_RUNTIME["pipe"], self.pipe)
+        with Image.open(result["output_path"]) as saved:
+            self.assertEqual(saved.getpixel((0, 0)), (1, 2, 3, 47))
+
+    def test_gpu_residency_does_not_trim_allocator_cache(self):
+        cuda = types.SimpleNamespace(
+            is_initialized=lambda: True,
+            synchronize=mock.Mock(),
+            memory_reserved=lambda: 8000 * 2**20,
+            memory_allocated=lambda: 7000 * 2**20,
+            max_memory_allocated=lambda: 7500 * 2**20,
+            max_memory_reserved=lambda: 8000 * 2**20,
+            empty_cache=mock.Mock(),
+        )
+        report = worker._idle_cuda_memory(types.SimpleNamespace(cuda=cuda), "gpu")
+        cuda.empty_cache.assert_not_called()
+        self.assertEqual(report["released_cache_mib"], 0)
+
     def test_model_reused_until_file_metadata_or_precision_or_memory_mode_changes(self):
         _, first = self.run_job()
         second_result, second = self.run_job()
