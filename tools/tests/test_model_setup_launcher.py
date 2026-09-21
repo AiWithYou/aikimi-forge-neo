@@ -82,13 +82,18 @@ try {{
                         self.assertEqual(data["arguments"], "--original-option")
                         self.assertTrue(data["locationRestored"])
                         calls = data["calls"]
-                        self.assertEqual(calls[0][-1], str(root / "venv"))
+                        # PowerShell expands Windows 8.3 aliases used by the CI temp directory.
+                        self.assertEqual(Path(calls[0][-1]).resolve(), (root / "venv").resolve())
                         if fail:
                             self.assertEqual(len(calls), 3)
                             continue
                         self.assertEqual(calls[3][-3:], ["--exit", "--uv", "--bnb"])
                         if model == "h3":
-                            self.assertEqual(calls[4], ["-B", str(root / "tools/setup_minimax_h3.py")])
+                            self.assertEqual(len(calls[4]), 2)
+                            self.assertEqual(calls[4][0], "-B")
+                            self.assertEqual(
+                                Path(calls[4][1]).resolve(), (root / "tools/setup_minimax_h3.py").resolve()
+                            )
                         else:
                             self.assertEqual(calls[4][2:4], ["install", model])
                         if model == "anima38":
