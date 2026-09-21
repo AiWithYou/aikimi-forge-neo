@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
-
 EXACT_IMG2IMG_STEPS = True
 EXACT_IMG2IMG_STEPS_SCOPE = "internal_tiles_only"
 KREA2_PHASEWEAVE_PRODUCT_NAME = "Krea2 PhaseWeave 4K"
@@ -284,6 +283,15 @@ def uses_prompt_only_conditioning_cache(model: object) -> bool:
     """Return whether conditioning is independent of image shape and init latent."""
 
     return bool(getattr(model, "conditioning_cache_is_prompt_only", False))
+
+
+KREA2_VRAM_CANVAS_PROFILES["fast_4k"] = {
+    **KREA2_VRAM_CANVAS_PROFILES["dense_detail_4k"],
+    "phase_count": 1,
+    "minimum_steps": 2,
+    "coarse_denoise": 0.13,
+    "novel_detail_gain": 0.0,
+}
 
 
 def krea2_detail_prompt(base_prompt: str) -> str:

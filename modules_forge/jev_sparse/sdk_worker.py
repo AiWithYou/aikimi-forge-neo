@@ -23,11 +23,22 @@ def main() -> int:
         timeout = float(payload["timeout"])
         if not 0.5 <= timeout <= 20:
             raise ValueError("Invalid timeout")
+        tile_steps = state.get("decision_kind") == "tile_steps"
         questions = {
             layer: Choice(
-                instructions=f"Choose attention KEEP percentage for layer {layer} to trade compute cost against estimated visual importance. Follow state.constraints and compare the supplied measurements with peer layers. Pixel-identical reproduction is NOT the objective; visually good, prompt-consistent generation with less compute is. Use lower keep for relatively weak or stable contributions, middle keep for typical or ambiguous contributions, and maximum keep for unusually strong or rapidly changing contributions. Do not default to maximum solely because these are proxy measurements. Do not invent image content, measured quality scores, or force a quota or variation. Return only a supplied choice.",
+                instructions=(
+                    f"Choose diffusion STEPS for tile detail group {layer}. Zero skips diffusion and retains the enlarged input. Positive choices regenerate that group for the selected step count. Follow state.constraints; compare measured detail statistics across groups. Prefer less compute for weak detail, more for strong detail. Do not invent faces, text, or quality measurements, or force quotas. Return only a supplied choice."
+                    if tile_steps
+                    else f"Choose attention KEEP percentage for layer {layer} to trade compute cost against estimated visual importance. Follow state.constraints and compare the supplied measurements with peer layers. Pixel-identical reproduction is NOT the objective; visually good, prompt-consistent generation with less compute is. Use lower keep for relatively weak or stable contributions, middle keep for typical or ambiguous contributions, and maximum keep for unusually strong or rapidly changing contributions. Do not default to maximum solely because these are proxy measurements. Do not invent image content, measured quality scores, or force a quota or variation. Return only a supplied choice."
+                ),
                 criteria={
-                    str(float(keep)): f"Keep {keep}% of eligible key blocks; larger values are more conservative"
+                    str(float(keep)): (
+                        "Skip diffusion; retain enlarged input"
+                        if tile_steps and keep == 0
+                        else f"Generate using {int(keep)} diffusion steps"
+                        if tile_steps
+                        else f"Keep {keep}% of eligible key blocks; larger values are more conservative"
+                    )
                     for keep in choices
                 },
             )

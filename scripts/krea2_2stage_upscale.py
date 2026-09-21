@@ -6,15 +6,16 @@ from modules import devices, images, processing
 from modules.krea2_quality import smart_finish_image, smart_finish_summary
 from modules.processing import Processed
 from modules.shared import opts, state
+from modules_forge.jev_sparse.krea2_jobs import whole_image_job
 from modules_forge.krea2_upscale import (
     KREA2_DEFAULT_DENOISE,
     KREA2_STAGE1_DENOISE,
     SAFE_DIFFUSION_LONG_EDGE,
     capped_diffusion_size,
     native_diffusion_long_edge,
+    replace_infotext_size,
     require_native_diffusion_size,
     require_safe_diffusion_size,
-    replace_infotext_size,
     target_size,
     two_stage_sizes,
     validate_tile_geometry,
@@ -575,6 +576,7 @@ class KreaTwoStageUpscale(scripts.Script):
             int(tile_batch_size),
         )
 
+    @whole_image_job
     def run(
         self,
         p,

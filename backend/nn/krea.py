@@ -131,7 +131,11 @@ class Attention(nn.Module):
             rep = self.heads // self.kvheads
             k = k.repeat_interleave(rep, dim=1)
             v = v.repeat_interleave(rep, dim=1)
-        out = attention_function(q, k, v, self.heads, mask=mask, skip_reshape=True, transformer_options=transformer_options)
+        override = transformer_options.get("krea2_attention_override")
+        if override is not None and "krea2_block_index" in transformer_options:
+            out = override(q, k, v, self.heads, mask, transformer_options, attention_function)
+        else:
+            out = attention_function(q, k, v, self.heads, mask=mask, skip_reshape=True, transformer_options=transformer_options)
         return self.wo(out * F.sigmoid(gate))
 
 
@@ -342,8 +346,18 @@ class SingleStreamDiT(nn.Module):
 
         freqs = self.pe_embedder(pos)
 
-        for block in self.blocks:
-            combined = block(combined, tvec, freqs, None, transformer_options=transformer_options)
+        block_options = transformer_options
+        if transformer_options.get("krea2_attention_override") is not None:
+            block_options = {
+                **transformer_options,
+                "krea2_text_tokens": txtlen,
+                "krea2_reference_tokens": reflen,
+                "krea2_image_tokens": imglen,
+            }
+        for index, block in enumerate(self.blocks):
+            if block_options is not transformer_options:
+                block_options["krea2_block_index"] = index
+            combined = block(combined, tvec, freqs, None, transformer_options=block_options)
 
         final = self.last(combined, t)
         out = final[:, txtlen + reflen : txtlen + reflen + imglen, :]

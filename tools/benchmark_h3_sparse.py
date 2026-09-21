@@ -23,6 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--repeats", type=int, default=2)
+    parser.add_argument("--duration", type=float, default=5.0, help="Requested video length in seconds (5 to 15)")
     parser.add_argument("--port", type=int, default=8192)
     parser.add_argument("--runtime-profile", choices=sorted(bridge.RUNTIME_PROFILES), default="ram")
     parser.add_argument("--clip-cache", choices=("auto", "off"), default="auto")
@@ -30,6 +31,10 @@ def main():
     args = parser.parse_args()
     if not args.allow_cloud:
         parser.error("--allow-cloud is required to send aggregate statistics to Jev")
+    try:
+        bridge.snap_h3_frames(args.duration)
+    except bridge.H3BridgeError as exc:
+        parser.error(str(exc))
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
     runtime = ROOT / "repositories/minimax-h3/ComfyUI"
@@ -37,7 +42,10 @@ def main():
     install_pack(runtime)
     h3_integration.install()
     url = f"http://127.0.0.1:{args.port}"
-    report = {"runs": [], "protocol": "5-second preview; fixed seed; separate warm-up; forward/reversed order"}
+    report = {
+        "runs": [],
+        "protocol": f"{args.duration:g}-second preview; fixed seed; separate warm-up; forward/reversed order",
+    }
     try:
         # One owned process can execute all comparison modes, including Jev.
         bridge.start_runtime(
@@ -63,7 +71,7 @@ def main():
                 "no speech, no music, no people, no text.",
                 aspect="16:9",
                 quality="preview",
-                duration_seconds=5,
+                duration_seconds=args.duration,
                 steps=4,
                 seed=20260921,
                 acceleration=H3Acceleration(

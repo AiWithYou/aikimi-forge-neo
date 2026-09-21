@@ -1,12 +1,13 @@
 # Jev / Sparse Attention
 
-H3・Anima・Qwen Image 2.1で、通常処理とSparse処理を切り替えて比較できます。既定はOFF（H3は「Kitchen dense」）です。SparseやJevを選ぶだけで必ず速くなる機能ではありません。[実測結果](jev-sparse-validation.md)も確認してください。
+Krea2・H3・Anima・Qwen Image 2.1で、通常処理とSparse処理を切り替えて比較できます。既定はOFF（H3は「Kitchen dense」）です。SparseやJevを選ぶだけで必ず速くなる機能ではありません。[実測結果](jev-sparse-validation.md)も確認してください。Krea2の層別Sparseとタイル配分は[Krea2ガイド](krea2-jev.md)にまとめています。
 
 ## APIキーの登録
 
 各モデルの次の場所に「Jev APIキー設定」があります。
 
 - Qwen Image 2.1: **実行環境 → Jev APIキー設定**
+- Krea2: **Krea2 · Jev高速化 → Jev APIキー設定**
 - Anima: **Anima Self-Attention・実験 → Jev APIキー設定**
 - H3: **高速化・任意設定 → Jev APIキー設定**
 
@@ -14,13 +15,14 @@ H3・Anima・Qwen Image 2.1で、通常処理とSparse処理を切り替えて�
 
 キーはWindowsでは `%LOCALAPPDATA%\Aikimi\secrets\jev-api-key.dpapi` に、現在のWindowsユーザーのDPAPIで暗号化して保存します。Linux/macOSでは `$XDG_CONFIG_HOME/aikimi/secrets/jev-api-key`（未設定時は `~/.config/aikimi/secrets/jev-api-key`）に、ディレクトリー700・ファイル600で保存します。こちらは権限制限された平文です。
 
-キーをブラウザーへ読み戻さず、保存後は入力欄を空にします。リポジトリの設定JSON、画像メタデータ、比較ログ、Gitへは書き込みません。不正な値の入力では以前のキーを置き換えません。3モデルで同じ保存済みキーを使用します。環境変数 `TYPESAFE_API_KEY` を設定している場合はそちらが優先です。
+キーをブラウザーへ読み戻さず、保存後は入力欄を空にします。リポジトリの設定JSON、画像メタデータ、比較ログ、Gitへは書き込みません。不正な値の入力では以前のキーを置き換えません。4モデルで同じ保存済みキーを使用します。環境変数 `TYPESAFE_API_KEY` を設定している場合はそちらが優先です。
 
 ## 切り替え
 
 | 対象 | 設定場所 | 選択肢 |
 |---|---|---|
 | Qwen 2.1 | 生成設定 → Sparse Attention | OFF / Dense計測 / 固定 / 数値ルール / Jev |
+| Krea2 | Krea2 · Jev高速化 | OFF / Dense計測 / 固定 / 数値ルール / Jev、VRAM-Canvasのタイル配分 |
 | Anima | Anima Self-Attention・実験 | OFF / Dense計測 / 固定 / 数値ルール / Jev |
 | H3 | 高速化・任意設定 → Attention | 通常Dense / 既存Sol・SLA / H3比較Dense / 固定5%・10% / Jev |
 
@@ -57,6 +59,9 @@ venv\Scripts\python.exe tools\benchmark_anima_sparse.py --port 7861 --output out
 
 # H3は導入済みの標準ComfyUIを自動起動して比較。
 venv\Scripts\python.exe tools\benchmark_h3_sparse.py --output outputs\my-h3-comparison --allow-cloud
+
+# H3を15秒の動画で比較する場合。
+venv\Scripts\python.exe tools\benchmark_h3_sparse.py --duration 15 --output outputs\my-h3-15sec-comparison --allow-cloud
 ```
 
 Animaの比較スクリプトには3.8B v1.1のモデル名・付属エンコーダーを指定しています。結果のPNG/動画と `benchmark.json` を同じフォルダーに残します。APIキーはコマンド引数へ渡しません。

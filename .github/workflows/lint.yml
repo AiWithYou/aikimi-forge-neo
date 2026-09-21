@@ -186,6 +186,9 @@ jobs:
             tools/benchmark_qwen21_sparse.py
             tools/benchmark_anima_sparse.py
             tools/benchmark_h3_sparse.py
+            tools/benchmark_krea2_sparse.py
+            tools/tests/test_krea2_sparse_model_hook.py
+            tools/tests/test_krea2_tile_allocation_gui.py
             tools/setup_jev_sparse.py
             tools/report_jev_sparse.py
             tests/jev_sparse
