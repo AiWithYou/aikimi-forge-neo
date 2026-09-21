@@ -1,11 +1,16 @@
 /* Keep references completely visible instead of scrolling inside a large thumbnail. */
+/* Qwen owns its model and precision; the Forge checkpoint selector does not apply. */
+body:has(#aikimi-feature-nav[data-active-feature="qwen_image21"]) #quicksettings {
+    display: none !important;
+}
+
 #qwen21-references .grid-container {
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)) !important;
-    grid-auto-rows: 128px !important;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)) !important;
+    grid-auto-rows: 96px !important;
 }
 
 #qwen21-references .gallery-item {
-    height: 128px;
+    height: 96px;
     min-width: 0;
 }
 
@@ -21,7 +26,32 @@
 }
 
 #qwen21-reference-controls button {
-    min-width: 116px;
+    min-width: 64px;
+}
+
+#qwen21-controls {
+    position: sticky;
+    top: 12px;
+    align-self: flex-start;
+}
+
+#qwen21-annotation-editor .forge-toolbar {
+    opacity: 1 !important;
+}
+
+#qwen21-annotation-editor [id^="removeButton_"] {
+    display: none;
+}
+
+@media (max-width: 800px) {
+    #qwen21-controls {
+        position: static;
+    }
+
+    #qwen21-annotation-editor .forge-container:not(.forge-maximized) {
+        height: 62vh !important;
+        min-height: 360px;
+    }
 }
 
 @media (max-width: 600px) {

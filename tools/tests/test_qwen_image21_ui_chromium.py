@@ -6,10 +6,16 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import gradio as gr
+import numpy as np
+import psutil
 from PIL import Image
 
+from modules import ui_tempdir
+from modules.gradio_frontend_compat import build_patched_tabs_asset, create_gradio_compatibility_app
 from tools.tests.chromium_helpers import find_chromium, reserve_local_port
 from tools.tests.test_gradio_frontend_compat_chromium import _wait_expression, cdp_page
 from tools.tests.test_qwen_image21_service import load_ui
@@ -24,8 +30,23 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix="qwen-ui-download-")
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
+        # Use Forge's real cache redirect, isolated from the user's temp files.
+        cls.enterClassContext(
+            patch.object(
+                ui_tempdir,
+                "_shared_module",
+                return_value=SimpleNamespace(
+                    opts=SimpleNamespace(temp_dir=str(cls.directory)),
+                    demo=None,
+                ),
+            )
+        )
+        cls.enterClassContext(patch("gradio.processing_utils.save_pil_to_cache", ui_tempdir.save_pil_to_file))
         cls.output = cls.directory / "output.png"
-        Image.new("RGBA", (64, 64), (40, 100, 180, 100)).save(cls.output)
+        pixels = np.random.default_rng(7).integers(0, 256, (1280, 1024, 3), dtype=np.uint8)
+        fixture = Image.fromarray(pixels)
+        fixture.putalpha(100)
+        fixture.save(cls.output)
         (cls.directory / "result.json").write_text(json.dumps({"seed": 123}), encoding="utf-8")
         cls.ui = load_ui()
         cls.poll_counts = {}
@@ -40,7 +61,17 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 "elapsed": float(cls.poll_counts[identifier]),
             }
 
-        cls.enterClassContext(patch.object(cls.ui.STUDIO, "start", side_effect=["fixture-job-1", "fixture-job-2"]))
+        cls.submitted = []
+
+        def submit(request, owner):
+            bounds = None
+            if request.annotation_layers:
+                with Image.open(request.annotation_layers[0]) as layer:
+                    bounds = layer.getchannel("A").getbbox()
+            cls.submitted.append((request.annotation_reference, bounds))
+            return f"fixture-job-{len(cls.submitted)}"
+
+        cls.enterClassContext(patch.object(cls.ui.STUDIO, "start", side_effect=submit))
         cls.enterClassContext(
             patch.object(
                 cls.ui.STUDIO,
@@ -49,7 +80,15 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             )
         )
         cls.enterClassContext(patch.object(cls.ui.STUDIO, "artifact", return_value=cls.output))
-        cls.demo = cls.ui.on_ui_tabs()[0][0]
+        studio = cls.ui.on_ui_tabs()[0][0]
+        # Match Forge: build the extension separately, then render it inside
+        # a tab that is not selected at page load.
+        with gr.Blocks() as cls.demo:
+            with gr.Tabs():
+                with gr.Tab("Home"):
+                    gr.Markdown("Other workspace")
+                with gr.Tab("Qwen editing"):
+                    studio.render()
         # Give only the isolated test instance a selector; production visibility
         # and callback behavior remain unchanged.
         component = next(
@@ -67,14 +106,23 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             quiet=True,
             inbrowser=False,
             ssr_mode=False,
-            allowed_paths=[str(cls.directory)],
+            allowed_paths=[str(cls.directory), str(Path(__file__).resolve().parents[2] / "modules_forge/forge_canvas")],
+            _app=create_gradio_compatibility_app(build_patched_tabs_asset()),
         )
         cls.addClassCleanup(cls.demo.close)
         cls.url = f"http://127.0.0.1:{cls.port}/"
 
     def test_completed_result_has_png_and_json_downloads_after_each_generation(self):
         with cdp_page(self.chromium, self.url) as page:
+            peak_rss = 0
+            self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true")))
+            page.evaluate(
+                "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
+            )
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-generate", "true")))
+            self.assertTrue(
+                page.evaluate(_wait_expression("body", "typeof ForgeCanvas === 'function'")), page.exceptions
+            )
             self.assertFalse(page.evaluate("document.body.innerText.includes('PNG・生成条件を保存')"))
             page.evaluate("""(() => {
                 const input = document.querySelector('#qwen21-prompt textarea');
@@ -83,6 +131,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             })()""")
             for generation in range(2):
                 with self.subTest(generation=generation):
+                    previous_src = page.evaluate("document.querySelector('#qwen21-output img')?.src || null")
                     page.evaluate("document.querySelector('#qwen21-generate').click()")
                     self.assertTrue(
                         page.evaluate(
@@ -93,6 +142,16 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                             )
                         )
                     )
+                    if generation:
+                        self.assertTrue(
+                            page.evaluate(
+                                _wait_expression("#qwen21-output", "element.innerText.includes('前の結果')", 3000)
+                            )
+                        )
+                        self.assertTrue(previous_src)
+                        self.assertEqual(
+                            page.evaluate("document.querySelector('#qwen21-output img')?.src"), previous_src
+                        )
                     self.assertTrue(
                         page.evaluate(
                             _wait_expression(
@@ -152,6 +211,68 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                             document.querySelector('#qwen21-annotation-panel').getBoundingClientRect().height > 0
                         ), 1200))""")
                     )
+                    canvas_ready = page.evaluate(
+                        _wait_expression(
+                            "#qwen21-annotation-editor .forge-image",
+                            "element.complete && element.naturalWidth === 1024 && element.getBoundingClientRect().width > 0",
+                        )
+                    )
+                    self.assertTrue(
+                        canvas_ready,
+                        {
+                            "errors": page.exceptions,
+                            "canvas": page.evaluate(
+                                "({config:typeof gradio_config,truth:typeof True,background:Array.from(document.querySelectorAll('.logical_image_background textarea')).map(e=>e.value.length),image:document.querySelector('#qwen21-annotation-editor .forge-image')?.getAttribute('src')?.slice(0,40)})"
+                            ),
+                        },
+                    )
+                    owned = psutil.Process(page.process.pid)
+                    rss = sum(p.memory_info().rss for p in [owned, *owned.children(recursive=True)] if p.is_running())
+                    peak_rss = max(peak_rss, rss)
+                    self.assertLess(rss, 1536 * 2**20, "Drawing UI consumed excessive memory in its isolated browser")
+                    if generation:
+                        # Opening a new result must never resurrect the guide
+                        # drawn on the previous source, even through Undo.
+                        stale_marks = page.evaluate("""(() => {
+                            const root=document.querySelector('#qwen21-annotation-editor');
+                            const canvas=root.querySelector('.forge-drawing-canvas');
+                            const undo=root.querySelector('[id^=undoButton_]');
+                            const states=[];
+                            for(let n=0;n<20 && !undo.disabled;n++) {
+                                undo.click();
+                                const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+                                states.push(pixels.some((v,i)=>i%4===3 && v>0));
+                            }
+                            return states;
+                        })()""")
+                        self.assertFalse(any(stale_marks), "Undo restored markings from the previous editing source")
+                    if generation == 0:
+                        rectangle = page.evaluate(
+                            "document.querySelector('#qwen21-annotation-editor .forge-drawing-canvas').getBoundingClientRect().toJSON()"
+                        )
+                        x, y = rectangle["x"] + rectangle["width"] * 0.45, rectangle["y"] + rectangle["height"] * 0.25
+                        page.send("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x, "y": y})
+                        page.send(
+                            "Input.dispatchMouseEvent",
+                            {"type": "mousePressed", "x": x, "y": y, "button": "left", "buttons": 1, "clickCount": 1},
+                        )
+                        page.send(
+                            "Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x + 45, "y": y + 35, "buttons": 1}
+                        )
+                        page.send(
+                            "Input.dispatchMouseEvent",
+                            {
+                                "type": "mouseReleased",
+                                "x": x + 45,
+                                "y": y + 35,
+                                "button": "left",
+                                "buttons": 0,
+                                "clickCount": 1,
+                            },
+                        )
+            self.assertEqual(self.submitted[1][0], 0)
+            self.assertIsNotNone(self.submitted[1][1])
+            print(f"Isolated drawing browser peak RSS: {peak_rss / 2**20:.1f} MiB")  # noqa: T201 - regression measurement
 
 
 if __name__ == "__main__":

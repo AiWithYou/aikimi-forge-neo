@@ -59,12 +59,13 @@ class AnnotationUiTests(unittest.TestCase):
 
     def test_continue_edit_uses_only_the_owned_result_and_opens_editor(self):
         with patch.object(self.ui.STUDIO, "artifact", return_value=self.source) as artifact:
-            gallery, selected, controls, target, editor, panel = self.ui.continue_edit("job", self.request)
+            gallery, selected, controls, target, editor, panel, view = self.ui.continue_edit("job", self.request)
         artifact.assert_called_once_with("job", ":browser-owner")
         self.assertEqual(self.ui.reference_paths(gallery["value"]), [str(self.source)])
         self.assertEqual((selected, target), (0, str(self.source)))
         self.assertTrue(controls["visible"] and panel["visible"])
         self.assertEqual(editor["value"].size, (40, 32))
+        self.assertEqual(view["value"], "edit")
 
     def test_cached_result_keeps_annotation_panel_open(self):
         cached = self.root / "gradio-cache.png"
@@ -96,8 +97,9 @@ class AnnotationUiTests(unittest.TestCase):
 
     def test_gradio_injects_request_between_settings_and_editor_values(self):
         demo = self.ui.on_ui_tabs()[0][0]
-        function_id = next(index for index, function in demo.fns.items() if function.fn is self.ui.start)
-        editor = {"background": str(self.source), "layers": [str(self.layer)], "composite": None}
+        function_id = next(index for index, function in demo.fns.items() if function.fn is self.ui.start_canvas)
+        background = Image.open(self.source).copy()
+        foreground = Image.open(self.layer).copy()
         values = [
             "edit",
             list(reversed(self.gallery)),
@@ -108,7 +110,9 @@ class AnnotationUiTests(unittest.TestCase):
             "42",
             40,
             str(self.source),
-            editor,
+            background,
+            foreground,
+            None,
         ]
         with patch.object(self.ui.STUDIO, "start", return_value="accepted") as submit:
             result = asyncio.run(demo.call_function(function_id, values, requests=self.request))
@@ -116,7 +120,8 @@ class AnnotationUiTests(unittest.TestCase):
         generation, owner = submit.call_args.args
         self.assertEqual(owner, ":browser-owner")
         self.assertEqual(generation.annotation_reference, 1)
-        self.assertEqual(generation.annotation_layers, (str(self.layer),))
+        self.assertEqual(len(generation.annotation_layers), 1)
+        self.assertFalse(Path(generation.annotation_layers[0]).exists())
 
     def test_empty_editor_keeps_ordinary_generation(self):
         with patch.object(self.ui.STUDIO, "start", return_value="accepted") as submit:
@@ -140,10 +145,43 @@ class AnnotationUiTests(unittest.TestCase):
     def test_missing_job_stops_timer_and_disables_both_result_actions(self):
         with patch.object(self.ui.STUDIO, "status", side_effect=JobNotFound("gone")):
             values = self.ui.poll("missing", self.request)
-        self.assertEqual(len(values), 8)
+        self.assertEqual(len(values), 9)
         self.assertFalse(values[3]["active"])
         self.assertFalse(values[6]["interactive"])
         self.assertFalse(values[7]["interactive"])
+
+    def test_single_upload_opens_drawing_surface_without_extra_click(self):
+        controls, target, editor, panel = self.ui.refresh_references([str(self.source)], "")
+        self.assertTrue(controls["visible"] and panel["visible"])
+        self.assertEqual(target, str(self.source))
+        self.assertEqual(editor["value"].size, (40, 32))
+
+    def test_next_generation_keeps_previous_image_with_explicit_label(self):
+        with patch.object(self.ui.STUDIO, "start", return_value="next-job"):
+            values = self.ui.start(
+                "edit",
+                self.gallery,
+                "1024x1024",
+                False,
+                "int8",
+                "offload",
+                "42",
+                40,
+                self.request,
+                previous_output=str(self.source),
+            )
+        self.assertEqual(values[0], "next-job")
+        self.assertNotIn("value", values[5])
+        self.assertIn("前の結果", values[5]["label"])
+        self.assertFalse(values[7]["interactive"])
+        self.assertFalse(values[8]["interactive"])
+
+    def test_failed_generation_does_not_erase_previous_image(self):
+        state = {"done": True, "state": "failed", "message": "failed", "elapsed": 1}
+        with patch.object(self.ui.STUDIO, "status", return_value=state):
+            values = self.ui.poll("failed-job", self.request)
+        self.assertEqual(values[4], {"__type__": "update", "label": "生成結果"})
+        self.assertFalse(values[3]["active"])
 
 
 if __name__ == "__main__":

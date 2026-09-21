@@ -440,7 +440,7 @@ class QwenUiTests(unittest.TestCase):
             patch.object(self.ui.STUDIO, "artifact", return_value=output),
         ):
             result = self.ui.poll("completed-job", request)
-        self.assertEqual(result[4], str(output))
+        self.assertEqual(result[4], {"__type__": "update", "value": str(output), "label": "生成結果"})
         self.assertEqual(
             result[5],
             {"__type__": "update", "visible": True, "value": [str(output), str(output.with_name("result.json"))]},

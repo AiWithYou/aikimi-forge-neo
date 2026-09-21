@@ -35,6 +35,7 @@ class CdpPage:
     def __init__(self, websocket):
         self.websocket = websocket
         self.command_id = 0
+        self.exceptions = []
 
     def send(self, method: str, params: dict | None = None, *, timeout: float = 10):
         self.command_id += 1
@@ -46,6 +47,10 @@ class CdpPage:
             if remaining <= 0:
                 raise TimeoutError(f"CDP command timed out: {method}")
             message = json.loads(self.websocket.recv(timeout=remaining))
+            if message.get("method") == "Runtime.exceptionThrown":
+                detail = message.get("params", {}).get("exceptionDetails", {})
+                self.exceptions.append(detail.get("exception", {}).get("description", detail.get("text")))
+                self.exceptions = self.exceptions[-20:]
             if message.get("id") != command_id:
                 continue
             if "error" in message:
@@ -117,6 +122,7 @@ def cdp_page(chromium: str, url: str):
                 max_size=None,
             )
             page = CdpPage(websocket)
+            page.process = process
             page.send("Page.enable")
             page.send("Runtime.enable")
             # Windows CIでは新しいChromeプロセスの初回読込が10秒を超える場合がある。
