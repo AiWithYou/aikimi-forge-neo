@@ -22,6 +22,8 @@ from modules_forge.minimax_h3_bridge import (
     MODE_TEXT,
     RUNTIME_PROFILE_FAST,
     RUNTIME_PROFILE_LOW_RAM,
+    RUNTIME_PROFILE_RAM,
+    RUNTIME_PROFILES,
     append_prompt_section,
     cache_history_video,
     cancel_generation,
@@ -892,13 +894,13 @@ def _initial_ui_updates(
 ):
     runtime_profile = (
         selected_profile
-        if selected_profile in {RUNTIME_PROFILE_FAST, RUNTIME_PROFILE_LOW_RAM}
+        if selected_profile in RUNTIME_PROFILES
         else RUNTIME_PROFILE_FAST
     )
     try:
         root = resolve_runtime_root(runtime_value) if runtime_value else None
         readiness = inspect_readiness(root, server_url)
-        if readiness.runtime_profile in {RUNTIME_PROFILE_FAST, RUNTIME_PROFILE_LOW_RAM}:
+        if readiness.runtime_profile in RUNTIME_PROFILES:
             runtime_profile = readiness.runtime_profile
         rendered_status = readiness_html(readiness, runtime_profile)
         initial_preset = _initial_generation_preset(readiness, runtime_profile)
@@ -1320,6 +1322,7 @@ def _build_ui():
                         )
                         runtime_profile = gr.Radio(
                             choices=[
+                                ("RAM保持・64GB以上 · CLIP自動キャッシュと併用", RUNTIME_PROFILE_RAM),
                                 (
                                     "高速・推奨 · Pinned Memory + Async 2",
                                     RUNTIME_PROFILE_FAST,

@@ -1,5 +1,7 @@
 """Explicit installer; never called automatically during app launch or generation."""
+
 from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -12,16 +14,27 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from modules_forge.jev_sparse.h3_integration import COMFY_REVISION, PACK, SPARSE_BLOB, git_blob, pack_files
+from modules_forge.jev_sparse.h3_integration import (
+    COMFY_REVISION,
+    PACK,
+    SPARSE_BLOBS,
+    git_blob,
+    pack_files,
+)
 
 
 def environment():
     # Downloads/builds do not need user API credentials or PYTHONPATH overrides.
-    return {k: v for k, v in os.environ.items() if not any(word in k.upper() for word in ("TOKEN", "SECRET", "PASSWORD", "API_KEY", "CREDENTIAL")) and k.upper() not in {"PYTHONPATH", "PYTHONHOME"}}
+    return {
+        k: v
+        for k, v in os.environ.items()
+        if not any(word in k.upper() for word in ("TOKEN", "SECRET", "PASSWORD", "API_KEY", "CREDENTIAL"))
+        and k.upper() not in {"PYTHONPATH", "PYTHONHOME"}
+    }
 
 
 def run(args, cwd=None):
-    subprocess.run([str(x) for x in args], cwd=cwd, env=environment(), check=True)
+    subprocess.run([str(x) for x in args], cwd=cwd, env=environment(), check=True)  # noqa: S603 -- explicit installer arguments, no shell
 
 
 def python_in(env):
@@ -43,8 +56,10 @@ def install_sdk():
 def install_pack(root: Path):
     root = root.resolve(strict=True)
     sparse = root / "comfy_extras/nodes_sparse_attention.py"
-    if not sparse.is_file() or git_blob(sparse.read_bytes().replace(b"\r\n", b"\n")) != SPARSE_BLOB:
-        raise RuntimeError("ComfyUI internal API mismatch. Use --create-h3-runtime; the normal H3 runtime is not upgraded.")
+    if not sparse.is_file() or git_blob(sparse.read_bytes().replace(b"\r\n", b"\n")) not in SPARSE_BLOBS:
+        raise RuntimeError(
+            "ComfyUI internal API mismatch. Use --create-h3-runtime; the normal H3 runtime is not upgraded."
+        )
     if not (root / "main.py").is_file() or not (root / "models").is_dir():
         raise RuntimeError("Not a ComfyUI root")
     custom = root / "custom_nodes"
@@ -65,7 +80,13 @@ def install_pack(root: Path):
             path = target / name
             if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
                 raise RuntimeError("Local node edits detected; they will not be overwritten")
-        unknown = [p for p in target.rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.relative_to(target).as_posix() not in set(prior) | {"aikimi-install.json"}]
+        unknown = [
+            p
+            for p in target.rglob("*")
+            if p.is_file()
+            and "__pycache__" not in p.parts
+            and p.relative_to(target).as_posix() not in set(prior) | {"aikimi-install.json"}
+        ]
         if unknown:
             raise RuntimeError("Unknown files in managed node directory; refusing replacement")
     stage = Path(tempfile.mkdtemp(prefix=".aikimi-jev-", dir=custom))
@@ -105,18 +126,37 @@ def create_runtime(models: Path):
     parent.mkdir(parents=True, exist_ok=True)
     run(["git", "clone", "--no-checkout", "https://github.com/Comfy-Org/ComfyUI.git", comfy])
     run(["git", "checkout", "--detach", COMFY_REVISION], cwd=comfy)
-    if git_blob((comfy / "comfy_extras/nodes_sparse_attention.py").read_bytes().replace(b"\r\n", b"\n")) != SPARSE_BLOB:
+    if (
+        git_blob((comfy / "comfy_extras/nodes_sparse_attention.py").read_bytes().replace(b"\r\n", b"\n"))
+        not in SPARSE_BLOBS
+    ):
         raise RuntimeError("Pinned runtime source verification failed")
     env = parent / ".venv"
     run([sys.executable, "-m", "venv", env])
     python = python_in(env)
-    run([python, "-m", "pip", "install", "torch", "torchvision", "torchaudio", "--index-url", "https://download.pytorch.org/whl/cu128"])
+    run(
+        [
+            python,
+            "-m",
+            "pip",
+            "install",
+            "torch==2.11.0",
+            "torchvision==0.26.0",
+            "torchaudio==2.11.0",
+            "--index-url",
+            "https://download.pytorch.org/whl/cu130",
+        ]
+    )
     run([python, "-m", "pip", "install", "-r", comfy / "requirements.txt"])
     run([python, "-m", "pip", "check"])
-    entry = {"base_path": str(model_root), "is_default": True, **{name: name for name in ("diffusion_models", "text_encoders", "vae", "loras", "model_patches")}}
+    entry = {
+        "base_path": str(model_root),
+        "is_default": True,
+        **{name: name for name in ("diffusion_models", "text_encoders", "vae", "loras", "model_patches")},
+    }
     (comfy / "extra_model_paths.yaml").write_text(json.dumps({"aikimi_h3": entry}, indent=2), encoding="utf-8")
     with (parent / "installed-packages.txt").open("w", encoding="utf-8") as stream:
-        subprocess.run([str(python), "-m", "pip", "freeze"], stdout=stream, env=environment(), check=True)
+        subprocess.run([str(python), "-m", "pip", "freeze"], stdout=stream, env=environment(), check=True)  # noqa: S603 -- owned virtualenv
     install_pack(comfy)
     print("H3 Studioの実行環境に次を指定し、選択設定で再起動してください:", comfy)
 
@@ -133,7 +173,20 @@ def main():
     if not any((args.sdk, args.h3, args.create_h3_runtime)):
         parser.error("Select --sdk, --h3 or --create-h3-runtime")
     if args.dry_run:
-        print(json.dumps({"sdk": args.sdk, "h3_node": args.h3, "create_h3_runtime": args.create_h3_runtime, "comfy_revision": COMFY_REVISION, "comfy_root": str(args.comfy_root), "shared_models": str(args.models), "api_calls": 0}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "sdk": args.sdk,
+                    "h3_node": args.h3,
+                    "create_h3_runtime": args.create_h3_runtime,
+                    "comfy_revision": COMFY_REVISION,
+                    "comfy_root": str(args.comfy_root),
+                    "shared_models": str(args.models),
+                    "api_calls": 0,
+                },
+                indent=2,
+            )
+        )
         return
     if args.sdk:
         install_sdk()

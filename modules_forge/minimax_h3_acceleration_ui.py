@@ -96,6 +96,9 @@ def create_acceleration_controls(duration):
         )
         note = gr.HTML(acceleration_note(*defaults.values()), elem_id="h3-acceleration-note")
         reset = gr.Button("標準構成（高速化・キャッシュ・NegPiPオフ）+ 20 Stepsに戻す", interactive=False, elem_id="h3-acceleration-reset")
+        from modules_forge.jev_sparse.ui import credential_controls
+
+        credential_controls("h3", gradio_module=gr)
         gr.Markdown(
             "必要な重み・拡張は選択先のComfyUIへ別途導入します。この画面は自動ダウンロードしません。\n\n"
             "[INT8 VAE](https://huggingface.co/Kijai/MiniMax-H3-experimental) · "

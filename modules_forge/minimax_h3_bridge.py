@@ -52,10 +52,12 @@ H3_STATUS_POLL_MAX_FAILURES = 3
 
 RUNTIME_PROFILE_FAST = "fast"
 RUNTIME_PROFILE_LOW_RAM = "low_ram"
-RUNTIME_PROFILES = {RUNTIME_PROFILE_FAST, RUNTIME_PROFILE_LOW_RAM}
+RUNTIME_PROFILE_RAM = "ram"
+RUNTIME_PROFILES = {RUNTIME_PROFILE_FAST, RUNTIME_PROFILE_LOW_RAM, RUNTIME_PROFILE_RAM}
 RUNTIME_PROFILE_LABELS = {
     RUNTIME_PROFILE_FAST: "高速（Pinned Memory + Async 2）",
     RUNTIME_PROFILE_LOW_RAM: "省RAM（cacheなし + Pinned/Async無効）",
+    RUNTIME_PROFILE_RAM: "RAM保持（64GB以上・ファイル逐次読込を抑制）",
 }
 
 MODE_TEXT = "text"
@@ -570,6 +572,8 @@ def _runtime_arguments_are_allowed(arguments: Sequence[str]) -> bool:
         "--whitelist-custom-nodes",
     }
     flag_options = {
+        "--cache-classic",
+        "--disable-dynamic-vram",
         "--auto-launch",
         "--cache-none",
         "--disable-all-custom-nodes",
@@ -637,7 +641,6 @@ def runtime_profile_from_args(
         return None
     forbidden = {
         "--cpu",
-        "--disable-dynamic-vram",
         "--fast",
         "--fast-disk",
         "--gpu-only",
@@ -663,6 +666,18 @@ def runtime_profile_from_args(
     if not common_profile:
         return None
     cache_options = ("--cache-none", "--cache-lru", "--cache-classic")
+    if (
+        len(_cli_option_values(arguments, "--disable-dynamic-vram")) == 1
+        and len(_cli_option_values(arguments, "--cache-classic")) == 1
+        and len(_cli_option_values(arguments, "--disable-async-offload")) == 1
+        and len(_cli_option_values(arguments, "--disable-pinned-memory")) == 1
+        and not any(_cli_option_values(arguments, option) for option in (
+            "--cache-none", "--cache-lru", "--async-offload"
+        ))
+    ):
+        return RUNTIME_PROFILE_RAM
+    if _cli_option_values(arguments, "--disable-dynamic-vram"):
+        return None
     if (
         len(_cli_option_values(arguments, "--async-offload")) == 1
         and async_value == "2"
@@ -1071,7 +1086,9 @@ def _runtime_command(
         "--preview-method",
         "none",
     ]
-    if runtime_profile == RUNTIME_PROFILE_FAST:
+    if runtime_profile == RUNTIME_PROFILE_RAM:
+        command.extend(["--disable-dynamic-vram", "--cache-classic", "--disable-async-offload", "--disable-pinned-memory"])
+    elif runtime_profile == RUNTIME_PROFILE_FAST:
         command.extend(["--async-offload", "2"])
     else:
         command.extend(["--cache-none", "--disable-async-offload", "--disable-pinned-memory"])
@@ -1091,6 +1108,11 @@ def start_runtime(
 ) -> RuntimeReadiness:
     if _RUNTIME_SETUP_ACTIVE:
         raise H3BridgeError("H3のセットアップが完了するまでお待ちください。")
+    if runtime_profile == RUNTIME_PROFILE_RAM:
+        import psutil
+
+        if psutil.virtual_memory().total < 60 * 1024**3:
+            raise H3BridgeError("RAM保持プロファイルは64GB以上の物理RAMが必要です。通常の高速プロファイルを選んでください。")
     runtime_root = resolve_runtime_root(runtime_root)
     try:
         with setup_lock(runtime_root):
@@ -2130,7 +2152,7 @@ def _estimated_required_free_gib(request: H3Request, runtime_profile: str) -> fl
         raise H3BridgeError(f"未対応のH3 runtime profileです: {runtime_profile}")
     width, height = request.dimensions
     decoded_video_gib = width * height * request.frame_count * 3 * 4 / 1024**3
-    safety_gib = 4.0 if runtime_profile == RUNTIME_PROFILE_FAST else 2.0
+    safety_gib = 2.0 if runtime_profile == RUNTIME_PROFILE_LOW_RAM else 4.0
     control_gib = decoded_video_gib + fun_control.MODEL_BYTES / 1024**3 if request.control.enabled else 0.0
     return decoded_video_gib + safety_gib + control_gib
 
@@ -2144,6 +2166,8 @@ def _validate_request_runtime_constraints(
         raise H3BridgeError(f"未対応のH3 runtime profileです: {runtime_profile}")
     if readiness.acceleration != request.acceleration:
         raise H3BridgeError("生成要求と確認済みの高速化構成が一致しません。状態を再確認してください。")
+    if runtime_profile == RUNTIME_PROFILE_RAM and request.acceleration.clip_cache == "off":
+        raise H3BridgeError("RAM保持ではCLIP条件キャッシュを「自動」にしてください。文章の処理後に大きなエンコーダーを解放します。")
     if request.mode == MODE_REFERENCES and not readiness.ready_for_ref2va:
         raise H3BridgeError("参照モード用 Ref2VA モデルがありません。")
     if request.mode != MODE_REFERENCES and not readiness.ready_for_fl2va:
@@ -2773,6 +2797,7 @@ def readiness_html(
     runtime_text = {
         RUNTIME_PROFILE_FAST: "高速 · Async 2",
         RUNTIME_PROFILE_LOW_RAM: "省RAM · Async無効",
+        RUNTIME_PROFILE_RAM: "RAM保持 · Pinned/Async無効",
     }.get(readiness.runtime_profile or "", "起動設定 未確認")
     core_text = (
         f"Core {readiness.core_revision[:8]}+"

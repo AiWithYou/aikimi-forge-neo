@@ -104,6 +104,8 @@ class Request:
     annotation_reference: int = -1
     annotation_layers: tuple[str, ...] = ()
     rewrite_prompt: bool = False
+    sparse_mode: str = "off"
+    sparse_keep_percent: float = 75.0
 
     def resolved(self) -> Request:
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 12000:
@@ -122,6 +124,12 @@ class Request:
             raise QwenImage21Error("透過背景の指定が不正です。")
         if not isinstance(self.rewrite_prompt, bool):
             raise QwenImage21Error("プロンプト書き換えの指定が不正です。")
+        from modules_forge.jev_sparse.qwen21 import Options
+
+        try:
+            Options(mode=self.sparse_mode, keep_percent=self.sparse_keep_percent).validate()
+        except ValueError as exc:
+            raise QwenImage21Error(str(exc)) from None
         inputs = validate_images(self.input_images)
         reference = integer(self.annotation_reference, "描画対象", -1, MAX_REFERENCE_IMAGES - 1)
         if not isinstance(self.annotation_layers, (list, tuple)):

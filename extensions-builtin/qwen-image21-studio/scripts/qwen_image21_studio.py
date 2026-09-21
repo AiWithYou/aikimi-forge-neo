@@ -158,6 +158,8 @@ def start(
     annotation_editor=None,
     previous_output=None,
     rewrite_prompt=False,
+    sparse_mode="off",
+    sparse_keep_percent=75,
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
@@ -178,6 +180,8 @@ def start(
             annotation_reference=annotation_reference,
             annotation_layers=annotation_layers,
             rewrite_prompt=rewrite_prompt,
+            sparse_mode=sparse_mode,
+            sparse_keep_percent=sparse_keep_percent,
         )
         identifier = STUDIO.start(generation, owner(request))
         return (
@@ -323,6 +327,8 @@ def start_canvas(
     foreground=None,
     previous_output=None,
     rewrite_prompt=False,
+    sparse_mode="off",
+    sparse_keep_percent=75,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
@@ -350,6 +356,8 @@ def start_canvas(
                 editor,
                 previous_output,
                 rewrite_prompt,
+                sparse_mode,
+                sparse_keep_percent,
             )
     except Exception as exc:
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
@@ -487,8 +495,41 @@ def on_ui_tabs():
                     )
                     seed = gr.Textbox(value="-1", label="Seed（-1: 毎回ランダム）")
                     steps = gr.Slider(1, 100, value=40, step=1, label="Steps")
+                    from modules_forge.jev_sparse.qwen21_integration import launch_defaults
+
+                    sparse_defaults = launch_defaults()
+                    sparse_mode = gr.Dropdown(
+                        [
+                            ("OFF · 通常生成", "off"),
+                            ("Dense · 速度計測", "dense"),
+                            ("固定Sparse · 通信なし", "fixed"),
+                            ("数値ルール · 通信なし", "rules"),
+                            ("Jev速度優先 · 集約統計を外部送信", "jev"),
+                        ],
+                        value=sparse_defaults.mode,
+                        label="Sparse Attention（実験）",
+                        elem_id="qwen21-sparse-mode",
+                        info="Jevは保存済みのキーを使用します。画像・プロンプトは送信しません。方式の変更は次の生成から適用します。",
+                    )
+                    sparse_keep = gr.Slider(
+                        1,
+                        100,
+                        value=sparse_defaults.keep_percent,
+                        step=1,
+                        label="固定Sparseの保持率 %",
+                        visible=sparse_defaults.mode == "fixed",
+                    )
+                    sparse_mode.change(
+                        lambda mode: gr.update(visible=mode == "fixed"),
+                        inputs=sparse_mode,
+                        outputs=sparse_keep,
+                        **PRIVATE,
+                    )
                     gr.Markdown("2K・複数参照・BF16は必要メモリが増えます。最初は1024px程度で確認してください。")
                 with gr.Accordion("実行環境", open=False):
+                    from modules_forge.jev_sparse.ui import credential_controls
+
+                    credential_controls("qwen21")
                     gr.Markdown("初回は `aikimi-qwen-image21-setup.bat` で専用環境とモデルを準備します。")
                     gr.Markdown("書き換えを追加: `aikimi-qwen-image21-setup.bat --prompt-rewriter-only`")
                     check = gr.Button("導入状態を確認", size="sm")
@@ -513,6 +554,8 @@ def on_ui_tabs():
                 annotation_canvas.foreground,
                 output,
                 rewrite_prompt,
+                sparse_mode,
+                sparse_keep,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,

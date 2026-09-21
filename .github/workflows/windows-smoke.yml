@@ -51,6 +51,7 @@ on:
       - "modules_forge/**"
       - "requirements.txt"
       - "tools/requirements-test.txt"
+      - "tools/tests/test_h3_ram_profile.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
       - "tools/minimax_h3_runtime_manifest.json"
@@ -153,6 +154,7 @@ on:
       - "modules_forge/**"
       - "requirements.txt"
       - "tools/requirements-test.txt"
+      - "tools/tests/test_h3_ram_profile.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
       - "tools/minimax_h3_runtime_manifest.json"
@@ -249,6 +251,10 @@ jobs:
         run: python -m pip install -r tools/requirements-test.txt
       - name: Run YuE2 Windows process and UI contracts
         run: python -m pytest tests/yue2 -q
+      - name: Run Jev Windows credential and worker contracts
+        run: python -m pytest tests/jev_sparse -q
+      - name: Run H3 RAM profile and cached Jev contracts
+        run: python tools/run_ci_tests.py --module tools.tests.test_h3_ram_profile --verbosity 1
       - name: Locate Chromium
         shell: pwsh
         run: |

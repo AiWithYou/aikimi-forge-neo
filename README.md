@@ -83,6 +83,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 - [MiniMax H3 Studio：動画生成](extensions-builtin/minimax-h3-studio/README.md)
 - [MiniMax H3 Image：実験的な静止画生成](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)
 - [MiniMax H3の任意の高速化設定](docs/minimax-h3-acceleration.md)
+- [Jev / Sparse Attentionの設定と速度比較](docs/jev-sparse.md) — H3・Anima・Qwen 2.1でON/OFF、APIキー登録、速度優先の層別制御。
 - [MiniMax H3・Qwen Image 2.1のW4A8量子化（試験対応）](docs/w4a8.md)
 - [Qwen Image 2.1：INT8とW4A8の実画像・実測比較](docs/assets/qwen-image21-v1.3.0/README.md)
 - [MiniMax H3のCLIPキャッシュとNegPiP併用](docs/minimax-h3-clipcache.md)
