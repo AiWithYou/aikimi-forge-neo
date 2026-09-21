@@ -55,7 +55,8 @@ def reference_gallery(paths):
 def update_reference_gallery(paths):
     # Gradio 6 hides upload/paste controls for a non-null selected_index even
     # with allow_preview=False. Selection belongs to our separate gr.State.
-    return gr.update(value=reference_gallery(paths), selected_index=None)
+    # A component update preserves None; gr.update drops it before serialization.
+    return gr.Gallery(value=reference_gallery(paths), selected_index=None, render=False)
 
 
 def reference_controls_visibility(gallery):
@@ -63,7 +64,8 @@ def reference_controls_visibility(gallery):
 
 
 def select_reference(event: gr.SelectData):
-    return event.index if event.selected and isinstance(event.index, int) else -1
+    selected = event.index if event.selected and isinstance(event.index, int) else -1
+    return selected, gr.Gallery(selected_index=None, render=False)
 
 
 def move_reference(gallery, selected, direction):
@@ -498,7 +500,7 @@ def on_ui_tabs():
             **PRIVATE,
         )
         stop.click(cancel, inputs=job, outputs=[status, stop], queue=False, **PRIVATE)
-        gallery.select(select_reference, outputs=selected, **PRIVATE)
+        gallery.select(select_reference, outputs=[selected, gallery], **PRIVATE)
         gallery.change(
             refresh_canvas,
             inputs=[gallery, annotation_target],

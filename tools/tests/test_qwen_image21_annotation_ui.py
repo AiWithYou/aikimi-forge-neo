@@ -61,7 +61,7 @@ class AnnotationUiTests(unittest.TestCase):
         with patch.object(self.ui.STUDIO, "artifact", return_value=self.source) as artifact:
             gallery, selected, controls, target, editor, panel, view = self.ui.continue_edit("job", self.request)
         artifact.assert_called_once_with("job", ":browser-owner")
-        self.assertEqual(self.ui.reference_paths(gallery["value"]), [str(self.source)])
+        self.assertEqual(self.ui.reference_paths(gallery.constructor_args["value"]), [str(self.source)])
         self.assertEqual((selected, target), (0, str(self.source)))
         self.assertTrue(controls["visible"] and panel["visible"])
         self.assertEqual(editor["value"].size, (40, 32))

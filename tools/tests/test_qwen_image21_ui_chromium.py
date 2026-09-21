@@ -232,6 +232,25 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                         0,
                         "Continuing an edit hid the reference upload controls",
                     )
+                    if generation == 0:
+                        page.evaluate(
+                            "document.querySelector('#qwen21-references button[aria-label^=Thumbnail]').click()"
+                        )
+                        self.assertTrue(
+                            page.evaluate("""new Promise(resolve => setTimeout(() => resolve(
+                            !!document.querySelector('#qwen21-references input[type=file]')
+                        ), 700))"""),
+                            "Selecting a reference hid its upload controls",
+                        )
+                        page.evaluate(
+                            "Array.from(document.querySelectorAll('#qwen21-reference-controls button')).find(b=>b.innerText==='後へ').click()"
+                        )
+                        self.assertTrue(
+                            page.evaluate(
+                                _wait_expression("#qwen21-references", "!!element.querySelector('input[type=file]')")
+                            ),
+                            "Reordering a selected reference did not restore upload controls",
+                        )
                     owned = psutil.Process(page.process.pid)
                     rss = private = 0
                     for process in [owned, *owned.children(recursive=True)]:
