@@ -52,6 +52,12 @@ def reference_gallery(paths):
     return [(path, f"Image {index}") for index, path in enumerate(paths, 1)]
 
 
+def update_reference_gallery(paths):
+    # Gradio 6 hides upload/paste controls for a non-null selected_index even
+    # with allow_preview=False. Selection belongs to our separate gr.State.
+    return gr.update(value=reference_gallery(paths), selected_index=None)
+
+
 def reference_controls_visibility(gallery):
     return gr.update(visible=bool(gallery))
 
@@ -66,7 +72,7 @@ def move_reference(gallery, selected, direction):
         raise gr.Error("並べ替える参照画像を選んでください。")
     target = max(0, min(len(paths) - 1, selected + direction))
     paths[selected], paths[target] = paths[target], paths[selected]
-    return gr.update(value=reference_gallery(paths), selected_index=target), target
+    return update_reference_gallery(paths), target
 
 
 def remove_reference(gallery, selected):
@@ -77,7 +83,7 @@ def remove_reference(gallery, selected):
     paths.pop(selected)
     target = min(selected, len(paths) - 1)
     return (
-        gr.update(value=reference_gallery(paths), selected_index=max(0, target) if paths else None),
+        update_reference_gallery(paths),
         target,
         reference_controls_visibility(paths),
     )
@@ -126,7 +132,7 @@ def continue_edit(identifier, request: gr.Request):
     path = str(STUDIO.artifact(identifier, owner(request)))
     target, editor, panel = open_annotation([path], 0)
     return (
-        gr.update(value=reference_gallery([path]), selected_index=0),
+        update_reference_gallery([path]),
         0,
         gr.update(visible=True),
         target,
@@ -251,7 +257,7 @@ def use_result(identifier, gallery, request: gr.Request):
         raise gr.Error("参照画像は10枚までです。追加する前に1枚削除してください。")
     paths.append(str(STUDIO.artifact(identifier, owner(request))))
     return (
-        gr.update(value=reference_gallery(paths), selected_index=len(paths) - 1),
+        update_reference_gallery(paths),
         len(paths) - 1,
         reference_controls_visibility(paths),
     )
