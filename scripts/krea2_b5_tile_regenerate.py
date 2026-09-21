@@ -1,23 +1,24 @@
 from __future__ import annotations
 
-from argparse import Namespace
-from dataclasses import asdict
-from datetime import datetime
 import json
 import math
-from pathlib import Path
 import shutil
 import tempfile
 import time
+from argparse import Namespace
+from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
 
 import gradio as gr
 from PIL import Image
 
-from backend import memory_management
 import modules.scripts as scripts
+from backend import memory_management
 from modules import devices, images, processing
 from modules.krea2_quality import adaptive_detail_guard
 from modules.shared import opts, state
+from modules_forge.jev_sparse.krea2_jobs import whole_image_job
 from modules_forge.krea2_highres import (
     EXACT_IMG2IMG_STEPS,
     EXACT_IMG2IMG_STEPS_SCOPE,
@@ -53,7 +54,6 @@ from tools.krea2_b5_tile_regenerate import (
     validate_args,
     validate_b5_aspect_ratio,
 )
-
 
 PROMPT_MODE_LOCAL = "safe_local"
 PROMPT_MODE_IMG2IMG = "img2img"
@@ -857,6 +857,7 @@ class Krea2B5TileRegenerate(scripts.Script):
             timeout=900.0,
         )
 
+    @whole_image_job
     def run(
         self,
         p,

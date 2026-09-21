@@ -9,10 +9,11 @@ import gradio as gr
 import numpy as np
 from PIL import Image
 
-from backend import memory_management
 import modules.scripts as scripts
+from backend import memory_management
 from modules import devices, images, processing
 from modules.shared import opts, state
+from modules_forge.jev_sparse.krea2_jobs import whole_image_job
 from modules_forge.krea2_highres import (
     EXACT_IMG2IMG_STEPS,
     EXACT_IMG2IMG_STEPS_SCOPE,
@@ -809,6 +810,7 @@ class Krea2LocalSupersampleDetail(scripts.Script):
         )
         return output_dir
 
+    @whole_image_job
     def run(
         self,
         p,

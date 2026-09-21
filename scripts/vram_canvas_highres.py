@@ -7,11 +7,13 @@ import gradio as gr
 import numpy as np
 from PIL import Image
 
-from backend import memory_management
 import modules.scripts as scripts
+from backend import memory_management
 from modules import devices, images, processing
 from modules.krea2_quality import smart_finish_image, smart_finish_summary
 from modules.shared import opts, state
+from modules_forge.jev_sparse.common import ExperimentCancelled
+from modules_forge.jev_sparse.krea2_jobs import current_session, prepare_tile_allocation, whole_image_job
 from modules_forge.krea2_highres import (
     EXACT_IMG2IMG_STEPS,
     EXACT_IMG2IMG_STEPS_SCOPE,
@@ -23,11 +25,6 @@ from modules_forge.krea2_highres import (
     krea2_vram_canvas_profile,
 )
 from modules_forge.krea2_upscale import replace_infotext_size, target_size
-from modules_forge.workflow_ui import (
-    workflow_hero,
-    workflow_section,
-    workflow_summary,
-)
 from modules_forge.vram_canvas import (
     CONSENSUS_MERGE_MODE,
     DEFAULT_NOVEL_DETAIL_CONSENSUS_SIGMA,
@@ -58,10 +55,16 @@ from modules_forge.vram_canvas import (
     resolve_tile_size,
     vram_canvas_work_bytes_per_pixel,
 )
+from modules_forge.workflow_ui import (
+    workflow_hero,
+    workflow_section,
+    workflow_summary,
+)
 
 MAX_OUTPUT_PIXELS = 70_000_000
 QUALITY_PROFILE_NAMES = {
     "Structure Safe": "structure_safe",
+    "Krea2 速度優先 4K": "fast_4k",
     "Krea2 Dense Detail 4K": "dense_detail_4k",
     "Krea2 Texture Rich 4K (Experimental)": "texture_rich_4k",
     "Krea2 PhaseWeave 4K (Experimental)": KREA2_PHASEWEAVE_PROFILE_KEY,
@@ -889,6 +892,12 @@ class VRAMCanvasHighres(scripts.Script):
                 "Krea2 dense-detail mode does not allow per-run checkpoint/VAE "
                 f"overrides ({', '.join(forbidden)}). Load Krea2 globally first."
             )
+        # A selected checkpoint can be cold after startup or idle eviction.
+        # Prepare that global selection while the caller holds the GPU queue,
+        # before checking its architecture; do not inspect a stale loaded model.
+        prepare_model = getattr(processing, "manage_model_and_prompt_cache", None)
+        if callable(prepare_model):
+            prepare_model(p)
         model = getattr(p, "sd_model", None)
         model_config = getattr(model, "model_config", None)
         if type(model).__name__ != "Krea2" or type(model_config).__name__ != "Krea2":
@@ -1244,6 +1253,7 @@ class VRAMCanvasHighres(scripts.Script):
                 if not np.isfinite(float(value)) or float(value) <= 0:
                     raise ValueError(f"{name} must be finite and greater than 0.")
 
+    @whole_image_job
     def run(
         self,
         p,
@@ -1613,6 +1623,19 @@ class VRAMCanvasHighres(scripts.Script):
                     stage_number = stage_index + 1
                     tile_records = []
                     base = current.resize((stage_w, stage_h), Image.Resampling.LANCZOS)
+                    tile_allocator = None
+                    allocation_scores = None
+                    session = current_session()
+                    if session is not None and session.options.tile_mode != "off":
+                        allocation_scores = [
+                            detail_score(np.asarray(base.crop((tile.core_x0, tile.core_y0, tile.core_x1, tile.core_y1)), dtype=np.uint8))
+                            for tile in plans
+                        ]
+                        tile_allocator = prepare_tile_allocation(
+                            p, allocation_scores, int(minimum_steps), int(maximum_steps), float(detail_knee)
+                        )
+                        gui_manifest["krea2_tile_allocation"] = session.options.tile_mode
+                        gui_manifest["krea2_tile_allocation_log"] = str(tile_allocator.log.path)
                     phase_normalizers = phase_weight_normalizers(plans, stage_w, stage_h)
                     denoise = self._stage_denoise(
                         stage_index,
@@ -1691,16 +1714,21 @@ class VRAMCanvasHighres(scripts.Script):
 
                     try:
                         for stage_tile_index, tile in enumerate(plans, start=1):
+                            if state.interrupted or state.skipped or state.stopping_generation:
+                                raise ExperimentCancelled("VRAM-Canvas was interrupted before the next tile.")
                             completed_tiles += 1
                             context = extract_tile_context(base, tile)
                             local_core = context.crop(tile.local_core_box)
-                            score = detail_score(np.asarray(local_core, dtype=np.uint8))
+                            score = (allocation_scores[stage_tile_index - 1] if allocation_scores is not None
+                                     else detail_score(np.asarray(local_core, dtype=np.uint8)))
                             steps = adaptive_step_count(
                                 score,
                                 int(minimum_steps),
                                 int(maximum_steps),
                                 knee=float(detail_knee),
                             )
+                            if tile_allocator is not None:
+                                steps = tile_allocator.steps(score, int(minimum_steps), int(maximum_steps), float(detail_knee))
                             seed = coordinate_seed(
                                 global_seed,
                                 tile.phase + stage_number * int(phase_count),
@@ -1728,6 +1756,14 @@ class VRAMCanvasHighres(scripts.Script):
                                     "detail_score": score,
                                 }
                             )
+                            if steps == 0:
+                                # A skipped tile still contributes its full base weight.
+                                # Its residual stays zero, including at overlapping seams.
+                                phase_slot = tile.phase if str(merge_mode) == PHASE_WEAVE_MERGE_MODE else 0
+                                weight_sums[phase_slot][tile.core_y0:tile.core_y1, tile.core_x0:tile.core_x1] += phase_normalized_tile_weight(tile, phase_normalizers)
+                                tile_records[-1]["diffusion_skipped"] = True
+                                state.nextjob()
+                                continue
                             diffusion_tile = self._pad_tile(context)
                             last_diffusion_size = diffusion_tile.size
                             p.width = diffusion_tile.width
@@ -1895,7 +1931,9 @@ class VRAMCanvasHighres(scripts.Script):
                         )
 
             if last_processed is None:
-                raise RuntimeError("VRAM-Canvas did not process any tile.")
+                if current_session() is None or current_session().options.tile_mode == "off":
+                    raise RuntimeError("VRAM-Canvas did not process any tile.")
+                last_processed = processing.Processed(p, [current], seed=global_seed, info="VRAM-Canvas: all tiles retained input")
             if smart_finish:
                 state.job = "VRAM-Canvas Smart Finish"
                 state.textinfo = (
