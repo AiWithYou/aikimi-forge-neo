@@ -115,6 +115,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
     def test_completed_result_has_png_and_json_downloads_after_each_generation(self):
         with cdp_page(self.chromium, self.url) as page:
             peak_rss = 0
+            peak_private = 0
             self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true")))
             page.evaluate(
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
@@ -226,10 +227,26 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                             ),
                         },
                     )
+                    self.assertGreater(
+                        page.evaluate("document.querySelectorAll('#qwen21-references input[type=file]').length"),
+                        0,
+                        "Continuing an edit hid the reference upload controls",
+                    )
                     owned = psutil.Process(page.process.pid)
-                    rss = sum(p.memory_info().rss for p in [owned, *owned.children(recursive=True)] if p.is_running())
+                    rss = private = 0
+                    for process in [owned, *owned.children(recursive=True)]:
+                        try:
+                            memory = process.memory_full_info()
+                        except psutil.NoSuchProcess:
+                            continue
+                        rss += memory.rss
+                        private += memory.uss
                     peak_rss = max(peak_rss, rss)
-                    self.assertLess(rss, 1536 * 2**20, "Drawing UI consumed excessive memory in its isolated browser")
+                    peak_private = max(peak_private, private)
+                    # Summed RSS double-counts shared Chromium pages differently
+                    # on Linux and Windows. Gate on unique resident pages (USS)
+                    # and retain RSS as the locally comparable benchmark value.
+                    self.assertLess(private, 1536 * 2**20, "Drawing UI consumed excessive private resident memory")
                     if generation:
                         # Opening a new result must never resurrect the guide
                         # drawn on the previous source, even through Undo.
@@ -273,6 +290,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             self.assertEqual(self.submitted[1][0], 0)
             self.assertIsNotNone(self.submitted[1][1])
             print(f"Isolated drawing browser peak RSS: {peak_rss / 2**20:.1f} MiB")  # noqa: T201 - regression measurement
+            print(f"Isolated drawing browser peak USS: {peak_private / 2**20:.1f} MiB")  # noqa: T201
 
 
 if __name__ == "__main__":
