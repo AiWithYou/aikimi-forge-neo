@@ -9,6 +9,18 @@ from modules_forge.jev_sparse import krea2, krea2_jobs
 from modules_forge.jev_sparse.ui import credential_controls
 
 
+def api_usage(mode, tile_mode):
+    calls = int(mode == "jev") + int(tile_mode == "jev")
+    if not calls:
+        return "**Jev API：0回** · キーなしで使えます。"
+    parts = []
+    if mode == "jev":
+        parts.append("全層をまとめて1回")
+    if tile_mode == "jev":
+        parts.append("VRAM-Canvasのタイル配分で1回")
+    return f"**Jev API：最大{calls}回／1生成** · " + " ＋ ".join(parts)
+
+
 class Script(scripts.Script):
     sorting_priority = 96
 
@@ -21,31 +33,45 @@ class Script(scripts.Script):
     def ui(self, is_img2img):
         prefix = "krea2-jev-i2i" if is_img2img else "krea2-jev-t2i"
         with gr.Accordion("Krea2 · Jev高速化", open=False, elem_id=prefix):
-            mode = gr.Dropdown(
+            mode = gr.Radio(
                 choices=[
-                    ("OFF · 通常", "off"),
-                    ("固定Sparse", "fixed"),
+                    ("OFF", "off"),
+                    ("固定率", "fixed"),
+                    ("Jev自動", "jev"),
                     ("数値ルール", "rules"),
-                    ("Jev · 層ごとに自動選択", "jev"),
-                    ("Dense · 比較用の記録", "dense"),
+                    ("Dense記録", "dense"),
                 ],
                 value="off",
-                label="Attention",
+                label="層ごとの高速化",
                 elem_id=prefix + "-mode",
             )
             keep = gr.Slider(
-                1, 100, value=10, step=1, label="固定Sparseの保持率 %", visible=False, elem_id=prefix + "-keep"
+                1,
+                100,
+                value=10,
+                step=1,
+                label="固定率：画像Attentionの保持率 %",
+                info="固定率を選ぶと調整できます。小さいほど計算範囲を絞り、100%で通常の計算になります。",
+                interactive=False,
+                elem_id=prefix + "-keep",
             )
-            mode.change(
-                lambda value: gr.update(visible=value == "fixed"), inputs=mode, outputs=keep, api_visibility="private"
-            )
-            tile_mode = gr.Dropdown(
-                choices=[("既存の配分", "off"), ("速度優先の数値ルール", "rules"), ("Jev · 細部量で配分", "jev")],
+            tile_mode = gr.Radio(
+                choices=[("OFF", "off"), ("数値ルール", "rules"), ("Jev自動", "jev")],
                 value="off",
-                label="4K/8Kタイルのstep配分（VRAM-Canvas）",
+                label="4K/8Kタイルの高速化（VRAM-Canvas）",
+                info="層の設定と別に切り替えられます。OFFでは既存のstep配分を使います。",
                 visible=is_img2img,
                 elem_id=prefix + "-tiles",
             )
+            usage = gr.Markdown(api_usage("off", "off"), elem_id=prefix + "-api-usage")
+            mode.change(
+                lambda value, tiles: (gr.update(interactive=value == "fixed"), api_usage(value, tiles)),
+                inputs=[mode, tile_mode],
+                outputs=[keep, usage],
+                queue=False,
+                api_visibility="private",
+            )
+            tile_mode.change(api_usage, inputs=[mode, tile_mode], outputs=usage, queue=False, api_visibility="private")
             with gr.Accordion("詳細", open=False):
                 minimum = gr.Number(
                     value=4096,
@@ -57,9 +83,11 @@ class Script(scripts.Script):
                 )
                 timeout = gr.Slider(0.5, 20, value=10, step=0.5, label="Jevの待ち時間上限（秒）")
                 gr.Markdown(
+                    "保持率は画像Attentionの計算範囲で、画質の保持率ではありません。"
                     "文章・参照画像のAttentionは保護します。層の判定とタイル配分は各1回まで。"
                     "タイルごとに通信せず、同じ画像の処理中は選択を再利用します。"
                     "タイル配分では細部の少ない領域の再描画を省く場合があります。"
+                    "Dense記録は通常のAttentionで比較ログだけを記録します。"
                 )
             credential_controls(prefix)
         self.infotext_fields = [
