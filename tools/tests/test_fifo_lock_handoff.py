@@ -1,6 +1,7 @@
 """Deterministic queue handoff and interrupted-wait regression tests; no GPU."""
 
 import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -174,8 +175,8 @@ class FIFOLockHandoffTests(unittest.TestCase):
                 for _ in range(100):
                     with self.lock:
                         value = counter[0]
-                        # Yield inside the critical section without timing sleeps.
-                        threading.Event().wait(0.00001)
+                        # Yield to ready threads without a timed sleep on Windows.
+                        time.sleep(0)
                         counter[0] = value + 1
             except BaseException as exc:
                 self.errors.append(exc)
