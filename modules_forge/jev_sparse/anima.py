@@ -15,7 +15,15 @@ from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 
-from .common import AnimaOptions, ExperimentCancelled, JevClient, RunLog, sdk_python
+from .common import (
+    AnimaOptions,
+    ExperimentCancelled,
+    JevClient,
+    RunLog,
+    cadence_has_budget,
+    cadence_interval,
+    sdk_python,
+)
 from .credentials import cloud_source
 
 _ACTIVE = contextvars.ContextVar("aikimi_anima_sparse_run", default=None)
@@ -50,11 +58,15 @@ class AnimaRun:
         opt = self.options
         if self.evaluation < opt.warmup_evaluations or opt.mode not in {"rules", "jev"} or self.circuit_open:
             return
-        if self.last_decision is not None and self.evaluation - self.last_decision < opt.update_interval:
+        if self.last_decision is not None and self.evaluation - self.last_decision < cadence_interval(
+            opt.decision_cadence, opt.update_interval
+        ):
             return
         if len(self.observations) != self.layers:
             return
-        if opt.mode == "jev" and (self.client is None or self.client.calls >= opt.max_calls):
+        if opt.mode == "jev" and (
+            self.client is None or not cadence_has_budget(opt.decision_cadence, self.client.calls, opt.max_calls)
+        ):
             return
         self.last_decision = self.evaluation
         if opt.mode == "rules":
@@ -107,7 +119,11 @@ class AnimaRun:
         return self.keeps[str(layer)]
 
     def wants_observations(self):
-        if self.options.mode == "jev" and self.client is not None and self.client.calls >= self.options.max_calls:
+        if (
+            self.options.mode == "jev"
+            and self.client is not None
+            and not cadence_has_budget(self.options.decision_cadence, self.client.calls, self.options.max_calls)
+        ):
             return False
         return self.options.mode in {"rules", "jev"} and not self.circuit_open
 

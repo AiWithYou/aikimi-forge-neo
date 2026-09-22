@@ -417,6 +417,62 @@ def test_h3_sampler_callback_order_checked():
         h3_node.H3Controller("fixed5", MemoryLog()).done(1)
 
 
+@pytest.mark.parametrize("interval,maximum,expected", [(1, 1, [2]), (2, 3, [2, 4]), (1, 3, [2, 3, 4])])
+def test_h3_configurable_cadence_without_prompt_or_final_step_call(interval, maximum, expected):
+    client = FakeClient(keep=3)
+    controller = h3_node.H3Controller(
+        "jev",
+        MemoryLog(),
+        client,
+        "private prompt",
+        max_calls=maximum,
+        initial_decision=False,
+        update_interval=interval,
+    )
+    controller.initialize()
+    for step in range(4):
+        controller.pending = {i: torch.tensor([step + 1.0, 0.1, 2.0, 0.2]) for i in range(50)}
+        controller.done(step)
+    assert [state["next_step"] for state, _, _ in client.requests] == expected
+    assert all(set(allowed) == {str(i) for i in range(1, 50)} for _, allowed, _ in client.requests)
+    assert "private prompt" not in json.dumps(client.requests)
+
+
+def test_h3_cadence_roundtrip_and_workflow():
+    from modules_forge.minimax_h3_acceleration import H3Acceleration
+
+    option = H3Acceleration(jev_cadence="interval", jev_interval=2)
+    assert H3Acceleration.from_values(option.values()) == option
+    assert H3Acceleration.from_dict(option.to_dict()) == option
+    assert H3Acceleration.from_values(option.values()[:-2]).jev_cadence == "once"
+    workflow = graph()
+    integration.patch_workflow(workflow, "jev", "/sdk/python", cadence="interval", interval=2)
+    inputs = workflow["aikimi_h3_sparse"]["inputs"]
+    assert inputs["decision_cadence"] == "interval" and inputs["decision_interval"] == 2
+
+
+@pytest.mark.parametrize("cadence,expected", [("once", 1), ("interval", 6), ("step", 11)])
+def test_anima_cadence_can_continue_beyond_legacy_call_limit(cadence, expected):
+    client = FakeClient()
+    run = anima.AnimaRun(
+        common.AnimaOptions(mode="jev", min_tokens=64, max_calls=1, decision_cadence=cadence, update_interval=2),
+        2,
+        MemoryLog(),
+        client,
+    )
+    for step in range(12):
+        run.begin_evaluation()
+        for layer in range(2):
+            run.observe(layer, torch.ones(1, 64, 16) * (step + 1), torch.ones(1, 64, 1, 16))
+        run.end_evaluation()
+    assert client.calls == expected
+
+
+@pytest.mark.parametrize("cadence", ["legacy", "once", "interval", "step"])
+def test_zero_api_budget_remains_explicit_opt_out(cadence):
+    assert not common.cadence_has_budget(cadence, 0, 0)
+
+
 def test_h3_samples_skip_reference_and_limit():
     x = torch.randn(1000, 512)
     layout = types.SimpleNamespace(segments=[(0, 100, "reference"), (100, 200, "audio"), (200, 1000, "video")])

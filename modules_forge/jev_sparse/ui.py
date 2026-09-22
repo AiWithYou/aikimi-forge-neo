@@ -50,6 +50,50 @@ def save_and_prepare(value):
     yield "", message
 
 
+def decision_controls(prefix, mode, *, gradio_module=None, jev_value="jev", interactive=True):
+    if gradio_module is None:
+        import gradio as gr
+    else:
+        gr = gradio_module
+
+    with gr.Group(visible=getattr(mode, "value", None) == jev_value) as controls:
+        cadence = gr.Radio(
+            choices=[("初回のみ", "once"), ("指定間隔", "interval"), ("毎step", "step")],
+            value="once",
+            label="Jevの再判定頻度",
+            interactive=interactive,
+            elem_id=prefix + "-jev-cadence",
+            info="最初の判定後、選んだ間隔で更新します。各層をまとめて1回で問い合わせます。",
+        )
+        with gr.Group(visible=False) as interval_controls:
+            interval = gr.Slider(
+                1,
+                100,
+                value=2,
+                step=1,
+                label="再判定する間隔（step）",
+                interactive=interactive,
+                elem_id=prefix + "-jev-interval",
+            )
+    mode.change(
+        lambda value: gr.update(visible=value == jev_value),
+        inputs=mode,
+        outputs=controls,
+        queue=False,
+        show_progress="hidden",
+        api_visibility="private",
+    )
+    cadence.change(
+        lambda value: gr.update(visible=value == "interval"),
+        inputs=cadence,
+        outputs=interval_controls,
+        queue=False,
+        show_progress="hidden",
+        api_visibility="private",
+    )
+    return cadence, interval
+
+
 def credential_controls(prefix, gradio_module=None):
     if gradio_module is None:
         import gradio as gr

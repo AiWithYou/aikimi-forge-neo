@@ -46,7 +46,7 @@ class ClipCachePolicyTests(unittest.TestCase):
         old = option.to_dict()
         del old["clip_cache"]
         self.assertEqual(H3Acceleration.from_dict(old).clip_cache, "off")
-        self.assertEqual(H3Acceleration.from_values(option.values()[:-6]).clip_cache, "off")
+        self.assertEqual(H3Acceleration.from_values(option.values()[:8 + len(option.negpip.values())]).clip_cache, "off")
         self.assertEqual(option.values()[3], 2)
 
     def test_invalid_modes_and_modified_clip_fail_explicitly(self):

@@ -160,6 +160,8 @@ def start(
     rewrite_prompt=False,
     sparse_mode="off",
     sparse_keep_percent=75,
+    sparse_jev_cadence="legacy",
+    sparse_jev_interval=2,
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
@@ -182,6 +184,8 @@ def start(
             rewrite_prompt=rewrite_prompt,
             sparse_mode=sparse_mode,
             sparse_keep_percent=sparse_keep_percent,
+            sparse_jev_cadence=sparse_jev_cadence,
+            sparse_jev_interval=sparse_jev_interval,
         )
         identifier = STUDIO.start(generation, owner(request))
         return (
@@ -329,6 +333,8 @@ def start_canvas(
     rewrite_prompt=False,
     sparse_mode="off",
     sparse_keep_percent=75,
+    sparse_jev_cadence="legacy",
+    sparse_jev_interval=2,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
@@ -358,6 +364,8 @@ def start_canvas(
                 rewrite_prompt,
                 sparse_mode,
                 sparse_keep_percent,
+                sparse_jev_cadence,
+                sparse_jev_interval,
             )
     except Exception as exc:
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
@@ -525,6 +533,12 @@ def on_ui_tabs():
                         outputs=sparse_keep,
                         **PRIVATE,
                     )
+                    from modules_forge.jev_sparse.ui import decision_controls
+
+                    sparse_cadence, sparse_interval = decision_controls("qwen21", sparse_mode)
+                    gr.Markdown(
+                        "Jevのstepはモデル評価単位です。最初の判定に必要な統計を集めた後、指定した頻度で更新します。"
+                    )
                     gr.Markdown("2K・複数参照・BF16は必要メモリが増えます。最初は1024px程度で確認してください。")
                 with gr.Accordion("実行環境", open=False):
                     from modules_forge.jev_sparse.ui import credential_controls
@@ -556,6 +570,8 @@ def on_ui_tabs():
                 rewrite_prompt,
                 sparse_mode,
                 sparse_keep,
+                sparse_cadence,
+                sparse_interval,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,

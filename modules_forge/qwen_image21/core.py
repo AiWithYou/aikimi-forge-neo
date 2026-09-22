@@ -106,6 +106,8 @@ class Request:
     rewrite_prompt: bool = False
     sparse_mode: str = "off"
     sparse_keep_percent: float = 75.0
+    sparse_jev_cadence: str = "legacy"
+    sparse_jev_interval: int = 2
 
     def resolved(self) -> Request:
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 12000:
@@ -127,7 +129,12 @@ class Request:
         from modules_forge.jev_sparse.qwen21 import Options
 
         try:
-            Options(mode=self.sparse_mode, keep_percent=self.sparse_keep_percent).validate()
+            Options(
+                mode=self.sparse_mode,
+                keep_percent=self.sparse_keep_percent,
+                decision_cadence=self.sparse_jev_cadence,
+                update_interval=integer(self.sparse_jev_interval, "Jevの再判定間隔", 1, 100),
+            ).validate()
         except ValueError as exc:
             raise QwenImage21Error(str(exc)) from None
         inputs = validate_images(self.input_images)
@@ -153,6 +160,7 @@ class Request:
             input_images=inputs,
             annotation_reference=reference,
             annotation_layers=layers,
+            sparse_jev_interval=int(self.sparse_jev_interval),
         )
 
     def to_dict(self) -> dict:
