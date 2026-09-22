@@ -19,13 +19,31 @@ SCRIPT_TITLE = "Krea2 Jev / Sparse"
 _JOB = contextvars.ContextVar("aikimi_krea2_job", default=None)
 
 
-def parse_options(mode="off", keep=10, minimum=4096, tile_mode="off", timeout=10):
+def parse_options(
+    mode="off",
+    keep=10,
+    minimum=4096,
+    tile_mode="off",
+    timeout=10,
+    decision_cadence="once",
+    interval=2,
+    tile_cadence="once",
+):
     if isinstance(keep, bool) or isinstance(timeout, bool):
         raise ValueError("保持率と待ち時間は数値で指定してください。")
     if isinstance(minimum, bool) or int(minimum) != minimum:
         raise ValueError("最小token数は整数で指定してください。")
+    if isinstance(interval, bool) or int(interval) != interval:
+        raise ValueError("再判定の間隔は整数で指定してください。")
     options = Options(
-        mode=mode, keep_percent=float(keep), min_tokens=int(minimum), tile_mode=tile_mode, timeout=float(timeout)
+        mode=mode,
+        keep_percent=float(keep),
+        min_tokens=int(minimum),
+        tile_mode=tile_mode,
+        timeout=float(timeout),
+        decision_cadence=decision_cadence,
+        update_interval=int(interval),
+        tile_cadence=tile_cadence,
     )
     options.validate()
     return options
@@ -78,11 +96,18 @@ def krea_selected(p):
 
 
 class TileAllocator:
-    def __init__(self, mode, log_root, timeout=10, *, client=None, is_cancelled=None):
+    def __init__(self, mode, log_root, timeout=10, *, client=None, is_cancelled=None, cadence="once"):
         if mode not in {"rules", "jev"}:
             raise ValueError("Invalid tile allocation mode")
+        if cadence not in {"once", "stage"}:
+            raise ValueError("Invalid tile allocation cadence")
         self.mode, self.timeout = mode, timeout
-        self.log = RunLog(log_root, "krea2-tiles", {"mode": mode, "api_call_limit": 1})
+        self.cadence, self.stage = cadence, 0
+        self.log = RunLog(
+            log_root,
+            "krea2-tiles",
+            {"mode": mode, "cadence": cadence, "api_call_limit": 1 if cadence == "once" else "upscale_stages"},
+        )
         self.client = client
         self.cancelled = is_cancelled or cancelled
         self.decided = False
@@ -91,6 +116,7 @@ class TileAllocator:
         self.counts = Counter()
         self.allocation_sources = Counter()
         self.source = "rules"
+        self.circuit_open = False
 
     @staticmethod
     def importance(score, knee):
@@ -107,9 +133,11 @@ class TileAllocator:
             raise ValueError("Invalid tile step limits")
         if self.cancelled():
             raise ExperimentCancelled("Generation cancelled")
-        if self.decided:
+        self.stage += 1
+        if self.circuit_open or (self.decided and self.cadence == "once"):
             return
         self.decided = True
+        self.choices = {}
         self.bounds = (minimum, maximum)
         groups = defaultdict(list)
         for score in scores:
@@ -123,7 +151,9 @@ class TileAllocator:
                 {
                     "decision_kind": "tile_steps",
                     "target": "Krea2 high-resolution tile compute allocation",
-                    "constraints": "SPEED-FIRST. Choose 0 or a supplied positive step count for each observed detail group. Zero retains the enlarged base and adds no generated detail. Groups are ordered from weak (0) to strong (7) measured texture/edge detail. Prefer skipping very weak, flat groups, minimum positive steps for typical groups, maximum for unusually strong detail. These are aggregate numerical proxies, not semantic image analysis or measured quality. Do not invent subjects, faces or text. No forced quota. A single choice per detail group is reused for all remaining upscale stages. Respect supplied positive step bounds.",
+                    "constraints": "SPEED-FIRST. Choose 0 or a supplied positive step count for each observed detail group. Zero retains the enlarged base and adds no generated detail. Groups are ordered from weak (0) to strong (7) measured texture/edge detail. Prefer skipping very weak, flat groups, minimum positive steps for typical groups, maximum for unusually strong detail. These are aggregate numerical proxies, not semantic image analysis or measured quality. Do not invent subjects, faces or text. No forced quota. Choices apply until the next scheduled stage decision. Respect supplied positive step bounds.",
+                    "stage": self.stage,
+                    "decision_cadence": self.cadence,
                     "groups": {
                         key: {
                             "tiles": len(values),
@@ -147,6 +177,7 @@ class TileAllocator:
             self.log.write(
                 "decision",
                 source=self.source,
+                stage=self.stage,
                 steps_by_detail_group=self.choices,
                 diagnostics=diagnostics,
                 api_calls=self.client.calls,
@@ -156,6 +187,7 @@ class TileAllocator:
             raise
         except Exception as exc:
             self.source = "rules_fallback"
+            self.circuit_open = True
             self.log.write("decision", source=self.source, error_type=type(exc).__name__)
 
     def steps(self, score, minimum, maximum, knee):
@@ -197,7 +229,9 @@ class Session:
         if self.options.tile_mode == "off":
             return None
         if self.allocator is None:
-            self.allocator = TileAllocator(self.options.tile_mode, self.log_root, self.options.timeout)
+            self.allocator = TileAllocator(
+                self.options.tile_mode, self.log_root, self.options.timeout, cadence=self.options.tile_cadence
+            )
         self.allocator.prepare(scores, minimum, maximum, knee)
         return self.allocator
 
@@ -265,6 +299,10 @@ def prepare_tile_allocation(p, scores, minimum, maximum, knee):
     allocator = session.prepare_tiles(scores, minimum, maximum, knee)
     if allocator is not None:
         p.extra_generation_params.update(
-            {"Krea2 tile allocation": session.options.tile_mode, "Krea2 tile allocation log": str(allocator.log.path)}
+            {
+                "Krea2 tile allocation": session.options.tile_mode,
+                "Krea2 tile cadence": session.options.tile_cadence,
+                "Krea2 tile allocation log": str(allocator.log.path),
+            }
         )
     return allocator

@@ -106,12 +106,13 @@ class AnimaRun:
             return 100.0
         return self.keeps[str(layer)]
 
-    def observe(self, layer, result, v):
-        if result.shape[1] < self.options.min_tokens:
-            return
+    def wants_observations(self):
         if self.options.mode == "jev" and self.client is not None and self.client.calls >= self.options.max_calls:
-            return
-        if self.options.mode not in {"rules", "jev"} or self.circuit_open:
+            return False
+        return self.options.mode in {"rules", "jev"} and not self.circuit_open
+
+    def observe(self, layer, result, v):
+        if result.shape[1] < self.options.min_tokens or not self.wants_observations():
             return
         import torch
 
