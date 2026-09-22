@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import tempfile
@@ -15,13 +16,14 @@ from modules_forge.qwen_image21.core import QwenImage21Error, atomic_json
 from tools import setup_qwen_image21 as setup
 
 
-def installed_rewriter(root):
-    model = root / rewriter.DIRECTORY
+def installed_rewriter(root, *, editing=False):
+    model_id, revision, directory = rewriter.profile(editing)
+    model = root / directory
     model.mkdir()
     atomic_json(
         model / "config.json",
         {
-            "model_type": "qwen3_5_text",
+            "model_type": "qwen3_5" if editing else "qwen3_5_text",
             "quantization_config": {
                 "quant_method": "bitsandbytes",
                 "load_in_4bit": True,
@@ -32,10 +34,14 @@ def installed_rewriter(root):
     )
     for name in ("model.safetensors", "tokenizer.json", "system_prompt.txt"):
         (model / name).write_text("fixture", encoding="utf-8")
+    if editing:
+        atomic_json(
+            model / "processor_config.json", {"image_processor": {"image_processor_type": "Qwen2VLImageProcessor"}}
+        )
     record = {
         "schema": 1,
-        "model": rewriter.MODEL_ID,
-        "revision": rewriter.MODEL_REVISION,
+        "model": model_id,
+        "revision": revision,
         "quantization": "nf4-double",
         "files": [
             {"path": path.name, "size": path.stat().st_size, "sha256": rewriter.file_hash(path)}
@@ -47,6 +53,98 @@ def installed_rewriter(root):
 
 
 class RewriterTests(unittest.TestCase):
+    def test_chat_turn_end_stops_generation_in_addition_to_document_end(self):
+        tokenizer = SimpleNamespace(eos_token_id=248046)
+        model = SimpleNamespace(generation_config=SimpleNamespace(eos_token_id=248044))
+        self.assertEqual(rewriter.generation_eos_ids(tokenizer, model), [248046, 248044])
+        model.generation_config.eos_token_id = [248044, 248046]
+        self.assertEqual(rewriter.generation_eos_ids(tokenizer, model), [248046, 248044])
+        tokenizer.eos_token_id = None
+        model.generation_config.eos_token_id = None
+        with self.assertRaises(QwenImage21Error):
+            rewriter.generation_eos_ids(tokenizer, model)
+
+    def test_edit_parser_requires_one_valid_ratio_source(self):
+        for ratio, follow in (("", "<image2>"), ("16:9", ""), ("18:39", ""), ("2.39:1", "")):
+            answer = {"rewritten_prompt": "Edit <image2>.", "wh_ratio": ratio, "ratio_follow": follow}
+            self.assertEqual(rewriter.parse_rewrite(json.dumps(answer), editing=True), answer)
+        for ratio, follow in (
+            ("", ""),
+            ("1:1", "<image1>"),
+            ("", "<image0>"),
+            ("", "<image11>"),
+            ("0:1", ""),
+            ("NaN:1", ""),
+        ):
+            answer = {"rewritten_prompt": "Edit it.", "wh_ratio": ratio, "ratio_follow": follow}
+            with self.subTest(answer=answer), self.assertRaises(QwenImage21Error):
+                rewriter.parse_rewrite(json.dumps(answer), editing=True)
+        with self.assertRaises(QwenImage21Error):
+            rewriter.parse_rewrite('{"rewritten_prompt":"Edit it.","wh_ratio":"1:1"}', editing=True)
+
+    def test_edit_rewrite_preserves_literals_references_and_original_constraints(self):
+        prompt = "<image1>の看板を「夏祭り」に変更。背景は変えない。"
+        answer = {"rewritten_prompt": 'In <image1>, write "夏祭り" on the sign.', "ratio_follow": "<image1>"}
+        result = rewriter.validate_edit_rewrite(answer, prompt, 2)
+        self.assertTrue(result["rewritten_prompt"].endswith(prompt))
+        self.assertNotIn("authoritative", answer["rewritten_prompt"])
+        for changes in (
+            {"rewritten_prompt": 'In <image1>, write "festival" on the sign.'},
+            {"rewritten_prompt": 'Write "夏祭り" on the sign.'},
+            {"rewritten_prompt": 'Copy <image3> to <image1> and write "夏祭り".'},
+            {"ratio_follow": "<image3>"},
+        ):
+            with self.subTest(changes=changes), self.assertRaises(QwenImage21Error):
+                rewriter.validate_edit_rewrite({**answer, **changes}, prompt, 2)
+
+    def test_edit_model_manifest_is_separate_and_requires_recorded_image_processor(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            installed_rewriter(root)
+            self.assertIn("--edit-prompt-rewriter-only", rewriter.rewriter_status(root, editing=True))
+            model, record = installed_rewriter(root, editing=True)
+            self.assertEqual(rewriter.rewriter_manifest(root, editing=True, verify_hashes=True)["path"], str(model))
+            record["files"] = [item for item in record["files"] if item["path"] != "processor_config.json"]
+            atomic_json(model / "rewriter-files.json", record)
+            with self.assertRaisesRegex(QwenImage21Error, "画像入力"):
+                rewriter.rewriter_manifest(root, editing=True)
+
+    def test_natural_image_references_are_checked_but_quoted_image_text_is_not(self):
+        prompt = "Image 1 contains the marked region. 画像2のカップを1枚目へ移し、看板に「画像9」と書く。"
+        answer = {
+            "rewritten_prompt": 'Move the cup from <image2> into <image1> and write "画像9" on the sign.',
+            "ratio_follow": "<image1>",
+        }
+        self.assertTrue(rewriter.validate_edit_rewrite(answer, prompt, 2)["rewritten_prompt"].endswith(prompt))
+        for text in (
+            'Move the cup from Image 3 into Image 1 and write "画像9".',
+            'Move the cup into 画像1 and write "画像9".',
+        ):
+            with self.subTest(text=text), self.assertRaises(QwenImage21Error):
+                rewriter.validate_edit_rewrite({**answer, "rewritten_prompt": text}, prompt, 2)
+        # Unadorned quantities are never interpreted as image IDs.
+        result = {"rewritten_prompt": 'Add 12 stars and write "Image 9".', "ratio_follow": "<image1>"}
+        rewriter.validate_edit_rewrite(result, 'Add 12 stars and write "Image 9".', 1)
+        dimensions = "Make the image 16:9. 画像1920x1080で12個の星を追加。"
+        rewriter.validate_edit_rewrite({"rewritten_prompt": dimensions}, dimensions, 1)
+        with self.assertRaisesRegex(QwenImage21Error, "参照番号に対応する画像"):
+            rewriter.rewrite_prompt(
+                Path("."), "Image 3を編集。", 1024, 1024, 0, mock.Mock(), mock.Mock(), images=[object()]
+            )
+
+    def test_only_unambiguous_single_image_references_can_be_made_explicit(self):
+        answer = {"rewritten_prompt": "Recolor the cup blue.", "ratio_follow": "<image1>"}
+        result = rewriter.validate_edit_rewrite(answer, "Image 1のカップを青く。", 1)
+        self.assertTrue(result["rewritten_prompt"].startswith("<image1>: Recolor"))
+        for prompt, count, changes in (
+            ("Image 1のカップを青く。", 2, {}),
+            ("Image 2のカップを青く。", 1, {}),
+            ("Image 1のカップを青く。", 1, {"ratio_follow": ""}),
+            ("Image 1のカップを青く。", 1, {"rewritten_prompt": "Recolor Image 2 blue."}),
+        ):
+            with self.subTest(prompt=prompt, count=count, changes=changes), self.assertRaises(QwenImage21Error):
+                rewriter.validate_edit_rewrite({**answer, **changes}, prompt, count)
+
     def test_parser_supports_official_thinking_and_direct_non_thinking_json(self):
         answer = {"rewritten_prompt": 'A poster reading "夏祭り".', "wh_ratio": "2:3"}
         text = json.dumps(answer, ensure_ascii=False)
@@ -126,10 +224,13 @@ class RewriterTests(unittest.TestCase):
             },
         ):
             config = rewriter.quantization_config()
+            edit_config = rewriter.quantization_config(editing=True)
         self.assertIs(config["load_in_4bit"], True)
         self.assertEqual(config["llm_int8_skip_modules"], [])
         self.assertIs(config["bnb_4bit_use_double_quant"], True)
         self.assertEqual(config["bnb_4bit_quant_type"], "nf4")
+        self.assertEqual(edit_config["llm_int8_skip_modules"], ["model.visual"])
+        self.assertIs(edit_config["bnb_4bit_use_double_quant"], True)
 
     def test_rewriter_only_reuses_environment_and_never_downloads_image_model(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -148,6 +249,34 @@ class RewriterTests(unittest.TestCase):
             self.assertIn("--prepare-rewriter", execute.call_args.args[0])
             self.assertFalse((root / "runtime.json").exists())
             lock.close.assert_called_once()
+
+    def test_edit_rewriter_install_and_verify_do_not_touch_text_or_image_models(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lock = mock.Mock()
+            with (
+                mock.patch("modules_forge.qwen_image21.core.runtime_lock", return_value=lock),
+                mock.patch("modules_forge.qwen_image21_environment.environment_status", return_value=(True, "OK")),
+                mock.patch.object(setup, "install_environment") as install,
+                mock.patch.object(setup, "download_model") as download,
+                mock.patch.object(setup, "execute") as execute,
+            ):
+                self.assertEqual(setup.main(["--root", str(root), "--edit-prompt-rewriter-only"]), 0)
+            install.assert_not_called()
+            download.assert_not_called()
+            self.assertIn("--prepare-edit-rewriter", execute.call_args.args[0])
+            with (
+                mock.patch("modules_forge.qwen_image21.core.runtime_lock", return_value=lock),
+                mock.patch.object(rewriter, "rewriter_manifest") as manifest,
+            ):
+                self.assertEqual(setup.main(["--root", str(root), "--edit-prompt-rewriter-only", "--verify"]), 0)
+            manifest.assert_called_once_with(root, verify_hashes=True, editing=True)
+            with mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(setup.main(["--root", str(root), "--edit-prompt-rewriter-only", "--dry-run"]), 0)
+            plan = json.loads(output.getvalue())
+            self.assertEqual(plan["model"], rewriter.EDIT_MODEL_ID)
+            self.assertIsNone(plan["prompt_rewriter"])
+            self.assertIs(plan["edit_prompt_rewriter"]["text_only"], False)
 
 
 @unittest.skipUnless(os.environ.get("QWEN_IMAGE21_REWRITER_GPU_TEST") == "1", "Opt-in dedicated CUDA environment test")

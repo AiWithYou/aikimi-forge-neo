@@ -8,6 +8,7 @@ are preserved. No global attention function is replaced.
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import importlib
 import math
 import time
@@ -18,11 +19,15 @@ from pathlib import Path
 from .common import (
     AnimaOptions,
     ExperimentCancelled,
-    JevClient,
+    JevBudget,
+    ReplayError,
     RunLog,
     cadence_has_budget,
     cadence_interval,
-    sdk_python,
+    client_available,
+    close_client,
+    create_client,
+    replay_requested,
 )
 from .credentials import cloud_source
 
@@ -30,10 +35,17 @@ _ACTIVE = contextvars.ContextVar("aikimi_anima_sparse_run", default=None)
 
 
 class AnimaRun:
-    def __init__(self, options: AnimaOptions, layers: int, log: RunLog, client=None, cancelled=None):
+    def __init__(
+        self, options: AnimaOptions, layers: int, log: RunLog, client=None, cancelled=None, *, owns_client=True
+    ):
         options.validate()
         self.options, self.layers, self.log = options, layers, log
         self.client = client
+        self.owns_client = owns_client
+        self.decisions = 0
+        self._start_calls = client.calls if client else 0
+        self._start_wait = client.wait_seconds if client else 0
+        self._start_replays = getattr(client, "replay_calls", 0)
         self.cancelled = cancelled or (lambda: False)
         self.keeps = {str(i): float(options.keep_percent) for i in range(layers)}
         if options.mode in {"dense", "rules", "jev"}:
@@ -43,6 +55,7 @@ class AnimaRun:
         self.previous = {}
         self.pending = {}
         self.observations = {}
+        self.observation_shapes = {}
         self.counts = Counter()
         self.total_counts = Counter()
         self.circuit_open = False
@@ -65,7 +78,8 @@ class AnimaRun:
         if len(self.observations) != self.layers:
             return
         if opt.mode == "jev" and (
-            self.client is None or not cadence_has_budget(opt.decision_cadence, self.client.calls, opt.max_calls)
+            not client_available(self.client)
+            or not cadence_has_budget(opt.decision_cadence, self.decisions, opt.max_calls)
         ):
             return
         self.last_decision = self.evaluation
@@ -84,11 +98,13 @@ class AnimaRun:
                     "next_model_evaluation": self.evaluation,
                     "constraints": "SPEED-FIRST profile: choose 25,50,75,100 percent. Text cross-attention is unchanged. No reference-image tokens are present. All transformer layers execute. Compare output-norm/drift proxies with peers: favor 25 for weak/stable contributions, 50 for typical/ambiguous contributions, 75 for unusually strong contributions. Reserve 100 for extreme contributions with supporting measurements. Visually good results matter; different fine details and compositions are acceptable. Missing first drift alone does not require 100. These are proxies, not measured visual quality. No forced quota.",
                     "blocks": self.observations,
+                    "tensor_shapes": self.observation_shapes,
                     "current_keep": self.keeps,
                 },
                 {str(i): (25.0, 50.0, 75.0, 100.0) for i in range(self.layers)},
                 100.0,
             )
+            self.decisions += 1
             self.log.write(
                 "decision",
                 evaluation=self.evaluation,
@@ -99,8 +115,10 @@ class AnimaRun:
                 controller_policy="speed_v3",
                 diagnostics=getattr(self.client, "last_diagnostics", {}),
                 observations=self.observations,
+                replay=getattr(self.client, "last_replay", None),
+                replay_calls=getattr(self.client, "replay_calls", 0),
             )
-        except ExperimentCancelled:
+        except (ExperimentCancelled, ReplayError):
             raise
         except Exception as exc:
             self.circuit_open = True
@@ -122,7 +140,10 @@ class AnimaRun:
         if (
             self.options.mode == "jev"
             and self.client is not None
-            and not cadence_has_budget(self.options.decision_cadence, self.client.calls, self.options.max_calls)
+            and (
+                not client_available(self.client)
+                or not cadence_has_budget(self.options.decision_cadence, self.decisions, self.options.max_calls)
+            )
         ):
             return False
         return self.options.mode in {"rules", "jev"} and not self.circuit_open
@@ -133,6 +154,7 @@ class AnimaRun:
         import torch
 
         with torch.no_grad():
+            self.observation_shapes[str(layer)] = {"result": list(result.shape), "value": list(v.shape)}
             stride = max(1, result.shape[1] // 32)
             sample = result[0, ::stride, :16][:32].detach().float().clone()
             vs = v[0, ::stride, 0, :16][:32].detach().float()
@@ -178,14 +200,23 @@ class AnimaRun:
             self.previous.clear()
             self.pending.clear()
             self.observations.clear()
+            self.observation_shapes.clear()
+            try:
+                if self.owns_client:
+                    close_client(self.client, status)
+            except ReplayError:
+                self.log.finish("failed", error_type="ReplayError")
+                raise
             self.log.finish(
                 status,
                 timing_scope="sum_instrumented_model_evaluations",
                 model_seconds=self.model_seconds,
                 model_evaluations=self.evaluation + 1,
                 attention_calls=dict(self.total_counts),
-                api_calls=self.client.calls if self.client else 0,
-                api_wait_seconds=self.client.wait_seconds if self.client else 0,
+                api_calls=self.client.calls - self._start_calls if self.client else 0,
+                api_wait_seconds=self.client.wait_seconds - self._start_wait if self.client else 0,
+                replay_calls=getattr(self.client, "replay_calls", 0) - self._start_replays,
+                decisions=self.decisions,
             )
 
 
@@ -242,7 +273,7 @@ def make_attention_patch(module, original, layer, run, kernel_fn=sparse_attentio
     return compute
 
 
-def attach(unet, options: AnimaOptions, log_root: Path, *, prompt="", cancelled=None):
+def attach(unet, options: AnimaOptions, log_root: Path, *, prompt="", cancelled=None, client=None, owns_client=True):
     """Return (cloned_patcher, run). Original weights and cross-attention untouched."""
     options.validate()
     if options.mode == "off":
@@ -269,13 +300,21 @@ def attach(unet, options: AnimaOptions, log_root: Path, *, prompt="", cancelled=
             or not ck.sol_attn_is_available(unet.load_device)
         ):
             raise RuntimeError("Anima Sparseにはhead_dim=128と、このGPUで使えるComfy-Kitchen sol_attnが必要です。")
-    client = (
-        JevClient(sdk_python(), options.timeout, cancelled, environment=cloud_source())
-        if options.mode == "jev" and options.max_calls
-        else None
-    )
-    log = RunLog(log_root, "anima", asdict(options), prompt)
-    run = AnimaRun(options, len(model.blocks), log, client, cancelled)
+    if client is None and options.mode == "jev" and options.max_calls:
+        client = create_client(
+            timeout=options.timeout,
+            cancelled=cancelled,
+            environment=None if replay_requested() else cloud_source(),
+            budget=JevBudget(options.job_max_calls, options.job_max_wait_seconds),
+            prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
+        )
+    try:
+        log = RunLog(log_root, "anima", asdict(options), prompt)
+        run = AnimaRun(options, len(model.blocks), log, client, cancelled, owns_client=owns_client)
+    except BaseException:
+        if owns_client:
+            close_client(client, "failed")
+        raise
     try:
         patched = unet.clone()
         for i, block in enumerate(model.blocks):

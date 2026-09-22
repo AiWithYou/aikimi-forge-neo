@@ -179,3 +179,149 @@ def convert_model(model, component, *, device="cuda:0", progress=None):
     if progress is not None:
         progress(len(selected), len(selected))
     return {"layers": len(selected), "source_weight_bytes": source_bytes, "packed_weight_bytes": packed_bytes}
+
+
+@torch.no_grad()
+def save_model(model, folder, stats, *, check_cancel=lambda: None, max_shard_bytes=512 * 1024**2):
+    """Store packed bytes/scales and BF16 exceptions without dequantization."""
+    from comfy_kitchen.tensor import QuantizedTensor
+    from safetensors.torch import save_file
+
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    weights, weight_map, shard = {}, {}, {}
+    shard_size = 0
+    shard_number = 0
+
+    def flush():
+        nonlocal shard_size, shard_number
+        if not shard:
+            return
+        check_cancel()
+        filename = f"weights-{shard_number:05d}.safetensors"
+        save_file(shard, str(folder / filename))
+        weight_map.update(dict.fromkeys(shard, filename))
+        shard.clear()
+        shard_number += 1
+        shard_size = 0
+
+    for name, tensor in model.state_dict().items():
+        check_cancel()
+        if isinstance(tensor, QuantizedTensor):
+            params = tensor._params
+            if tensor._layout_cls != LAYOUT or params.transposed:
+                raise ValueError("Unsupported packed Qwen weight layout")
+            group = tensor.state_dict(name)
+            weights[name] = {
+                "shape": list(tensor.shape),
+                "dtype": str(tensor.dtype).removeprefix("torch."),
+                "group_size": params.group_size,
+                "convrot_groupsize": params.convrot_groupsize,
+                "keys": list(group),
+            }
+        else:
+            group = {name: tensor}
+        size = sum(value.nbytes for value in group.values())
+        if shard and shard_size + size > max_shard_bytes:
+            flush()
+        # Clone each group so tied/aliased source storage is serialized safely.
+        shard.update({key: value.detach().cpu().contiguous().clone() for key, value in group.items()})
+        shard_size += size
+    flush()
+    (folder / "w4a8.json").write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "layout": LAYOUT,
+                "weights": weights,
+                "weight_map": weight_map,
+                "stats": stats,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+@torch.no_grad()
+def load_saved_model(folder, component, factory, *, check_cancel=lambda: None):
+    """Restore the exact packed representation into a freshly built skeleton."""
+    from accelerate import init_empty_weights
+    from comfy_kitchen.tensor import AsymW4A8Int8Layout, QuantizedTensor
+    from safetensors import safe_open
+
+    folder = Path(folder).resolve()
+    record = json.loads((folder / "w4a8.json").read_text(encoding="utf-8"))
+    if record.get("schema") != 1 or record.get("layout") != LAYOUT:
+        raise ValueError("Unsupported W4A8 checkpoint format")
+    with init_empty_weights(include_buffers=False):
+        model = factory()
+    model.eval().requires_grad_(False)
+    expected = {name: tuple(value.shape) for name, value in model.state_dict().items()}
+    parameters = set(dict(model.named_parameters()))
+    targets = {f"{name}.weight" for name, _layer in target_linears(model, component)}
+    packed_weights = record["weights"]
+    if targets != set(packed_weights):
+        raise ValueError("W4A8 checkpoint target layers mismatch")
+    physical_keys = set(expected) - targets
+    for name, spec in packed_weights.items():
+        if tuple(spec["shape"]) != expected[name] or spec["dtype"] not in {"float32", "float16", "bfloat16"}:
+            raise ValueError(f"W4A8 checkpoint shape/dtype mismatch: {name}")
+        required = {name, name + "_s_rel", name + "_s_channel"}
+        allowed = required | {name + "_correction", name + "_codebook"}
+        if not required.issubset(spec["keys"]) or not set(spec["keys"]).issubset(allowed):
+            raise ValueError(f"Incomplete W4A8 scales: {name}")
+        physical_keys.update(spec["keys"])
+    if physical_keys != set(record["weight_map"]):
+        raise ValueError("W4A8 checkpoint inventory mismatch")
+    loaded = set()
+    for filename in dict.fromkeys(record["weight_map"].values()):
+        check_cancel()
+        path = (folder / filename).resolve()
+        if not path.is_relative_to(folder):
+            raise ValueError("Escaping W4A8 shard path")
+        with safe_open(path, framework="pt", device="cpu") as source:
+            keys = set(source.keys())
+            if keys != {key for key, file in record["weight_map"].items() if file == filename} or loaded & keys:
+                raise ValueError("Unexpected W4A8 shard keys")
+            loaded.update(keys)
+            for name in expected.keys() & keys:
+                check_cancel()
+                parent_name, _, field = name.rpartition(".")
+                parent = model.get_submodule(parent_name)
+                tensor = source.get_tensor(name).clone()
+                if name in targets:
+                    spec = packed_weights[name]
+                    if not set(spec["keys"]).issubset(keys):
+                        raise ValueError("Packed weight and scales must share a shard")
+                    n, k = spec["shape"]
+                    if tuple(tensor.shape) != (n, k // 2) or tensor.dtype != torch.int8:
+                        raise ValueError(f"Invalid packed W4A8 storage: {name}")
+
+                    def scale(suffix, name=name, spec=spec):
+                        key = name + suffix
+                        return source.get_tensor(key).clone() if key in spec["keys"] else None
+
+                    params = AsymW4A8Int8Layout.Params(
+                        scale=scale("_s_rel"),
+                        s_channel=scale("_s_channel"),
+                        correction=scale("_correction"),
+                        codebook=scale("_codebook"),
+                        orig_dtype=getattr(torch, spec["dtype"]),
+                        orig_shape=tuple(spec["shape"]),
+                        group_size=spec["group_size"],
+                        convrot_groupsize=spec["convrot_groupsize"],
+                    )
+                    packed = QuantizedTensor(tensor, LAYOUT, params)
+                    grandparent, _, child = parent_name.rpartition(".")
+                    setattr(model.get_submodule(grandparent), child, W4A8Linear(packed, parent.bias).eval())
+                else:
+                    if tuple(tensor.shape) != expected[name]:
+                        raise ValueError(f"W4A8 exception tensor shape mismatch: {name}")
+                    if name in parameters:
+                        parent._parameters[field] = nn.Parameter(tensor, requires_grad=False)
+                    else:
+                        parent._buffers[field] = tensor
+    if loaded != physical_keys or any(value.is_meta for value in (*model.parameters(), *model.buffers())):
+        raise ValueError("Incomplete saved W4A8 model")
+    return model, record["stats"]

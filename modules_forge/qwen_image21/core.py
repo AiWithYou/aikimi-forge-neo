@@ -108,6 +108,13 @@ class Request:
     sparse_keep_percent: float = 75.0
     sparse_jev_cadence: str = "legacy"
     sparse_jev_interval: int = 2
+    rewrite_edit_prompt: bool = False
+    preserve_unmasked: bool = False
+    edit_mask_reference: int = -1
+    edit_mask_path: str = ""
+    mask_feather: float = 0.0
+    sparse_jev_max_calls: int = 0
+    sparse_jev_max_wait_seconds: float = 0.0
 
     def resolved(self) -> Request:
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 12000:
@@ -126,6 +133,10 @@ class Request:
             raise QwenImage21Error("透過背景の指定が不正です。")
         if not isinstance(self.rewrite_prompt, bool):
             raise QwenImage21Error("プロンプト書き換えの指定が不正です。")
+        if not isinstance(self.rewrite_edit_prompt, bool):
+            raise QwenImage21Error("編集指示の書き換え指定が不正です。")
+        if not isinstance(self.preserve_unmasked, bool):
+            raise QwenImage21Error("範囲外固定の指定が不正です。")
         from modules_forge.jev_sparse.qwen21 import Options
 
         try:
@@ -134,6 +145,8 @@ class Request:
                 keep_percent=self.sparse_keep_percent,
                 decision_cadence=self.sparse_jev_cadence,
                 update_interval=integer(self.sparse_jev_interval, "Jevの再判定間隔", 1, 100),
+                job_max_calls=integer(self.sparse_jev_max_calls, "Jevのジョブ内呼出上限", 0, 1000),
+                job_max_wait_seconds=self.sparse_jev_max_wait_seconds,
             ).validate()
         except ValueError as exc:
             raise QwenImage21Error(str(exc)) from None
@@ -150,6 +163,23 @@ class Request:
             from .annotations import validate_annotation_layers
 
             layers, _ = validate_annotation_layers(inputs[reference], self.annotation_layers)
+        from .annotations import validate_edit_mask, validate_mask_feather
+
+        feather = validate_mask_feather(self.mask_feather)
+        mask_reference = integer(self.edit_mask_reference, "マスクの編集元", -1, MAX_REFERENCE_IMAGES - 1)
+        if not isinstance(self.edit_mask_path, (str, Path)):
+            raise QwenImage21Error("編集マスクの形式が不正です。")
+        mask_path = ""
+        if self.preserve_unmasked:
+            if not 0 <= mask_reference < len(inputs) or not self.edit_mask_path:
+                raise QwenImage21Error("範囲外を固定するには編集元の参照画像と編集マスクを指定してください。")
+            mask_path, _ = validate_edit_mask(
+                inputs[mask_reference], str(self.edit_mask_path), output_size=(width, height)
+            )
+        else:
+            # Disabled controls may retain browser state; never turn a guide or
+            # an old mask into an edit restriction implicitly.
+            mask_reference = -1
         return replace(
             self,
             prompt=self.prompt.strip(),
@@ -161,6 +191,11 @@ class Request:
             annotation_reference=reference,
             annotation_layers=layers,
             sparse_jev_interval=int(self.sparse_jev_interval),
+            edit_mask_reference=mask_reference,
+            edit_mask_path=mask_path,
+            mask_feather=feather,
+            sparse_jev_max_calls=int(self.sparse_jev_max_calls),
+            sparse_jev_max_wait_seconds=float(self.sparse_jev_max_wait_seconds),
         )
 
     def to_dict(self) -> dict:

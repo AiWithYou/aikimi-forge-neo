@@ -7,13 +7,13 @@ import os
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from .common import cloud_environment, sdk_python
+from .common import REPLAY_ENV, cloud_environment, replay_requested, sdk_python
 from .credentials import read_saved_key
 from .qwen21 import OPTIONS_ENV, Options
 
 ROOT = Path(__file__).resolve().parents[2]
-# Reviewed v1.3.0 W4A8/prompt-rewriter worker; projection and cache contracts match.
-WORKER_BLOB = "96c1d349d879460861ece114a93cc15446b7fca5"
+# Reviewed 2026-09-22 persistent quantization, I2I rewrite and mask-output worker.
+WORKER_BLOB = "181ec29efb4462f5eb3a5b5ecbd9b7f7868df7e3"
 
 
 def launch_defaults() -> Options:
@@ -25,9 +25,14 @@ def worker_launch(request, worker: Path, environment: dict) -> tuple[Path, dict,
     cadence = getattr(request, "sparse_jev_cadence", "legacy")
     if cadence != "legacy" and request.sparse_mode == "jev":
         options = replace(options, decision_cadence=cadence, update_interval=request.sparse_jev_interval)
+    options = replace(
+        options,
+        job_max_calls=getattr(request, "sparse_jev_max_calls", options.job_max_calls),
+        job_max_wait_seconds=getattr(request, "sparse_jev_max_wait_seconds", options.job_max_wait_seconds),
+    )
     options.validate()
     environment = dict(environment)
-    for key in ("TYPESAFE_API_KEY", "AIKIMI_JEV_ALLOW_CLOUD", "AIKIMI_JEV_PYTHON", OPTIONS_ENV):
+    for key in ("TYPESAFE_API_KEY", "AIKIMI_JEV_ALLOW_CLOUD", "AIKIMI_JEV_PYTHON", OPTIONS_ENV, REPLAY_ENV):
         environment.pop(key, None)
     if options.mode == "off":
         return worker, environment, {}
@@ -39,9 +44,14 @@ def worker_launch(request, worker: Path, environment: dict) -> tuple[Path, dict,
     if digest != WORKER_BLOB:
         raise ValueError("Qwen worker differs from the reviewed revision; sparse mode is unavailable")
     if options.mode == "jev" and options.max_calls:
-        key = os.environ.get("TYPESAFE_API_KEY", "").strip() or read_saved_key()
-        cloud = cloud_environment({**os.environ, "TYPESAFE_API_KEY": key, "AIKIMI_JEV_ALLOW_CLOUD": "1"})
-        environment.update(
-            TYPESAFE_API_KEY=cloud["TYPESAFE_API_KEY"], AIKIMI_JEV_ALLOW_CLOUD="1", AIKIMI_JEV_PYTHON=str(sdk_python())
-        )
+        if replay_requested():
+            environment[REPLAY_ENV] = os.environ[REPLAY_ENV]
+        else:
+            key = os.environ.get("TYPESAFE_API_KEY", "").strip() or read_saved_key()
+            cloud = cloud_environment({**os.environ, "TYPESAFE_API_KEY": key, "AIKIMI_JEV_ALLOW_CLOUD": "1"})
+            environment.update(
+                TYPESAFE_API_KEY=cloud["TYPESAFE_API_KEY"],
+                AIKIMI_JEV_ALLOW_CLOUD="1",
+                AIKIMI_JEV_PYTHON=str(sdk_python()),
+            )
     return ROOT / "tools/qwen_image21_sparse_worker.py", environment, {"sparse_experiment": asdict(options)}

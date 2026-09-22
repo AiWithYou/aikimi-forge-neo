@@ -133,93 +133,42 @@ def test_json_log_does_not_save_prompt_and_finishes_once(tmp_path):
         common.dumps({"not_finite": float("nan")})
 
 
-def test_sdk_process_success_and_redaction(monkeypatch):
+def test_sdk_process_success_and_redaction(monkeypatch, mock_sdk):
     monkeypatch.setenv("AIKIMI_JEV_ALLOW_CLOUD", "1")
     monkeypatch.setenv("TYPESAFE_API_KEY", "fake-key")
-    calls = []
-
-    class Process:
-        returncode = 0
-
-        def __init__(self, argv, **kwargs):
-            calls.append((argv, kwargs))
-
-        def communicate(self, input=None, timeout=None):
-            return '{"decisions":{"0":{"choice":"50.0","confidence":0.9}}}', ""
-
-        def poll(self):
-            return 0
-
-    monkeypatch.setattr(common.subprocess, "Popen", Process)
-    client = common.JevClient(Path(sys.executable), 1)
-    assert client.decide({}, {"0": (50, 75, 100)}, 100) == {"0": 50}
-    assert client.calls == 1
-    assert "fake-key" not in str(calls[0][0])
-    assert calls[0][1]["env"]["TYPESAFE_API_KEY"] == "fake-key"
-    assert calls[0][0][1:3] == ["-I", "-B"]
+    child = mock_sdk()
+    with common.JevClient(Path(sys.executable), 1) as client:
+        assert client.decide({}, {"0": (50, 75, 100)}, 100) == {"0": 50}
+        assert client.decide({}, {"0": (50, 75, 100)}, 100) == {"0": 50}
+        assert client.calls == 2 and len(child.children) == 1
+        assert "fake-key" not in str(child.launches[0][0])
+        assert child.launches[0][1]["env"]["TYPESAFE_API_KEY"] == "fake-key"
+        assert child.launches[0][0][1:3] == ["-I", "-B"]
+    assert child.children[0].poll() == 0
+    assert client.closed and not client.env and not client._thread.is_alive()
 
 
-def test_sdk_cancellation_reaps_child(monkeypatch):
+def test_sdk_cancellation_reaps_child(monkeypatch, mock_sdk):
     monkeypatch.setenv("AIKIMI_JEV_ALLOW_CLOUD", "1")
     monkeypatch.setenv("TYPESAFE_API_KEY", "fake-key")
-    child = types.SimpleNamespace(killed=False, communicates=0)
-
-    class Process:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def communicate(self, input=None, timeout=None):
-            child.communicates += 1
-            if not child.killed:
-                raise subprocess.TimeoutExpired("sdk", timeout)
-            return "", ""
-
-        def poll(self):
-            return 1 if child.killed else None
-
-        def kill(self):
-            child.killed = True
-
-    monkeypatch.setattr(common.subprocess, "Popen", Process)
-    client = common.JevClient(Path(sys.executable), 1, cancelled=lambda: child.communicates > 0)
+    child = mock_sdk(blocked=True)
+    client = common.JevClient(Path(sys.executable), 1, cancelled=lambda: bool(child.children))
     with pytest.raises(common.ExperimentCancelled):
         client.decide({}, {"0": (50, 100)}, 100)
-    assert child.killed and child.communicates >= 2
-    assert client.calls == 1
+    assert child.children[0].poll() is not None and client.closed
+    assert client.calls == 1 and not client._thread.is_alive()
 
 
-def test_sdk_timeout_has_bounded_single_attempt(monkeypatch):
+def test_sdk_timeout_has_bounded_single_attempt(monkeypatch, mock_sdk):
     monkeypatch.setenv("AIKIMI_JEV_ALLOW_CLOUD", "1")
     monkeypatch.setenv("TYPESAFE_API_KEY", "fake-key")
-    tick = [0]
-
-    def clock():
-        tick[0] += 1
-        return float(tick[0])
-
-    child = types.SimpleNamespace(killed=False)
-
-    class Process:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def communicate(self, input=None, timeout=None):
-            if not child.killed:
-                raise subprocess.TimeoutExpired("sdk", timeout)
-            return "", ""
-
-        def poll(self):
-            return 1 if child.killed else None
-
-        def kill(self):
-            child.killed = True
-
-    monkeypatch.setattr(common.subprocess, "Popen", Process)
-    monkeypatch.setattr(common.time, "perf_counter", clock)
-    client = common.JevClient(Path(sys.executable), 0.5)
+    child = mock_sdk(blocked=True)
+    client = common.JevClient(Path(sys.executable), 0.5, budget=common.JevBudget(max_wait_seconds=0.05))
     with pytest.raises(common.JevError, match="timeout"):
         client.decide({}, {"0": (50, 100)}, 100)
-    assert child.killed and client.calls == 1
+    assert child.children[0].poll() is not None and client.calls == 1
+    assert client.closed and not client._thread.is_alive()
+    assert client.wait_seconds < 2
 
 
 def observations(layers):
@@ -444,7 +393,8 @@ def test_h3_cadence_roundtrip_and_workflow():
     option = H3Acceleration(jev_cadence="interval", jev_interval=2)
     assert H3Acceleration.from_values(option.values()) == option
     assert H3Acceleration.from_dict(option.to_dict()) == option
-    assert H3Acceleration.from_values(option.values()[:-2]).jev_cadence == "once"
+    assert H3Acceleration.from_values(option.values()[:-4]).jev_cadence == "once"
+    assert H3Acceleration.from_values(option.values()[:-2]).jev_cadence == "interval"
     workflow = graph()
     integration.patch_workflow(workflow, "jev", "/sdk/python", cadence="interval", interval=2)
     inputs = workflow["aikimi_h3_sparse"]["inputs"]
@@ -717,7 +667,9 @@ def fake_comfy(monkeypatch):
 @pytest.mark.parametrize("mode", ["dense", "fixed5", "fixed10"])
 def test_h3_mock_comfy_four_step_execution(monkeypatch, tmp_path, mode):
     monkeypatch.setenv("AIKIMI_SPARSE_LOG_DIR", str(tmp_path))
-    monkeypatch.setattr(h3_node, "JevClient", lambda *args: pytest.fail("fixed mode constructed cloud client"))
+    monkeypatch.setattr(
+        h3_node, "create_client", lambda *args, **kwargs: pytest.fail("fixed mode constructed cloud client")
+    )
     original = fake_comfy(monkeypatch)
     (patched,) = h3_node.AikimiH3SparseExperiment().patch(original, mode)
     assert not original.patches
@@ -943,7 +895,7 @@ def test_real_gradio_anima_ui_default_off(monkeypatch):
         controls = script.ui(False)
         runtime = gr.Textbox(value="normal/ComfyUI", visible=False, interactive=False, elem_id="h3-runtime-path")
         integration.after_component(runtime)
-    assert len(controls) == 7
+    assert len(controls) == 10
     assert controls[0].value == "off"
     assert runtime.get_config()["visible"] is True
     assert runtime.get_config()["interactive"] is True

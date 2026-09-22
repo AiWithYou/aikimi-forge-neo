@@ -32,6 +32,7 @@ RESOLUTIONS = [
     ("1696 × 2528 · 2:3 · 2K", "1696x2528"),
     ("2752 × 1536 · 16:9 · 2K", "2752x1536"),
     ("1536 × 2752 · 9:16 · 2K", "1536x2752"),
+    ("編集元と同じサイズ", "reference"),
 ]
 
 
@@ -130,8 +131,17 @@ def refresh_references(gallery, annotation_target):
     return reference_controls_visibility(paths), *close_annotation()
 
 
-def continue_edit(identifier, request: gr.Request):
-    path = str(STUDIO.artifact(identifier, owner(request)))
+def result_path(identifier, request: gr.Request, variant="preferred"):
+    # Preserve the original two-argument callback contract for ordinary jobs.
+    return (
+        STUDIO.artifact(identifier, owner(request))
+        if variant == "preferred"
+        else STUDIO.artifact(identifier, owner(request), variant)
+    )
+
+
+def continue_edit(identifier, request: gr.Request, variant="preferred"):
+    path = str(result_path(identifier, request, variant))
     target, editor, panel = open_annotation([path], 0)
     return (
         update_reference_gallery([path]),
@@ -162,13 +172,33 @@ def start(
     sparse_keep_percent=75,
     sparse_jev_cadence="legacy",
     sparse_jev_interval=2,
+    rewrite_edit_prompt=False,
+    preserve_unmasked=False,
+    edit_mask_reference=-1,
+    edit_mask_path="",
+    mask_feather=0,
+    sparse_jev_max_calls=0,
+    sparse_jev_max_wait_seconds=0,
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
             raise QwenImage21Error("出力サイズを選択してください。")
-        width, height = (int(value) for value in resolution.split("x"))
         paths = reference_paths(gallery)
         annotation_reference, annotation_layers = resolve_annotation(paths, annotation_target, annotation_editor)
+        if resolution == "reference":
+            if not paths:
+                raise QwenImage21Error("同じサイズにする編集元の参照画像を指定してください。")
+            index = (
+                edit_mask_reference
+                if preserve_unmasked
+                else (reference_index(paths, annotation_target) if annotation_target else 0)
+            )
+            if not isinstance(index, int) or not 0 <= index < len(paths):
+                raise QwenImage21Error("編集元の参照画像を選択してください。")
+            with annotation_preview(paths[index]) as image:
+                width, height = image.size
+        else:
+            width, height = (int(value) for value in resolution.split("x"))
         generation = Request(
             prompt=prompt,
             input_images=tuple(paths),
@@ -186,6 +216,13 @@ def start(
             sparse_keep_percent=sparse_keep_percent,
             sparse_jev_cadence=sparse_jev_cadence,
             sparse_jev_interval=sparse_jev_interval,
+            rewrite_edit_prompt=rewrite_edit_prompt,
+            preserve_unmasked=preserve_unmasked,
+            edit_mask_reference=edit_mask_reference,
+            edit_mask_path=edit_mask_path,
+            mask_feather=mask_feather,
+            sparse_jev_max_calls=sparse_jev_max_calls,
+            sparse_jev_max_wait_seconds=sparse_jev_max_wait_seconds,
         )
         identifier = STUDIO.start(generation, owner(request))
         return (
@@ -204,7 +241,7 @@ def start(
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
 
 
-def poll(identifier, request: gr.Request):
+def poll(identifier, request: gr.Request, variant="preferred"):
     if not identifier:
         return [gr.update()] * 10
     done = False
@@ -214,9 +251,23 @@ def poll(identifier, request: gr.Request):
         text = f"{state['message']}  ·  経過 {state['elapsed']:.0f} 秒"
         output, files, usable = gr.update(), gr.update(), False
         if done and state["state"] == "complete":
-            path = STUDIO.artifact(identifier, owner(request))
-            output, usable = gr.update(value=str(path), label="生成結果"), True
-            files = gr.update(value=[str(path), str(path.with_name("result.json"))], visible=True)
+            path = result_path(identifier, request, variant)
+            output, usable = (
+                gr.update(
+                    value=str(path),
+                    label=("生成そのまま" if variant == "original" else "範囲外固定")
+                    if state.get("preserved_output_path")
+                    else "生成結果",
+                ),
+                True,
+            )
+            paths = [str(path)]
+            if state.get("preserved_output_path"):
+                if variant == "original":
+                    paths.insert(0, str(STUDIO.artifact(identifier, owner(request))))
+                else:
+                    paths.append(str(STUDIO.artifact(identifier, owner(request), "original")))
+            files = gr.update(value=[*paths, str(path.with_name("result.json"))], visible=True)
         elif done:
             output = gr.update(label="生成結果")
         return (
@@ -267,11 +318,11 @@ def cancel(identifier, request: gr.Request):
     return "この画面で停止できる実行中ジョブはありません。", gr.update(interactive=False)
 
 
-def use_result(identifier, gallery, request: gr.Request):
+def use_result(identifier, gallery, request: gr.Request, variant="preferred"):
     paths = reference_paths(gallery)
     if len(paths) >= MAX_REFERENCE_IMAGES:
         raise gr.Error("参照画像は10枚までです。追加する前に1枚削除してください。")
-    paths.append(str(STUDIO.artifact(identifier, owner(request))))
+    paths.append(str(result_path(identifier, request, variant)))
     return (
         update_reference_gallery(paths),
         len(paths) - 1,
@@ -282,7 +333,7 @@ def use_result(identifier, gallery, request: gr.Request):
 def check_runtime():
     from modules_forge.qwen_image21.prompt_rewriter import rewriter_status
 
-    return runtime_status(RUNTIME) + "\n" + rewriter_status(RUNTIME)
+    return runtime_status(RUNTIME) + "\n" + rewriter_status(RUNTIME) + "\n" + rewriter_status(RUNTIME, editing=True)
 
 
 def _canvas_updates(editor):
@@ -310,8 +361,8 @@ def close_canvas():
     return target, None, None, panel, ""
 
 
-def continue_canvas(identifier, request: gr.Request):
-    gallery, selected, controls, target, editor, panel, view = continue_edit(identifier, request)
+def continue_canvas(identifier, request: gr.Request, variant="preferred"):
+    gallery, selected, controls, target, editor, panel, view = continue_edit(identifier, request, variant)
     background, foreground, title = _canvas_updates(editor)
     return gallery, selected, controls, target, background, foreground, panel, title, view
 
@@ -335,19 +386,58 @@ def start_canvas(
     sparse_keep_percent=75,
     sparse_jev_cadence="legacy",
     sparse_jev_interval=2,
+    rewrite_edit_prompt=False,
+    preserve_unmasked=False,
+    mask_target="",
+    mask_background=None,
+    mask_foreground=None,
+    mask_upload=None,
+    mask_source="paint",
+    mask_feather=0,
+    sparse_jev_max_calls=0,
+    sparse_jev_max_wait_seconds=0,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
     try:
         with TemporaryDirectory(prefix="qwen-canvas-") as temporary:
+            directory = Path(temporary)
             editor = None
             if annotation_target and foreground is not None and foreground.getchannel("A").getbbox() is not None:
                 if background is None:
                     raise QwenImage21Error("編集元を読み込み直してください。")
-                directory = Path(temporary)
                 background.save(directory / "background.png", format="PNG")
                 foreground.save(directory / "marks.png", format="PNG")
                 editor = {"background": str(directory / "background.png"), "layers": [str(directory / "marks.png")]}
+            mask_reference, mask_path = -1, ""
+            if preserve_unmasked:
+                paths = reference_paths(gallery)
+                if not mask_target:
+                    raise QwenImage21Error("範囲外を固定する編集元を開いてください。")
+                mask_reference = reference_index(paths, mask_target)
+                if mask_source == "upload":
+                    if not isinstance(mask_upload, (str, Path)) or not mask_upload:
+                        raise QwenImage21Error("編集範囲のマスク画像をアップロードしてください。")
+                    mask_path = str(mask_upload)
+                elif mask_source == "paint":
+                    if mask_background is None or mask_foreground is None:
+                        raise QwenImage21Error("範囲外を固定するには変更する範囲を塗ってください。")
+                    mask_background.save(directory / "mask-background.png", format="PNG")
+                    mask_foreground.save(directory / "mask-paint.png", format="PNG")
+                    painted_reference, _ = resolve_annotation(
+                        paths,
+                        mask_target,
+                        {
+                            "background": str(directory / "mask-background.png"),
+                            "layers": [str(directory / "mask-paint.png")],
+                        },
+                    )
+                    if painted_reference != mask_reference:
+                        raise QwenImage21Error("編集マスクが空です。変更する範囲を塗ってください。")
+                    mask_path = str(directory / "mask.png")
+                    mask_foreground.getchannel("A").save(mask_path, format="PNG")
+                else:
+                    raise QwenImage21Error("マスクの指定方法が不正です。")
             return start(
                 prompt,
                 gallery,
@@ -366,6 +456,13 @@ def start_canvas(
                 sparse_keep_percent,
                 sparse_jev_cadence,
                 sparse_jev_interval,
+                rewrite_edit_prompt,
+                preserve_unmasked,
+                mask_reference,
+                mask_path,
+                mask_feather,
+                sparse_jev_max_calls,
+                sparse_jev_max_wait_seconds,
             )
     except Exception as exc:
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
@@ -376,6 +473,48 @@ def switch_workspace(view):
         gr.update(visible=True if view == "edit" else "hidden"),
         gr.update(visible=True if view == "result" else "hidden"),
     )
+
+
+def refresh_mask(gallery, annotation_target, current_target, enabled=True):
+    paths = reference_paths(gallery)
+    if not enabled or not annotation_target:
+        return "", None, None, None
+    try:
+        index = reference_index(paths, annotation_target)
+        if current_target and reference_index(paths, current_target) == index:
+            return paths[index], gr.update(), gr.update(), gr.update()
+    except QwenImage21Error:
+        if not paths or annotation_target not in paths:
+            return "", None, None, None
+        index = paths.index(annotation_target)
+    return paths[index], annotation_preview(paths[index]), None, None
+
+
+def result_variants(identifier, request: gr.Request, current_identifier=""):
+    try:
+        state = STUDIO.status(identifier, owner(request)) if identifier else {}
+    except JobNotFound:
+        state = {}
+    if identifier == current_identifier and state.get("done"):
+        return gr.update(), gr.update()
+    complete = state.get("done") and state.get("state") == "complete"
+    return (
+        gr.update(value="preferred", visible=True if complete and state.get("preserved_output_path") else "hidden"),
+        identifier if complete else "",
+    )
+
+
+def select_result_variant(identifier, variant, request: gr.Request):
+    state = STUDIO.status(identifier, owner(request))
+    if not state.get("done") or state.get("state") != "complete":
+        return gr.update()
+    path = result_path(identifier, request, variant)
+    label = (
+        ("生成そのまま" if variant == "original" else "範囲外固定")
+        if state.get("preserved_output_path")
+        else "生成結果"
+    )
+    return gr.update(value=str(path), label=label)
 
 
 def on_ui_tabs():
@@ -432,7 +571,64 @@ def on_ui_tabs():
                         )
                         close_editor = gr.Button("囲みを使わず閉じる", size="sm")
                         gr.Markdown("元画像は保持します。囲みは目印のため、範囲外も変わる場合があります。")
+                        preserve_unmasked = gr.Checkbox(
+                            value=False,
+                            label="マスク範囲外を元画像に固定",
+                            info="塗った部分だけ生成結果を反映します。編集元と同じ出力サイズが必要です。",
+                            elem_id="qwen21-preserve-unmasked",
+                        )
+                        # Keep the Canvas HTML lifecycle mounted. CSS follows
+                        # the checkbox/source radio without remounting its JS.
+                        with gr.Group(elem_id="qwen21-mask-panel"):
+                            mask_source = gr.Radio(
+                                [("塗って指定", "paint"), ("マスク画像", "upload")],
+                                value="paint",
+                                label="編集範囲",
+                                elem_id="qwen21-mask-source",
+                            )
+                            with gr.Group(elem_id="qwen21-mask-paint"):
+                                gr.Markdown("**変更する部分を塗る / Shiftで消す / Ctrl+Zで取り消し**")
+                                mask_canvas = ForgeCanvas(
+                                    no_upload=True,
+                                    height=460,
+                                    scribble_color="#38bdf8",
+                                    scribble_color_fixed=True,
+                                    scribble_width=36,
+                                    scribble_alpha=100,
+                                    scribble_alpha_fixed=True,
+                                    scribble_softness_fixed=True,
+                                    numpy=False,
+                                    elem_id="qwen21-mask-editor",
+                                    file_background=True,
+                                )
+                                # Gradio deduplicates head scripts by URL. A
+                                # second HTML component can run before the
+                                # first component's shared script has loaded.
+                                mask_canvas.block.js_on_load = (
+                                    "const initializeMask = () => {"
+                                    "if (!element.isConnected) return;"
+                                    "if (typeof ForgeCanvas !== 'function') { setTimeout(initializeMask, 50); return; }"
+                                    + mask_canvas.block.js_on_load
+                                    + "}; initializeMask();"
+                                )
+                            mask_upload = gr.Image(
+                                label="白＝編集・黒＝保持（編集元と同じサイズ）",
+                                type="filepath",
+                                image_mode=None,
+                                format="png",
+                                sources=["upload", "clipboard"],
+                                interactive=True,
+                                elem_id="qwen21-mask-upload",
+                            )
+                            mask_feather = gr.Slider(0, 64, value=0, step=1, label="境界を内側へぼかす px")
                 with gr.Group(visible="hidden", elem_id="qwen21-result-tab") as result_view:
+                    result_variant = gr.Radio(
+                        [("範囲外固定", "preferred"), ("生成そのまま", "original")],
+                        value="preferred",
+                        label="表示・次の編集に使う画像",
+                        visible="hidden",
+                        elem_id="qwen21-result-variant",
+                    )
                     output = gr.Image(
                         label="生成結果",
                         type="filepath",
@@ -481,6 +677,12 @@ def on_ui_tabs():
                     info="新規生成用。参照画像がある編集では自動で省略します。",
                     elem_id="qwen21-rewrite-prompt",
                 )
+                rewrite_edit_prompt = gr.Checkbox(
+                    value=False,
+                    label="編集指示を書き換える（4bit）",
+                    info="参照画像を使う編集用。画像と編集指示から使用するプロンプトを整えます。",
+                    elem_id="qwen21-rewrite-edit-prompt",
+                )
                 with gr.Row():
                     generate = gr.Button("生成・編集", variant="primary", elem_id="qwen21-generate")
                     stop = gr.Button("停止", interactive=False, elem_id="qwen21-stop")
@@ -493,7 +695,9 @@ def on_ui_tabs():
                     label="精度",
                     info="W4A8は初回読み込み時に変換します。画質差を確認して使ってください。",
                 )
-                resolution = gr.Dropdown(RESOLUTIONS, value="1024x1024", label="出力サイズ")
+                resolution = gr.Dropdown(
+                    RESOLUTIONS, value="1024x1024", label="出力サイズ", elem_id="qwen21-resolution"
+                )
                 transparent = gr.Checkbox(value=False, label="透過背景を指示（RGBA PNG）")
                 with gr.Accordion("生成設定", open=False):
                     memory_mode = gr.Radio(
@@ -533,9 +737,12 @@ def on_ui_tabs():
                         outputs=sparse_keep,
                         **PRIVATE,
                     )
-                    from modules_forge.jev_sparse.ui import decision_controls
+                    from modules_forge.jev_sparse.ui import budget_controls, decision_controls
 
                     sparse_cadence, sparse_interval = decision_controls("qwen21", sparse_mode)
+                    sparse_max_calls, sparse_max_wait = budget_controls(
+                        "qwen21", sparse_mode, steps=steps, cadence=sparse_cadence, interval=sparse_interval
+                    )
                     gr.Markdown(
                         "Jevのstepはモデル評価単位です。最初の判定に必要な統計を集めた後、指定した頻度で更新します。"
                     )
@@ -546,9 +753,11 @@ def on_ui_tabs():
                     credential_controls("qwen21")
                     gr.Markdown("初回は `aikimi-qwen-image21-setup.bat` で専用環境とモデルを準備します。")
                     gr.Markdown("書き換えを追加: `aikimi-qwen-image21-setup.bat --prompt-rewriter-only`")
+                    gr.Markdown("編集用の書き換えを追加: `aikimi-qwen-image21-setup.bat --edit-prompt-rewriter-only`")
                     check = gr.Button("導入状態を確認", size="sm")
                     environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=2)
         job, selected, annotation_target = gr.State(""), gr.State(-1), gr.State("")
+        mask_target, variant_job = gr.State(""), gr.State("")
         back, forward = gr.State(-1), gr.State(1)
         timer = gr.Timer(1, active=False)
         workspace_view.change(switch_workspace, inputs=workspace_view, outputs=[edit_view, result_view], **PRIVATE)
@@ -572,6 +781,16 @@ def on_ui_tabs():
                 sparse_keep,
                 sparse_cadence,
                 sparse_interval,
+                rewrite_edit_prompt,
+                preserve_unmasked,
+                mask_target,
+                mask_canvas.background,
+                mask_canvas.foreground,
+                mask_upload,
+                mask_source,
+                mask_feather,
+                sparse_max_calls,
+                sparse_max_wait,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,
@@ -581,11 +800,32 @@ def on_ui_tabs():
         )
         timer.tick(
             poll,
-            inputs=job,
+            inputs=[job, result_variant],
             outputs=[status, generate, stop, timer, output, files, use, edit_result, workspace_view, effective_prompt],
             **PRIVATE,
         )
         stop.click(cancel, inputs=job, outputs=[status, stop], queue=False, **PRIVATE)
+        preserve_unmasked.change(
+            lambda enabled: gr.update(value="reference") if enabled else gr.update(),
+            inputs=preserve_unmasked,
+            outputs=resolution,
+            **PRIVATE,
+        )
+        for component in (annotation_target, preserve_unmasked):
+            component.change(
+                refresh_mask,
+                inputs=[gallery, annotation_target, mask_target, preserve_unmasked],
+                outputs=[mask_target, mask_canvas.background, mask_canvas.foreground, mask_upload],
+                **PRIVATE,
+            )
+        for component in (job, output):
+            component.change(
+                result_variants,
+                inputs=[job, variant_job],
+                outputs=[result_variant, variant_job],
+                **PRIVATE,
+            )
+        result_variant.input(select_result_variant, inputs=[job, result_variant], outputs=output, **PRIVATE)
         gallery.select(select_reference, outputs=[selected, gallery], **PRIVATE)
         gallery.change(
             refresh_canvas,
@@ -642,10 +882,15 @@ def on_ui_tabs():
             ],
             **PRIVATE,
         )
-        use.click(use_result, inputs=[job, gallery], outputs=[gallery, selected, reference_controls], **PRIVATE)
+        use.click(
+            use_result,
+            inputs=[job, gallery, result_variant],
+            outputs=[gallery, selected, reference_controls],
+            **PRIVATE,
+        )
         edit_result.click(
             continue_canvas,
-            inputs=job,
+            inputs=[job, result_variant],
             outputs=[
                 gallery,
                 selected,

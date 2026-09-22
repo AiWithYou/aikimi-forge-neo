@@ -21,8 +21,15 @@ body:has(#aikimi-feature-nav[data-active-feature="qwen_image21"]) #quicksettings
     aspect-ratio: auto;
 }
 
-#qwen21-annotation-panel {
+#qwen21-annotation-panel,
+#qwen21-mask-panel {
     min-width: 0;
+}
+
+#qwen21-annotation-panel:not(:has(#qwen21-preserve-unmasked input:checked)) #qwen21-mask-panel,
+#qwen21-mask-panel:has(#qwen21-mask-source input[value="paint"]:checked) #qwen21-mask-upload,
+#qwen21-mask-panel:has(#qwen21-mask-source input[value="upload"]:checked) #qwen21-mask-paint {
+    display: none !important;
 }
 
 #qwen21-reference-controls button {
@@ -35,11 +42,13 @@ body:has(#aikimi-feature-nav[data-active-feature="qwen_image21"]) #quicksettings
     align-self: flex-start;
 }
 
-#qwen21-annotation-editor .forge-toolbar {
+#qwen21-annotation-editor .forge-toolbar,
+#qwen21-mask-editor .forge-toolbar {
     opacity: 1 !important;
 }
 
-#qwen21-annotation-editor [id^="removeButton_"] {
+#qwen21-annotation-editor [id^="removeButton_"],
+#qwen21-mask-editor [id^="removeButton_"] {
     display: none;
 }
 
@@ -48,7 +57,8 @@ body:has(#aikimi-feature-nav[data-active-feature="qwen_image21"]) #quicksettings
         position: static;
     }
 
-    #qwen21-annotation-editor .forge-container:not(.forge-maximized) {
+    #qwen21-annotation-editor .forge-container:not(.forge-maximized),
+    #qwen21-mask-editor .forge-container:not(.forge-maximized) {
         height: 62vh !important;
         min-height: 360px;
     }

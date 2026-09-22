@@ -1,6 +1,6 @@
 # Aikimi Studio Neo
 
-**v1.3.0** · [変更履歴](CHANGELOG.md)
+**v1.4.0** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -23,7 +23,7 @@
 
 Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み、画像編集・動画生成があります。下の一覧では、**継承**はForgeから引き継いだ機能、**追加**は本ブランチの追加処理、**統合**は外部モデルや実行環境を使うための専用UI・連携を指します。
 
-比較の基準は[Forge Neoの同期元](https://github.com/Haoming02/sd-webui-forge-classic/tree/0d0cb72951b059c8ea17861ba86db8d0f6098c28)です。その後の更新は選んで取り込んでいます。[2026年9月21日までの更新確認](docs/upstream-sync.md)に採用・見送りの内容を記載しています。
+比較の基準は[Forge Neoの同期元](https://github.com/Haoming02/sd-webui-forge-classic/tree/0d0cb72951b059c8ea17861ba86db8d0f6098c28)です。その後の更新は選んで取り込んでいます。[2026年9月22日までの更新確認](docs/upstream-sync.md)に採用・見送りの内容を記載しています。
 
 モデルやComfyUIそのものは各開発元の成果です。出典と利用条件は機能別ガイドと[Third-party notices](THIRD_PARTY_NOTICES.md)を参照してください。
 
@@ -34,7 +34,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
-| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。i2iと共通の描画ツールで対象を囲み、生成結果から続けて編集できます。編集元と結果の切り替え、拡大、ペン・消しゴム・Undo/Redoに対応。INT8、W4A8（試験対応）、BF16、CPU退避を選べます。任意の4bitプロンプト書き換えはON/OFFと使用文の確認に対応。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
+| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・CPU退避も選べます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
@@ -43,6 +43,10 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **MiniMax H3 Image**（統合・実験） | `H3 Image`タブで静止画生成と参照画像による編集。PNGと生成条件を保存します。実モデルでのGPU画像生成・画質・速度は未検証です。 |
 
 モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
+
+**v1.4.0では、変換したモデルを次回も使い、編集対象外をそのまま残せます。** QwenのINT8・W4A8は初回変換後にディスクへ保存。PE-I2Iの編集用プロンプト補助と、マスク外のRGBAを固定する編集を追加しました。[カップの色変更・元画像との比較](docs/assets/qwen-image21-v1.4.0/README.md)で実際の結果を確認できます。
+
+Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLiteとタイル生成の連携は [v1.4.0の検証記録](docs/optimization-persistence-2026-09-22.md) にまとめています。複数題材・seed・保持率で比較する場合は [Sparseベンチマーク](docs/sparse-benchmark-suite.md) を参照してください。
 
 ### 画像生成と全体の操作
 
@@ -69,7 +73,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **SenseNovaの参照優先モード**（追加） | 参照キャッシュのCPU退避とAttentionの分割処理でVRAM使用量を削減。最大8枚・各約1MPの参照と約4MP出力に対応し、CPU RAMと転送時間を使用します。 |
 | **H3の長尺生成**（統合＋追加） | 共通プロンプトと区間ごとの指示から、複数区間をつないだ動画を生成。HybridWindowsを利用する方式も選べます。導入条件と併用できる設定は[長尺生成ガイド](extensions-builtin/minimax-h3-studio/README.md#長尺生成)を参照してください。 |
 | **H3の高速化設定**（統合） | Turbo・INT8 VAE・Fast Decode・Sparse Attentionを必要に応じて選択。画質・メモリ・速度とのトレードオフは[高速化ガイド](docs/minimax-h3-acceleration.md)に記載しています。 |
-| **Jev / Sparse Attention**（追加） | Krea2・Anima・Qwen Image 2.1・H3で任意にON/OFF。全4モデルでJevの再判定頻度を初回のみ・指定間隔・毎stepから選択。Krea2・Anima・Qwenは固定保持率スライダーも使えます。[共通設定](docs/jev-sparse.md) |
+| **Jev / Sparse Attention**（追加） | Krea2・Anima・Qwen Image 2.1・H3で任意にON/OFF。再判定頻度と、生成全体のAPI回数・待ち時間上限を設定できます。問い合わせ用プロセスと接続をジョブ中に再利用し、記録済み判定の通信なし再生にも対応。Krea2・Anima・Qwenは固定保持率も選べます。[共通設定](docs/jev-sparse.md) |
 | **H3 NegPiP**（統合） | H3 Studio／H3 Imageでプロンプト内の負の重みを使用。切替後は実行環境の再起動が必要で、Sparse Attentionとは併用できません。 |
 | **H3 CLIP条件キャッシュ**（統合＋追加） | 同じプロンプト・参照素材の条件を再利用し、Qwen3-VLの再ロードと再計算を省略。固定版CLIPCachedの導入が必要です。 |
 | **H3 Fun ControlNet · INT8**（統合） | 元動画のCannyや前処理済みのDepth・Pose動画で、動きと構図を制御。INT8制御モデルと対応ComfyUIが必要です。 |
@@ -107,6 +111,8 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | Qwen Image 2.1 | 生成設定 → Sparse Attention → Jev速度優先 |
 
 **初回のみ／指定間隔／毎step** を選べます。指定間隔のスライダーを **2** にすると2stepごと、**3** にすると3stepごとに再判定します（1〜100）。既定は初回のみです。最初の判定には直前の計算で集めた統計を使います。H3は4step動画のstep単位、画像モデルはモデル評価単位です。[回数・対応範囲・H3ノード更新](docs/jev-sparse.md#再判定頻度)
+
+v1.4.0では、これとは別に **生成全体のAPI回数上限／API待ち時間上限** を指定できます。この2つの設定は0で上限なしです。Krea2では層判定とタイル判定で同じ予算を共有し、タイルごとにはリセットしません。判定の再生はAPIを呼ばず、元の入力・条件・順序が合う記録だけを使います。[上限と判定再生](docs/jev-sparse.md#生成全体の上限と判定再生)
 
 ### Krea2の高速化を使う
 
@@ -293,8 +299,8 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 | 既定ブランチ | `neo` |
 | ベース | `Haoming02/sd-webui-forge-classic`の`neo` |
 | 最終同期基準 | `0d0cb72951b059c8ea17861ba86db8d0f6098c28`（Forge Neo 2.29後の`arch`更新を含む） |
-| 最新の確認先 | `41359cd4`（2026-09-21に確認）。[選択取り込みの記録](docs/upstream-sync.md) |
-| Aikimiの配布バージョン | `1.3.0`。Forgeのバージョンとは別に管理 |
+| 最新の確認先 | `c21fa928`（2026-09-22に確認）。ControlLLLite＋MultiDiffusionの連携を選択して取り込み。[確認記録](docs/upstream-sync.md) |
+| Aikimiの配布バージョン | `1.4.0`。Forgeのバージョンとは別に管理 |
 | 主対象 | Windows 11、Python 3.13、NVIDIA GPU |
 | コードのライセンス | AGPL-3.0。モデルとアセットには別条件が適用される場合があります。 |
 

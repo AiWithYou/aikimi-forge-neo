@@ -236,7 +236,7 @@ def test_stage_cadence_refreshes_tile_choices_and_stops_after_failure(tmp_path):
 
 
 def test_tile_rules_never_construct_sdk(tmp_path, monkeypatch):
-    monkeypatch.setattr(krea2_jobs, "JevClient", lambda *a, **kw: pytest.fail("Unexpected cloud call"))
+    monkeypatch.setattr(krea2_jobs, "create_client", lambda *a, **kw: pytest.fail("Unexpected cloud call"))
     planner = krea2_jobs.TileAllocator("rules", tmp_path, is_cancelled=lambda: False)
     planner.prepare([0, 0.1], 2, 4, 0.035)
     assert planner.steps(0, 2, 4, 0.035) == 0
@@ -251,8 +251,8 @@ def test_nested_job_restores_context_on_exception(tmp_path, monkeypatch):
     captured = []
     original = krea2_jobs.Session
 
-    def new_session(options):
-        session = original(options, tmp_path)
+    def new_session(options, **kwargs):
+        session = original(options, tmp_path, **kwargs)
         captured.append(session)
         return session
 
@@ -288,7 +288,7 @@ def test_log_close_failure_still_clears_job_context(monkeypatch):
     def close(_status):
         raise OSError("log write failed")
 
-    monkeypatch.setattr(krea2_jobs, "Session", lambda *a: SimpleNamespace(close=close))
+    monkeypatch.setattr(krea2_jobs, "Session", lambda *a, **kw: SimpleNamespace(close=close))
     with pytest.raises(OSError):
         with krea2_jobs.generation_scope(SimpleNamespace()):
             assert krea2_jobs.current_session() is not None

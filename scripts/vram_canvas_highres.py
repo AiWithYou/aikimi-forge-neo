@@ -1,6 +1,7 @@
 import json
 import shutil
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
 
 import gradio as gr
@@ -1619,7 +1620,7 @@ class VRAMCanvasHighres(scripts.Script):
                     raise RuntimeError(f"VRAM-Canvas needs about {required_work_bytes / GIB:.2f} GiB of temporary disk space; " f"only {free_disk_bytes / GIB:.2f} GiB is free.")
 
                 completed_tiles = 0
-                for stage_index, ((stage_w, stage_h), plans) in enumerate(zip(stages, stage_plans)):
+                for stage_index, ((stage_w, stage_h), plans) in enumerate(zip(stages, stage_plans, strict=True)):
                     stage_number = stage_index + 1
                     tile_records = []
                     base = current.resize((stage_w, stage_h), Image.Resampling.LANCZOS)
@@ -1632,7 +1633,8 @@ class VRAMCanvasHighres(scripts.Script):
                             for tile in plans
                         ]
                         tile_allocator = prepare_tile_allocation(
-                            p, allocation_scores, int(minimum_steps), int(maximum_steps), float(detail_knee)
+                            p, allocation_scores, int(minimum_steps), int(maximum_steps), float(detail_knee),
+                            layout={"width": stage_w, "height": stage_h, "tiles": [asdict(tile) for tile in plans]},
                         )
                         gui_manifest["krea2_tile_allocation"] = session.options.tile_mode
                         gui_manifest["krea2_tile_allocation_log"] = str(tile_allocator.log.path)

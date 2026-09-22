@@ -11,10 +11,15 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields
 from typing import Any
 
-from modules_forge.minimax_h3_negpip import H3NegPiP, NEGPIP_NODE, NEGPIP_PACK
-from modules_forge.minimax_h3_clipcache import CLIP_CACHE_NODES, CLIP_CACHE_PACK, apply_clipcache, validate_clipcache_nodes
-from modules_forge import minimax_h3_negpip_cache as negpip_cache
 from modules_forge import minimax_h3_hybrid as hybrid
+from modules_forge import minimax_h3_negpip_cache as negpip_cache
+from modules_forge.minimax_h3_clipcache import (
+    CLIP_CACHE_NODES,
+    CLIP_CACHE_PACK,
+    apply_clipcache,
+    validate_clipcache_nodes,
+)
+from modules_forge.minimax_h3_negpip import NEGPIP_NODE, NEGPIP_PACK, H3NegPiP
 
 TURBO_MODEL = "minimax_h3_fused_refdelta_r1024_turbo8_mystic07_int8_convrot.safetensors"
 W4A8_MODELS = {
@@ -44,8 +49,13 @@ class H3Acceleration:
     hybrid: hybrid.H3Hybrid = field(default_factory=hybrid.H3Hybrid)
     jev_cadence: str = "once"
     jev_interval: int = 2
+    jev_max_calls: int = 0
+    jev_max_wait_seconds: float = 0.0
 
     def validate(self) -> None:
+        from modules_forge.jev_sparse.common import JevBudget
+
+        JevBudget(self.jev_max_calls, self.jev_max_wait_seconds)
         if not isinstance(self.jev_cadence, str) or self.jev_cadence not in {"once", "interval", "step"}:
             raise ValueError("Jevの再判定頻度が不正です。")
         interval = self.jev_interval
@@ -101,14 +111,16 @@ class H3Acceleration:
         if not values:
             return cls()
         previous_count = 8 + len(H3NegPiP().values())
-        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6, previous_count + 8):
+        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6, previous_count + 8, previous_count + 10):
             raise ValueError("H3 追加設定の項目数が一致しません。UIを再読み込みしてください。")
         result = cls(
             *values[:8], negpip=H3NegPiP.from_values(values[8:previous_count]),
             clip_cache=values[previous_count] if len(values) > previous_count else "off",
             hybrid=hybrid.H3Hybrid(*values[previous_count + 1:previous_count + 6]) if len(values) >= previous_count + 6 else hybrid.H3Hybrid(),
-            jev_cadence=values[previous_count + 6] if len(values) == previous_count + 8 else "once",
-            jev_interval=values[previous_count + 7] if len(values) == previous_count + 8 else 2,
+            jev_cadence=values[previous_count + 6] if len(values) >= previous_count + 8 else "once",
+            jev_interval=values[previous_count + 7] if len(values) >= previous_count + 8 else 2,
+            jev_max_calls=values[previous_count + 8] if len(values) >= previous_count + 10 else 0,
+            jev_max_wait_seconds=values[previous_count + 9] if len(values) >= previous_count + 10 else 0.0,
         )
         result.validate()
         return result
@@ -117,7 +129,7 @@ class H3Acceleration:
         return asdict(self)
 
     def values(self) -> tuple:
-        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid", "jev_cadence", "jev_interval"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values() + (self.jev_cadence, self.jev_interval)
+        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid", "jev_cadence", "jev_interval", "jev_max_calls", "jev_max_wait_seconds"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values() + (self.jev_cadence, self.jev_interval, self.jev_max_calls, self.jev_max_wait_seconds)
 
 
     def runtime_packs(self) -> tuple[str, ...]:

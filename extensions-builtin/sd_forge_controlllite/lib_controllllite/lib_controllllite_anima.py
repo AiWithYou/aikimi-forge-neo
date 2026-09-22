@@ -2,13 +2,17 @@
 
 import logging
 import math
+from contextlib import ExitStack
 from typing import Final, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from backend.args import dynamic_args
 from backend.state_dict import load_state_dict
+
+from .lib_controllllite import get_tiled_cond_image
 
 logger = logging.getLogger("ControlNet")
 
@@ -266,6 +270,10 @@ class ControlNetLLLiteDiT(nn.Module):
             m.layer_idx = i
             m._depth_embeds_ref = [self.depth_embeds]
 
+        self.register_buffer("_cond_image_original", None, persistent=False)
+        self.register_buffer("_cond_emb_original", None, persistent=False)
+        self._lllite_tiled_cache: dict[tuple, dict[int, torch.Tensor]] = {}
+
         logger.info(f"Loaded Control-LLLite (Anima) ({n} modules)")
 
     @staticmethod
@@ -313,13 +321,40 @@ class ControlNetLLLiteDiT(nn.Module):
 
     def set_cond_image(self, cond_image: Optional[torch.Tensor]):
         """cond_image: (B, 3, H, W) in [-1, 1]. None clears."""
-        if cond_image is None:
-            for m in self.lllite_modules:
-                m.cond_emb = None
+        self.clear_cache()
+        self._cond_image_original = None
+        self._cond_emb_original = None
+        self.restore_original()
+        if cond_image is not None:
+            original = cond_image.detach().clone()
+            cx = self.conditioning1(original)
+            self._cond_image_original = original
+            self._cond_emb_original = cx
+            self.restore_original()
+
+    def prepare_tiled(self, bboxes, opt_f: int, PH: int, PW: int, batch_size: int, batch_id: int, x_dtype: torch.dtype, tuple_key: tuple):
+        if self._cond_image_original is None:
             return
-        cx = self.conditioning1(cond_image)
+        cache = self._lllite_tiled_cache.setdefault(tuple_key, {})
+        if batch_id not in cache:
+            weight = self.conditioning1.conv1.weight
+            tiled = get_tiled_cond_image(self._cond_image_original, bboxes, opt_f, PH, PW, batch_size, x_dtype)
+            cache[batch_id] = self.conditioning1(tiled.to(device=weight.device, dtype=weight.dtype))
         for m in self.lllite_modules:
-            m.cond_emb = cx
+            m.cond_emb = cache[batch_id]
+
+    def restore_original(self):
+        for m in self.lllite_modules:
+            m.cond_emb = self._cond_emb_original
+
+    def clear_cache(self):
+        self._lllite_tiled_cache.clear()
+
+    def _apply(self, fn, recurse=True):
+        result = super()._apply(fn, recurse=recurse)
+        self.clear_cache()
+        self.restore_original()
+        return result
 
     def set_multiplier(self, multiplier: float):
         self.multiplier = multiplier
@@ -338,13 +373,28 @@ class ControlNetLLLiteDiT(nn.Module):
             m.is_first = i == 0
 
     def apply_to(self):
-        for m in self.lllite_modules:
-            m.apply_to()
+        try:
+            for m in self.lllite_modules:
+                m.apply_to()
+        except BaseException:
+            self.restore()
+            raise
+        instances = getattr(dynamic_args, "ACTIVE_LLLITE_DIT", None)
+        if instances is None:
+            instances = set()
+            dynamic_args.ACTIVE_LLLITE_DIT = instances
+        instances.add(self)
 
     def restore(self):
-        for m in self.lllite_modules:
-            m.restore()
-        self.set_cond_image(None)
+        try:
+            with ExitStack() as cleanup:
+                for m in self.lllite_modules:
+                    cleanup.callback(m.restore)
+        finally:
+            instances = getattr(dynamic_args, "ACTIVE_LLLITE_DIT", None)
+            if instances is not None:
+                instances.discard(self)
+            self.set_cond_image(None)
 
 
 # region Weight Loading (v2)

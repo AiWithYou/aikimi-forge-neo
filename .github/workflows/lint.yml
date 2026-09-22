@@ -15,6 +15,12 @@ on:
       - "tests/jev_sparse/**"
       - "tools/*jev_sparse*.py"
       - "tools/benchmark_*sparse.py"
+      - "modules/aikimi_version.py"
+      - "tools/prepare_qwen21_quantized.py"
+      - "tools/benchmark_qwen21_attention.py"
+      - "tools/sparse_benchmark.py"
+      - "tools/tests/test_qwen_quantized_cache.py"
+      - "tools/tests/test_controllllite_tiling.py"
       - "tools/tests/test_h3_ram_profile.py"
       - "modules_forge/forge_canvas/**"
       - "tools/tests/test_forge_canvas_transport.py"
@@ -90,6 +96,12 @@ on:
       - "tests/jev_sparse/**"
       - "tools/*jev_sparse*.py"
       - "tools/benchmark_*sparse.py"
+      - "modules/aikimi_version.py"
+      - "tools/prepare_qwen21_quantized.py"
+      - "tools/benchmark_qwen21_attention.py"
+      - "tools/sparse_benchmark.py"
+      - "tools/tests/test_qwen_quantized_cache.py"
+      - "tools/tests/test_controllllite_tiling.py"
       - "tools/tests/test_h3_ram_profile.py"
       - "modules_forge/forge_canvas/**"
       - "tools/tests/test_forge_canvas_transport.py"
@@ -187,6 +199,12 @@ jobs:
             tools/benchmark_anima_sparse.py
             tools/benchmark_h3_sparse.py
             tools/benchmark_krea2_sparse.py
+            modules/aikimi_version.py
+            tools/prepare_qwen21_quantized.py
+            tools/benchmark_qwen21_attention.py
+            tools/sparse_benchmark.py
+            tools/tests/test_qwen_quantized_cache.py
+            tools/tests/test_controllllite_tiling.py
             tools/tests/test_krea2_sparse_model_hook.py
             tools/tests/test_krea2_tile_allocation_gui.py
             tools/setup_jev_sparse.py

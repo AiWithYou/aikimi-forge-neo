@@ -548,8 +548,9 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
         from modules_forge.minimax_h3_acceleration import H3Acceleration
         control_count = len(H3Acceleration().values())
         self.assertEqual(len(generate["inputs"]), 20 + control_count)
-        self.assertEqual(generate["inputs"][-14], component_ids["h3-negpip-enabled"])
-        self.assertEqual(generate["inputs"][-6], component_ids["h3-clip-cache"])
+        acceleration_inputs = generate["inputs"][-control_count:]
+        self.assertEqual(acceleration_inputs[8], component_ids["h3-negpip-enabled"])
+        self.assertEqual(acceleration_inputs[8 + len(H3Acceleration().negpip.values())], component_ids["h3-clip-cache"])
         self.assertEqual(generate["inputs"][-control_count:-control_count + 8], [component_ids[elem_id] for elem_id in (
             "h3-model-variant", "h3-video-vae", "h3-decode-mode", "h3-tile-batch",
             "h3-attention-mode", "h3-sparse-tau", "h3-sparse-keep", "h3-sparse-start",

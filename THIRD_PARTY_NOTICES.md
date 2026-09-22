@@ -33,6 +33,7 @@
 | SenseNova U1.5 | SenseNova、starsFriday、joyfox | 各固定revisionのmodel cardとruntime LICENSE |
 | MiniMax H3 | MiniMaxAI、ComfyUI | MiniMax H3 Community LicenseとComfyUI側のnotice |
 | Qwen Image 2.1 | Qwen、Hugging Face Diffusers、bitsandbytes | [Qwen Research License](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/b3179ad355be050328e483a9dfdd9e60cd62adfa/LICENSE)（研究・評価目的の非商用利用。商用は別途許諾）、Diffusers Apache-2.0、bitsandbytes MIT |
+| Qwen Image 2.1のプロンプト補助 | Qwen PE-T2I、PE-I2I、Transformers、bitsandbytes | 各固定版のQwen Research License（[PE-T2I](https://huggingface.co/Qwen/Qwen-Image-2.1-PE-T2I/blob/f3ed7985c788ad75b3ab7223e0c4c51e2a43545b/LICENSE)、[PE-I2I](https://huggingface.co/Qwen/Qwen-Image-2.1-PE-I2I/blob/72927bc08afc99b7888ceb7d7d51a12db3700bbd/LICENSE)）。導入先にLICENSEを保持し、量子化済み重みはGitに含めません。 |
 
 Animaの配布repositoryは、upstream AnimaとNVIDIA由来条件の確認を求めています。条件を短く言い換えて断定せず、利用時点の原文を確認してください。Krea2にも独自のcommunity licenseがあります。
 

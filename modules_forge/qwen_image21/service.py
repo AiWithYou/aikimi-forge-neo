@@ -11,7 +11,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from .annotations import snapshot_annotation
+from .annotations import snapshot_annotation, snapshot_edit_mask
 from .core import (
     QwenImage21Error,
     Request,
@@ -95,6 +95,8 @@ class Studio:
         runtime_manifest(self.runtime)
         if request.rewrite_prompt and not request.input_images:
             rewriter_manifest(self.runtime)
+        if request.rewrite_edit_prompt and request.input_images:
+            rewriter_manifest(self.runtime, editing=True)
         self._dependencies()
         with self._guard:
             if self._closed:
@@ -116,6 +118,8 @@ class Studio:
                 entry = runtime_manifest(self.runtime)
                 if request.rewrite_prompt and not request.input_images:
                     rewriter_manifest(self.runtime)
+                if request.rewrite_edit_prompt and request.input_images:
+                    rewriter_manifest(self.runtime, editing=True)
                 directory = self.outputs / uuid.uuid4().hex
                 directory.mkdir(parents=True, exist_ok=False)
                 job = Job(directory.name, owner, directory)
@@ -125,10 +129,23 @@ class Studio:
                     clean_paths, request.annotation_reference, request.annotation_layers, directory
                 )
                 payload["input_images"] = model_paths
+                payload["clean_input_images"] = clean_paths
                 payload["user_prompt"] = request.prompt
                 payload["prompt"] = request.prompt + instruction
                 payload["annotation"] = annotation
                 payload["annotation_layers"] = annotation.get("layer_paths", [])
+                payload["edit_mask"] = (
+                    snapshot_edit_mask(
+                        clean_paths,
+                        request.edit_mask_reference,
+                        request.edit_mask_path,
+                        request.mask_feather,
+                        directory,
+                    )
+                    if request.preserve_unmasked
+                    else {}
+                )
+                payload["edit_mask_path"] = payload["edit_mask"].get("mask_path", "")
                 atomic_json(directory / "request.json", payload)
                 atomic_json(directory / "status.json", {"state": "running", "message": job.message})
                 self._jobs = dict(list(self._jobs.items())[-MAX_FINISHED_JOBS:])
@@ -233,6 +250,15 @@ class Studio:
                 if image.format != "PNG" or image.size != (request.width, request.height):
                     raise QwenImage21Error("生成画像の形式またはサイズが要求と一致しません。")
                 image.verify()
+            preferred = output
+            if request.preserve_unmasked:
+                preferred = inside(job.directory, job.directory / "output-preserved.png")
+                if Path(result.get("preserved_output_path", "")).resolve() != preferred:
+                    raise QwenImage21Error("範囲外を固定した画像の保存先を確認できません。")
+                with Image.open(preferred) as image:
+                    if image.format != "PNG" or image.mode != "RGBA" or image.size != (request.width, request.height):
+                        raise QwenImage21Error("範囲外固定画像の形式またはサイズが一致しません。")
+                    image.verify()
             with self._guard:
                 if job.cancel.is_set():
                     raise InterruptedError("停止しました。")
@@ -240,12 +266,17 @@ class Studio:
                 metadata = result.get("metadata", {})
                 rewrite = metadata.get("prompt_rewrite", {})
                 rewrite_message = " · 書き換え4bit" if rewrite.get("applied") else ""
-                if request.rewrite_prompt and request.input_images:
+                if request.rewrite_prompt and request.input_images and not request.rewrite_edit_prompt:
                     rewrite_message = " · 編集のため書き換え省略"
+                preservation_message = " · 範囲外固定" if request.preserve_unmasked else ""
                 final = {
                     "state": "complete",
-                    "message": f"完了 · Seed {request.seed} · {request.width}×{request.height} · {request.precision.upper()}{rewrite_message}",
-                    "output_path": str(output),
+                    "message": f"完了 · Seed {request.seed} · {request.width}×{request.height} · {request.precision.upper()}{rewrite_message}{preservation_message}",
+                    "output_path": str(preferred),
+                    "original_output_path": str(output),
+                    "preserved_output_path": str(preferred) if request.preserve_unmasked else "",
+                    "output_paths": [str(preferred), str(output)] if request.preserve_unmasked else [str(output)],
+                    "preservation": result.get("preservation", {}),
                     "seed": request.seed,
                     "progress": 1.0,
                     "effective_prompt": metadata.get("effective_prompt", request.prompt),
@@ -309,14 +340,25 @@ class Studio:
             job.cancel.set()
             return True
 
-    def artifact(self, identifier: str, owner: str) -> Path:
+    def artifact(self, identifier: str, owner: str, variant: str = "preferred") -> Path:
         job = self._job(identifier, owner)
         if not job.done.is_set() or job.final.get("state") != "complete":
             raise QwenImage21Error("このジョブの完成画像はまだありません。")
-        output = inside(self.outputs, job.directory / "output.png")
+        if variant not in {"preferred", "original", "preserved"}:
+            raise QwenImage21Error("生成結果の種類が不正です。")
+        has_preserved = bool(job.final.get("preserved_output_path"))
+        if variant == "preserved" and not has_preserved:
+            raise QwenImage21Error("このジョブには範囲外固定画像がありません。")
+        filename = "output-preserved.png" if has_preserved and variant != "original" else "output.png"
+        output = inside(job.directory, job.directory / filename)
         if not output.is_file():
             raise QwenImage21Error("保存画像が見つかりません。")
         return output
+
+    def artifacts(self, identifier: str, owner: str) -> list[Path]:
+        preferred = self.artifact(identifier, owner)
+        original = self.artifact(identifier, owner, "original")
+        return [preferred] if preferred == original else [preferred, original]
 
     def shutdown(self):
         with self._guard:

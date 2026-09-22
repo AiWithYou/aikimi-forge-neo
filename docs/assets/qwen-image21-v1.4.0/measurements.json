@@ -1,0 +1,117 @@
+{
+  "date": "2026-09-22",
+  "scope": "one real image edit; not a full quality or end-to-end speed comparison",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "vram_gib": 24,
+    "os": "Windows 11"
+  },
+  "model": "Qwen/Qwen-Image-2.1",
+  "model_revision": "b3179ad355be050328e483a9dfdd9e60cd62adfa",
+  "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+  "versions": {
+    "torch": "2.11.0+cu130",
+    "diffusers": "0.41.0.dev0",
+    "transformers": "5.17.0",
+    "accelerate": "1.15.0",
+    "bitsandbytes": "0.50.2",
+    "comfy-kitchen": "0.2.31"
+  },
+  "precision": "w4a8",
+  "memory_mode": "offload",
+  "width": 1024,
+  "height": 1024,
+  "steps": 40,
+  "seed": 9212027,
+  "effective_prompt": "Change the red ceramic mug on the right side of the wooden table to a blue ceramic mug, recoloring its glossy exterior to a saturated blue while retaining the same shape, size, handle position, glossy ceramic surface finish, and the white interior rim and inner wall exactly as they are. Keep the white robot figure on the left, including its glossy white head, black eyes, black joint connectors, and black-tipped hands, completely unchanged, and keep the wooden table surface, the plain light-gray background wall, the blurred wooden shelf at the right edge, the overall lighting, shadows, and framing completely unchanged.\n\nOriginal editing instruction and preservation constraints (authoritative):\nChange only the red ceramic mug to blue. Keep the white robot, table, lighting, framing and background unchanged.",
+  "original_prompt": "Change only the red ceramic mug to blue. Keep the white robot, table, lighting, framing and background unchanged.",
+  "prompt_rewrite": {
+    "rewritten_prompt": "Change the red ceramic mug on the right side of the wooden table to a blue ceramic mug, recoloring its glossy exterior to a saturated blue while retaining the same shape, size, handle position, glossy ceramic surface finish, and the white interior rim and inner wall exactly as they are. Keep the white robot figure on the left, including its glossy white head, black eyes, black joint connectors, and black-tipped hands, completely unchanged, and keep the wooden table surface, the plain light-gray background wall, the blurred wooden shelf at the right edge, the overall lighting, shadows, and framing completely unchanged.\n\nOriginal editing instruction and preservation constraints (authoritative):\nChange only the red ceramic mug to blue. Keep the white robot, table, lighting, framing and background unchanged.",
+    "wh_ratio": "",
+    "ratio_follow": "<image1>",
+    "enabled": true,
+    "applied": true,
+    "model": "Qwen/Qwen-Image-2.1-PE-I2I",
+    "revision": "72927bc08afc99b7888ceb7d7d51a12db3700bbd",
+    "quantization": "nf4-double",
+    "linear4bit_layers": 249,
+    "thinking": false,
+    "requested_ratio": "1:1",
+    "size_changed": false,
+    "generated_tokens": 144,
+    "stop_token_id": 248046,
+    "eos_token_ids": [
+      248046,
+      248044
+    ],
+    "load_seconds": 9.734,
+    "generation_seconds": 21.28,
+    "elapsed_seconds": 31.014
+  },
+  "timings": {
+    "load_seconds": 307.153,
+    "sampling_seconds": 75.485
+  },
+  "quantized_cache": {
+    "transformer": "hit",
+    "text_encoder": "hit"
+  },
+  "sparse": {
+    "status": "completed",
+    "backend": "pytorch-block-gather-sdpa",
+    "settings": {
+      "mode": "fixed",
+      "keep_percent": 75,
+      "min_tokens": 1024,
+      "warmup_evaluations": 1,
+      "update_interval": 4,
+      "max_calls": 1,
+      "timeout": 10,
+      "block_size": 256,
+      "decision_cadence": "legacy",
+      "query_batch_blocks": 4,
+      "max_batch_workspace_mb": 256,
+      "job_max_calls": 0,
+      "job_max_wait_seconds": 0.0
+    },
+    "timing_scope": "experiment_context_wall_and_separate_transformer_intervals",
+    "total_wall_seconds": 75.48050820000935,
+    "evaluation_cpu_wall_seconds": 68.6635174996918,
+    "transformer_cpu_wall_seconds": 68.64086689974647,
+    "controller_wall_seconds": 9.839970152825117e-05,
+    "cuda_event_seconds": 69.27396716308593,
+    "cuda_event_evaluations": 40,
+    "cuda_event_scope": "transformer_stream_intervals_include_host_launch_gaps_and_device_copies",
+    "model_seconds": 68.6635174996918,
+    "model_seconds_kind": "legacy_alias_evaluation_cpu_wall_including_controller_not_gpu_time",
+    "model_evaluations": 40,
+    "attention_calls": {
+      "dense": 32,
+      "sparse_target": 1248
+    },
+    "api_calls": 0,
+    "api_wait_seconds": 0.0,
+    "replay_calls": 0
+  },
+  "preservation": {
+    "outside_pixels_exact": 937341,
+    "feather_pixels": 4,
+    "feather_direction": "inside",
+    "mask_bounds": [
+      659,
+      553,
+      998,
+      882
+    ]
+  },
+  "files": {
+    "model-generated.png": {
+      "bytes": 1286792,
+      "sha256": "60687a8c4c96396bdcdaa516a130fac4bc6f9524a475aa52cd1785b021d780f8"
+    },
+    "mask-preserved.png": {
+      "bytes": 1203362,
+      "sha256": "6ac3d70235d979d3cfbb46f2fe8e23f7b6d76eae1ae929edecd8867807b62d59"
+    }
+  }
+}

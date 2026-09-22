@@ -13,8 +13,8 @@ import inspect
 from dataclasses import replace
 from pathlib import Path
 
+from .common import JevBudget, dumps, replay_paths_from_environment, replay_requested, sdk_python
 from .common import cloud_environment as _cloud_environment
-from .common import sdk_python
 from .credentials import cloud_source
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -69,7 +69,9 @@ def verify_runtime(root: Path):
             )
 
 
-def patch_workflow(graph, mode, python="", *, cadence="once", interval=2):
+def patch_workflow(
+    graph, mode, python="", *, cadence="once", interval=2, job_max_calls=0, job_max_wait_seconds=0, replay_logs=""
+):
     def unique(kind):
         hits = [key for key, node in graph.items() if node.get("class_type") == kind]
         if len(hits) != 1:
@@ -78,6 +80,7 @@ def patch_workflow(graph, mode, python="", *, cadence="once", interval=2):
 
     if mode not in MODES.values():
         raise ValueError("Unknown experiment mode")
+    JevBudget(job_max_calls, job_max_wait_seconds)
     if (
         cadence not in {"once", "interval", "step"}
         or isinstance(interval, bool)
@@ -124,6 +127,9 @@ def patch_workflow(graph, mode, python="", *, cadence="once", interval=2):
             "prompt_context": prompt if isinstance(prompt, str) else "",
             "decision_cadence": cadence,
             "decision_interval": int(interval),
+            "job_max_calls": job_max_calls,
+            "job_max_wait_seconds": job_max_wait_seconds,
+            "replay_logs": replay_logs,
         },
     }
     graph[guider]["inputs"]["model"] = [ident, 0]
@@ -165,7 +171,7 @@ class _SubprocessProxy:
             env = dict(kwargs.get("env") or {})
             env["PYTHONUNBUFFERED"] = "1"
             env["AIKIMI_SPARSE_LOG_DIR"] = str(ROOT / "outputs" / "jev-sparse")
-            if MODES[mode] == "jev":
+            if MODES[mode] == "jev" and not replay_requested():
                 # Only the explicitly selected ComfyUI child receives this key.
                 # git and pip still call the original subprocess.run, not this proxy.
                 cloud = cloud_environment()
@@ -216,7 +222,7 @@ def install():
         if self.attention not in MODES:
             return apply(self, workflow, base_files, mode)
         validate_experiment(self)
-        if self.attention == "h3_jev":
+        if self.attention == "h3_jev" and not replay_requested():
             cloud_environment()
             python = str(sdk_python(ROOT))
         else:
@@ -232,6 +238,9 @@ def install():
             python,
             cadence=getattr(self, "jev_cadence", "once"),
             interval=getattr(self, "jev_interval", 2),
+            job_max_calls=getattr(self, "jev_max_calls", 0),
+            job_max_wait_seconds=getattr(self, "jev_max_wait_seconds", 0),
+            replay_logs=dumps(replay_paths_from_environment()) if replay_requested() else "",
         )
         workflow.clear()
         workflow.update(copy_graph)
@@ -248,6 +257,8 @@ def install():
             ("sdk_python", "STRING"),
             ("prompt_context", "STRING"),
             ("decision_interval", "INT"),
+            ("job_max_calls", "INT"),
+            ("job_max_wait_seconds", "FLOAT"),
         ):
             if not inputs.get(name) or inputs[name][0] != kind:
                 raise ValueError("H3実験ノードの入力仕様が一致しません。専用ノードを再導入してください。")
@@ -295,7 +306,7 @@ def install():
         if mode not in MODES:
             return old_start(*args, **kwargs)
         verify_runtime(bound.arguments["runtime_root"])
-        if mode == "h3_jev":
+        if mode == "h3_jev" and not replay_requested():
             cloud_environment()
         token = _START_MODE.set(mode)
         try:
