@@ -3,8 +3,8 @@ import os
 import cv2
 import numpy as np
 import requests
+from packaging.version import Version as parse_version
 from PIL import ImageDraw
-from pkg_resources import parse_version
 
 from modules import paths_internal
 
