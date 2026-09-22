@@ -69,6 +69,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **SenseNovaの参照優先モード**（追加） | 参照キャッシュのCPU退避とAttentionの分割処理でVRAM使用量を削減。最大8枚・各約1MPの参照と約4MP出力に対応し、CPU RAMと転送時間を使用します。 |
 | **H3の長尺生成**（統合＋追加） | 共通プロンプトと区間ごとの指示から、複数区間をつないだ動画を生成。HybridWindowsを利用する方式も選べます。導入条件と併用できる設定は[長尺生成ガイド](extensions-builtin/minimax-h3-studio/README.md#長尺生成)を参照してください。 |
 | **H3の高速化設定**（統合） | Turbo・INT8 VAE・Fast Decode・Sparse Attentionを必要に応じて選択。画質・メモリ・速度とのトレードオフは[高速化ガイド](docs/minimax-h3-acceleration.md)に記載しています。 |
+| **Jev / Sparse Attention**（追加） | Krea2・Anima・Qwen Image 2.1・H3で任意にON/OFF。Krea2は固定保持率を1〜100%のスライダーで調整でき、4K/8KではJevによるタイルのstep配分も選べます。[設定・実測](docs/krea2-jev.md) |
 | **H3 NegPiP**（統合） | H3 Studio／H3 Imageでプロンプト内の負の重みを使用。切替後は実行環境の再起動が必要で、Sparse Attentionとは併用できません。 |
 | **H3 CLIP条件キャッシュ**（統合＋追加） | 同じプロンプト・参照素材の条件を再利用し、Qwen3-VLの再ロードと再計算を省略。固定版CLIPCachedの導入が必要です。 |
 | **H3 Fun ControlNet · INT8**（統合） | 元動画のCannyや前処理済みのDepth・Pose動画で、動きと構図を制御。INT8制御モデルと対応ComfyUIが必要です。 |
@@ -83,7 +84,8 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 - [MiniMax H3 Studio：動画生成](extensions-builtin/minimax-h3-studio/README.md)
 - [MiniMax H3 Image：実験的な静止画生成](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)
 - [MiniMax H3の任意の高速化設定](docs/minimax-h3-acceleration.md)
-- [Jev / Sparse Attentionの設定と速度比較](docs/jev-sparse.md) — H3・Anima・Qwen 2.1でON/OFF、APIキー登録、速度優先の層別制御。
+- [Jev / Sparse Attentionの設定と速度比較](docs/jev-sparse.md) — Krea2・H3・Anima・Qwen 2.1でON/OFF、APIキー登録、速度優先の層別制御。
+- [Krea2のJev / Sparse・4K高速化](docs/krea2-jev.md) — 固定率スライダー、タイル配分、API回数の見方。
 - [MiniMax H3・Qwen Image 2.1のW4A8量子化（試験対応）](docs/w4a8.md)
 - [Qwen Image 2.1：INT8とW4A8の実画像・実測比較](docs/assets/qwen-image21-v1.3.0/README.md)
 - [MiniMax H3のCLIPキャッシュとNegPiP併用](docs/minimax-h3-clipcache.md)
@@ -92,6 +94,18 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 - [Grain Cleanerガイド](docs/grain-cleaner.md)
 - [背景除去・モデルの事前取得](docs/background-removal.md)
 - [CD Tuner・MiniMax H3 NegPiPガイド](docs/cd-tuner-negpip.md)
+
+### Krea2の高速化を使う
+
+`txt2img`／`img2img`の **Krea2 · Jev高速化** を開き、**層ごとの高速化** を選びます。初期状態はOFFです。
+
+- **固定率**：スライダーで画像Attentionの保持率を **1〜100%** に調整。初期値は10%で、OFFに切り替えても設定値を保持します。Jev APIキーは不要です。
+- **Jev自動**：最初の計算結果を基に、Jevが層ごとの保持率を一括で選択。**Jev APIキー設定 → 保存してJevを準備** から自分のキーを登録できます。キーはGit管理外のユーザー領域に保存し、Windowsでは暗号化します。
+- **4K/8Kタイルの高速化**：img2imgのVRAM-Canvasで、数値ルールかJevによるstep配分を追加できます。層の設定とは別にON/OFFできます。
+
+Jevへの問い合わせは層の判定で最大1回、タイル配分で最大1回です。選択中の設定に応じた上限を画面に表示し、同じ生成のstep・タイル間では判定を再利用します。両方OFFなら追加処理なし、固定率・数値ルールだけならAPI呼び出しなしです。
+
+4Kの速度優先設定は、Script **VRAM-Canvas 4K/8K Highres** → 品質プロファイル **Krea2 速度優先 4K** → 層 **固定率10%** ＋タイル **Jev自動** です。RTX 3090での同一入力・4096×2304の比較では、通常119.9秒に対して71.7秒でした（各1回の実測）。保持率は画質の割合ではなく計算範囲です。出力の細部は変わり、10%がすべての画像・環境で最速とは限りません。[比較条件・結果](docs/jev-sparse-validation.md)
 
 <details>
 <summary>WebUIの操作と状態表示の詳細</summary>

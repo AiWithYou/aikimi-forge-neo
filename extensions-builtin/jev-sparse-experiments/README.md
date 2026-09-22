@@ -1,14 +1,17 @@
 # Jev / Sparse Attention
 
-H3・Anima・Qwen Image 2.1の任意の比較機能です。通常生成はOFFが既定です。
+Krea2・H3・Anima・Qwen Image 2.1の任意の高速化・比較機能です。通常生成はOFFが既定です。
 
 - [使い方・キーの登録](../../docs/jev-sparse.md)
 - [GPU実測と検証範囲](../../docs/jev-sparse-validation.md)
 - [Qwen 2.1の適用範囲](../../docs/qwen21-sparse.md)
+- [Krea2の固定率スライダー・4K/8Kタイル配分](../../docs/krea2-jev.md)
 
-Animaの自己Attentionにはcomfy-kitchen 0.2.33のCUDAカーネル、H3にはComfyUIのnative SLA、Qwenには専用workerのblock-gather + SDPAを使います。Jevは層別の保持率を選ぶ制御部分です。
+Krea2・Animaの自己Attentionにはcomfy-kitchen 0.2.33のCUDAカーネル、H3にはComfyUIのnative SLA、Qwenには専用workerのblock-gather + SDPAを使います。Jevは層別の保持率を選ぶ制御部分です。
 
-速度優先版のJevは既定で1回だけ問い合わせ、画像モデルでは25/50/75/100%、H3では1/3/5/10%から選びます。構図や細部の違いは許容する設計です。有効な回答を信頼度だけで100%へ置き換えず、回答・信頼度・適用値を記録します。APIエラー時の退避、キャンセル、呼び出し上限は維持します。
+速度優先版の層別Jevは既定で1回だけ問い合わせ、Krea2では1/3/5/10/25/50/100%、Anima・Qwenでは25/50/75/100%、H3では1/3/5/10%から選びます。構図や細部の違いは許容する設計です。有効な回答を信頼度だけで100%へ置き換えず、回答・信頼度・適用値を記録します。APIエラー時の退避、キャンセル、呼び出し上限は維持します。
+
+Krea2のGUIではOFF・固定率・Jev自動を直接切り替え、固定率は1〜100%のスライダーで調整できます（初期値10%）。OFFでも数値は保持します。VRAM-Canvasのタイル配分は独立して切り替えられ、Jevを選ぶと生成全体で最大1回を追加します。画面に表示するAPI上限は、固定率だけなら0回、固定率＋Jevタイル配分なら1回、両方Jevなら2回です。
 
 各モデルにAPIキーの入力・保存欄があります。キーはユーザー領域に保存し、WindowsではDPAPIで暗号化します。Git・生成履歴・比較ログには保存しません。通常・固定・数値ルールはAPIを呼びません。
 
