@@ -500,6 +500,14 @@ class WorkerLoaderTests(unittest.TestCase):
         )
         cache.start()
         self.addCleanup(cache.stop)
+        # These tests exercise mocked loader ordering, not installed GPU
+        # distributions. Cache identity/serialization have their own tests.
+        identity = mock.patch(
+            "modules_forge.qwen_image21.quantized_cache.component_identity",
+            side_effect=lambda _path, name, precision, **_kwargs: {"component": name, "precision": precision},
+        )
+        identity.start()
+        self.addCleanup(identity.stop)
         output = redirect_stdout(io.StringIO())
         output.__enter__()
         self.addCleanup(output.__exit__, None, None, None)
