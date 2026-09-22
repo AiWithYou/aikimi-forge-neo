@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -16,6 +17,7 @@ from modules_forge.qwen_image21.core import (
     Request,
     runtime_status,
 )
+from modules_forge.qwen_image21.quantized_cache import saved_status
 from modules_forge.qwen_image21.service import JobNotFound, Studio
 
 RUNTIME = Path(script_path) / "models" / "Qwen-Image-2.1"
@@ -334,6 +336,99 @@ def check_runtime():
     from modules_forge.qwen_image21.prompt_rewriter import rewriter_status
 
     return runtime_status(RUNTIME) + "\n" + rewriter_status(RUNTIME) + "\n" + rewriter_status(RUNTIME, editing=True)
+
+
+def save_quantized(precision, request: gr.Request):
+    try:
+        identifier = STUDIO.prepare(precision, owner(request))
+        return (
+            identifier,
+            f"{precision.upper()}モデルを準備しています。",
+            gr.update(interactive=False),
+            gr.update(visible=True, interactive=True),
+            gr.update(active=True),
+            gr.update(interactive=False),
+        )
+    except Exception as exc:
+        return gr.update(), str(exc), *[gr.update() for _ in range(4)]
+
+
+def poll_save(identifier, precision, request: gr.Request):
+    if not identifier:
+        return [gr.update()] * 5
+    try:
+        state = STUDIO.status(identifier, owner(request))
+        done = state["done"]
+        text = state["message"]
+        if not done:
+            text += f" · 経過 {state['elapsed']:.0f} 秒"
+        return (
+            text,
+            gr.update(interactive=done and precision != "bf16"),
+            gr.update(visible=not done, interactive=not done),
+            gr.update(active=not done),
+            gr.update(interactive=done),
+        )
+    except JobNotFound as exc:
+        return (
+            str(exc),
+            gr.update(interactive=precision != "bf16"),
+            gr.update(visible=False),
+            gr.update(active=False),
+            gr.update(interactive=True),
+        )
+
+
+def model_save_status(precision, identifier, request: gr.Request):
+    if identifier:
+        try:
+            if not STUDIO.status(identifier, owner(request))["done"]:
+                return gr.update(), gr.update(interactive=False)
+        except JobNotFound:
+            pass
+    return saved_status(RUNTIME, precision), gr.update(interactive=precision != "bf16")
+
+
+def unload_model():
+    try:
+        return STUDIO.unload(), '<span data-state="idle"></span>'
+    except Exception as exc:
+        return str(exc), gr.update()
+
+
+def refresh_saved_after_generation(identifier, precision, request: gr.Request):
+    try:
+        state = STUDIO.status(identifier, owner(request)) if identifier else {}
+        if state.get("done") and state.get("state") == "complete":
+            return saved_status(RUNTIME, precision)
+    except JobNotFound:
+        pass
+    return gr.update()
+
+
+def assistant_status(identifier, request: gr.Request):
+    """Expose only this browser's job state to the mascot, without prompts/paths."""
+    from modules.aikimi_security.redaction import safe_error_message
+
+    if not identifier:
+        return ""
+    try:
+        state = STUDIO.status(identifier, owner(request))
+    except JobNotFound:
+        return '<span data-state="idle"></span>'
+    stage = state.get("stage", "loading") if not state["done"] else state["state"]
+    label = safe_error_message(state.get("message", ""), limit=240)
+    precision = state.get("precision", "").upper()
+    return '<span data-state="{}" data-progress="{}" data-message="{}" data-model="{}" data-result="{}" data-job="{}"></span>'.format(
+        html.escape(str(stage), quote=True),
+        html.escape(str(state.get("progress", 0)), quote=True),
+        html.escape(label, quote=True),
+        html.escape(f"Qwen Image 2.1 · {precision}", quote=True),
+        "qwen21-output"
+        if state.get("operation") != "prepare" and state["done"] and state["state"] == "complete"
+        else "",
+        html.escape(identifier, quote=True),
+    )
 
 
 def _canvas_updates(editor):
@@ -690,11 +785,24 @@ def on_ui_tabs():
                     value="未実行", label="進行状況", lines=2, interactive=False, elem_id="qwen21-status"
                 )
                 precision = gr.Radio(
-                    [("INT8 · メモリ節約", "int8"), ("W4A8 · さらに節約（試験対応）", "w4a8"), ("BF16", "bf16")],
+                    [("INT8 · メモリ節約", "int8"), ("W4A8 · さらに節約", "w4a8"), ("BF16", "bf16")],
                     value="int8",
                     label="精度",
-                    info="W4A8は初回読み込み時に変換します。画質差を確認して使ってください。",
+                    elem_id="qwen21-precision",
                 )
+                with gr.Row():
+                    save_model = gr.Button("変換モデルを保存", size="sm", elem_id="qwen21-save-model")
+                    unload = gr.Button("モデルを解放", size="sm", elem_id="qwen21-unload-model")
+                    stop_save = gr.Button("保存を停止", size="sm", visible=False, elem_id="qwen21-stop-save")
+                save_status = gr.Textbox(
+                    value=saved_status(RUNTIME, "int8"),
+                    label="モデルの保存状態",
+                    show_label=False,
+                    interactive=False,
+                    lines=2,
+                    elem_id="qwen21-save-status",
+                )
+                assistant = gr.HTML(visible="hidden", elem_id="qwen21-assistant-state")
                 resolution = gr.Dropdown(
                     RESOLUTIONS, value="1024x1024", label="出力サイズ", elem_id="qwen21-resolution"
                 )
@@ -719,7 +827,7 @@ def on_ui_tabs():
                             ("Jev速度優先 · 集約統計を外部送信", "jev"),
                         ],
                         value=sparse_defaults.mode,
-                        label="Sparse Attention（実験）",
+                        label="Sparse Attention",
                         elem_id="qwen21-sparse-mode",
                         info="Jevは保存済みのキーを使用します。画像・プロンプトは送信しません。方式の変更は次の生成から適用します。",
                     )
@@ -760,6 +868,26 @@ def on_ui_tabs():
         mask_target, variant_job = gr.State(""), gr.State("")
         back, forward = gr.State(-1), gr.State(1)
         timer = gr.Timer(1, active=False)
+        save_job = gr.State("")
+        save_timer = gr.Timer(1, active=False)
+        save_model.click(
+            save_quantized,
+            inputs=precision,
+            outputs=[save_job, save_status, save_model, stop_save, save_timer, generate],
+            concurrency_id="qwen-image21-submit",
+            concurrency_limit=1,
+            **PRIVATE,
+        ).then(assistant_status, inputs=save_job, outputs=assistant, **PRIVATE)
+        save_timer.tick(
+            poll_save,
+            inputs=[save_job, precision],
+            outputs=[save_status, save_model, stop_save, save_timer, generate],
+            **PRIVATE,
+        ).then(assistant_status, inputs=save_job, outputs=assistant, **PRIVATE)
+        stop_save.click(cancel, inputs=save_job, outputs=[save_status, stop_save], queue=False, **PRIVATE)
+        precision.change(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
+        tab.load(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
+        unload.click(unload_model, outputs=[save_status, assistant], queue=False, **PRIVATE)
         workspace_view.change(switch_workspace, inputs=workspace_view, outputs=[edit_view, result_view], **PRIVATE)
         generate.click(
             start_canvas,
@@ -798,10 +926,16 @@ def on_ui_tabs():
             trigger_mode="once",
             **PRIVATE,
         )
+        job.change(assistant_status, inputs=job, outputs=assistant, **PRIVATE)
         timer.tick(
             poll,
             inputs=[job, result_variant],
             outputs=[status, generate, stop, timer, output, files, use, edit_result, workspace_view, effective_prompt],
+            **PRIVATE,
+        ).then(assistant_status, inputs=job, outputs=assistant, **PRIVATE).then(
+            refresh_saved_after_generation,
+            inputs=[job, precision],
+            outputs=save_status,
             **PRIVATE,
         )
         stop.click(cancel, inputs=job, outputs=[status, stop], queue=False, **PRIVATE)

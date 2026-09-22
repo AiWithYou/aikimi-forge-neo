@@ -13,7 +13,7 @@ from .qwen21 import OPTIONS_ENV, Options
 
 ROOT = Path(__file__).resolve().parents[2]
 # Reviewed 2026-09-22 persistent quantization, I2I rewrite and mask-output worker.
-WORKER_BLOB = "181ec29efb4462f5eb3a5b5ecbd9b7f7868df7e3"
+WORKER_BLOB = "6f691e89ff208ed3db625221429b80cf15cb635f"
 
 
 def launch_defaults() -> Options:

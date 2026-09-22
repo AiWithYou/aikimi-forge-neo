@@ -2,11 +2,33 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from modules.aikimi_security.redaction import safe_error_message
+
+_environment_cache = {}
+_environment_lock = threading.Lock()
+
+
+def _environment_snapshot(feature: str) -> dict[str, Any] | None:
+    if feature not in {"krea2", "anima38", "sensenova", "minimax_h3", "qwen_image21"}:
+        return None
+    from modules.aikimi_capabilities import feature_check
+    from modules.aikimi_diagnostics import default_paths
+
+    # The snapshot endpoint is polled frequently. Bound filesystem inspection
+    # while allowing setup/repair changes to appear without restarting the UI.
+    with _environment_lock:
+        cached = _environment_cache.get(feature)
+        if cached and time.monotonic() - cached[0] < 10:
+            return cached[1]
+        check = feature_check(feature, default_paths())
+        result = {"feature": feature, "label": check.label, **check.public_dict()} if check else None
+        _environment_cache[feature] = (time.monotonic(), result)
+        return result
 
 
 def _display_name(path: object | None) -> str | None:
@@ -78,11 +100,7 @@ def _generation_snapshot(state=None, pending_tasks=None) -> dict[str, Any]:
     time_start = state.time_start
     textinfo = state.textinfo
     active = bool(job) or job_count != 0
-    value = (
-        _generation_progress(job_count, job_no, sampling_steps, sampling_step)
-        if active
-        else 0.0
-    )
+    value = _generation_progress(job_count, job_no, sampling_steps, sampling_step) if active else 0.0
     eta = None
 
     if active and value > 0 and time_start:
@@ -130,18 +148,21 @@ def _memory_snapshot() -> dict[str, Any]:
         }
 
 
-def snapshot() -> dict[str, Any]:
+def snapshot(feature: str = "") -> dict[str, Any]:
     """Return a JSON-safe view of existing Forge runtime state."""
 
     from modules import shared
+    from modules.aikimi_version import VERSION
 
     server_start = shared.state.server_start or time.time()
     return {
         "model": _model_snapshot(),
         "generation": _generation_snapshot(),
         "memory": _memory_snapshot(),
+        "environment": _environment_snapshot(feature),
         "backend": {
             "ready": True,
+            "version": VERSION,
             "uptime_seconds": max(time.time() - server_start, 0.0),
         },
     }

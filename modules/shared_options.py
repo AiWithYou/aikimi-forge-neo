@@ -15,8 +15,8 @@ from modules_forge import gpu_residency
 
 options_templates.update(options_section((None, "Aikimi / GPU", "system"), {
     "aikimi_model_retention": OptionInfo(
-        "auto", "生成後のモデル保持", gr.Radio,
-        {"choices": [("自動（5分後に解放）", "auto"), ("連続生成を優先", "keep"), ("毎回解放", "release")]},
+        "keep", "生成後のモデル保持", gr.Radio,
+        {"choices": [("保持（手動で解放）", "keep"), ("自動（5分後に解放）", "auto"), ("毎回解放", "release")]},
         onchange=gpu_residency.apply_policy,
     ),
 }))

@@ -23,12 +23,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from modules_forge.qwen_image21.quantized_cache import INT8_SKIP_MODULES  # noqa: E402
+
 DIFFUSERS_REVISION = "6256aa7666cedd47443adc8f82da9a10e110b09c"
 MODEL_ID = "Qwen/Qwen-Image-2.1"
 EVENT_PREFIX = "QWEN_IMAGE21_EVENT "
 # Keep the small input/output and timestep projections in BF16. Attention and
 # feed-forward projections inside every denoising block use LLM.int8().
-INT8_SKIP_MODULES = ("img_in", "txt_in", "modulation", "norm_out", "proj_out", "time_text_embed")
 _RESIDENT_RUNTIME: dict[str, Any] | None = None
 _RESIDENT_KEY: tuple | None = None
 
@@ -94,6 +95,9 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     request = json.loads((job / "request.json").read_text(encoding="utf-8"))
     if not isinstance(request, dict):
         raise ValueError("request.json must contain an object.")
+    operation = request.get("operation", "generate")
+    if operation not in {"generate", "prepare"}:
+        raise ValueError("Unsupported operation")
     for key, default, allowed in (
         ("precision", "int8", {"int8", "bf16", "w4a8"}),
         ("memory_mode", "offload", {"offload", "gpu"}),
@@ -140,6 +144,8 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         if not isinstance(path, str) or not Path(path).is_absolute() or not Path(path).is_file():
             raise ValueError("Each input image must be an existing absolute local file path.")
     request["input_images"] = images
+    if operation == "prepare" and request["precision"] not in {"int8", "w4a8"}:
+        raise ValueError("Only INT8 and W4A8 models need conversion")
     return job, model_path, request
 
 
@@ -428,6 +434,23 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         job, model_path, request = _read_request(payload)
         _check_cancel(job)
+        if request.get("operation") == "prepare":
+            from modules_forge.qwen_image21.quantized_cache import saved_components
+
+            _progress(job, "loading", "保存済みモデルを確認中", 0.05)
+            try:
+                disk_cache = saved_components(model_path, request["precision"], check_cancel=lambda: _check_cancel(job))
+            except (FileNotFoundError, ValueError, KeyError, TypeError):
+                # Re-enter the existing loader to create only missing/invalid
+                # components; valid components never pass through quantization.
+                clear_runtime()
+                runtime, _ = _runtime_for_request(model_path, request, job)
+                disk_cache = saved_components(model_path, request["precision"], check_cancel=lambda: _check_cancel(job))
+            _check_cancel(job)
+            result = {"operation": "prepare", "precision": request["precision"], "quantized_cache": disk_cache}
+            _atomic_json(job / "result.json", result)
+            _progress(job, "complete", "モデルを保存しました。次回からこのモデルを使います。", 1.0)
+            return result
         import torch
 
         if torch.cuda.is_initialized():

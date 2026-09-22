@@ -115,8 +115,13 @@ class Request:
     mask_feather: float = 0.0
     sparse_jev_max_calls: int = 0
     sparse_jev_max_wait_seconds: float = 0.0
+    operation: str = "generate"
 
     def resolved(self) -> Request:
+        if self.operation not in {"generate", "prepare"}:
+            raise QwenImage21Error("実行する操作が不正です。")
+        if self.operation == "prepare" and self.precision not in {"int8", "w4a8"}:
+            raise QwenImage21Error("保存する精度はINT8またはW4A8を選んでください。")
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 12000:
             raise QwenImage21Error("プロンプトを1〜12000文字で入力してください。")
         width = integer(self.width, "幅", 256, 4096)

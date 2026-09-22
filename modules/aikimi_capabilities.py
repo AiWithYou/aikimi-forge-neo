@@ -338,10 +338,21 @@ def _qwen_image21_check(paths: DiagnosticPaths) -> DiagnosticCheck:
         "qwen_image21",
         "Qwen Image 2.1",
         CheckState.READY,
-        "The pinned Qwen Image 2.1 setup is registered for BF16 and INT8. No generation was run.",
+        "The pinned Qwen Image 2.1 setup is registered. No generation was run.",
         "Open Qwen Image 2.1 Studio to check status and generate.",
         available=True,
     )
+
+
+def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | None:
+    check = {
+        "krea2": _krea2_check,
+        "anima38": _anima38_check,
+        "sensenova": _sensenova_check,
+        "minimax_h3": _minimax_h3_check,
+        "qwen_image21": _qwen_image21_check,
+    }.get(feature)
+    return check(paths) if check else None
 
 
 def feature_checks(paths: DiagnosticPaths) -> tuple[DiagnosticCheck, ...]:
