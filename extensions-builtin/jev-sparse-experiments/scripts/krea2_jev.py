@@ -9,16 +9,34 @@ from modules_forge.jev_sparse import krea2, krea2_jobs
 from modules_forge.jev_sparse.ui import credential_controls
 
 
-def api_usage(mode, tile_mode):
+def api_usage(mode, tile_mode, cadence="once", interval=2, tile_cadence="once"):
     calls = int(mode == "jev") + int(tile_mode == "jev")
     if not calls:
         return "**Jev API：0回** · キーなしで使えます。"
     parts = []
     if mode == "jev":
-        parts.append("全層をまとめて1回")
+        parts.append(
+            "層：生成全体で1回"
+            if cadence == "once"
+            else "層：毎step（最初の評価を除く）"
+            if cadence == "step"
+            else f"層：最初の評価後、{int(interval)} stepごと"
+        )
     if tile_mode == "jev":
-        parts.append("VRAM-Canvasのタイル配分で1回")
-    return f"**Jev API：最大{calls}回／1生成** · " + " ＋ ".join(parts)
+        parts.append("タイル：生成全体で1回" if tile_cadence == "once" else "タイル：拡大段階ごとに1回")
+    repeating = (mode == "jev" and cadence != "once") or (tile_mode == "jev" and tile_cadence != "once")
+    title = "Jev API" if repeating else f"Jev API：最大{calls}回／1生成"
+    return f"**{title}** · " + " ／ ".join(parts)
+
+
+def update_controls(mode, tile_mode, cadence, interval, tile_cadence):
+    return (
+        gr.update(interactive=mode == "fixed"),
+        gr.update(visible=mode == "jev"),
+        gr.update(visible=mode == "jev" and cadence == "interval"),
+        gr.update(visible=tile_mode == "jev"),
+        api_usage(mode, tile_mode, cadence, interval, tile_cadence),
+    )
 
 
 class Script(scripts.Script):
@@ -55,6 +73,23 @@ class Script(scripts.Script):
                 interactive=False,
                 elem_id=prefix + "-keep",
             )
+            with gr.Group(visible=False) as cadence_group:
+                cadence = gr.Radio(
+                    choices=[("初回のみ", "once"), ("指定間隔", "interval"), ("毎step", "step")],
+                    value="once",
+                    label="層のJev再判定頻度",
+                    info="stepはサンプラーのモデル評価単位。最初の評価で統計を集め、次の評価から判定します。",
+                    elem_id=prefix + "-cadence",
+                )
+                with gr.Group(visible=False) as interval_group:
+                    interval = gr.Slider(
+                        1,
+                        100,
+                        value=2,
+                        step=1,
+                        label="再判定する間隔（step）",
+                        elem_id=prefix + "-interval",
+                    )
             tile_mode = gr.Radio(
                 choices=[("OFF", "off"), ("数値ルール", "rules"), ("Jev自動", "jev")],
                 value="off",
@@ -63,15 +98,24 @@ class Script(scripts.Script):
                 visible=is_img2img,
                 elem_id=prefix + "-tiles",
             )
+            with gr.Group(visible=False) as tile_cadence_group:
+                tile_cadence = gr.Radio(
+                    choices=[("初回のみ", "once"), ("拡大段階ごと", "stage")],
+                    value="once",
+                    label="タイル配分のJev再判定頻度",
+                    elem_id=prefix + "-tile-cadence",
+                )
             usage = gr.Markdown(api_usage("off", "off"), elem_id=prefix + "-api-usage")
-            mode.change(
-                lambda value, tiles: (gr.update(interactive=value == "fixed"), api_usage(value, tiles)),
-                inputs=[mode, tile_mode],
-                outputs=[keep, usage],
-                queue=False,
-                api_visibility="private",
-            )
-            tile_mode.change(api_usage, inputs=[mode, tile_mode], outputs=usage, queue=False, api_visibility="private")
+            frequency_inputs = [mode, tile_mode, cadence, interval, tile_cadence]
+            for control in frequency_inputs:
+                control.change(
+                    update_controls,
+                    inputs=frequency_inputs,
+                    outputs=[keep, cadence_group, interval_group, tile_cadence_group, usage],
+                    queue=False,
+                    show_progress="hidden",
+                    api_visibility="private",
+                )
             with gr.Accordion("詳細", open=False):
                 minimum = gr.Number(
                     value=4096,
@@ -84,8 +128,9 @@ class Script(scripts.Script):
                 timeout = gr.Slider(0.5, 20, value=10, step=0.5, label="Jevの待ち時間上限（秒）")
                 gr.Markdown(
                     "保持率は画像Attentionの計算範囲で、画質の保持率ではありません。"
-                    "文章・参照画像のAttentionは保護します。層の判定とタイル配分は各1回まで。"
-                    "タイルごとに通信せず、同じ画像の処理中は選択を再利用します。"
+                    "文章・参照画像のAttentionは保護します。初回のみでは生成全体で判定を再利用します。"
+                    "層を再判定する設定では、各タイルでも指定した頻度で問い合わせます。"
+                    "サンプラーによっては表示上の1stepでモデルを複数回評価します。"
                     "タイル配分では細部の少ない領域の再描画を省く場合があります。"
                     "Dense記録は通常のAttentionで比較ログだけを記録します。"
                 )
@@ -96,8 +141,11 @@ class Script(scripts.Script):
             (minimum, "Krea2 Sparse min tokens"),
             (tile_mode, "Krea2 tile allocation"),
             (timeout, "Krea2 Sparse timeout"),
+            (cadence, "Krea2 Sparse cadence"),
+            (interval, "Krea2 Sparse interval"),
+            (tile_cadence, "Krea2 tile cadence"),
         ]
-        return [mode, keep, minimum, tile_mode, timeout]
+        return [mode, keep, minimum, tile_mode, timeout, cadence, interval, tile_cadence]
 
     def process(self, p, *args):
         options = krea2_jobs.parse_options(*args)
@@ -112,6 +160,8 @@ class Script(scripts.Script):
                     "Krea2 Sparse keep": options.keep_percent,
                     "Krea2 Sparse min tokens": options.min_tokens,
                     "Krea2 Sparse timeout": options.timeout,
+                    "Krea2 Sparse cadence": options.decision_cadence,
+                    "Krea2 Sparse interval": options.update_interval,
                 }
             )
 

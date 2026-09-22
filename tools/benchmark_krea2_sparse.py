@@ -28,6 +28,9 @@ def main():
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--keep", type=float, default=10)
     parser.add_argument("--minimum-tokens", type=int, default=4096)
+    parser.add_argument("--decision-cadence", choices=("once", "interval", "step"), default="once")
+    parser.add_argument("--decision-interval", type=int, default=2)
+    parser.add_argument("--tile-cadence", choices=("once", "stage"), default="once")
     parser.add_argument(
         "--modes",
         nargs="+",
@@ -53,6 +56,8 @@ def main():
         parser.error("Tile allocation modes require --stage 4k")
     if args.repeats < 1 or not 1 <= args.port <= 65535:
         parser.error("Positive repeats and a valid loopback port are required")
+    if not 1 <= args.decision_interval <= 100:
+        parser.error("Decision interval must be 1..100")
     if any(size < 256 or size > 2048 or size % 16 for size in args.sizes):
         parser.error("Native sizes must be 256..2048 and divisible by 16")
     root = args.output.resolve()
@@ -139,6 +144,9 @@ def main():
             args.minimum_tokens,
             tile_mode,
             10,
+            args.decision_cadence,
+            args.decision_interval,
+            args.tile_cadence,
         ]
         print(f"BENCHMARK_START {label}", flush=True)  # noqa: T201
         started = time.perf_counter()
@@ -168,8 +176,9 @@ def main():
                 d.get("source") == "jev" for d in log_summaries.get(kind, {}).get("decisions", [])
             ):
                 raise RuntimeError(f"No valid Jev {kind} decision; fallback is not a Jev result")
-        if any(entry["end"]["api_calls"] > 1 for entry in log_summaries.values()):
-            raise RuntimeError("Jev was called repeatedly for nested tiles")
+        for kind, cadence in (("attention", args.decision_cadence), ("tiles", args.tile_cadence)):
+            if cadence == "once" and log_summaries.get(kind, {}).get("end", {}).get("api_calls", 0) > 1:
+                raise RuntimeError(f"Jev {kind} exceeded the once-per-job budget")
         (directory / "generation.json").write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
         row = {
             "label": label,

@@ -26,13 +26,19 @@ class Options(AnimaOptions):
     min_tokens: int = 4096
     timeout: float = 10.0
     tile_mode: str = "off"
+    decision_cadence: str = "once"
+    tile_cadence: str = "once"
 
     def validate(self):
         super().validate()
         if self.tile_mode not in {"off", "rules", "jev"}:
             raise ValueError("Unknown Krea2 tile allocation mode")
         if self.max_calls != 1:
-            raise ValueError("Krea2 uses one batched layer decision per generation")
+            raise ValueError("Krea2 uses decision_cadence instead of max_calls")
+        if self.decision_cadence not in {"once", "interval", "step"}:
+            raise ValueError("Unknown Krea2 decision cadence")
+        if self.tile_cadence not in {"once", "stage"}:
+            raise ValueError("Unknown Krea2 tile decision cadence")
 
 
 class KreaRun(AnimaRun):
@@ -40,22 +46,52 @@ class KreaRun(AnimaRun):
         super().__init__(*args, **kwargs)
         self.layout = None
         self.layouts = set()
+        self.sampling_pass = -1
+        self.sampling_step = -1
+        self.clock_ready = False
+        self.last_decision_step = None
+
+    @property
+    def repeating(self):
+        return self.options.mode == "jev" and self.options.decision_cadence != "once"
+
+    def begin_sampling(self):
+        self.sampling_pass += 1
+        self.sampling_step = -1
+        self.clock_ready = False
+        self.last_decision_step = None
+        if self.repeating:
+            # A new tile/pass must not be assessed using another tile's statistics.
+            self.observations.clear()
+            self.previous.clear()
+            self.pending.clear()
+
+    def begin_step(self):
+        # Called before CFG batching, once per sampler denoiser evaluation.
+        self.clock_ready = True
+        self.sampling_step += 1
 
     def begin_evaluation(self):
         if self.cancelled():
             raise ExperimentCancelled("Generation cancelled")
         self.evaluation += 1
+        if not self.clock_ready:
+            self.sampling_step = self.evaluation
         self.counts.clear()
         self.pending.clear()
+        interval = self.options.update_interval if self.options.decision_cadence == "interval" else 1
         if (
             self.evaluation < self.options.warmup_evaluations
+            or self.sampling_step < self.options.warmup_evaluations
             or self.options.mode not in {"jev", "rules"}
             or self.circuit_open
             or len(self.observations) != self.layers
-            or self.last_decision is not None
+            or (not self.repeating and self.last_decision is not None)
+            or (self.last_decision_step is not None and self.sampling_step - self.last_decision_step < interval)
         ):
             return
         self.last_decision = self.evaluation
+        self.last_decision_step = self.sampling_step
         if self.options.mode == "rules":
             order = sorted(self.observations, key=lambda i: self.observations[i]["relative_output_norm"])
             self.keeps = {
@@ -68,8 +104,11 @@ class KreaRun(AnimaRun):
             self.keeps = self.client.decide(
                 {
                     "target": "Krea2 image-to-image and text-to-image joint attention",
-                    "constraints": "SPEED-FIRST: choose KEEP percentages 1,3,5,10,25,50,100 separately for all layers. Text and reference-image key/value blocks AND query rows remain exact. All layers, projections, gates and MLPs run. Rank attention output norm and drift against peers: use 1 or 3 for weak contributions, 5 or 10 for typical contributions, 25 or 50 for strong contributions, reserve 100 for extreme contributions. Changed detail/composition is acceptable; preserve plausible, useful images. Proxies are not measured visual quality. Missing first drift is normal. No forced quotas. This one decision is reused across the remaining steps and upscale tiles.",
+                    "constraints": "SPEED-FIRST: choose KEEP percentages 1,3,5,10,25,50,100 separately for all layers. Text and reference-image key/value blocks AND query rows remain exact. All layers, projections, gates and MLPs run. Rank attention output norm and drift against peers: use 1 or 3 for weak contributions, 5 or 10 for typical contributions, 25 or 50 for strong contributions, reserve 100 for extreme contributions. Changed detail/composition is acceptable; preserve plausible, useful images. Proxies are not measured visual quality. Missing first drift is normal. No forced quotas. Apply this choice until the next scheduled decision; once cadence reuses it across remaining steps and upscale tiles.",
                     "next_model_evaluation": self.evaluation,
+                    "sampling_pass": self.sampling_pass,
+                    "sampling_step": self.sampling_step,
+                    "decision_cadence": self.options.decision_cadence,
                     "blocks": self.observations,
                     "current_keep": self.keeps,
                 },
@@ -79,6 +118,8 @@ class KreaRun(AnimaRun):
             self.log.write(
                 "decision",
                 evaluation=self.evaluation,
+                sampling_pass=self.sampling_pass,
+                sampling_step=self.sampling_step,
                 source="jev",
                 keep_percent=self.keeps,
                 api_calls=self.client.calls,
@@ -93,10 +134,23 @@ class KreaRun(AnimaRun):
             self.keeps = {str(i): 100.0 for i in range(self.layers)}
             self.log.write("decision", source="dense_fallback", error_type=type(exc).__name__, keep_percent=self.keeps)
 
-    def observe(self, layer, result, v):
-        # The decision is shared by the whole image, including all nested tiles.
-        if self.last_decision is None:
-            super().observe(layer, result, v)
+    def wants_observations(self):
+        return (
+            self.options.mode in {"jev", "rules"}
+            and not self.circuit_open
+            and (self.repeating or self.last_decision is None)
+        )
+
+    def keep(self, layer):
+        if self.repeating and self.sampling_step < self.options.warmup_evaluations:
+            return 100.0
+        return super().keep(layer)
+
+    def end_evaluation(self):
+        if self.repeating:
+            # Unsupported/masked evaluations must not leave stale observations.
+            self.observations.clear()
+        super().end_evaluation()
 
 
 def sparse_attention(q, k, v, keep, protected_tokens, *, kernel=None):
@@ -196,6 +250,8 @@ def new_run(options, layers, log_root, *, prompt="", cancelled=None):
         else None
     )
     settings = {**asdict(options), "kernel_head_group": 16, "kernel_token_block": 64}
+    settings.pop("max_calls")
+    settings["api_call_limit"] = 1 if options.decision_cadence == "once" else "sampling_cadence"
     return KreaRun(options, layers, RunLog(Path(log_root), "krea2", settings, prompt), client, cancelled)
 
 
@@ -219,8 +275,18 @@ def attach(unet, options, log_root, *, run=None, prompt="", cancelled=None):
     if transformer_options.get("krea2_attention_override") is not None:
         raise ValueError("Another Krea2 attention override is already installed")
     run = run or new_run(options, len(model.blocks), log_root, prompt=prompt, cancelled=cancelled)
+    run.begin_sampling()
     transformer_options["krea2_attention_override"] = attention_override(run)
     previous = patched.model_options.get("model_function_wrapper")
+
+    def step_clock(model, x, timestep, uncond, cond, cond_scale, model_options, seed):
+        run.begin_step()
+        return model, x, timestep, uncond, cond, cond_scale, model_options, seed
+
+    patched.model_options["conditioning_modifiers"] = [
+        *patched.model_options.get("conditioning_modifiers", []),
+        step_clock,
+    ]
 
     def wrapper(apply_model, args):
         def delegate():

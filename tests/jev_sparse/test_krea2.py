@@ -76,6 +76,64 @@ def test_short_image_sequence_does_not_trigger_jev(tmp_path):
     assert client.calls == 0
 
 
+@pytest.mark.parametrize("cadence,interval,expected", [("once", 2, 1), ("step", 2, 3), ("interval", 2, 2)])
+def test_cadence_uses_fresh_statistics_without_duplicate_cfg_calls(tmp_path, cadence, interval, expected):
+    run, client = make_run(tmp_path, decision_cadence=cadence, update_interval=interval)
+    run.begin_sampling()
+    for step in range(4):
+        run.begin_step()
+        for _branch in range(2):
+            run.begin_evaluation()
+            for layer in range(run.layers):
+                run.observe(layer, torch.ones(1, 64, 256) * (step + 1), torch.ones(1, 64, 2, 128))
+            run.end_evaluation()
+    assert client.calls == expected
+    assert [request[0]["sampling_step"] for request in client.requests] == (
+        [1] if cadence == "once" else [1, 2, 3] if cadence == "step" else [1, 3]
+    )
+    norms = [request[0]["blocks"]["0"]["relative_output_norm"] for request in client.requests]
+    assert norms == sorted(set(norms))
+    run.close()
+
+
+def test_repeated_cadence_resets_statistics_for_each_upscale_tile(tmp_path):
+    run, client = make_run(tmp_path, decision_cadence="step")
+    for tile in range(2):
+        run.begin_sampling()
+        for step in range(3):
+            run.begin_step()
+            run.begin_evaluation()
+            if step == 0:
+                assert run.keep(0) == 100
+                assert client.calls == tile * 2
+            observe_all(run)
+            run.end_evaluation()
+    assert client.calls == 4
+    assert [request[0]["sampling_pass"] for request in client.requests] == [0, 0, 1, 1]
+    run.close()
+
+
+def test_repeated_cadence_stops_cloud_calls_after_failure(tmp_path):
+    run, client = make_run(tmp_path, decision_cadence="step")
+    client.fail = True
+    for _ in range(6):
+        run.begin_evaluation()
+        observe_all(run)
+        run.end_evaluation()
+    assert client.calls == 1 and run.keep(0) == 100
+    run.close()
+
+
+def test_legacy_five_args_and_new_cadence_args_remain_compatible():
+    legacy = krea2_jobs.parse_options("fixed", 17, 4096, "off", 10)
+    assert legacy.keep_percent == 17 and legacy.decision_cadence == legacy.tile_cadence == "once"
+    repeated = krea2_jobs.parse_options("jev", 10, 4096, "jev", 10, "interval", 3, "stage")
+    assert repeated.decision_cadence == "interval" and repeated.update_interval == 3
+    assert repeated.tile_cadence == "stage"
+    with pytest.raises(ValueError):
+        krea2_jobs.parse_options(interval=1.5)
+
+
 def test_conditioning_prefix_and_original_dense_path(tmp_path):
     run, _ = make_run(tmp_path, mode="fixed", keep_percent=5, warmup_evaluations=0)
     run.begin_evaluation()
@@ -161,6 +219,22 @@ def test_tile_failure_uses_bounded_rules_without_retry(tmp_path):
     assert 2 <= planner.steps(0.04, 2, 4, 0.035) <= 4
 
 
+def test_stage_cadence_refreshes_tile_choices_and_stops_after_failure(tmp_path):
+    client = Client(value=0)
+    planner = krea2_jobs.TileAllocator("jev", tmp_path, client=client, is_cancelled=lambda: False, cadence="stage")
+    planner.prepare([0.003], 2, 4, 0.035)
+    assert planner.steps(0.003, 2, 4, 0.035) == 0
+    client.value = 4
+    planner.prepare([0.003], 2, 4, 0.035)
+    assert planner.steps(0.003, 2, 4, 0.035) == 4
+    assert client.calls == 2
+    client.fail = True
+    planner.prepare([0.003], 2, 4, 0.035)
+    planner.prepare([0.003], 2, 4, 0.035)
+    assert client.calls == 3 and planner.steps(0.003, 2, 4, 0.035) == 0
+    planner.close("completed")
+
+
 def test_tile_rules_never_construct_sdk(tmp_path, monkeypatch):
     monkeypatch.setattr(krea2_jobs, "JevClient", lambda *a, **kw: pytest.fail("Unexpected cloud call"))
     planner = krea2_jobs.TileAllocator("rules", tmp_path, is_cancelled=lambda: False)
@@ -230,7 +304,17 @@ def test_checkpoint_header_guard(tmp_path, marker, expected):
     assert krea2_jobs._checkpoint_is_krea(str(path), stat.st_mtime_ns, stat.st_size) is expected
 
 
-@pytest.mark.parametrize("changes", [{"max_calls": 2}, {"tile_mode": "unknown"}, {"min_tokens": 32}])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"max_calls": 2},
+        {"tile_mode": "unknown"},
+        {"min_tokens": 32},
+        {"decision_cadence": "unknown"},
+        {"tile_cadence": "unknown"},
+        {"update_interval": 0},
+    ],
+)
 def test_invalid_krea2_options(changes):
     with pytest.raises(ValueError):
         replace(krea2.Options(), **changes).validate()
