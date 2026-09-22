@@ -124,11 +124,11 @@ jobs:
       matrix:
         include:
           - name: assets
-            requirements: tools/requirements-aikimi-assets.txt
+            inputs: tools/requirements-aikimi-assets.txt
           - name: browser-tests
-            requirements: tools/requirements-test.txt
+            inputs: tools/requirements-test.txt
           - name: preprocessors
-            requirements: extensions-builtin/forge_legacy_preprocessors/requirements.txt
+            inputs: extensions-builtin/forge_legacy_preprocessors/requirements.txt
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -141,5 +141,5 @@ jobs:
       - name: Resolve and audit the toolchain
         uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
         with:
-          inputs: ${{ matrix.requirements }}
+          inputs: ${{ matrix.inputs }}
           vulnerability-service: PyPI
