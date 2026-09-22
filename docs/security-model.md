@@ -126,6 +126,28 @@ diskcacheは、最新の5.6.3までが影響対象であり、監査時点では
 
 これらの制限を前提に追加した監査例外も取り消しました。AccelerateやSenseNova専用環境の依存関係で既知の問題が検出されると、GitHubの監査は失敗として報告します。監査の結果や期限を理由に、アプリの起動・生成・拡張を停止する処理はありません。検出内容は未修正として扱い、安全性を確認済みと表示しません。
 
+## 2026年9月22日の互換性を優先した再確認
+
+既存の機能・拡張API・生成の数値経路を保てる変更に限って確認しました。以下の依存監査の検出は未解消です。バージョン番号だけを上げたり、APIを禁止したりして監査を通す変更はしていません。
+
+| 対象 | 現物・公式資料で確認したこと | 判断 |
+|---|---|---|
+| Accelerate 1.14.0 / `PYSEC-2026-3804` | 最新1.15.0でも対象のチェックポイント読み込み処理が同一。自作の一時ディレクトリだけを使い、両版の `load_checkpoint_in_model` と `load_checkpoint_and_dispatch` が、index内の相対・絶対パスで外側のsafetensorsを読むことを再現しました。 | 1.15.0への変更を脆弱性修正として扱いません。通常のForge・SenseNova経路ではこの2 APIの呼び出しを確認していませんが、拡張が使う可能性は残ります。APIの禁止や実行時の差し替えは追加しません。 |
+| SenseNovaのTransformers 4.57.6 | 4.57系には修正済みの後続版がありません。監査を満たす5.10系はHub依存の更新に加え、Qwen3ConfigのRoPE設定と `create_causal_mask` の引数が現SenseNova runtimeと一致しません。 | 入力IDなどの経路を削って合わせる対応はしません。画像・入力ID・キャッシュ経路と、生成結果・速度の互換性を検証する移行として扱います。 |
+| setuptools 81.0.0 / `PYSEC-2026-3447` | 修正版83以降は、現物のtorch 2.11.0の `setuptools<82` と両立しません。82では `pkg_resources` も削除されています。本件はsdistのUnicodeファイル除外に関する問題で、既知の生成経路にsdistの作成・公開処理は見つかりませんでした。 | 依存制約を無視した導入はしません。torch/torchvision/CUDA拡張をまとめて検証する更新時に再審査します。拡張のインストールや依存ビルド自体は禁止しません。 |
+
+この確認では、autocropのOpenCV版判定にある `pkg_resources.parse_version` 依存だけを除去しました。元の名前は `packaging.version.Version` そのものであることを確認し、同じクラスを直接参照します。OpenCVの7種類の版判定とモデル選択が一致し、コーナー・エントロピーを使う3サイズの切り抜き・注釈計6画像も画素一致しました。顔検出モデルの取得・推論は行っていません。`pkg_resources` が使えない条件でのimportも成功しています。画像処理とモデルの計算を変えず、廃止APIへの直接依存を1つ減らす変更です。この変更によって上表の脆弱性が修正されたとは扱いません。
+
+本体の期限付き例外とSenseNovaの独立監査を維持し、除外IDは増やしていません。Accelerateの「影響最終版1.14.0」というデータベース記載だけでは、1.15.0が修正済みだとは判断できません。
+
+Transformers 5.10.0は修正境界の比較に使いましたが、PyPIでは公開内容の不備により撤回済みです。実際の移行候補には、現行本体が使う5.10.4など、撤回されていない版を個別に検証する必要があります。
+
+一次資料：
+
+- [Accelerateの報告と修正案](https://github.com/huggingface/accelerate/issues/4067)、[Hubキャッシュのリンクを維持する修正案](https://github.com/huggingface/accelerate/pull/4138)、[1.15.0の公開情報](https://github.com/huggingface/accelerate/releases/tag/v1.15.0)。修正案は確認時点で未マージです。
+- [Transformers 5.10.0](https://github.com/huggingface/transformers/releases/tag/v5.10.0)。対象の報告IDは `PYSEC-2025-217`、`PYSEC-2026-2288`、`2289`、`2290`、`3929` です。
+- [setuptoolsの公式advisory](https://github.com/pypa/setuptools/security/advisories/GHSA-h35f-9h28-mq5c)、[修正差分](https://github.com/pypa/setuptools/commit/dd9f436a36486b4cb8a4c70a2321548b0be09b8f)、[変更記録](https://setuptools.pypa.io/en/latest/history.html#v83-0-0)。
+
 ## 非目標
 
 - zero-trust gatewayは、このリポジトリの対象外です。
