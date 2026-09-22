@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 FORMAT_VERSION = 1
+INT8_SKIP_MODULES = ("img_in", "txt_in", "modulation", "norm_out", "proj_out", "time_text_embed")
 
 
 class InvalidQuantizedCheckpoint(ValueError, RuntimeError):
@@ -26,17 +27,16 @@ def file_hash(path, check_cancel=lambda: None):
     return digest.hexdigest()
 
 
-def component_identity(model_path, component, precision, *, skip_modules=()):
+def component_identity(model_path, component, precision, *, skip_modules=(), versions=None):
     """Bind artifacts to the source revision, actual files, recipe and runtime."""
     model_path = Path(model_path).resolve()
     folder = model_path / component
     inventory = model_path.parent / "model-files.json"
     record = json.loads(inventory.read_text(encoding="utf-8")) if inventory.is_file() else {}
-    versions = {}
-    for name in ("torch", "diffusers", "transformers", "bitsandbytes", "accelerate", "safetensors"):
-        versions[name] = importlib.metadata.version(name)
+    names = ("torch", "diffusers", "transformers", "bitsandbytes", "accelerate", "safetensors")
     if precision == "w4a8":
-        versions["comfy-kitchen"] = importlib.metadata.version("comfy-kitchen")
+        names += ("comfy-kitchen",)
+    versions = {name: versions[name] if versions is not None else importlib.metadata.version(name) for name in names}
     return {
         "schema": FORMAT_VERSION,
         "revision": record.get("revision"),
@@ -61,6 +61,45 @@ def component_identity(model_path, component, precision, *, skip_modules=()):
 def cache_path(model_path, identity):
     key = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:24]
     return Path(model_path).resolve().parent / "quantized" / identity["precision"] / key / identity["component"]
+
+
+def saved_components(model_path, precision, *, versions=None, check_cancel=lambda: None):
+    """Validate both components using the same identity as the inference loader."""
+    result = {}
+    for name in ("transformer", "text_encoder"):
+        identity = component_identity(
+            model_path,
+            name,
+            precision,
+            versions=versions,
+            skip_modules=INT8_SKIP_MODULES if precision == "int8" and name == "transformer" else (),
+        )
+        path = cache_path(model_path, identity)
+        manifest(path, identity, check_cancel=check_cancel)
+        result[name] = {"status": "hit", "path": str(path)}
+    return result
+
+
+def saved_status(runtime, precision):
+    """Inspect the dedicated runtime without importing its GPU libraries."""
+    if precision == "bf16":
+        return "BF16は元のモデルを使用します。"
+    try:
+        environment = Path(runtime) / "worker-env"
+        paths = (
+            [environment / "Lib" / "site-packages"]
+            if os.name == "nt"
+            else list((environment / "lib").glob("python*/site-packages"))
+        )
+        versions = {
+            item.metadata["Name"].lower().replace("_", "-"): item.version
+            for item in importlib.metadata.distributions(path=[str(path) for path in paths])
+            if item.metadata["Name"]
+        }
+        saved_components(Path(runtime) / "model", precision, versions=versions)
+    except (OSError, ValueError, KeyError, TypeError):
+        return f"{precision.upper()} · 未保存。生成時にも自動保存します。"
+    return f"{precision.upper()} · 保存済み。次回からこのモデルを使います。"
 
 
 def manifest(path, identity, *, verify_hashes=False, check_cancel=lambda: None):

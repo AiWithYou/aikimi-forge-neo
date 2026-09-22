@@ -17,17 +17,17 @@ def acceleration_note(*values) -> str:
         return f'<div role="alert">{html.escape(str(exc))}</div>'
     notes = []
     if option.model_variant == "w4a8":
-        notes.append("W4A8は生成モデルの重みを約12GBへ縮小します。初回はdownload_minimax_h3_w4a8_models.batで導入してください。画質・動き・音を同じSeedで比較してください。Stepsは自動変更しません。")
+        notes.append("W4A8モデルはdownload_minimax_h3_w4a8_models.batで導入できます。")
     if option.model_variant == "fused_turbo":
         notes.append("MATLOWAI版はTurboとMysticを焼き込んだ派生モデルです。動き・質感・音が標準と変わります。モデル選択だけではStepsを変えません。4/8 Stepsボタンで明示適用してください。")
     if option.video_vae == "int8":
         notes.append("INT8 ConvRot VAEは量子化による画質差やGPU依存の不具合があり得ます。黒画面・ノイズが出る場合はFP16で比較してください。")
     if option.decode_mode == "fast":
-        notes.append("Fast VAEは実験的なタイル一括処理です。VRAMが増え、通常版より遅い場合もあります。node内部のOOM時はbatch 1で再試行されます。切替後はruntimeを再起動してください。")
+        notes.append("Fast VAEはタイルを一括処理します。切替後はruntimeを再起動してください。")
     if option.attention != "dense":
         notes.append("Sparse Attentionは近似です。長い系列ほど有利ですが、短い系列（12288 tokens未満）と開始区間はdenseになります。音声・参照条件の行は保護しますが、全体の同一性は保証しません。")
         if option.attention == "sla":
-            notes.append("SLAは特に実験的です。MATLOWAI作者の旧H3SLA nodeとは別実装で、同じ数値でも同じ結果にはなりません。VSA専用学習済み重みはこの選択には含みません。")
+            notes.append("SLAはtop-kで使用する領域を選びます。")
     if option.negpip.enabled:
         notes.append("NegPiPを有効にしています。プロンプト内の負の重みをValueへ適用します。切替後は選択設定で再起動してください。")
     if option.clip_cache != "off":
@@ -61,7 +61,7 @@ def create_acceleration_controls(duration):
     with gr.Accordion("高速化 · 任意設定 / 画質・メモリとの比較", open=False, elem_id="h3-acceleration"):
         gr.Markdown("生成・デコードの高速化とCLIP条件の再利用を選べます。まず1つずつ同じSeedで比較してください。標準設定は自動変更しません。")
         model = gr.Dropdown(
-            choices=[("標準 · モード別公式INT8モデル", "base"), ("W4A8 · メモリ節約（試験対応）", "w4a8"), ("MATLOWAI Fused Turbo · 派生モデル", "fused_turbo")],
+            choices=[("標準 · モード別公式INT8モデル", "base"), ("W4A8 · メモリ節約", "w4a8"), ("MATLOWAI Fused Turbo · 派生モデル", "fused_turbo")],
             value=defaults.model_variant, label="1. 生成モデル", interactive=False,
             info="W4A8は専用ダウンロードBATで導入できます。既存モデルはそのまま選べます。", elem_id="h3-model-variant",
         )
@@ -74,14 +74,14 @@ def create_acceleration_controls(duration):
             info="Kijai配布のINT8 ConvRot Video VAEをmodels/vaeへ配置します。", elem_id="h3-video-vae",
         )
         decode = gr.Dropdown(
-            choices=[("VAEDecode · 標準", "standard"), ("Fast VAE Decode · 実験的", "fast")],
+            choices=[("VAEDecode · 標準", "standard"), ("Fast VAE Decode", "fast")],
             value=defaults.decode_mode, label="3. Videoデコード", interactive=False,
             info="FastのみComfyUI-MiniMax-H3-MotionCacheを許可します。他のcustom nodeは無効のままです。",
             elem_id="h3-decode-mode",
         )
         batch = gr.Slider(1, 8, value=defaults.tile_batch_size, step=1, label="Fast VAE tile batch · 大きいほどVRAM増", visible=False, interactive=False, elem_id="h3-tile-batch")
         attention = gr.Dropdown(
-            choices=[("Kitchen dense · 標準", "dense"), ("Sol-Attn · 適応しきい値 / 近似", "sol"), ("SLA top-k · 実験的 / 近似", "sla")],
+            choices=[("Kitchen dense · 標準", "dense"), ("Sol-Attn · 適応しきい値 / 近似", "sol"), ("SLA top-k · 近似", "sla")],
             value=defaults.attention, label="4. Attention", interactive=False,
             info="公式BlockSparseAttention（2026-09-06追加）とcomfy-kitchen 0.2.33以上が必要です。",
             elem_id="h3-attention-mode",

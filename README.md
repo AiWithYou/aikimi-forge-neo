@@ -1,6 +1,6 @@
 # Aikimi Studio Neo
 
-**v1.4.0** · [変更履歴](CHANGELOG.md)
+**v1.4.1** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -38,13 +38,13 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
-| **MiniMax H3 Studio**（統合） | 音声付き動画を生成。専用ComfyUI・Python・標準INT8モデルのセットアップと既存モデルの共有に対応。任意でW4A8モデルを追加できます（試験対応、動画全体の実生成は未検証）。 |
+| **MiniMax H3 Studio**（統合） | 音声付き動画を生成。専用ComfyUI・Python・標準INT8モデルのセットアップと既存モデルの共有に対応。任意でW4A8モデルを追加できます。 |
 | **YuE2 Music**（統合） | 歌詞と曲調から作曲。ABC楽譜の生成・編集、別アレンジの生成、複数候補のA/B試聴、Seed・生成条件の保存と復元に対応。公式Python版と任意のaudio.cpp／GGUF版を専用環境で実行します。 |
 | **MiniMax H3 Image**（統合・実験） | `H3 Image`タブで静止画生成と参照画像による編集。PNGと生成条件を保存します。実モデルでのGPU画像生成・画質・速度は未検証です。 |
 
 モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
 
-**v1.4.0では、変換したモデルを次回も使い、編集対象外をそのまま残せます。** QwenのINT8・W4A8は初回変換後にディスクへ保存。PE-I2Iの編集用プロンプト補助と、マスク外のRGBAを固定する編集を追加しました。[カップの色変更・元画像との比較](docs/assets/qwen-image21-v1.4.0/README.md)で実際の結果を確認できます。
+**v1.4.1では、Qwenの「変換モデルを保存」からINT8・W4A8を事前に準備できます。** 保存済みのモデルは次回から自動で使います。読み込み済みモデルは保持し、必要なときに「モデルを解放」でRAM・VRAMを空けられます。ちびあいきみには、選択中の機能の環境とQwenの読込・保存・生成状況が反映されます。PE-I2Iとマスク外固定編集の結果は[元画像との比較](docs/assets/qwen-image21-v1.4.0/README.md)で確認できます。
 
 Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLiteとタイル生成の連携は [v1.4.0の検証記録](docs/optimization-persistence-2026-09-22.md) にまとめています。複数題材・seed・保持率で比較する場合は [Sparseベンチマーク](docs/sparse-benchmark-suite.md) を参照してください。
 
@@ -90,7 +90,7 @@ Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLi
 - [MiniMax H3の任意の高速化設定](docs/minimax-h3-acceleration.md)
 - [Jev / Sparse Attentionの設定と速度比較](docs/jev-sparse.md) — Krea2・H3・Anima・Qwen 2.1でON/OFF、APIキー登録、速度優先の層別制御。
 - [Krea2のJev / Sparse・4K高速化](docs/krea2-jev.md) — 固定率スライダー、タイル配分、API回数の見方。
-- [MiniMax H3・Qwen Image 2.1のW4A8量子化（試験対応）](docs/w4a8.md)
+- [MiniMax H3・Qwen Image 2.1のW4A8量子化](docs/w4a8.md)
 - [Qwen Image 2.1：INT8とW4A8の実画像・実測比較](docs/assets/qwen-image21-v1.3.0/README.md)
 - [MiniMax H3のCLIPキャッシュとNegPiP併用](docs/minimax-h3-clipcache.md)
 - [MiniMax H3 Fun ControlNetと実行環境の修正](docs/minimax-h3-fun-control.md)

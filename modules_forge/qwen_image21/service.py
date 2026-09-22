@@ -47,6 +47,8 @@ class Job:
     completion_committed: bool = False
     message: str = "実行環境を準備中"
     thread: threading.Thread | None = None
+    operation: str = "generate"
+    precision: str = "int8"
 
 
 class Studio:
@@ -122,7 +124,7 @@ class Studio:
                     rewriter_manifest(self.runtime, editing=True)
                 directory = self.outputs / uuid.uuid4().hex
                 directory.mkdir(parents=True, exist_ok=False)
-                job = Job(directory.name, owner, directory)
+                job = Job(directory.name, owner, directory, operation=request.operation, precision=request.precision)
                 payload = request.to_dict()
                 clean_paths = copy_inputs(request.input_images, directory)
                 model_paths, instruction, annotation = snapshot_annotation(
@@ -165,6 +167,27 @@ class Studio:
                 finally:
                     lease.release()
                 raise
+
+    def prepare(self, precision: str, owner: str) -> str:
+        return self.start(Request(prompt="モデルを保存", precision=precision, operation="prepare"), owner)
+
+    def unload(self) -> str:
+        self._dependencies()
+        with self._guard:
+            if any(not job.done.is_set() for job in self._jobs.values()):
+                raise QwenImage21Error("Qwen Image 2.1の処理が終わってから解放してください。")
+            lease = self._ownership_factory()
+            # A manual idle release must not start an engine or evict another
+            # Studio. Hold the shared queue until the worker has actually exited.
+            lease.engine = None
+            if not lease.acquire(blocking=False):
+                raise QwenImage21Error("生成中です。終了後に解放してください。")
+            try:
+                self._residency.release_resource(ENGINE)
+                self._release_idle()
+            finally:
+                lease.release()
+        return "読み込み済みモデルを解放しました。保存済みモデルは次回も使えます。"
 
     def _release_idle(self):
         """Called under the GPU queue; do not obtain another GPU lease here."""
@@ -243,6 +266,31 @@ class Studio:
             if not response.get("ok"):
                 raise QwenImage21Error(response.get("error") or "workerでエラーが発生しました。")
             result = read_json(job.directory / "result.json")
+            if request.operation == "prepare":
+                if (
+                    not isinstance(result, dict)
+                    or result.get("operation") != "prepare"
+                    or result.get("precision") != request.precision
+                ):
+                    raise QwenImage21Error("モデルの保存結果を確認できません。")
+                saved = result.get("quantized_cache", {})
+                for name in ("transformer", "text_encoder"):
+                    record = saved.get(name, {})
+                    folder = inside(self.runtime / "quantized", Path(record.get("path", "")))
+                    if record.get("status") != "hit" or not (folder / "complete.json").is_file():
+                        raise QwenImage21Error("モデルの保存が完了していません。")
+                with self._guard:
+                    if job.cancel.is_set():
+                        raise InterruptedError("停止しました。")
+                    self._residency.register(ENGINE, self._release_idle, ENGINE)
+                    final = {
+                        "state": "complete",
+                        "message": f"{request.precision.upper()} · 保存済み。次回からこのモデルを使います。",
+                        "progress": 1.0,
+                    }
+                    job.completion_committed = True
+                    success = True
+                return
             output = inside(job.directory, job.directory / "output.png")
             if not isinstance(result, dict) or Path(result.get("output_path", "")).resolve() != output:
                 raise QwenImage21Error("生成結果の保存先を確認できません。worker.logを確認してください。")
@@ -327,7 +375,13 @@ class Studio:
                     state.update({key: progress[key] for key in ("message", "progress", "stage") if key in progress})
             except (OSError, ValueError):
                 pass
-        return {**state, "elapsed": time.monotonic() - job.started, "done": done}
+        return {
+            **state,
+            "elapsed": time.monotonic() - job.started,
+            "done": done,
+            "operation": job.operation,
+            "precision": job.precision,
+        }
 
     def cancel(self, identifier: str, owner: str) -> bool:
         with self._guard:

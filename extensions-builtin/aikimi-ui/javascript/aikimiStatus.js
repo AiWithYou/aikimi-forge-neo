@@ -366,6 +366,8 @@
         metrics.append(
             createMetricRow("状態", "status"),
             createMetricRow("モデル", "model"),
+            createMetricRow("環境", "environment"),
+            createMetricRow("バージョン", "version"),
             createMetricRow("読込時間", "load-time"),
             createMetricRow("進捗", "progress"),
             createMetricRow("残り時間", "eta"),
@@ -519,6 +521,14 @@
             );
         }
         if (assetIssue) candidates.push(stateCandidate("warning", { errorDetails: assetIssue, priority: 15 }));
+        const environment = snapshot?.environment;
+        if (environment?.feature === activeFeature && environment.available === false) {
+            candidates.push(stateCandidate("warning", {
+                message: `${environment.label}の準備が必要です。`,
+                errorDetails: `${environment.summary || ""} ${environment.action || ""}`.trim(),
+                priority: 16,
+            }));
+        }
         candidates.push(stateCandidate("idle"));
 
         return candidates.reduce((selected, candidate) => (candidate.priority > selected.priority ? candidate : selected));
@@ -620,9 +630,10 @@
         const progressPercent = Number.isFinite(progress) ? Math.round(Math.min(Math.max(progress, 0), 1) * 100) : null;
         const stateMessage = candidate.message || stateConfig.message || STATUS_LABELS[state] || state;
         const portraitDescriptor = resolvePortrait(state);
-        const modelName = model.loaded_name || model.selected_name || "未選択";
+        const nativeFeature = ["qwen_image21", "sensenova", "minimax_h3"].includes(activeFeature);
+        const modelName = candidate.modelName || (nativeFeature ? featureLabel(activeFeature) : model.loaded_name || model.selected_name) || "未選択";
         const modelLabel =
-            model.loaded_name && model.reload_pending && model.selected_name
+            !candidate.modelName && !nativeFeature && model.loaded_name && model.reload_pending && model.selected_name
                 ? `${modelName} → ${model.selected_name}`
                 : modelName;
 
@@ -663,6 +674,11 @@
 
         setText(field("status"), STATUS_LABELS[state] || state);
         setText(field("model"), modelLabel);
+        const environment = snapshot?.environment?.feature === activeFeature ? snapshot.environment : null;
+        setText(field("environment"), environment ? environment.available === false ? "準備が必要です" : environment.state === "ready" ? "準備できています" : "導入状態を確認してください" : "確認中");
+        field("environment").parentElement.hidden = !activeFeature;
+        setText(field("version"), backend.version ? `v${backend.version}` : "—");
+        field("version").parentElement.hidden = !backend.version;
         setText(field("load-time"), formatSeconds(model.last_load_seconds));
         setText(field("progress"), progressPercent == null ? "—" : `${progressPercent}%${candidate.text ? ` · ${candidate.text}` : ""}`);
         setText(field("eta"), formatSeconds(eta));
@@ -677,7 +693,7 @@
         setText(field("error"), publicTechnicalDetail(candidate.errorDetails || portraitLoadIssue || "None"));
         field("error").parentElement.hidden = !candidate.errorDetails && !portraitLoadIssue;
         field("vram").parentElement.hidden = !memory.available;
-        field("load-time").parentElement.hidden = !Number.isFinite(model.last_load_seconds);
+        field("load-time").parentElement.hidden = nativeFeature || !Number.isFinite(model.last_load_seconds);
 
     }
 
@@ -808,19 +824,23 @@
             controller.abort();
         }, FETCH_TIMEOUT_MS);
         try {
-            const response = await fetch(appUrl("./internal/aikimi-status"), {
+            const url = new URL(appUrl("./internal/aikimi-status"));
+            if (activeFeature) url.searchParams.set("feature", activeFeature);
+            const response = await fetch(url.href, {
                 cache: "no-store",
                 headers: { Accept: "application/json" },
                 signal: controller.signal,
             });
             if (!response.ok) throw new Error(`Status returned ${response.status}`);
 
-            snapshot = await response.json();
+            const nextSnapshot = await response.json();
+            if (generation !== pollingGeneration || !statusIsActive()) return;
+            snapshot = nextSnapshot;
             pollingFailures = 0;
 
             render();
         } catch (error) {
-            if (error.name !== "AbortError" || timedOut) {
+            if (generation === pollingGeneration && (error.name !== "AbortError" || timedOut)) {
                 pollingFailures += 1;
                 render();
             }
@@ -907,6 +927,7 @@
         activeContainer = next.container;
         navigationIssue = next.feature ? nextNavigationIssue : null;
         lastRenderedState = null;
+        if (changed) stopPolling();
         syncVisibility();
     }
 

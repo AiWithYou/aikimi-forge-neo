@@ -21,7 +21,7 @@ _log = logging.getLogger(__name__)
 
 def policy():
     shared = sys.modules.get("modules.shared")
-    value = getattr(getattr(shared, "opts", None), "aikimi_model_retention", AUTO)
+    value = getattr(getattr(shared, "opts", None), "aikimi_model_retention", KEEP)
     if value not in {AUTO, KEEP, RELEASE}:
         raise ValueError("生成後のモデル保持設定が不正です。")
     return value

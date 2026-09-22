@@ -25,7 +25,7 @@ def create_ui(blocks):
     with gr.Accordion("GPU・モデル保持", open=False, elem_id="aikimi-gpu-retention"):
         with gr.Row():
             mode = gr.Radio(
-                [("自動（5分後に解放）", "auto"), ("連続生成を優先", "keep"), ("毎回解放", "release")],
+                [("保持（手動で解放）", "keep"), ("自動（5分後に解放）", "auto"), ("毎回解放", "release")],
                 value=gpu_residency.policy(),
                 label="生成後のモデル保持",
                 scale=5,
