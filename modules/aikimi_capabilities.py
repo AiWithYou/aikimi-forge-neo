@@ -345,14 +345,42 @@ def _qwen_image21_check(paths: DiagnosticPaths) -> DiagnosticCheck:
 
 
 def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | None:
+    if feature == "minimax_h3_image":
+        from dataclasses import replace
+
+        return replace(_minimax_h3_check(paths), id=feature, label="MiniMax H3 Image")
     check = {
         "krea2": _krea2_check,
         "anima38": _anima38_check,
         "sensenova": _sensenova_check,
         "minimax_h3": _minimax_h3_check,
         "qwen_image21": _qwen_image21_check,
+        "yue2": _yue2_check,
     }.get(feature)
     return check(paths) if check else None
+
+
+def _yue2_check(paths: DiagnosticPaths) -> DiagnosticCheck:
+    from modules_forge.yue2_studio.core import runtime_manifest
+
+    runtime = paths.root / "extensions-builtin/yue2-studio/runtime"
+    for engine, fields in (("official", ("python", "model", "vae")), ("cpp", ("binary", "models"))):
+        try:
+            entry = runtime_manifest(runtime, engine)
+            if all(isinstance(entry.get(name), str) and Path(entry[name]).exists() for name in fields):
+                return DiagnosticCheck(
+                    "yue2", "YuE2 Music", CheckState.READY, "YuE2の実行環境とモデルを確認しました。", available=True
+                )
+        except (OSError, ValueError):
+            pass
+    return DiagnosticCheck(
+        "yue2",
+        "YuE2 Music",
+        CheckState.BLOCKED,
+        "YuE2の実行環境またはモデルが不足しています。",
+        "aikimi-yue2-setup.batで準備してください。",
+        available=False,
+    )
 
 
 def feature_checks(paths: DiagnosticPaths) -> tuple[DiagnosticCheck, ...]:

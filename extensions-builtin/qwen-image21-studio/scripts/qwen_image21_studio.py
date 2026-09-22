@@ -389,13 +389,6 @@ def model_save_status(precision, identifier, request: gr.Request):
     return saved_status(RUNTIME, precision), gr.update(interactive=precision != "bf16")
 
 
-def unload_model():
-    try:
-        return STUDIO.unload(), '<span data-state="idle"></span>'
-    except Exception as exc:
-        return str(exc), gr.update()
-
-
 def refresh_saved_after_generation(identifier, precision, request: gr.Request):
     try:
         state = STUDIO.status(identifier, owner(request)) if identifier else {}
@@ -792,7 +785,6 @@ def on_ui_tabs():
                 )
                 with gr.Row():
                     save_model = gr.Button("変換モデルを保存", size="sm", elem_id="qwen21-save-model")
-                    unload = gr.Button("モデルを解放", size="sm", elem_id="qwen21-unload-model")
                     stop_save = gr.Button("保存を停止", size="sm", visible=False, elem_id="qwen21-stop-save")
                 save_status = gr.Textbox(
                     value=saved_status(RUNTIME, "int8"),
@@ -887,7 +879,6 @@ def on_ui_tabs():
         stop_save.click(cancel, inputs=save_job, outputs=[save_status, stop_save], queue=False, **PRIVATE)
         precision.change(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
         tab.load(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
-        unload.click(unload_model, outputs=[save_status, assistant], queue=False, **PRIVATE)
         workspace_view.change(switch_workspace, inputs=workspace_view, outputs=[edit_view, result_view], **PRIVATE)
         generate.click(
             start_canvas,

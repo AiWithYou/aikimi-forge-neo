@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import html
+import uuid
 from pathlib import Path
 
 import gradio as gr
 
 from modules import script_callbacks
+from modules.aikimi_status import studio_status_html
 from modules.paths import data_path, script_path
 from modules_forge import minimax_h3_images as images
 from modules_forge.minimax_h3_acceleration import H3Acceleration
@@ -89,8 +91,14 @@ def _request(mode, prompt, references, width, height, steps, seed, scheduler, fr
 def _generate(runtime, url, profile, mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_values):
     # Keep the submitted URL in server-side State; changing a textbox must not
     # redirect a subsequent cancellation to another ComfyUI process.
+    notification_id = uuid.uuid4().hex
+    def notify(stage, message, progress=None):
+        return studio_status_html("minimax-h3-image", stage, message, job_id=notification_id,
+                                  model_name="MiniMax H3 Image", progress=progress,
+                                  result_id="h3-image-result" if stage == "complete" else "", visible=True)
+
     yield (
-        "入力を確認しています。", None, [], [], None, {},
+        notify("prepare", "入力を確認しています。"), None, [], [], None, {},
         gr.update(interactive=False), gr.update(interactive=False),
     )
     try:
@@ -100,18 +108,18 @@ def _generate(runtime, url, profile, mode, prompt, references, width, height, st
         ):
             complete = event["stage"] == "complete"
             job = {"prompt_id": event["prompt_id"], "server_url": url} if event.get("prompt_id") and not complete else {}
-            message = html.escape(event["message"])
+            message = event["message"]
             if "elapsed" in event:
                 message += f" 経過 {event['elapsed']:.0f} 秒。"
             yield (
-                message, event.get("path", gr.update()),
+                notify(event["stage"], message, event.get("progress")), event.get("path", gr.update()),
                 [(path, f"候補 {index}") for index, path in enumerate(event["candidates"])] if complete else gr.update(),
                 event.get("files", gr.update()), event.get("metadata", gr.update()), job,
                 gr.update(interactive=complete), gr.update(interactive=bool(job)),
             )
     except Exception as exc:
         yield (
-            "**停止またはエラー:** " + html.escape(str(exc)), gr.update(), gr.update(),
+            notify("cancelled" if isinstance(exc, images.H3ImageCancelled) else "error", str(exc)), gr.update(), gr.update(),
             gr.update(), gr.update(), {}, gr.update(interactive=True), gr.update(interactive=False),
         )
 
@@ -191,9 +199,9 @@ def on_ui_tabs():
                 with gr.Row():
                     generate = gr.Button("画像を生成", variant="primary")
                     cancel = gr.Button("停止", interactive=False)
-                status = gr.Markdown("未実行。")
+                status = gr.HTML("未実行。", elem_id="h3-image-status")
             with gr.Column(scale=1, min_width=320):
-                result = gr.Image(label="生成画像", type="filepath", format="png", interactive=False)
+                result = gr.Image(label="生成画像", type="filepath", format="png", interactive=False, elem_id="h3-image-result")
                 gallery = gr.Gallery(label="5フレームの候補（候補保存を有効にした場合）", columns=3, height=280, interactive=False)
                 files = gr.File(label="PNG・生成条件JSON", file_count="multiple", interactive=False)
                 gr.Markdown("保存先: `outputs/minimax_h3/images/`。原画像は上書きしません。")

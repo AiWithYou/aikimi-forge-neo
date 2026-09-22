@@ -199,6 +199,45 @@
     const observedErrors = new WeakSet();
     const preloadedImages = new Map();
     const failedAssetUrls = new Set();
+    const studioSignatures = new Map();
+
+    function syncStudioEvents() {
+        if (!enabled || !window.AikimiStatus) return;
+        for (const element of gradioApp().querySelectorAll("[data-aikimi-source]")) {
+            const data = element.dataset;
+            const source = data.aikimiSource;
+            const signature = JSON.stringify([data.job, data.stage, data.message, data.progress, data.model, data.result]);
+            if (studioSignatures.get(source) === signature) continue;
+            studioSignatures.set(source, signature);
+            if (["idle", "cancelled", "cancel"].includes(data.stage)) {
+                window.AikimiStatus.clear(source);
+                continue;
+            }
+            if (data.stage === "released") {
+                published.clear();
+                for (const timer of publishedTimers.values()) window.clearTimeout(timer);
+                publishedTimers.clear();
+                currentIssue = null;
+                completedUntil = 0;
+                requestFreshSnapshot();
+            }
+            const state = {
+                loading: "loading_model", runtime: "loading_model", prepare: "loading_model",
+                running: "generating", generating: "generating", saving: "generating",
+                queued: "queued", reconnecting: "updating", complete: "completed", released: "completed",
+                failed: "error", error: "error", warning: "warning",
+            }[data.stage];
+            if (!state) continue;
+            const progress = data.progress === "" ? NaN : Number(data.progress);
+            window.AikimiStatus.publish(source, {
+                state, message: data.message, modelName: data.model,
+                progress: Number.isFinite(progress) ? progress : null,
+                resultElementId: data.result || null,
+                errorDetails: ["error", "warning"].includes(state) ? data.message : null,
+                ttlMs: source === "model-release" ? 5000 : null,
+            });
+        }
+    }
 
     function appUrl(relativePath) {
         return new URL(relativePath, window.location.href).href;
@@ -258,6 +297,9 @@
             sensenova: "SenseNova",
             minimax_h3: "MiniMax H3",
             qwen_image21: "Qwen Image 2.1",
+            minimax_h3_image: "MiniMax H3 Image",
+            yue2: "YuE2 Music",
+            forge: "Forge",
         }[feature] || "Aikimi";
     }
 
@@ -368,6 +410,7 @@
             createMetricRow("モデル", "model"),
             createMetricRow("環境", "environment"),
             createMetricRow("バージョン", "version"),
+            createMetricRow("保持設定", "retention"),
             createMetricRow("読込時間", "load-time"),
             createMetricRow("進捗", "progress"),
             createMetricRow("残り時間", "eta"),
@@ -630,7 +673,7 @@
         const progressPercent = Number.isFinite(progress) ? Math.round(Math.min(Math.max(progress, 0), 1) * 100) : null;
         const stateMessage = candidate.message || stateConfig.message || STATUS_LABELS[state] || state;
         const portraitDescriptor = resolvePortrait(state);
-        const nativeFeature = ["qwen_image21", "sensenova", "minimax_h3"].includes(activeFeature);
+        const nativeFeature = ["qwen_image21", "sensenova", "minimax_h3", "minimax_h3_image", "yue2"].includes(activeFeature);
         const modelName = candidate.modelName || (nativeFeature ? featureLabel(activeFeature) : model.loaded_name || model.selected_name) || "未選択";
         const modelLabel =
             !candidate.modelName && !nativeFeature && model.loaded_name && model.reload_pending && model.selected_name
@@ -679,6 +722,8 @@
         field("environment").parentElement.hidden = !activeFeature;
         setText(field("version"), backend.version ? `v${backend.version}` : "—");
         field("version").parentElement.hidden = !backend.version;
+        setText(field("retention"), { keep: "保持（手動で解放）", auto: "自動（5分後に解放）", release: "毎回解放" }[backend.model_retention]);
+        field("retention").parentElement.hidden = !backend.model_retention;
         setText(field("load-time"), formatSeconds(model.last_load_seconds));
         setText(field("progress"), progressPercent == null ? "—" : `${progressPercent}%${candidate.text ? ` · ${candidate.text}` : ""}`);
         setText(field("eta"), formatSeconds(eta));
@@ -902,8 +947,13 @@
         const tabs = window.AikimiTabs;
         const eventFeature = event?.detail?.feature || null;
         const eventContainer = event?.detail?.container || null;
-        const feature = tabs?.getActiveFeature?.() ?? eventFeature;
-        const container = tabs?.getActiveContainer?.() ?? eventContainer;
+        const container = tabs?.getActiveContainer?.() ?? eventContainer ??
+            (typeof get_uiCurrentTabContent === "function" ? get_uiCurrentTabContent() : null);
+        const feature = tabs?.getActiveFeature?.() ?? eventFeature ?? {
+            tab_minimax_h3_image_studio: "minimax_h3_image",
+            tab_aikimi_yue2_studio: "yue2",
+            tab_txt2img: "forge", tab_img2img: "forge",
+        }[container?.id];
         return {
             feature: typeof feature === "string" && feature ? feature : null,
             container: container instanceof Element ? container : null,
@@ -970,6 +1020,7 @@
             publishedTimers.clear();
         }
         if (wasEnabled !== enabled) {
+            if (enabled) studioSignatures.clear();
             document.dispatchEvent(new CustomEvent("aikimi:status-visibility-change"));
         }
     }
@@ -1047,14 +1098,15 @@
                 if (existingTimer) window.clearTimeout(existingTimer);
                 publishedTimers.delete(key);
                 published.set(key, { ...value });
-                if (value.state === "completed") {
+                const ttl = Number.isFinite(value.ttlMs) && value.ttlMs > 0 ? Math.min(value.ttlMs, 15000) : value.state === "completed" ? 4500 : 0;
+                if (ttl) {
                     publishedTimers.set(
                         key,
                         window.setTimeout(function () {
                             published.delete(key);
                             publishedTimers.delete(key);
                             render();
-                        }, 4500),
+                        }, ttl),
                     );
                 }
                 render();
@@ -1080,6 +1132,7 @@
     function handleUiUpdate() {
         if (optionsAvailable) ensureToggle();
         syncFeatureContext();
+        syncStudioEvents();
         if (statusIsActive()) scanOutputErrors();
     }
 
