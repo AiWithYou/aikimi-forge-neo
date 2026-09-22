@@ -119,6 +119,8 @@
             return;
         }
         const state = {
+            loading: "loading_model",
+            loaded: "loading_model",
             prepare: "generating",
             queued: "queued",
             running: "generating",
@@ -128,7 +130,7 @@
         if (!state) return;
         const progressMatch = progressText.match(/(\d+)%/);
         window.AikimiStatus.publish("sensenova-u15", {
-            state,
+            state, message: exactError || message, modelName: "SenseNova U1.5",
             resultElementId: "sn-result-image",
             progress: progressMatch ? Number(progressMatch[1]) / 100 : null,
             errorDetails: stage === "error" ? exactError || message : null,

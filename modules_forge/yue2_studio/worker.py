@@ -72,7 +72,7 @@ def join_windows_job(name):
         kernel.CloseHandle(handle)
 
 
-def native(request: Request, entry: dict, directory: Path, plan_only: bool, report, cancelled, cache=None):
+def native(request: Request, entry: dict, directory: Path, plan_only: bool, report, cancelled, cache=None, stage_callback=None):
     import torch
     from yue2 import YuE2Pipeline
     from yue2.pipeline import SongResult
@@ -86,7 +86,9 @@ def native(request: Request, entry: dict, directory: Path, plan_only: bool, repo
     total = math.ceil(torch.cuda.get_device_properties(0).total_memory / 2**30)
     budget = min(request.memory_gib or total, total)
     config = GenerationConfig.from_dict({"ode_steps": request.steps, "semantic": {"max_tokens": request.max_tokens}})
-    report("モデルを検証・読み込み中（初回は時間がかかります）")
+    if stage_callback:
+        stage_callback("loading")
+    report("モデルを検証・読み込み中")
     key = (tuple(sorted(entry.items())), request.steps, request.max_tokens, budget, request.offload, request.fp8)
     if cache is not None and cache.get("key") != key:
         if cache.get("pipe") is not None:
@@ -109,6 +111,8 @@ def native(request: Request, entry: dict, directory: Path, plan_only: bool, repo
             out.mkdir(exist_ok=False)
             song_request = SongRequest(**request.song(index))
             start = time.perf_counter()
+            if stage_callback:
+                stage_callback("generating")
             report(f"候補 {index + 1}/{request.candidates} · 楽譜を準備中")
             plan = pipe.plan(request=song_request, cancelled=cancelled)
             plan.save(out)
@@ -195,8 +199,12 @@ _PIPE_CACHE = {}
 def resident_run(payload):
     directory = Path(payload["job"]).resolve()
     runtime = Path(payload["runtime"]).resolve()
+    stage = "loading"
+    def set_stage(value):
+        nonlocal stage
+        stage = value
     def report(message, state="running"):
-        atomic_json(directory / "status.json", {"state": state, "message": message})
+        atomic_json(directory / "status.json", {"state": state, "message": message, "stage": stage if state == "running" else state})
 
     try:
         project = read_json(directory / "project.json")
@@ -207,8 +215,9 @@ def resident_run(payload):
         cancelled = lambda: (directory / "cancel").exists()
         runner = native if request.engine == "official" else cpp
         if runner is native:
-            runner(request, entry, directory, project.get("plan_only", False), report, cancelled, _PIPE_CACHE)
+            runner(request, entry, directory, project.get("plan_only", False), report, cancelled, _PIPE_CACHE, set_stage)
         else:
+            set_stage("generating")
             runner(request, entry, directory, project.get("plan_only", False), report, cancelled)
         report("完了しました。履歴から候補を試聴・比較できます。", "complete")
         return 0
@@ -219,7 +228,7 @@ def resident_run(payload):
         traceback.print_exc()
         message = str(exc)
         if "out of memory" in message.lower():
-            message = "VRAM不足です。他のGPUアプリを終了し、CPU退避を有効にしてください。16GB環境は実験対応です。"
+            message = "VRAM不足です。他のGPUアプリを終了し、CPU退避を有効にしてください。"
         report(message, "failed")
         raise
 

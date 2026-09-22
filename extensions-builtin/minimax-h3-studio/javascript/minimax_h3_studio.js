@@ -246,7 +246,7 @@
         }
         const state = {
             validation: "warning",
-            runtime: "updating",
+            runtime: "loading_model",
             prepare: "generating",
             queued: "queued",
             running: "generating",
@@ -257,7 +257,7 @@
         }[stage];
         if (!state) return;
         window.AikimiStatus.publish("minimax-h3", {
-            state,
+            state, message, modelName: "MiniMax H3",
             resultElementId: "h3-result-video",
             progress: Number.isFinite(progressNow) ? progressNow / 100 : null,
             errorDetails: ["validation", "error"].includes(stage) ? message : null,

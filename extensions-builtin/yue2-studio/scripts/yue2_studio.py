@@ -74,6 +74,22 @@ def cancel(identifier, request: gr.Request):
     return "停止を要求しました。終了確認中です。" if STUDIO.cancel(identifier, owner(request)) else "この画面で停止できる実行中ジョブはありません。"
 
 
+def assistant_status(identifier, request: gr.Request):
+    from modules.aikimi_status import studio_status_html
+
+    if not identifier:
+        return ""
+    try:
+        state = STUDIO.status(identifier, owner(request))
+    except JobNotFound:
+        return studio_status_html("yue2", "idle", "", job_id=identifier)
+    stage = state["state"] if state["done"] else state.get("stage", "loading")
+    return studio_status_html(
+        "yue2", stage, state.get("message", ""), job_id=identifier, model_name="YuE2 Music",
+        progress=state.get("progress"), result_id="yue2-result-audio" if stage == "complete" else "",
+    )
+
+
 def refresh_history():
     choices = STUDIO.history()
     return gr.update(choices=choices, value=None), gr.update(choices=choices, value=None)
@@ -190,10 +206,11 @@ def on_ui_tabs():
                     plan = gr.Button("楽譜だけ作る")
                     stop = gr.Button("停止", interactive=False)
                 status = gr.Textbox(value="未実行", label="進行状況", interactive=False, lines=2)
+                assistant = gr.HTML(visible="hidden", elem_id="yue2-assistant-state")
             with gr.Column(scale=4, min_width=340):
                 history = gr.Dropdown(choices=[], label="生成履歴・候補", interactive=True)
                 refresh = gr.Button("履歴を更新", size="sm")
-                audio = gr.Audio(label="試聴 A", interactive=False, type="filepath")
+                audio = gr.Audio(label="試聴 A", interactive=False, type="filepath", elem_id="yue2-result-audio")
                 warning = gr.Textbox(label="結果の確認", interactive=False, lines=2)
                 with gr.Accordion("別の候補と比較", open=False):
                     comparison = gr.Dropdown(choices=[], label="比較する候補", interactive=True)
@@ -217,7 +234,10 @@ def on_ui_tabs():
         for button, mode in ((generate, normal_mode), (plan, plan_mode)):
             button.click(run, inputs=[*ordered, mode], outputs=output_controls,
                          concurrency_limit=1, concurrency_id="aikimi-yue2-submit", trigger_mode="once", **PRIVATE)
-        timer.tick(poll, inputs=job, outputs=[status, generate, plan, stop, timer, history, comparison], **PRIVATE)
+        job.change(assistant_status, inputs=job, outputs=assistant, **PRIVATE)
+        timer.tick(poll, inputs=job, outputs=[status, generate, plan, stop, timer, history, comparison], **PRIVATE).then(
+            assistant_status, inputs=job, outputs=assistant, **PRIVATE,
+        )
         stop.click(cancel, inputs=job, outputs=status, queue=False, **PRIVATE)
         history.change(load_result, inputs=history, outputs=[audio, score_result, files, warning], **PRIVATE)
         comparison.change(lambda key: load_result(key)[0], inputs=comparison, outputs=audio_b, **PRIVATE)

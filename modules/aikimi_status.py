@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import threading
 import time
 from pathlib import Path
@@ -13,8 +14,37 @@ _environment_cache = {}
 _environment_lock = threading.Lock()
 
 
+def studio_status_html(source, stage, message, *, job_id="", model_name="", progress=None, result_id="", visible=False):
+    """Small browser-owned Studio status payload, with no prompts or local paths."""
+    message = safe_error_message(message, limit=240)
+    if stage == "complete" and progress is None:
+        progress = 1.0
+    values = {
+        "aikimi-source": source,
+        "stage": stage,
+        "message": message,
+        "job": job_id,
+        "model": model_name,
+        "progress": "" if progress is None else progress,
+        "result": result_id,
+    }
+    attributes = " ".join(f'data-{key}="{html.escape(str(value), quote=True)}"' for key, value in values.items())
+    payload = f"<span hidden {attributes}></span>"
+    return f"<p>{html.escape(message)}</p>{payload}" if visible else payload
+
+
 def _environment_snapshot(feature: str) -> dict[str, Any] | None:
-    if feature not in {"krea2", "anima38", "sensenova", "minimax_h3", "qwen_image21"}:
+    if feature == "forge":
+        model = _model_snapshot()
+        available = bool(model["loaded"] or model["selected_name"])
+        return {
+            "feature": "forge",
+            "label": "Forge",
+            "state": "ready" if available else "warning",
+            "available": available,
+            "summary": "モデルを選択してください。" if not available else "モデルが選択されています。",
+        }
+    if feature not in {"krea2", "anima38", "sensenova", "minimax_h3", "minimax_h3_image", "qwen_image21", "yue2"}:
         return None
     from modules.aikimi_capabilities import feature_check
     from modules.aikimi_diagnostics import default_paths
@@ -163,6 +193,7 @@ def snapshot(feature: str = "") -> dict[str, Any]:
         "backend": {
             "ready": True,
             "version": VERSION,
+            "model_retention": getattr(getattr(shared, "opts", None), "aikimi_model_retention", "keep"),
             "uptime_seconds": max(time.time() - server_start, 0.0),
         },
     }
