@@ -222,6 +222,15 @@ class RunLog:
             self.closed = True
 
 
+def cadence_interval(cadence, interval):
+    return 1 if cadence == "step" else interval
+
+
+def cadence_has_budget(cadence, calls, maximum):
+    # Keep zero as an explicit cloud opt-out for existing API clients.
+    return maximum > 0 and (cadence in {"interval", "step"} or calls < (maximum if cadence == "legacy" else 1))
+
+
 @dataclass(frozen=True)
 class AnimaOptions:
     mode: str = "off"
@@ -231,10 +240,18 @@ class AnimaOptions:
     update_interval: int = 4
     max_calls: int = 1
     timeout: float = 3.0
+    decision_cadence: str = "legacy"
 
     def validate(self) -> None:
         if self.mode not in {"off", "dense", "fixed", "rules", "jev"}:
             raise ValueError("Unknown Anima sparse mode")
+        if not isinstance(self.decision_cadence, str) or self.decision_cadence not in {
+            "legacy",
+            "once",
+            "interval",
+            "step",
+        }:
+            raise ValueError("Unknown Jev decision cadence")
         if (
             isinstance(self.keep_percent, bool)
             or not isinstance(self.keep_percent, (int, float))

@@ -22,6 +22,9 @@ def launch_defaults() -> Options:
 
 def worker_launch(request, worker: Path, environment: dict) -> tuple[Path, dict, dict]:
     options = replace(launch_defaults(), mode=request.sparse_mode, keep_percent=request.sparse_keep_percent)
+    cadence = getattr(request, "sparse_jev_cadence", "legacy")
+    if cadence != "legacy" and request.sparse_mode == "jev":
+        options = replace(options, decision_cadence=cadence, update_interval=request.sparse_jev_interval)
     options.validate()
     environment = dict(environment)
     for key in ("TYPESAFE_API_KEY", "AIKIMI_JEV_ALLOW_CLOUD", "AIKIMI_JEV_PYTHON", OPTIONS_ENV):

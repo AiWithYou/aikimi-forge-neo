@@ -1452,9 +1452,9 @@ def _build_ui():
         )
 
         summary_inputs = [aspect, quality, duration, steps, scheduler, ref_image_size]
-        acceleration_controls[-5].change(
+        acceleration_controls[-7].change(
             lambda enabled: (gr.update(visible=not enabled), gr.update(label="各区間の終了構図" if enabled else "終了フレーム")),
-            inputs=[acceleration_controls[-5]], outputs=[settings_summary, last_frame], queue=False, show_progress="hidden",
+            inputs=[acceleration_controls[-7]], outputs=[settings_summary, last_frame], queue=False, show_progress="hidden",
         )
         mode.change(
             fn=_mode_updates,

@@ -69,7 +69,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **SenseNovaの参照優先モード**（追加） | 参照キャッシュのCPU退避とAttentionの分割処理でVRAM使用量を削減。最大8枚・各約1MPの参照と約4MP出力に対応し、CPU RAMと転送時間を使用します。 |
 | **H3の長尺生成**（統合＋追加） | 共通プロンプトと区間ごとの指示から、複数区間をつないだ動画を生成。HybridWindowsを利用する方式も選べます。導入条件と併用できる設定は[長尺生成ガイド](extensions-builtin/minimax-h3-studio/README.md#長尺生成)を参照してください。 |
 | **H3の高速化設定**（統合） | Turbo・INT8 VAE・Fast Decode・Sparse Attentionを必要に応じて選択。画質・メモリ・速度とのトレードオフは[高速化ガイド](docs/minimax-h3-acceleration.md)に記載しています。 |
-| **Jev / Sparse Attention**（追加） | Krea2・Anima・Qwen Image 2.1・H3で任意にON/OFF。Krea2は固定保持率を1〜100%のスライダーで調整でき、4K/8KではJevによるタイルのstep配分も選べます。[設定・実測](docs/krea2-jev.md) |
+| **Jev / Sparse Attention**（追加） | Krea2・Anima・Qwen Image 2.1・H3で任意にON/OFF。全4モデルでJevの再判定頻度を初回のみ・指定間隔・毎stepから選択。Krea2・Anima・Qwenは固定保持率スライダーも使えます。[共通設定](docs/jev-sparse.md) |
 | **H3 NegPiP**（統合） | H3 Studio／H3 Imageでプロンプト内の負の重みを使用。切替後は実行環境の再起動が必要で、Sparse Attentionとは併用できません。 |
 | **H3 CLIP条件キャッシュ**（統合＋追加） | 同じプロンプト・参照素材の条件を再利用し、Qwen3-VLの再ロードと再計算を省略。固定版CLIPCachedの導入が必要です。 |
 | **H3 Fun ControlNet · INT8**（統合） | 元動画のCannyや前処理済みのDepth・Pose動画で、動きと構図を制御。INT8制御モデルと対応ComfyUIが必要です。 |
@@ -94,6 +94,19 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 - [Grain Cleanerガイド](docs/grain-cleaner.md)
 - [背景除去・モデルの事前取得](docs/background-removal.md)
 - [CD Tuner・MiniMax H3 NegPiPガイド](docs/cd-tuner-negpip.md)
+
+### Jevの再判定頻度を設定する
+
+**Krea2だけでなく、H3・Anima・Qwen Image 2.1にも設定欄があります。** 各モデルでJevを選ぶと **Jevの再判定頻度** が現れます。
+
+| モデル | 設定場所 |
+|---|---|
+| Krea2 | `txt2img`／`img2img` → Krea2 · Jev高速化 → Jev自動 |
+| MiniMax H3 | H3 Studio → 高速化・任意設定 → Attention → H3 Jev速度優先 |
+| Anima | `txt2img`／`img2img` → Anima Self-Attention・実験 → Jev速度優先 |
+| Qwen Image 2.1 | 生成設定 → Sparse Attention → Jev速度優先 |
+
+**初回のみ／指定間隔／毎step** を選べます。指定間隔のスライダーを **2** にすると2stepごと、**3** にすると3stepごとに再判定します（1〜100）。既定は初回のみです。最初の判定には直前の計算で集めた統計を使います。H3は4step動画のstep単位、画像モデルはモデル評価単位です。[回数・対応範囲・H3ノード更新](docs/jev-sparse.md#再判定頻度)
 
 ### Krea2の高速化を使う
 

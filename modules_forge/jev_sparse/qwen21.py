@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
-from .common import ExperimentCancelled, JevClient, RunLog, sdk_python
+from .common import ExperimentCancelled, JevClient, RunLog, cadence_has_budget, cadence_interval, sdk_python
 
 OPTIONS_ENV = "AIKIMI_QWEN21_SPARSE_OPTIONS"
 REVISION = "6256aa7666cedd47443adc8f82da9a10e110b09c"
@@ -33,10 +33,18 @@ class Options:
     max_calls: int = 1
     timeout: float = 3.0
     block_size: int = 256
+    decision_cadence: str = "legacy"
 
     def validate(self):
         if not isinstance(self.mode, str) or self.mode not in {"off", "dense", "fixed", "rules", "jev"}:
             raise ValueError("Unknown Qwen 2.1 experiment mode")
+        if not isinstance(self.decision_cadence, str) or self.decision_cadence not in {
+            "legacy",
+            "once",
+            "interval",
+            "step",
+        }:
+            raise ValueError("Unknown Jev decision cadence")
         for name, low, high in (("keep_percent", 1, 100), ("timeout", 0.5, 20)):
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not low <= v <= high:
@@ -176,7 +184,9 @@ class Run:
         o = self.options
         if self.circuit_open or self.evaluation < o.warmup_evaluations or len(self.observations) != self.layers:
             return
-        if self.last_decision is not None and self.evaluation - self.last_decision < o.update_interval:
+        if self.last_decision is not None and self.evaluation - self.last_decision < cadence_interval(
+            o.decision_cadence, o.update_interval
+        ):
             return
         if o.mode == "rules":
             order = sorted(self.observations, key=lambda x: self.observations[x]["relative_output_norm"])
@@ -184,7 +194,11 @@ class Run:
                 i: (50.0 if n < self.layers / 3 else 75.0 if n < 2 * self.layers / 3 else 100.0)
                 for n, i in enumerate(order)
             }
-        elif o.mode == "jev" and self.client is not None and self.client.calls < o.max_calls:
+        elif (
+            o.mode == "jev"
+            and self.client is not None
+            and cadence_has_budget(o.decision_cadence, self.client.calls, o.max_calls)
+        ):
             try:
                 self.keeps = self.client.decide(
                     {
@@ -224,7 +238,11 @@ class Run:
     def observe(self, layer, result, source):
         if result.shape[1] < self.options.min_tokens:
             return
-        if self.options.mode == "jev" and self.client is not None and self.client.calls >= self.options.max_calls:
+        if (
+            self.options.mode == "jev"
+            and self.client is not None
+            and not cadence_has_budget(self.options.decision_cadence, self.client.calls, self.options.max_calls)
+        ):
             return
         if self.options.mode not in {"rules", "jev"} or self.circuit_open or result.shape[1] == 0:
             return

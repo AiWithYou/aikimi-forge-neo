@@ -29,9 +29,11 @@ def _samples(x, layout):
 
 
 class H3Controller:
-    def __init__(self, mode, log, client=None, prompt="", *, max_calls=4, initial_decision=True):
+    def __init__(self, mode, log, client=None, prompt="", *, max_calls=4, initial_decision=True, update_interval=1):
         self.mode, self.log, self.client, self.prompt = mode, log, client, prompt
         self.max_calls, self.initial_decision = max_calls, initial_decision
+        self.update_interval = update_interval
+        self.last_decision_step = None
         self.step = 0
         self.keeps = [100.0 if mode == "dense" else 10.0 if mode == "fixed10" else 5.0] * 50
         self.previous, self.pending, self.actual = {}, {}, {}
@@ -55,6 +57,7 @@ class H3Controller:
         self.prompt = ""
 
     def _decide(self, state, allowed, fallback, initial=False):
+        self.last_decision_step = -1 if initial else self.step
         try:
             result = self.client.decide(state, allowed, fallback)
             self.keeps = (
@@ -99,7 +102,13 @@ class H3Controller:
         if index != self.step:
             raise RuntimeError("H3 callback step order does not match four-step res_multistep")
         self.log.write("step", step=index + 1, keep_percent=self.keeps[:], actual_attention=dict(self.actual))
-        if self.mode == "jev" and index < 3 and not self.disabled and self.client.calls < self.max_calls:
+        if (
+            self.mode == "jev"
+            and index < 3
+            and not self.disabled
+            and self.client.calls < self.max_calls
+            and (self.last_decision_step is None or index - self.last_decision_step >= self.update_interval)
+        ):
             import torch
 
             if set(self.pending) != set(range(50)):
@@ -148,14 +157,18 @@ class AikimiH3SparseExperiment:
                 "mode": (["dense", "fixed5", "fixed10", "jev"],),
                 "sdk_python": ("STRING", {"default": ""}),
                 "prompt_context": ("STRING", {"default": "", "multiline": True}),
-            }
+            },
+            "optional": {
+                "decision_cadence": (["once", "interval", "step"], {"default": "once"}),
+                "decision_interval": ("INT", {"default": 2, "min": 1, "max": 100}),
+            },
         }
 
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "patch"
     CATEGORY = "Aikimi/Experiments"
 
-    def patch(self, model, mode, sdk_python="", prompt_context=""):
+    def patch(self, model, mode, sdk_python="", prompt_context="", decision_cadence="once", decision_interval=2):
         import comfy.model_management as mm
         import comfy.patcher_extension as pe
         from comfy_extras.nodes_sparse_attention import (
@@ -167,6 +180,10 @@ class AikimiH3SparseExperiment:
 
         if mode not in {"dense", "fixed5", "fixed10", "jev"}:
             raise ValueError("Unknown H3 experiment mode")
+        if decision_cadence not in {"once", "interval", "step"}:
+            raise ValueError("Unknown H3 Jev cadence")
+        if type(decision_interval) is not int or not 1 <= decision_interval <= 100:
+            raise ValueError("H3 Jev decision interval must be 1..100")
         if mode == "jev":
             from .common import cloud_environment
 
@@ -257,6 +274,8 @@ class AikimiH3SparseExperiment:
                 "h3",
                 {
                     "mode": mode,
+                    "decision_cadence": decision_cadence,
+                    "decision_interval": decision_interval,
                     "steps": 4,
                     "sampler": "res_multistep",
                     "timing_scope": "sampling_only",
@@ -271,7 +290,15 @@ class AikimiH3SparseExperiment:
             status = "failed"
             try:
                 client = JevClient(Path(sdk_python), 20, cancelled) if mode == "jev" else None
-                c = H3Controller(mode, log, client, prompt_context, max_calls=1, initial_decision=False)
+                c = H3Controller(
+                    mode,
+                    log,
+                    client,
+                    prompt_context,
+                    max_calls=1 if decision_cadence == "once" else 3,
+                    initial_decision=False,
+                    update_interval=decision_interval if decision_cadence == "interval" else 1,
+                )
                 p.controller = c
                 c.initialize()
 

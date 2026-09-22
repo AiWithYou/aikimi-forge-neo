@@ -50,7 +50,7 @@ class Script(scripts.Script):
 
     def ui(self, is_img2img):
         with gr.Accordion("Anima Self-Attention · 実験", open=False):
-            from modules_forge.jev_sparse.ui import credential_controls
+            from modules_forge.jev_sparse.ui import credential_controls, decision_controls
 
             credential_controls("anima-i2i" if is_img2img else "anima-t2i")
             mode = gr.Dropdown(
@@ -65,15 +65,15 @@ class Script(scripts.Script):
                 label="実験方式",
             )
             keep = gr.Slider(1, 100, value=75, step=1, label="固定モードの保持率 %")
+            cadence, interval = decision_controls("anima-i2i" if is_img2img else "anima-t2i", mode)
             with gr.Row():
                 minimum = gr.Number(value=4096, precision=0, label="Sparseを使う最小token数")
                 warmup = gr.Slider(0, 10, value=1, step=1, label="最初のDenseモデル評価回数")
             with gr.Row():
-                interval = gr.Slider(1, 32, value=4, step=1, label="制御の更新間隔（モデル評価回数）")
-                maximum = gr.Slider(0, 8, value=1, step=1, label="Jev呼び出し上限（速度優先は1回）")
+                maximum = gr.Number(value=1, visible=False)
                 timeout = gr.Slider(0.5, 20, value=3, step=0.5, label="Jev timeout（秒）")
             gr.Markdown(
-                "画像の自己Attentionだけが対象です。参照latentは対象外です。Jevは速度優先で25・50・75・100%、数値ルールは50・75・100%から選びます。Jevは保存したキーを使い、既定で1回問い合わせます。API失敗後はDenseへ戻ります。ログ：`outputs/jev-sparse`。"
+                "画像の自己Attentionだけが対象です。参照latentは対象外です。Jevは25・50・75・100%、数値ルールは50・75・100%から選びます。Jevのstepはモデル評価単位です。保存したキーを使い、選んだ頻度で再判定します。API失敗後はDenseへ戻ります。ログ：`outputs/jev-sparse`。"
             )
         self.infotext_fields = [
             (mode, "Anima Sparse mode"),
@@ -83,18 +83,21 @@ class Script(scripts.Script):
             (interval, "Anima Sparse interval"),
             (maximum, "Anima Sparse max calls"),
             (timeout, "Anima Sparse timeout"),
+            (cadence, "Anima Sparse cadence"),
         ]
-        return [mode, keep, minimum, warmup, interval, maximum, timeout]
+        return [mode, keep, minimum, warmup, interval, maximum, timeout, cadence]
 
-    def process(self, p, mode, keep, minimum, warmup, interval, maximum, timeout):
+    def process(self, p, mode, keep, minimum, warmup, interval, maximum, timeout, cadence="legacy"):
+        rule_interval = 4 if mode == "rules" and cadence != "legacy" else _integer(interval)
         options = AnimaOptions(
             mode,
             float(keep),
             _integer(minimum),
             _integer(warmup),
-            _integer(interval),
+            rule_interval,
             _integer(maximum),
             float(timeout),
+            decision_cadence=cadence,
         )
         options.validate()
         p._aikimi_sparse_options = options
@@ -106,9 +109,10 @@ class Script(scripts.Script):
                     "Anima Sparse keep": keep,
                     "Anima Sparse min tokens": minimum,
                     "Anima Sparse warmup": warmup,
-                    "Anima Sparse interval": interval,
+                    "Anima Sparse interval": options.update_interval,
                     "Anima Sparse max calls": maximum,
                     "Anima Sparse timeout": timeout,
+                    "Anima Sparse cadence": cadence,
                 }
             )
 

@@ -343,6 +343,23 @@ def test_real_observations_drive_jev_from_dense_prefill(tmp_path):
     assert "raw_tensor" not in serialized
 
 
+@pytest.mark.parametrize("cadence,expected", [("once", 1), ("interval", 6), ("step", 11)])
+def test_qwen_cadence_continues_after_first_decision(tmp_path, cadence, expected):
+    model = QwenImage21Transformer2DModel()
+    client = FakeClient()
+    with q.experiment(
+        model,
+        q.Options(mode="jev", min_tokens=64, block_size=64, decision_cadence=cadence, update_interval=2),
+        tmp_path,
+        upstream=UPSTREAM,
+        client=client,
+    ):
+        _, data, rope, mask = call_prefill(model)
+        for _ in range(11):
+            model(data[:, 13:], "cached", mask, rope[13:])
+    assert client.calls == expected
+
+
 def test_rules_offline_and_client_failure_dense(tmp_path):
     for mode, client in [("rules", None), ("jev", FakeClient(fail=True))]:
         model = QwenImage21Transformer2DModel()
@@ -473,10 +490,14 @@ def test_cloud_key_scoped_to_selected_qwen_worker(monkeypatch, tmp_path):
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     monkeypatch.setattr(integration, "read_saved_key", lambda: "fake-secret")
     monkeypatch.setattr(integration, "sdk_python", lambda: Path(sys.executable))
-    request = types.SimpleNamespace(sparse_mode="jev", sparse_keep_percent=75)
+    request = types.SimpleNamespace(
+        sparse_mode="jev", sparse_keep_percent=75, sparse_jev_cadence="interval", sparse_jev_interval=2
+    )
     _, env, payload = integration.worker_launch(request, service.WORKER, service.safe_environment())
     assert env["TYPESAFE_API_KEY"] == "fake-secret" and env["AIKIMI_JEV_ALLOW_CLOUD"] == "1"
     assert "fake-secret" not in json.dumps(payload)
+    assert payload["sparse_experiment"]["decision_cadence"] == "interval"
+    assert payload["sparse_experiment"]["update_interval"] == 2
 
 
 def load_worker(monkeypatch, tmp_path):

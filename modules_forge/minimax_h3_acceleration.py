@@ -42,8 +42,15 @@ class H3Acceleration:
     negpip: H3NegPiP = field(default_factory=H3NegPiP)
     clip_cache: str = "off"
     hybrid: hybrid.H3Hybrid = field(default_factory=hybrid.H3Hybrid)
+    jev_cadence: str = "once"
+    jev_interval: int = 2
 
     def validate(self) -> None:
+        if not isinstance(self.jev_cadence, str) or self.jev_cadence not in {"once", "interval", "step"}:
+            raise ValueError("Jevの再判定頻度が不正です。")
+        interval = self.jev_interval
+        if isinstance(interval, bool) or not isinstance(interval, (int, float)) or not math.isfinite(interval) or interval != int(interval) or not 1 <= interval <= 100:
+            raise ValueError("Jevの再判定間隔は1〜100の整数で指定してください。")
         if not isinstance(self.hybrid, hybrid.H3Hybrid):
             raise ValueError("長尺設定の形式が不正です。")
         self.hybrid.validate()
@@ -94,12 +101,14 @@ class H3Acceleration:
         if not values:
             return cls()
         previous_count = 8 + len(H3NegPiP().values())
-        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6):
+        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6, previous_count + 8):
             raise ValueError("H3 追加設定の項目数が一致しません。UIを再読み込みしてください。")
         result = cls(
             *values[:8], negpip=H3NegPiP.from_values(values[8:previous_count]),
             clip_cache=values[previous_count] if len(values) > previous_count else "off",
-            hybrid=hybrid.H3Hybrid(*values[previous_count + 1:]) if len(values) == previous_count + 6 else hybrid.H3Hybrid(),
+            hybrid=hybrid.H3Hybrid(*values[previous_count + 1:previous_count + 6]) if len(values) >= previous_count + 6 else hybrid.H3Hybrid(),
+            jev_cadence=values[previous_count + 6] if len(values) == previous_count + 8 else "once",
+            jev_interval=values[previous_count + 7] if len(values) == previous_count + 8 else 2,
         )
         result.validate()
         return result
@@ -108,7 +117,7 @@ class H3Acceleration:
         return asdict(self)
 
     def values(self) -> tuple:
-        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values()
+        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid", "jev_cadence", "jev_interval"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values() + (self.jev_cadence, self.jev_interval)
 
 
     def runtime_packs(self) -> tuple[str, ...]:

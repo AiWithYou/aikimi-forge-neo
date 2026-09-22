@@ -69,7 +69,7 @@ def verify_runtime(root: Path):
             )
 
 
-def patch_workflow(graph, mode, python=""):
+def patch_workflow(graph, mode, python="", *, cadence="once", interval=2):
     def unique(kind):
         hits = [key for key, node in graph.items() if node.get("class_type") == kind]
         if len(hits) != 1:
@@ -78,6 +78,14 @@ def patch_workflow(graph, mode, python=""):
 
     if mode not in MODES.values():
         raise ValueError("Unknown experiment mode")
+    if (
+        cadence not in {"once", "interval", "step"}
+        or isinstance(interval, bool)
+        or not isinstance(interval, (int, float))
+        or not 1 <= interval <= 100
+        or int(interval) != interval
+    ):
+        raise ValueError("Invalid H3 Jev decision cadence or interval")
     scheduler, sampler, guider = unique("BasicScheduler"), unique("KSamplerSelect"), unique("BasicGuider")
     if graph[scheduler]["inputs"].get("steps") != 4 or graph[sampler]["inputs"].get("sampler_name") != "res_multistep":
         raise ValueError("H3実験は4 Steps / res_multistep限定です。Turbo + 4 Stepsを明示適用してください。")
@@ -114,6 +122,8 @@ def patch_workflow(graph, mode, python=""):
             "mode": mode,
             "sdk_python": python,
             "prompt_context": prompt if isinstance(prompt, str) else "",
+            "decision_cadence": cadence,
+            "decision_interval": int(interval),
         },
     }
     graph[guider]["inputs"]["model"] = [ident, 0]
@@ -216,7 +226,13 @@ def install():
 
         copy_graph = copy.deepcopy(workflow)
         apply(normal(self), copy_graph, base_files, mode)
-        patch_workflow(copy_graph, MODES[self.attention], python)
+        patch_workflow(
+            copy_graph,
+            MODES[self.attention],
+            python,
+            cadence=getattr(self, "jev_cadence", "once"),
+            interval=getattr(self, "jev_interval", 2),
+        )
         workflow.clear()
         workflow.update(copy_graph)
 
@@ -227,9 +243,17 @@ def install():
         schema = schemas.get(NODE, {})
         spec = schema.get("input", {})
         inputs = {**spec.get("required", {}), **spec.get("optional", {})}
-        for name, kind in (("model", "MODEL"), ("sdk_python", "STRING"), ("prompt_context", "STRING")):
+        for name, kind in (
+            ("model", "MODEL"),
+            ("sdk_python", "STRING"),
+            ("prompt_context", "STRING"),
+            ("decision_interval", "INT"),
+        ):
             if not inputs.get(name) or inputs[name][0] != kind:
                 raise ValueError("H3実験ノードの入力仕様が一致しません。専用ノードを再導入してください。")
+        cadence_values = inputs.get("decision_cadence", [()])[0]
+        if not isinstance(cadence_values, (list, tuple)) or not {"once", "interval", "step"} <= set(cadence_values):
+            raise ValueError("H3のJev頻度設定に対応するノードへ更新してください。")
         values = inputs.get("mode", [()])[0]
         if (
             not isinstance(values, (list, tuple))
@@ -290,8 +314,16 @@ def install():
             return old_note(*values)
         if option.attention not in MODES:
             return old_note(*values)
+        cadence = getattr(option, "jev_cadence", "once")
+        frequency = (
+            "初回のみ"
+            if cadence == "once"
+            else "毎step"
+            if cadence == "step"
+            else f"{int(option.jev_interval)} stepごと"
+        )
         cloud_note = (
-            "Jevは初段の集約統計を1回だけ外部APIへ送り、残りの保持率を選びます。プロンプト・生画像・音声・重みは送信しません。"
+            f"Jevの再判定：{frequency}。最初のstepで統計を集め、次のstepから49層の保持率を一括選択します。プロンプト・生画像・音声・重みは送信しません。"
             if option.attention == "h3_jev"
             else "この比較モードはクラウド通信しません。"
         )
