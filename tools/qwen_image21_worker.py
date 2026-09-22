@@ -129,6 +129,10 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         raise ValueError("transparent must be a boolean.")
     if not isinstance(request.get("rewrite_prompt", False), bool):
         raise ValueError("rewrite_prompt must be a boolean.")
+    if not isinstance(request.get("rewrite_edit_prompt", False), bool):
+        raise ValueError("rewrite_edit_prompt must be a boolean.")
+    if not isinstance(request.get("preserve_unmasked", False), bool):
+        raise ValueError("preserve_unmasked must be a boolean.")
     images = request.get("input_images", [])
     if not isinstance(images, list) or len(images) > 10:
         raise ValueError("input_images must contain at most ten local image paths.")
@@ -208,6 +212,13 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     components: dict[str, Any] = {}
     counts: dict[str, int] = {}
     w4a8_stats: dict[str, dict] = {}
+    disk_cache: dict[str, dict] = {}
+    from modules_forge.qwen_image21.quantized_cache import (
+        InvalidQuantizedCheckpoint,
+        component_identity,
+        load_or_create,
+    )
+
     if request["precision"] == "int8":
         loaders = (
             (
@@ -223,27 +234,44 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         for name, model_class, quantization in loaders:
             _check_cancel(job)
             _progress(job, "loading", f"{name} を INT8 で読み込み中", 0.08 if name == "transformer" else 0.17)
-            component = model_class.from_pretrained(
-                str(model_path),
-                subfolder=name,
-                torch_dtype=torch.bfloat16,
-                quantization_config=quantization,
-                device_map={"": "cuda:0"},
-                local_files_only=True,
-                use_safetensors=True,
+            identity = component_identity(
+                model_path, name, "int8", skip_modules=INT8_SKIP_MODULES if name == "transformer" else ()
             )
-            counts[name] = _int8_layers(component)
-            if counts[name] == 0 or not getattr(component, "is_loaded_in_8bit", False):
-                raise RuntimeError(f"{name} was not loaded as bitsandbytes INT8.")
-            _install_int8_offload_fix(component)
-            # Initial quantization needs CUDA. Park each completed component on
-            # CPU before quantizing the next one, including in full-GPU mode.
-            component.to("cpu")
+
+            def load_int8(folder, *, cached=False, model_class=model_class, name=name, quantization=quantization):
+                loaded = model_class.from_pretrained(
+                    str(folder),
+                    **({} if cached else {"subfolder": name, "quantization_config": quantization}),
+                    torch_dtype=torch.bfloat16,
+                    device_map={"": "cuda:0"},
+                    local_files_only=True,
+                    use_safetensors=True,
+                )
+                counts[name] = _int8_layers(loaded)
+                if counts[name] == 0 or not getattr(loaded, "is_loaded_in_8bit", False):
+                    raise InvalidQuantizedCheckpoint(f"{name} was not loaded as bitsandbytes INT8.")
+                _install_int8_offload_fix(loaded)
+                # Keep quantization scales aliased correctly across save/reload
+                # and GPU -> CPU -> GPU, before the next component is loaded.
+                loaded.to("cpu")
+                return loaded
+
+            component, disk_cache[name] = load_or_create(
+                model_path,
+                identity,
+                lambda path: load_int8(path, cached=True),
+                lambda: load_int8(model_path),
+                lambda model, path: model.save_pretrained(path, safe_serialization=True, max_shard_size="2GB"),
+                check_cancel=lambda: _check_cancel(job),
+                progress=lambda message, stage_end=0.17 if name == "transformer" else 0.27: _progress(
+                    job, "loading", message, stage_end
+                ),
+            )
             components[name] = component
             torch.cuda.empty_cache()
             _check_cancel(job)
     elif request["precision"] == "w4a8":
-        from modules_forge.qwen_image21.w4a8 import load_model, validate_dependency
+        from modules_forge.qwen_image21.w4a8 import load_model, load_saved_model, save_model, validate_dependency
 
         validate_dependency()
         for name, model_class in (
@@ -252,7 +280,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         ):
             _check_cancel(job)
             component_progress = 0.08 if name == "transformer" else 0.18
-            _progress(job, "loading", f"{name} を W4A8 へ変換するため読み込み中", component_progress)
+            _progress(job, "loading", f"{name} の W4A8 モデルを確認中", component_progress)
             folder = model_path / name
             if name == "transformer":
                 config = model_class.load_config(str(folder), local_files_only=True)
@@ -272,7 +300,19 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
                     )
                     last_progress = done
 
-            component, w4a8_stats[name] = load_model(folder, name, factory, progress=packing_progress)
+            identity = component_identity(model_path, name, "w4a8")
+            saved, disk_cache[name] = load_or_create(
+                model_path,
+                identity,
+                partial(load_saved_model, component=name, factory=factory, check_cancel=lambda: _check_cancel(job)),
+                partial(load_model, folder, name, factory, progress=packing_progress),
+                lambda result, path: save_model(result[0], path, result[1], check_cancel=lambda: _check_cancel(job)),
+                check_cancel=lambda: _check_cancel(job),
+                progress=lambda message, stage_end=component_progress + 0.10: _progress(
+                    job, "loading", message, stage_end
+                ),
+            )
+            component, w4a8_stats[name] = saved
             components[name] = component
             torch.cuda.empty_cache()
             _check_cancel(job)
@@ -297,6 +337,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         "pipe": pipe,
         "int8_layers": counts,
         "w4a8": w4a8_stats,
+        "disk_cache": disk_cache,
         "versions": versions,
         "load_seconds": time.monotonic() - started,
     }
@@ -325,9 +366,11 @@ def _load_images(paths: list[str]) -> list[Any]:
 
 
 def _rewrite_for_request(model_path: Path, request: dict[str, Any], job: Path) -> dict:
-    enabled = request.get("rewrite_prompt", False)
-    if not enabled or request["input_images"]:
-        return {"enabled": enabled, "applied": False, "reason": "image_edit" if enabled else "disabled"}
+    editing = bool(request["input_images"])
+    enabled = request.get("rewrite_edit_prompt" if editing else "rewrite_prompt", False)
+    if not enabled:
+        legacy_edit = editing and request.get("rewrite_prompt", False)
+        return {"enabled": bool(legacy_edit), "applied": False, "reason": "image_edit" if legacy_edit else "disabled"}
     from modules_forge.qwen_image21.prompt_rewriter import rewrite_prompt
 
     # Preserve a reusable image pipeline on CPU while the small helper owns CUDA.
@@ -347,6 +390,7 @@ def _rewrite_for_request(model_path: Path, request: dict[str, Any], job: Path) -
         request["seed"],
         lambda: _check_cancel(job),
         lambda message: _progress(job, "rewriting", message, 0.03),
+        **({"images": _load_images(request["input_images"])} if editing else {}),
     )
     _check_cancel(job)
     if restore_gpu:
@@ -447,6 +491,10 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         image.save(partial, format="PNG")
         _check_cancel(job)
         os.replace(partial, output_path)
+        from modules_forge.qwen_image21.annotations import save_preserved_output
+
+        preservation = save_preserved_output(request, image, job)
+        _check_cancel(job)
         memory = _idle_cuda_memory(torch, request["memory_mode"])
         metadata = {
             "model": MODEL_ID,
@@ -456,6 +504,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "prompt": request["prompt"],
             "effective_prompt": prompt,
             "prompt_rewrite": rewrite,
+            "preservation": preservation.get("preservation", {}),
             "width": image.width,
             "height": image.height,
             "steps": request["steps"],
@@ -472,6 +521,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "input_image_names": [Path(path).name for path in request["input_images"]],
             "int8_layers": runtime["int8_layers"],
             "w4a8": runtime.get("w4a8", {}),
+            "quantized_cache": runtime.get("disk_cache", {}),
             "int8_skip_modules": list(INT8_SKIP_MODULES) if request["precision"] == "int8" else [],
             "versions": runtime["versions"],
             "reused_model": reused,
@@ -485,7 +535,12 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         metadata_path = job / "metadata.json"
         _atomic_json(metadata_path, metadata)
         _check_cancel(job)
-        result = {"output_path": str(output_path), "metadata_path": str(metadata_path), "metadata": metadata}
+        result = {
+            "output_path": str(output_path),
+            "metadata_path": str(metadata_path),
+            "metadata": metadata,
+            **preservation,
+        }
         _atomic_json(job / "result.json", result)
         _progress(job, "complete", "生成が完了しました", 1.0)
         return result

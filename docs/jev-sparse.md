@@ -50,6 +50,16 @@ Anima・Qwen・Krea2のstepはモデル評価単位です。最初に利用可�
 
 APIでは、H3の高速化設定に `jev_cadence`（`once` / `interval` / `step`）と `jev_interval`、Qwenのリクエストに `sparse_jev_cadence` と `sparse_jev_interval` を指定できます。Animaのalwayson scriptは従来の7項目の後に頻度を追加し、間隔は従来の5番目の引数です。Anima・Qwenで従来の上限回数を使うAPI設定は `decision_cadence="legacy"` を使用し、上限0はどの頻度でもAPI停止として保持します。
 
+## 生成全体の上限と判定再生
+
+再判定頻度とは別に、生成全体のAPI回数と累積待ち時間に上限を設定できます。この2つは **0＝上限なし** です。既存の低水準設定 `max_calls=0`（API停止）とは別の設定です。上限に達すると追加の問い合わせを止め、最後の有効な設定を使います。
+
+Krea2では、層ごとの判定とタイルのstep配分が同じジョブ予算を共有します。再拡大やタイル分割で上限をリセットしません。Anima・Qwen・H3も生成単位で管理します。画面の回数見込みはモデル評価回数からの推定で、実際の回数・待ち時間はJSONLに記録します。
+
+APIでは、H3の高速化設定に `jev_max_calls` と `jev_max_wait_seconds`、Qwenのリクエストに `sparse_jev_max_calls` と `sparse_jev_max_wait_seconds` を指定します。内部のSparse設定では `job_max_calls` と `job_max_wait_seconds` です。問い合わせ用の専用PythonとSDK接続はジョブ中に再利用し、終了・失敗・キャンセルで閉じます。
+
+判定再生は、完了済みJevログの選択を通信なしで適用する比較機能です。入力・生成条件、判定順序、選択肢、予算、タイル配置を照合し、不一致や記録不足はエラーにします。旧ログのうち再生用の照合情報がないものは分析専用です。使い方と比較条件は [Sparse比較スイート](sparse-benchmark-suite.md) を参照してください。
+
 ## 外部通信と記録
 
 Jevモードだけが、公式SDK 0.7.0・固定モデル `jev-1.13.0` で `https://api.typesafe.ai` へ問い合わせます。API利用料が発生する場合があります。

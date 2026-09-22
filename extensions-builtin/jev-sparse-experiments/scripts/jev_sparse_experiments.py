@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 
@@ -10,7 +11,14 @@ import gradio as gr
 from modules import script_callbacks, scripts, shared
 from modules.paths import data_path
 from modules_forge.jev_sparse import h3_integration
-from modules_forge.jev_sparse.common import AnimaOptions
+from modules_forge.jev_sparse.common import (
+    AnimaOptions,
+    JevBudget,
+    ReplayError,
+    close_client,
+    create_client,
+    replay_requested,
+)
 
 
 def _install_h3():
@@ -50,7 +58,7 @@ class Script(scripts.Script):
 
     def ui(self, is_img2img):
         with gr.Accordion("Anima Self-Attention · 実験", open=False):
-            from modules_forge.jev_sparse.ui import credential_controls, decision_controls
+            from modules_forge.jev_sparse.ui import budget_controls, credential_controls, decision_controls
 
             credential_controls("anima-i2i" if is_img2img else "anima-t2i")
             mode = gr.Dropdown(
@@ -66,6 +74,9 @@ class Script(scripts.Script):
             )
             keep = gr.Slider(1, 100, value=75, step=1, label="固定モードの保持率 %")
             cadence, interval = decision_controls("anima-i2i" if is_img2img else "anima-t2i", mode)
+            job_calls, job_wait = budget_controls(
+                "anima-i2i" if is_img2img else "anima-t2i", mode, cadence=cadence, interval=interval
+            )
             with gr.Row():
                 minimum = gr.Number(value=4096, precision=0, label="Sparseを使う最小token数")
                 warmup = gr.Slider(0, 10, value=1, step=1, label="最初のDenseモデル評価回数")
@@ -84,10 +95,25 @@ class Script(scripts.Script):
             (maximum, "Anima Sparse max calls"),
             (timeout, "Anima Sparse timeout"),
             (cadence, "Anima Sparse cadence"),
+            (job_calls, "Anima Jev job max calls"),
+            (job_wait, "Anima Jev job wait seconds"),
         ]
-        return [mode, keep, minimum, warmup, interval, maximum, timeout, cadence]
+        return [mode, keep, minimum, warmup, interval, maximum, timeout, cadence, job_calls, job_wait]
 
-    def process(self, p, mode, keep, minimum, warmup, interval, maximum, timeout, cadence="legacy"):
+    def process(
+        self,
+        p,
+        mode,
+        keep,
+        minimum,
+        warmup,
+        interval,
+        maximum,
+        timeout,
+        cadence="legacy",
+        job_max_calls=0,
+        job_max_wait_seconds=0,
+    ):
         rule_interval = 4 if mode == "rules" and cadence != "legacy" else _integer(interval)
         options = AnimaOptions(
             mode,
@@ -98,10 +124,14 @@ class Script(scripts.Script):
             _integer(maximum),
             float(timeout),
             decision_cadence=cadence,
+            job_max_calls=_integer(job_max_calls),
+            job_max_wait_seconds=job_max_wait_seconds,
         )
         options.validate()
         p._aikimi_sparse_options = options
         p._aikimi_sparse_runs = []
+        p._aikimi_sparse_client = None
+        p._aikimi_sparse_completed = False
         if mode != "off":
             p.extra_generation_params.update(
                 {
@@ -113,6 +143,8 @@ class Script(scripts.Script):
                     "Anima Sparse max calls": maximum,
                     "Anima Sparse timeout": timeout,
                     "Anima Sparse cadence": cadence,
+                    "Anima Jev job max calls": options.job_max_calls,
+                    "Anima Jev job wait seconds": options.job_max_wait_seconds,
                 }
             )
 
@@ -133,12 +165,40 @@ class Script(scripts.Script):
 
         p.extra_generation_params["Anima Sparse status"] = "requested_not_active"
         try:
+            if options.mode == "jev" and options.max_calls and p._aikimi_sparse_client is None:
+                from modules_forge.jev_sparse.credentials import cloud_source
+
+                p._aikimi_sparse_client = create_client(
+                    timeout=options.timeout,
+                    cancelled=cancelled,
+                    environment=None if replay_requested() else cloud_source(),
+                    budget=JevBudget(options.job_max_calls, options.job_max_wait_seconds),
+                    prompt_sha256=hashlib.sha256(str(p.prompt).encode()).hexdigest(),
+                )
             patched, run = attach(
-                current, options, Path(data_path) / "outputs" / "jev-sparse", prompt=str(p.prompt), cancelled=cancelled
+                current,
+                options,
+                Path(data_path) / "outputs" / "jev-sparse",
+                prompt=str(p.prompt),
+                cancelled=cancelled,
+                client=p._aikimi_sparse_client,
+                owns_client=False,
             )
         except Exception as exc:
-            p.extra_generation_params["Anima Sparse status"] = "not_active:" + type(exc).__name__
-            raise
+            close_client(p._aikimi_sparse_client, "failed")
+            reason = type(exc).__name__
+            p.extra_generation_params["Anima Sparse status"] = "not_active:" + reason
+            # Forge catches setup callback exceptions. Carry a rejected replay
+            # into sampling so it cannot silently complete using an unpatched model.
+            patched = current.clone()
+
+            def fail(_apply_model, _args):
+                raise RuntimeError("Anima Jevを開始できません。設定と判定ログを確認してください: " + reason)
+
+            patched.set_model_unet_function_wrapper(fail)
+            p._aikimi_sparse_base, p._aikimi_sparse_patch = current, patched
+            p.sd_model.forge_objects.unet = patched
+            return
         p.extra_generation_params["Anima Sparse status"] = "active_experiment"
         run.log.write(
             "generation_context",
@@ -155,8 +215,24 @@ class Script(scripts.Script):
         p.extra_generation_params["Anima Sparse log"] = str(run.log.path)
 
     def postprocess(self, p, processed, *args):
-        for run in getattr(p, "_aikimi_sparse_runs", []):
-            run.close("cancelled" if shared.state.interrupted or shared.state.skipped else "completed")
-        patched = getattr(p, "_aikimi_sparse_patch", None)
-        if patched is not None and p.sd_model.forge_objects.unet is patched:
-            p.sd_model.forge_objects.unet = p._aikimi_sparse_base
+        p._aikimi_sparse_completed = True
+        self.on_process_cleanup(p)
+
+    def on_process_cleanup(self, p, *args):
+        status = "completed" if getattr(p, "_aikimi_sparse_completed", False) else "failed"
+        if shared.state.interrupted or shared.state.skipped:
+            status = "cancelled"
+        try:
+            try:
+                close_client(getattr(p, "_aikimi_sparse_client", None), status)
+            except ReplayError:
+                status = "failed"
+                raise
+        finally:
+            try:
+                for run in getattr(p, "_aikimi_sparse_runs", []):
+                    run.close(status)
+            finally:
+                patched = getattr(p, "_aikimi_sparse_patch", None)
+                if patched is not None and p.sd_model.forge_objects.unet is patched:
+                    p.sd_model.forge_objects.unet = p._aikimi_sparse_base

@@ -3,6 +3,7 @@
 # 3rd Edit by. Haoming02
 # - Based on: https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111
 
+from contextlib import ExitStack, contextmanager
 from enum import Enum
 from typing import Final, Optional, Union
 
@@ -12,6 +13,7 @@ from numpy import exp, pi, sqrt
 from torch import Tensor
 
 from backend import memory_management
+from backend.args import dynamic_args
 from backend.misc.image_resize import adaptive_resize
 from backend.patcher.base import ModelPatcher
 from backend.patcher.controlnet import ControlNet, T2IAdapter
@@ -276,6 +278,44 @@ class AbstractDiffusion:
                 control.cond_hint = self.control_params[tuple_key][param_id][batch_id]
             control = control.previous_controlnet
 
+    @contextmanager
+    def tiled_controllllite(self, c_in: dict):
+        patches = c_in.get("transformer_options", {}).get("patches", {})
+        controls = {}
+        for patch in (*patches.get("attn1_patch", ()), *patches.get("attn2_patch", ())):
+            if type(patch).__name__ == "control_net_lllite_patch":
+                controls[id(patch)] = (patch, patch.modules.values())
+        for instance in tuple(getattr(dynamic_args, "ACTIVE_LLLITE_DIT", ())):
+            controls[id(instance)] = (instance, instance.lllite_modules)
+        states = [(patch, [(module, module.current_step) for module in modules]) for patch, modules in controls.values()]
+
+        with ExitStack() as cleanup:
+            for patch, _ in states:
+                cleanup.callback(patch.restore_original)
+            try:
+                if self.refresh:
+                    for patch, _ in states:
+                        patch.clear_cache()
+                yield states
+            except BaseException:
+                for patch, steps in states:
+                    patch.clear_cache()
+                    for module, step in steps:
+                        module.current_step = step
+                raise
+
+    def process_controllllite(self, x_shape, x_dtype, cond_or_uncond, bboxes, batch_size, batch_id, states):
+        if not states:
+            return
+        PH, PW = self.h * opt_f, self.w * opt_f
+        # Same tile shape can refer to a different image size or tile layout.
+        tuple_key = (tuple(cond_or_uncond), tuple(x_shape), x_dtype, PH, PW, opt_f, tuple(tuple(bbox.box) for bbox in bboxes))
+        for patch, steps in states:
+            # Every tile in this model evaluation uses the same control step.
+            for module, step in steps:
+                module.current_step = step
+            patch.prepare_tiled(bboxes, opt_f, PH, PW, batch_size, batch_id, x_dtype, tuple_key)
+
 
 def gaussian_weights(tile_w: int, tile_h: int) -> Tensor:
     f = lambda x, midpoint, var=0.01: exp(-(x - midpoint) * (x - midpoint) / (tile_w * tile_w) / (2 * var)) / sqrt(2 * pi * var)
@@ -310,51 +350,54 @@ class MultiDiffusion(AbstractDiffusion):
             self.init_done()
         self.h, self.w = H, W
         self.reset_buffer(x_in)
-        if self.draw_background:
-            for batch_id, bboxes in enumerate(self.batched_bboxes):
-                x_tile = torch.cat([x_in[bbox.slicer] for bbox in bboxes], dim=0)
-                n_rep = len(bboxes)
-                ts_tile = self.repeat_tensor(t_in, n_rep)
-                cond_tile = self.repeat_tensor(c_crossattn, n_rep)
-                c_tile = c_in.copy()
-                c_tile["c_crossattn"] = cond_tile
-                if "time_context" in c_in:
-                    c_tile["time_context"] = self.repeat_tensor(c_in["time_context"], n_rep)
-                for key in c_tile:
-                    if key in ["y", "c_concat"]:
-                        icond = c_tile[key]
-                        if icond.ndim == 5:
-                            assert icond.shape[2] == 1
-                            icond = icond.squeeze(2)
+        with self.tiled_controllllite(c_in) as controls:
+            if self.draw_background:
+                for batch_id, bboxes in enumerate(self.batched_bboxes):
+                    x_tile = torch.cat([x_in[bbox.slicer] for bbox in bboxes], dim=0)
+                    n_rep = len(bboxes)
+                    ts_tile = self.repeat_tensor(t_in, n_rep)
+                    cond_tile = self.repeat_tensor(c_crossattn, n_rep)
+                    c_tile = c_in.copy()
+                    c_tile["c_crossattn"] = cond_tile
+                    if "time_context" in c_in:
+                        c_tile["time_context"] = self.repeat_tensor(c_in["time_context"], n_rep)
+                    for key in c_tile:
+                        if key in ["y", "c_concat"]:
+                            icond = c_tile[key]
+                            if icond.ndim == 5:
+                                assert icond.shape[2] == 1
+                                icond = icond.squeeze(2)
 
-                        if icond.shape[2:] == (self.h, self.w):
-                            c_tile[key] = torch.cat([icond[bbox.slicer] for bbox in bboxes])
-                        else:
-                            c_tile[key] = self.repeat_tensor(icond, n_rep)
-                if "control" in c_in:
-                    self.process_controlnet(x_tile.shape, x_tile.dtype, c_in, cond_or_uncond, bboxes, N, batch_id)
-                    c_tile["control"] = c_in["control_model"].get_control(x_tile, ts_tile, c_tile, len(cond_or_uncond))
+                            if icond.shape[2:] == (self.h, self.w):
+                                c_tile[key] = torch.cat([icond[bbox.slicer] for bbox in bboxes])
+                            else:
+                                c_tile[key] = self.repeat_tensor(icond, n_rep)
+                    if "control" in c_in:
+                        self.process_controlnet(x_tile.shape, x_tile.dtype, c_in, cond_or_uncond, bboxes, N, batch_id)
+                        c_tile["control"] = c_in["control_model"].get_control(x_tile, ts_tile, c_tile, len(cond_or_uncond))
 
-                if is_5d:
-                    x_tile = x_tile.unsqueeze(2)
-                    for key in ["y", "c_concat"]:
-                        if key in c_tile and c_tile[key].ndim == 4:
-                            c_tile[key] = c_tile[key].unsqueeze(2)
+                    self.process_controllllite(x_tile.shape, x_tile.dtype, cond_or_uncond, bboxes, N, batch_id, controls)
 
-                    control = c_tile.get("control")
-                    while control is not None:
-                        if hasattr(control, "cond_hint") and control.cond_hint is not None and control.cond_hint.ndim == 4:
-                            control.cond_hint = control.cond_hint.unsqueeze(2)
-                        control = control.previous_controlnet
+                    if is_5d:
+                        x_tile = x_tile.unsqueeze(2)
+                        for key in ["y", "c_concat"]:
+                            if key in c_tile and c_tile[key].ndim == 4:
+                                c_tile[key] = c_tile[key].unsqueeze(2)
 
-                x_tile_out = model_function(x_tile, ts_tile, **c_tile)
+                        control = c_tile.get("control")
+                        while control is not None:
+                            if hasattr(control, "cond_hint") and control.cond_hint is not None and control.cond_hint.ndim == 4:
+                                control.cond_hint = control.cond_hint.unsqueeze(2)
+                            control = control.previous_controlnet
 
-                if is_5d:
-                    x_tile_out = x_tile_out.squeeze(2)
+                    x_tile_out = model_function(x_tile, ts_tile, **c_tile)
 
-                for i, bbox in enumerate(bboxes):
-                    self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :]
-                del x_tile_out, x_tile, ts_tile, c_tile
+                    if is_5d:
+                        x_tile_out = x_tile_out.squeeze(2)
+
+                    for i, bbox in enumerate(bboxes):
+                        self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :]
+                    del x_tile_out, x_tile, ts_tile, c_tile
         x_out = torch.where(self.weights > 1, self.x_buffer / self.weights, self.x_buffer)
 
         if is_5d:
@@ -408,66 +451,69 @@ class MixtureOfDiffusers(AbstractDiffusion):
             self.init_done()
         self.h, self.w = H, W
         self.reset_buffer(x_in)
-        if self.draw_background:
-            for batch_id, bboxes in enumerate(self.batched_bboxes):
-                x_tile_list = []
-                t_tile_list = []
-                icond_map = {}
-                for bbox in bboxes:
-                    x_tile_list.append(x_in[bbox.slicer])
-                    t_tile_list.append(t_in)
-                    if isinstance(c_in, dict):
+        with self.tiled_controllllite(c_in) as controls:
+            if self.draw_background:
+                for batch_id, bboxes in enumerate(self.batched_bboxes):
+                    x_tile_list = []
+                    t_tile_list = []
+                    icond_map = {}
+                    for bbox in bboxes:
+                        x_tile_list.append(x_in[bbox.slicer])
+                        t_tile_list.append(t_in)
+                        if isinstance(c_in, dict):
+                            for key in ["y", "c_concat"]:
+                                if key in c_in:
+                                    icond = c_in[key]
+                                    if icond.ndim == 5:
+                                        assert icond.shape[2] == 1
+                                        icond = icond.squeeze(2)
+
+                                    if icond.shape[2:] == (self.h, self.w):
+                                        icond = icond[bbox.slicer]
+                                    if icond_map.get(key, None) is None:
+                                        icond_map[key] = []
+                                    icond_map[key].append(icond)
+                        else:
+                            print(">> [WARN] not supported, make an issue on github!!")
+                    n_rep = len(bboxes)
+                    x_tile = torch.cat(x_tile_list, dim=0)
+                    t_tile = self.repeat_tensor(t_in, n_rep)
+                    tcond_tile = self.repeat_tensor(c_crossattn, n_rep)
+                    c_tile = c_in.copy()
+                    c_tile["c_crossattn"] = tcond_tile
+                    if "time_context" in c_in:
+                        c_tile["time_context"] = self.repeat_tensor(c_in["time_context"], n_rep)
+                    for key in c_tile:
+                        if key in ["y", "c_concat"]:
+                            icond_tile = torch.cat(icond_map[key], dim=0)
+                            c_tile[key] = icond_tile
+                    if "control" in c_in:
+                        self.process_controlnet(x_tile.shape, x_tile.dtype, c_in, cond_or_uncond, bboxes, N, batch_id)
+                        c_tile["control"] = c_in["control_model"].get_control(x_tile, t_tile, c_tile, len(cond_or_uncond))
+
+                    self.process_controllllite(x_tile.shape, x_tile.dtype, cond_or_uncond, bboxes, N, batch_id, controls)
+
+                    if is_5d:
+                        x_tile = x_tile.unsqueeze(2)
                         for key in ["y", "c_concat"]:
-                            if key in c_in:
-                                icond = c_in[key]
-                                if icond.ndim == 5:
-                                    assert icond.shape[2] == 1
-                                    icond = icond.squeeze(2)
+                            if key in c_tile and c_tile[key].ndim == 4:
+                                c_tile[key] = c_tile[key].unsqueeze(2)
 
-                                if icond.shape[2:] == (self.h, self.w):
-                                    icond = icond[bbox.slicer]
-                                if icond_map.get(key, None) is None:
-                                    icond_map[key] = []
-                                icond_map[key].append(icond)
-                    else:
-                        print(">> [WARN] not supported, make an issue on github!!")
-                n_rep = len(bboxes)
-                x_tile = torch.cat(x_tile_list, dim=0)
-                t_tile = self.repeat_tensor(t_in, n_rep)
-                tcond_tile = self.repeat_tensor(c_crossattn, n_rep)
-                c_tile = c_in.copy()
-                c_tile["c_crossattn"] = tcond_tile
-                if "time_context" in c_in:
-                    c_tile["time_context"] = self.repeat_tensor(c_in["time_context"], n_rep)
-                for key in c_tile:
-                    if key in ["y", "c_concat"]:
-                        icond_tile = torch.cat(icond_map[key], dim=0)
-                        c_tile[key] = icond_tile
-                if "control" in c_in:
-                    self.process_controlnet(x_tile.shape, x_tile.dtype, c_in, cond_or_uncond, bboxes, N, batch_id)
-                    c_tile["control"] = c_in["control_model"].get_control(x_tile, t_tile, c_tile, len(cond_or_uncond))
+                        control = c_tile.get("control")
+                        while control is not None:
+                            if hasattr(control, "cond_hint") and control.cond_hint is not None and control.cond_hint.ndim == 4:
+                                control.cond_hint = control.cond_hint.unsqueeze(2)
+                            control = control.previous_controlnet
 
-                if is_5d:
-                    x_tile = x_tile.unsqueeze(2)
-                    for key in ["y", "c_concat"]:
-                        if key in c_tile and c_tile[key].ndim == 4:
-                            c_tile[key] = c_tile[key].unsqueeze(2)
+                    x_tile_out = model_function(x_tile, t_tile, **c_tile)
 
-                    control = c_tile.get("control")
-                    while control is not None:
-                        if hasattr(control, "cond_hint") and control.cond_hint is not None and control.cond_hint.ndim == 4:
-                            control.cond_hint = control.cond_hint.unsqueeze(2)
-                        control = control.previous_controlnet
+                    if is_5d:
+                        x_tile_out = x_tile_out.squeeze(2)
 
-                x_tile_out = model_function(x_tile, t_tile, **c_tile)
-
-                if is_5d:
-                    x_tile_out = x_tile_out.squeeze(2)
-
-                for i, bbox in enumerate(bboxes):
-                    w = self.tile_weights * self.rescale_factor[bbox.slicer]
-                    self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :] * w
-                del x_tile_out, x_tile, t_tile, c_tile
+                    for i, bbox in enumerate(bboxes):
+                        w = self.tile_weights * self.rescale_factor[bbox.slicer]
+                        self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :] * w
+                    del x_tile_out, x_tile, t_tile, c_tile
         x_out = self.x_buffer
 
         if is_5d:

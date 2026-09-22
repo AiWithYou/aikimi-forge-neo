@@ -189,6 +189,14 @@ class FakeClient:
         ("timeout", float("inf")),
         ("block_size", True),
         ("block_size", 129),
+        ("query_batch_blocks", 0),
+        ("query_batch_blocks", True),
+        ("query_batch_blocks", 17),
+        ("max_batch_workspace_mb", 0),
+        ("max_batch_workspace_mb", 1025),
+        ("job_max_calls", -1),
+        ("job_max_calls", True),
+        ("job_max_wait_seconds", float("nan")),
     ],
 )
 def test_invalid_options(name, value):
@@ -209,17 +217,19 @@ def test_options_reject_secrets_and_unknown_fields():
         q.Options.parse(" " * 4097)
 
 
+@pytest.mark.parametrize("query_batch_blocks", [1, 2, 4])
 @pytest.mark.parametrize(
     "prefix,length,keep", [(0, 135, 50), (17, 135, 50), (137, 130, 75), (17, 192, 1), (3, 128, 100)]
 )
-def test_gather_matches_independent_dense_mask_reference(prefix, length, keep):
+def test_gather_matches_independent_dense_mask_reference(prefix, length, keep, query_batch_blocks):
     torch.manual_seed(17)
     query = torch.randn(2, length, 2, 8)
     key, value = [torch.randn(2, prefix + length, 2, 8) for _ in range(2)]
     valid = torch.ones(2, 1, 1, prefix + length, dtype=torch.bool)
     if prefix:
         valid[0, :, :, :prefix:3] = False
-    actual = q.block_gather_attention(query, key, value, keep, prefix, valid, 64)
+    valid[1, :, :, prefix + 7 :: 11] = False
+    actual = q.block_gather_attention(query, key, value, keep, prefix, valid, 64, query_batch_blocks=query_batch_blocks)
     allowed = valid.expand(2, 2, length, -1).clone()
     if keep < 100:
         allowed[:, :, :, prefix:] = False
@@ -233,13 +243,15 @@ def test_gather_matches_independent_dense_mask_reference(prefix, length, keep):
                         allowed[b, h, start : start + 64, prefix + idx * 64 : prefix + min(length, (idx + 1) * 64)] = (
                             True
                         )
+    allowed &= valid
     reference = F.scaled_dot_product_attention(
         query.transpose(1, 2), key.transpose(1, 2), value.transpose(1, 2), attn_mask=allowed
     ).transpose(1, 2)
     torch.testing.assert_close(actual, reference, atol=2e-6, rtol=2e-5)
 
 
-def test_sparse_uses_shorter_key_sequences(monkeypatch):
+@pytest.mark.parametrize("query_batch_blocks,expected_calls", [(1, 4), (2, 2), (4, 1)])
+def test_sparse_uses_shorter_key_sequences(monkeypatch, query_batch_blocks, expected_calls):
     original = F.scaled_dot_product_attention
     sizes = []
 
@@ -250,8 +262,40 @@ def test_sparse_uses_shorter_key_sequences(monkeypatch):
     monkeypatch.setattr(F, "scaled_dot_product_attention", record)
     query = torch.randn(1, 256, 2, 8)
     key = torch.randn(1, 269, 2, 8)
-    q.block_gather_attention(query, key, key, 50, 13, block_size=64)
-    assert sizes == [13 + 128] * 4  # actual reduced matmul, not a masked 269-key dense call
+    q.block_gather_attention(query, key, key, 50, 13, block_size=64, query_batch_blocks=query_batch_blocks)
+    assert sizes == [13 + 128] * expected_calls  # reduced keys and fewer launches, not a masked dense call
+
+
+def test_workspace_budget_splits_heads_without_changing_attention(monkeypatch):
+    torch.manual_seed(18)
+    query = torch.randn(1, 320, 8, 64)
+    key, value = [torch.randn(1, 449, 8, 64) for _ in range(2)]
+    expected = q.block_gather_attention(query, key, value, 50, 129, block_size=64)
+    original = F.scaled_dot_product_attention
+    calls = []
+
+    def record(query, key, value, **kwargs):
+        calls.append(query.shape[1])
+        return original(query, key, value, **kwargs)
+
+    monkeypatch.setattr(F, "scaled_dot_product_attention", record)
+    actual = q.block_gather_attention(query, key, value, 50, 129, block_size=64, max_batch_workspace_mb=1)
+    assert len(calls) > 2 and max(calls) < 8
+    torch.testing.assert_close(actual, expected)
+
+
+def test_workspace_too_small_for_one_head_is_rejected():
+    with pytest.raises(ValueError, match="one query block"):
+        q._gather_batch_plan(1, 32, 128, 256, 4096, 1024, 2, 4, 1)
+
+
+def test_all_masked_keys_return_zero_in_partial_query_batch():
+    query = torch.randn(2, 135, 2, 8)
+    keys = torch.randn(2, 152, 2, 8)
+    mask = torch.zeros(1, 1, 1, 152, dtype=torch.bool)
+    actual = q.block_gather_attention(query, keys, keys, 50, 17, mask, 64)
+    assert actual.shape == query.shape
+    torch.testing.assert_close(actual, torch.zeros_like(actual))
 
 
 def test_exact_prefix_masked_values_never_leak():
@@ -319,6 +363,125 @@ def test_dense_only_delegates_and_records(tmp_path):
     assert run.summary["attention_calls"] == {"dense": 6}
     assert run.summary["model_evaluations"] == 2
     assert run.summary["model_seconds"] > 0
+    assert run.summary["cuda_event_seconds"] is None
+    assert run.summary["cuda_event_evaluations"] == 0
+    assert run.summary["total_wall_seconds"] >= run.summary["evaluation_cpu_wall_seconds"]
+    assert run.summary["evaluation_cpu_wall_seconds"] >= run.summary["transformer_cpu_wall_seconds"] > 0
+    assert run.summary["model_seconds_kind"].endswith("not_gpu_time")
+
+
+def test_controller_wait_is_excluded_from_forward_cpu_wall(monkeypatch, tmp_path):
+    clock = [0.0]
+    monkeypatch.setattr(q.time, "perf_counter", lambda: clock[0])
+
+    class TimedClient(FakeClient):
+        def decide(self, state, allowed, fallback):
+            clock[0] += 3.0
+            self.wait_seconds += 3.0
+            return super().decide(state, allowed, fallback)
+
+    model = QwenImage21Transformer2DModel()
+
+    def advance_forward(module, args, result):
+        clock[0] += 0.25
+
+    handle = model.register_forward_hook(advance_forward)
+    try:
+        with q.experiment(
+            model, q.Options(mode="jev", min_tokens=64), tmp_path, upstream=UPSTREAM, client=TimedClient()
+        ) as run:
+            _, data, _, mask = call_prefill(model)
+            model(data[:, 13:], "cached", mask)
+    finally:
+        handle.remove()
+    assert run.summary["transformer_cpu_wall_seconds"] == 0.5
+    assert run.summary["controller_wall_seconds"] == run.summary["api_wait_seconds"] == 3.0
+    assert run.summary["evaluation_cpu_wall_seconds"] == run.summary["total_wall_seconds"] == 3.5
+
+
+def test_cuda_timing_is_collected_at_finish_without_per_evaluation_sync(tmp_path):
+    calls = []
+
+    class Event:
+        def record(self, stream):
+            calls.append("record")
+
+        def synchronize(self):
+            calls.append("synchronize")
+
+        def elapsed_time(self, other):
+            return 12.5
+
+    run = q.Run(q.Options(mode="dense"), 1, common.RunLog(tmp_path, "qwen21", {}))
+    run.active_cuda_events = (Event(), Event(), object())
+    run.end_forward()
+    assert calls == ["record"]
+    run.finish("completed")
+    assert calls == ["record", "synchronize"]
+    assert run.summary["cuda_event_seconds"] == 0.0125
+    assert run.summary["cuda_event_evaluations"] == 1
+
+
+def record_replay_source(tmp_path, options):
+    class RecordingClient(FakeClient):
+        def decide(self, state, allowed, fallback):
+            result = super().decide(state, allowed, fallback)
+            self.last_replay = {
+                "schema": 1,
+                "job_id": "qwen-test-job",
+                "sequence": self.calls,
+                "budget": {"max_calls": options.job_max_calls, "max_wait_seconds": options.job_max_wait_seconds},
+                "api_wait_seconds": self.wait_seconds,
+                "request": common.request_contract(state, allowed),
+                "answer": {"decisions": {key: {"choice": value, "confidence": 1} for key, value in result.items()}},
+            }
+            return result
+
+    with q.experiment(
+        QwenImage21Transformer2DModel(), options, tmp_path, upstream=UPSTREAM, client=RecordingClient()
+    ) as run:
+        # The recorded contract describes geometry/schedule, not tensor values.
+        run.begin()
+        run.observations = {str(i): {"relative_output_norm": 0.5, "cross_evaluation_drift": None} for i in range(3)}
+        run.observation_shapes = {str(i): {"target": [1, 192, 16], "prefix_tokens": 13} for i in range(3)}
+        run.end()
+        run.begin()
+        run.end()
+    return run.log.path
+
+
+def test_offline_qwen_replay_uses_no_cloud_or_sdk_python(monkeypatch, tmp_path):
+    options = q.Options(mode="jev", min_tokens=64, block_size=64, decision_cadence="once")
+    source = record_replay_source(tmp_path / "source", options)
+    monkeypatch.setenv(common.REPLAY_ENV, json.dumps([str(source)]))
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Replay must not use cloud credentials or an SDK process")
+
+    monkeypatch.setattr(common, "sdk_python", forbidden)
+    monkeypatch.setattr(common, "cloud_environment", forbidden)
+    model = QwenImage21Transformer2DModel()
+    with q.experiment(model, options, tmp_path / "replay", upstream=UPSTREAM) as run:
+        _, data, _, mask = call_prefill(model)
+        for _ in range(3):
+            model(data[:, 13:], "cached", mask)
+    assert run.summary["api_calls"] == 0 and run.summary["replay_calls"] == 1
+    assert run.summary["attention_calls"]["sparse_target"] == 9
+    assert run.client.closed
+
+
+def test_replay_shape_mismatch_does_not_fall_back_silently(monkeypatch, tmp_path):
+    options = q.Options(mode="jev", min_tokens=64, block_size=64)
+    source = record_replay_source(tmp_path / "source", options)
+    monkeypatch.setenv(common.REPLAY_ENV, json.dumps([str(source)]))
+    model = QwenImage21Transformer2DModel()
+    with pytest.raises(common.ReplayError, match="shape"):
+        with q.experiment(model, options, tmp_path / "replay", upstream=UPSTREAM) as run:
+            model(torch.randn(1, 333, 16), "extract")
+            model(torch.randn(1, 320, 16), "cached")
+    assert run.summary["status"] == "failed"
+    assert run.client.closed
+    assert not model._forward_hooks and not model._forward_pre_hooks
 
 
 def test_real_observations_drive_jev_from_dense_prefill(tmp_path):
@@ -498,6 +661,26 @@ def test_cloud_key_scoped_to_selected_qwen_worker(monkeypatch, tmp_path):
     assert "fake-secret" not in json.dumps(payload)
     assert payload["sparse_experiment"]["decision_cadence"] == "interval"
     assert payload["sparse_experiment"]["update_interval"] == 2
+
+
+def test_replay_routing_omits_credentials_and_passes_budget(monkeypatch, tmp_path):
+    service = fake_service(monkeypatch, tmp_path)
+    replay_logs = json.dumps([str(tmp_path / "recorded.jsonl")])
+    monkeypatch.setenv(common.REPLAY_ENV, replay_logs)
+
+    def forbidden():
+        raise AssertionError("Replay must not load API credentials or the SDK Python")
+
+    monkeypatch.setattr(integration, "read_saved_key", forbidden)
+    monkeypatch.setattr(integration, "sdk_python", forbidden)
+    request = types.SimpleNamespace(
+        sparse_mode="jev", sparse_keep_percent=75, sparse_jev_max_calls=3, sparse_jev_max_wait_seconds=12.5
+    )
+    _, env, payload = integration.worker_launch(request, service.WORKER, service.safe_environment())
+    assert env[common.REPLAY_ENV] == replay_logs
+    assert "TYPESAFE_API_KEY" not in env and "AIKIMI_JEV_ALLOW_CLOUD" not in env
+    assert payload["sparse_experiment"]["job_max_calls"] == 3
+    assert payload["sparse_experiment"]["job_max_wait_seconds"] == 12.5
 
 
 def load_worker(monkeypatch, tmp_path):

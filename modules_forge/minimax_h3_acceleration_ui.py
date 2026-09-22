@@ -89,9 +89,12 @@ def create_acceleration_controls(duration):
         tau = gr.Slider(0, 4, value=defaults.sparse_tau, step=0.05, label="Sol-Attn tau · 大きいほど疎", visible=False, interactive=False, elem_id="h3-sparse-tau")
         keep = gr.Slider(0.5, 95, value=defaults.sparse_keep_percent, step=0.5, label="SLA保持率 % · 大きいほどdenseに近い", visible=False, interactive=False, elem_id="h3-sparse-keep")
         start = gr.Slider(0, 1, value=defaults.sparse_start_percent, step=0.01, label="Sparse開始位置 · それ以前はdense", visible=False, interactive=False, elem_id="h3-sparse-start")
-        from modules_forge.jev_sparse.ui import decision_controls
+        from modules_forge.jev_sparse.ui import budget_controls, decision_controls
 
         jev_cadence, jev_interval = decision_controls("h3", attention, gradio_module=gr, jev_value="h3_jev", interactive=False)
+        jev_max_calls, jev_max_wait = budget_controls("h3", attention, steps=4, cadence=jev_cadence,
+                                                     interval=jev_interval, gradio_module=gr,
+                                                     jev_value="h3_jev", interactive=False)
         clip_cache = gr.Dropdown(
             choices=[("オフ · 毎回通常処理", "off"), ("自動 · 保存した条件を再利用", "auto"), ("再計算して更新 · 毎回", "refresh")],
             value=defaults.clip_cache, label="5. CLIP条件キャッシュ", interactive=False, elem_id="h3-clip-cache",
@@ -112,7 +115,7 @@ def create_acceleration_controls(duration):
         )
     negpip_controls = create_negpip_controls(prefix="h3", interactive=False)
     hybrid_controls, hybrid_note = create_hybrid_controls()
-    controls = [model, vae, decode, batch, attention, tau, keep, start, *negpip_controls, clip_cache, *hybrid_controls, jev_cadence, jev_interval]
+    controls = [model, vae, decode, batch, attention, tau, keep, start, *negpip_controls, clip_cache, *hybrid_controls, jev_cadence, jev_interval, jev_max_calls, jev_max_wait]
     summary_inputs = hybrid_controls + [duration]
     for control in summary_inputs:
         control.change(hybrid_summary, inputs=summary_inputs, outputs=[hybrid_note], queue=False, show_progress="hidden")

@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from modules_forge.minimax_h3_negpip import H3NegPiP  # noqa: E402
 from tools.tests.test_h3_acceleration import H3Acceleration, load_bridge  # noqa: E402
-from modules_forge.minimax_h3_negpip import H3NegPiP
 
 CONTROL_COUNT = len(H3Acceleration().values())
 
@@ -61,13 +61,13 @@ class H3AccelerationUITests(unittest.TestCase):
 
         option = H3Acceleration(hybrid=H3Hybrid(True, 3, 39, 16, "left\nforward\nright"))
         _, generate = self.callback("_generate")
-        self.assertEqual([item.elem_id for item in generate.inputs[-5:]], [
+        self.assertEqual([item.elem_id for item in generate.inputs if (item.elem_id or "").startswith("h3-hybrid-")], [
             "h3-hybrid-enabled", "h3-hybrid-windows", "h3-hybrid-overlap", "h3-hybrid-switch", "h3-hybrid-prompts",
         ])
         request = self.ui.H3Request(mode="text", prompt="test", duration_seconds=10, acceleration=option)
         with patch.object(self.ui, "_history_state", return_value=([], "", [])), patch.object(self.ui, "load_history_request", return_value=request):
             result = self.ui._restore_history_with_acceleration("id", "")
-        self.assertEqual(tuple(update["value"] for update in result[-8:-3]), option.hybrid.values())
+        self.assertEqual(tuple(update["value"] for update in result[22 + 9 + len(H3NegPiP().values()):22 + 14 + len(H3NegPiP().values())]), option.hybrid.values())
         self.assertIn("27.12", hybrid_summary(*option.hybrid.values(), 10))
         self.assertEqual(hybrid_summary(*H3Hybrid().values(), 10), "")
         summaries = [fn for fn in self.demo.fns.values() if fn.fn.__name__ == "hybrid_summary"]
@@ -109,8 +109,8 @@ class H3AccelerationUITests(unittest.TestCase):
             _, fn = self.callback(name)
             self.assertEqual(len(fn.inputs), count)
             self.assertEqual(fn.inputs[-CONTROL_COUNT:], self.callback("_generate")[1].inputs[-CONTROL_COUNT:])
-            self.assertEqual(fn.inputs[-14].elem_id, "h3-negpip-enabled")
-            self.assertEqual(fn.inputs[-6].elem_id, "h3-clip-cache")
+            self.assertEqual(fn.inputs[-CONTROL_COUNT + 8].elem_id, "h3-negpip-enabled")
+            self.assertEqual(fn.inputs[-CONTROL_COUNT + 8 + len(H3NegPiP().values())].elem_id, "h3-clip-cache")
             self.assertEqual([item.elem_id for item in fn.inputs][-CONTROL_COUNT:-CONTROL_COUNT + 8], ["h3-model-variant", "h3-video-vae", "h3-decode-mode", "h3-tile-batch", "h3-attention-mode", "h3-sparse-tau", "h3-sparse-keep", "h3-sparse-start"])
         args = ["text", "test", None, None, None, None, None, "16:9", "preview", 5, 4, 42, "simple", "match", "off", None, 1.0]
         chosen = H3Acceleration("fused_turbo", "int8", "fast", 2, "sla")
@@ -135,7 +135,7 @@ class H3AccelerationUITests(unittest.TestCase):
         request = self.ui.H3Request(mode="text", prompt="test", acceleration=H3Acceleration(clip_cache="auto"))
         with patch.object(self.ui, "_history_state", return_value=([], "", [])), patch.object(self.ui, "load_history_request", return_value=request):
             result = self.ui._restore_history_with_acceleration("id", "")
-        self.assertEqual(result[-9]["value"], "auto")
+        self.assertEqual(result[22 + 8 + len(H3NegPiP().values())]["value"], "auto")
 
     def test_fun_control_ui_values_reach_request(self):
         args = ["text", "test", None, None, None, None, None, "16:9", "draft", 5, 20, 42, "simple", "match", "canny", "motion.mp4", 0.8]

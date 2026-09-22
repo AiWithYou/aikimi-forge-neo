@@ -7,13 +7,24 @@ in Krea2. Text/reference KV and query rows use the kernel's exact sink ranges.
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import importlib
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .anima import AnimaRun
-from .common import AnimaOptions, ExperimentCancelled, JevClient, RunLog, sdk_python
+from .common import (
+    AnimaOptions,
+    ExperimentCancelled,
+    JevBudget,
+    ReplayError,
+    RunLog,
+    client_available,
+    close_client,
+    create_client,
+    replay_requested,
+)
 from .credentials import cloud_source
 
 _ACTIVE = contextvars.ContextVar("aikimi_krea2_active", default=None)
@@ -28,6 +39,7 @@ class Options(AnimaOptions):
     tile_mode: str = "off"
     decision_cadence: str = "once"
     tile_cadence: str = "once"
+    replay_logs: str = ""
 
     def validate(self):
         super().validate()
@@ -39,6 +51,8 @@ class Options(AnimaOptions):
             raise ValueError("Unknown Krea2 decision cadence")
         if self.tile_cadence not in {"once", "stage"}:
             raise ValueError("Unknown Krea2 tile decision cadence")
+        if not isinstance(self.replay_logs, str):
+            raise ValueError("Krea2 replay logs must be a JSON array string")
 
 
 class KreaRun(AnimaRun):
@@ -63,6 +77,7 @@ class KreaRun(AnimaRun):
         if self.repeating:
             # A new tile/pass must not be assessed using another tile's statistics.
             self.observations.clear()
+            self.observation_shapes.clear()
             self.previous.clear()
             self.pending.clear()
 
@@ -85,6 +100,7 @@ class KreaRun(AnimaRun):
             or self.sampling_step < self.options.warmup_evaluations
             or self.options.mode not in {"jev", "rules"}
             or self.circuit_open
+            or (self.options.mode == "jev" and not client_available(self.client))
             or len(self.observations) != self.layers
             or (not self.repeating and self.last_decision is not None)
             or (self.last_decision_step is not None and self.sampling_step - self.last_decision_step < interval)
@@ -110,11 +126,13 @@ class KreaRun(AnimaRun):
                     "sampling_step": self.sampling_step,
                     "decision_cadence": self.options.decision_cadence,
                     "blocks": self.observations,
+                    "tensor_shapes": self.observation_shapes,
                     "current_keep": self.keeps,
                 },
                 {str(i): KEEP_CHOICES for i in range(self.layers)},
                 100.0,
             )
+            self.decisions += 1
             self.log.write(
                 "decision",
                 evaluation=self.evaluation,
@@ -126,8 +144,10 @@ class KreaRun(AnimaRun):
                 api_wait_seconds=self.client.wait_seconds,
                 diagnostics=self.client.last_diagnostics,
                 observations=self.observations,
+                replay=getattr(self.client, "last_replay", None),
+                replay_calls=getattr(self.client, "replay_calls", 0),
             )
-        except ExperimentCancelled:
+        except (ExperimentCancelled, ReplayError):
             raise
         except Exception as exc:
             self.circuit_open = True
@@ -138,6 +158,7 @@ class KreaRun(AnimaRun):
         return (
             self.options.mode in {"jev", "rules"}
             and not self.circuit_open
+            and (self.options.mode != "jev" or client_available(self.client))
             and (self.repeating or self.last_decision is None)
         )
 
@@ -243,19 +264,34 @@ def attention_override(run, kernel_fn=sparse_attention):
     return compute
 
 
-def new_run(options, layers, log_root, *, prompt="", cancelled=None):
-    client = (
-        JevClient(sdk_python(), options.timeout, cancelled, environment=cloud_source())
-        if options.mode == "jev"
-        else None
-    )
+def new_run(options, layers, log_root, *, prompt="", cancelled=None, client=None, owns_client=True):
+    if options.mode == "jev" and client is None:
+        client = create_client(
+            timeout=options.timeout,
+            cancelled=cancelled,
+            environment=None if replay_requested() else cloud_source(),
+            budget=JevBudget(options.job_max_calls, options.job_max_wait_seconds),
+            prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
+        )
     settings = {**asdict(options), "kernel_head_group": 16, "kernel_token_block": 64}
     settings.pop("max_calls")
     settings["api_call_limit"] = 1 if options.decision_cadence == "once" else "sampling_cadence"
-    return KreaRun(options, layers, RunLog(Path(log_root), "krea2", settings, prompt), client, cancelled)
+    try:
+        return KreaRun(
+            options,
+            layers,
+            RunLog(Path(log_root), "krea2", settings, prompt),
+            client,
+            cancelled,
+            owns_client=owns_client,
+        )
+    except BaseException:
+        if owns_client:
+            close_client(client, "failed")
+        raise
 
 
-def attach(unet, options, log_root, *, run=None, prompt="", cancelled=None):
+def attach(unet, options, log_root, *, run=None, prompt="", cancelled=None, client=None, owns_client=True):
     options.validate()
     if options.mode == "off":
         return unet, run
@@ -274,7 +310,9 @@ def attach(unet, options, log_root, *, run=None, prompt="", cancelled=None):
     transformer_options = patched.model_options.setdefault("transformer_options", {})
     if transformer_options.get("krea2_attention_override") is not None:
         raise ValueError("Another Krea2 attention override is already installed")
-    run = run or new_run(options, len(model.blocks), log_root, prompt=prompt, cancelled=cancelled)
+    run = run or new_run(
+        options, len(model.blocks), log_root, prompt=prompt, cancelled=cancelled, client=client, owns_client=owns_client
+    )
     run.begin_sampling()
     transformer_options["krea2_attention_override"] = attention_override(run)
     previous = patched.model_options.get("model_function_wrapper")

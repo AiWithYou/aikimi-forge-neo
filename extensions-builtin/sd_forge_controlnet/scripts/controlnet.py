@@ -1,4 +1,5 @@
 import os.path
+from contextlib import ExitStack
 from typing import Optional
 
 import cv2
@@ -42,6 +43,7 @@ class ControlNetCachedParameters:
     def __init__(self):
         self.preprocessor = None
         self.model = None
+        self.model_cleanup_pending = False
         self.control_cond = None
         self.control_cond_for_hr_fix = None
         self.control_mask = None
@@ -463,6 +465,7 @@ class ControlNetForForgeOfficial(scripts.Script):
 
         params.model.advanced_mask_weighting = mask
 
+        params.model_cleanup_pending = True
         params.model.process_before_every_sampling(p, cond, mask, *args, **kwargs, control_type=convert_control_type(unit.type_filter))
 
         logger.info(f"ControlNet Method {params.preprocessor.name} patched.")
@@ -494,9 +497,17 @@ class ControlNetForForgeOfficial(scripts.Script):
     @torch.no_grad()
     def process_unit_after_every_sampling(self, p: StableDiffusionProcessing, unit: ControlNetUnit, params: ControlNetCachedParameters, *args, **kwargs):
 
-        params.preprocessor.process_after_every_sampling(p, params, *args, **kwargs)
-        params.model.process_after_every_sampling(p, params, *args, **kwargs)
+        try:
+            params.preprocessor.process_after_every_sampling(p, params, *args, **kwargs)
+        finally:
+            self._restore_control_model(p, params, *args, **kwargs)
         return
+
+    @staticmethod
+    def _restore_control_model(p, params, *args, **kwargs):
+        if params.model_cleanup_pending:
+            params.model.process_after_every_sampling(p, params, *args, **kwargs)
+            params.model_cleanup_pending = False
 
     @torch.no_grad()
     def process(self, p, *args, **kwargs):
@@ -522,11 +533,32 @@ class ControlNetForForgeOfficial(scripts.Script):
 
     @torch.no_grad()
     def postprocess_batch_list(self, p, pp, *args, **kwargs):
-        for i, unit in enumerate(self.get_enabled_units(args)):
-            self.process_unit_after_every_sampling(p, unit, self.current_params[i], pp, *args, **kwargs)
+        parameters = [self.current_params[i] for i, _unit in enumerate(self.get_enabled_units(args))]
+        with ExitStack() as cleanup:
+            for params in parameters:
+                cleanup.callback(self._restore_control_model, p, params, pp, *args, **kwargs)
+            # Image postprocessors retain their original order; model hooks unwind in reverse.
+            for params in parameters:
+                params.preprocessor.process_after_every_sampling(p, params, pp, *args, **kwargs)
         return
 
+    @torch.no_grad()
+    def on_process_cleanup(self, p, *args):
+        # Sampling/decode failures can bypass postprocess_batch_list entirely.
+        params_by_unit = getattr(self, "current_params", {})
+        try:
+            for params in reversed(tuple(params_by_unit.values())):
+                if not params.model_cleanup_pending:
+                    continue
+                try:
+                    self._restore_control_model(p, params, *args)
+                except Exception:
+                    logger.exception("Failed to restore ControlNet model after processing")
+        finally:
+            self.current_params = {}
+
     def postprocess(self, p, processed, *args):
+        self.on_process_cleanup(p, *args)
         self.current_params = {}
         return
 

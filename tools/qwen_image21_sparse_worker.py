@@ -56,29 +56,23 @@ class PipelineProxy:
         def cancelled():
             return (self.job / "cancel").exists()
 
+        digests = []
+        for value in self.request.get("input_images", []):
+            with Path(value).open("rb") as stream:
+                digests.append(hashlib.file_digest(stream, "sha256").hexdigest())
+        identity = {key: self.request[key] for key in ("seed", "width", "height", "steps", "precision", "memory_mode")}
+        identity["input_sha256"] = digests
         with experiment(
             self.pipe.transformer,
             self.options,
             self.job / "jev-sparse",
             prompt=self.request["prompt"],
             cancelled=cancelled,
+            replay_identity=identity,
         ) as run:
             self.run = run
             if run is not None:
-                digests = []
-                for value in self.request.get("input_images", []):
-                    with Path(value).open("rb") as stream:
-                        digests.append(hashlib.file_digest(stream, "sha256").hexdigest())
-                run.log.write(
-                    "generation_context",
-                    seed=self.request["seed"],
-                    width=self.request["width"],
-                    height=self.request["height"],
-                    steps=self.request["steps"],
-                    precision=self.request["precision"],
-                    memory_mode=self.request["memory_mode"],
-                    input_sha256=digests,
-                )
+                run.log.write("generation_context", **identity)
             return self.pipe(*args, **kwargs)
 
 

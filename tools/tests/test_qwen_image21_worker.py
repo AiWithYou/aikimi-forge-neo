@@ -203,6 +203,39 @@ class WorkerJobTests(unittest.TestCase):
         self.assertEqual(self.pipe.calls[-1]["prompt"], "Unmodified second prompt")
         self.assertEqual(result["metadata"]["prompt_rewrite"]["reason"], "disabled")
 
+    def test_edit_rewriter_receives_ordered_images_only_when_explicitly_enabled(self):
+        path = self.job / "reference.png"
+        Image.new("RGBA", (256, 320), (10, 20, 30, 47)).save(path)
+        self.request.update(rewrite_edit_prompt=True, input_images=[str(path)], transparent=False)
+        self.write_request()
+        rewritten = {"enabled": True, "applied": True, "rewritten_prompt": "Change the cup to blue."}
+        with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt", return_value=rewritten) as rewrite:
+            result, _ = self.run_job()
+        self.assertEqual(len(rewrite.call_args.kwargs["images"]), 1)
+        self.assertEqual(rewrite.call_args.kwargs["images"][0].getpixel((0, 0)), (10, 20, 30, 47))
+        self.assertEqual(self.pipe.calls[0]["prompt"], rewritten["rewritten_prompt"])
+        self.assertTrue(result["metadata"]["prompt_rewrite"]["applied"])
+
+    def test_preserved_and_raw_rgba_outputs_survive_worker_boundary(self):
+        path = self.job / "reference.png"
+        mask_path = self.job / "edit-mask.png"
+        Image.new("RGBA", (256, 320), (10, 20, 30, 17)).save(path)
+        mask = Image.new("L", (256, 320))
+        mask.paste(255, (100, 100, 140, 140))
+        mask.save(mask_path)
+        self.request.update(
+            input_images=[str(path)],
+            preserve_unmasked=True,
+            edit_mask={"original_path": str(path), "mask_path": str(mask_path), "feather": 2},
+        )
+        self.write_request()
+        result, _ = self.run_job()
+        with Image.open(result["preserved_output_path"]) as fixed, Image.open(result["output_path"]) as raw:
+            self.assertEqual(fixed.getpixel((0, 0)), (10, 20, 30, 17))
+            self.assertEqual(raw.getpixel((0, 0)), (1, 2, 3, 47))
+            self.assertEqual(fixed.getpixel((120, 120)), raw.getpixel((120, 120)))
+        self.assertTrue(result["metadata"]["preservation"]["applied"])
+
     def test_rewrite_failure_or_cancel_never_runs_diffusion(self):
         self.request["rewrite_prompt"] = True
         self.write_request()
@@ -461,6 +494,12 @@ class WorkerLoaderTests(unittest.TestCase):
         versions = mock.patch.object(worker, "_versions", return_value={"diffusers": "pinned"})
         versions.start()
         self.addCleanup(versions.stop)
+        cache = mock.patch(
+            "modules_forge.qwen_image21.quantized_cache.load_or_create",
+            side_effect=lambda _model, _identity, _load, create, _save, **_kwargs: (create(), {"status": "created"}),
+        )
+        cache.start()
+        self.addCleanup(cache.stop)
         output = redirect_stdout(io.StringIO())
         output.__enter__()
         self.addCleanup(output.__exit__, None, None, None)

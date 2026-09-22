@@ -46,9 +46,22 @@ def summarize(path: Path) -> dict:
         "mode": settings.get("mode"),
         "status": "incomplete_log" if incomplete else last.get("status", "incomplete"),
         "timing_scope": last.get("timing_scope", settings.get("timing_scope")),
-        "measured_seconds": last.get("model_seconds") if target == "anima" else last.get("elapsed_seconds"),
+        "measured_seconds": (
+            last.get("model_seconds")
+            if target == "anima"
+            else last.get("total_wall_seconds", last.get("elapsed_seconds"))
+        ),
         "api_calls": last.get("api_calls"),
+        "replay_calls": last.get("replay_calls", 0),
         "api_wait_seconds": last.get("api_wait_seconds"),
+        "total_wall_seconds": last.get("total_wall_seconds", last.get("elapsed_seconds")),
+        "evaluation_cpu_wall_seconds": last.get("evaluation_cpu_wall_seconds"),
+        "transformer_cpu_wall_seconds": last.get("transformer_cpu_wall_seconds"),
+        "controller_wall_seconds": last.get("controller_wall_seconds"),
+        "cuda_event_seconds": last.get("cuda_event_seconds"),
+        "cuda_event_evaluations": last.get("cuda_event_evaluations"),
+        "cuda_event_scope": last.get("cuda_event_scope"),
+        "model_seconds_kind": last.get("model_seconds_kind"),
         "attention_calls": counts,
         "prompt_sha256": first.get("prompt_sha256"),
         "generation_context": next((row for row in records if row.get("event") == "generation_context"), None),
@@ -70,7 +83,7 @@ def main():
     print(
         json.dumps(
             {
-                "note": "Measured scopes differ: H3 sampling only; Anima summed instrumented model evaluations. Match models, prompts, media, seeds, sizes and runtime before comparing. No automatic speedup claim.",
+                "note": "Measured scopes differ: H3 sampling; Anima instrumented evaluations; Qwen context wall, host forward, controller/API wait and CUDA stream intervals are separate. CUDA events include host launch gaps and device copies, not pure kernel time. Match models, prompts, media, seeds, sizes and runtime before comparing. No automatic speedup claim.",
                 "runs": reports,
             },
             ensure_ascii=False,

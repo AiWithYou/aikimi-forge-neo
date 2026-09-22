@@ -94,6 +94,92 @@ def decision_controls(prefix, mode, *, gradio_module=None, jev_value="jev", inte
     return cadence, interval
 
 
+def estimated_calls(steps, cadence="once", interval=2, warmup=1):
+    """Estimate from model evaluations; a sampler may evaluate more than once per step."""
+    if steps is None:
+        return 1 if cadence == "once" else None
+    remaining = max(0, int(steps) - max(1, int(warmup)))
+    if cadence == "once":
+        return min(1, remaining)
+    spacing = max(1, int(interval)) if cadence in {"interval", "legacy"} else 1
+    return (remaining + spacing - 1) // spacing
+
+
+def budget_note(mode, maximum, wait, steps=None, cadence="once", interval=2, *, jev_value="jev"):
+    if mode != jev_value:
+        return "Jev API：0回"
+    count = estimated_calls(steps, cadence, interval)
+    if maximum:
+        count = min(count, int(maximum)) if count is not None else None
+    forecast = (
+        f"1パスの呼び出し見込み：{count}回"
+        if count is not None
+        else f"呼び出し見込み：最初の評価後、{1 if cadence == 'step' else int(interval)}評価ごと"
+    )
+    limits = []
+    if maximum:
+        limits.append(f"最大{int(maximum)}回")
+    if wait:
+        limits.append(f"合計待ち時間{float(wait):g}秒")
+    return forecast + "。生成全体の上限：" + (" / ".join(limits) if limits else "なし") + "。"
+
+
+def budget_controls(
+    prefix, mode, *, steps=None, cadence=None, interval=None, gradio_module=None, jev_value="jev", interactive=True
+):
+    if gradio_module is None:
+        import gradio as gr
+    else:
+        gr = gradio_module
+    with gr.Group(visible=getattr(mode, "value", None) == jev_value) as controls:
+        with gr.Row():
+            maximum = gr.Number(
+                value=0,
+                minimum=0,
+                maximum=1000,
+                precision=0,
+                label="生成全体のAPI回数上限（0＝無制限）",
+                interactive=interactive,
+                elem_id=prefix + "-jev-job-max-calls",
+            )
+            wait = gr.Number(
+                value=0,
+                minimum=0,
+                maximum=3600,
+                precision=1,
+                label="生成全体のAPI待ち時間上限・秒（0＝無制限）",
+                interactive=interactive,
+                elem_id=prefix + "-jev-job-max-wait",
+            )
+        note = gr.Markdown("Jev API：0回", elem_id=prefix + "-jev-budget-note")
+    inputs = [mode, maximum, wait]
+    specifications = []
+    for value, default in ((steps, None), (cadence, "once"), (interval, 2)):
+        if hasattr(value, "change"):
+            specifications.append((len(inputs), None))
+            inputs.append(value)
+        else:
+            specifications.append((None, default if value is None else value))
+
+    def update(*values):
+        parameters = [values[index] if index is not None else value for index, value in specifications]
+        return budget_note(*values[:3], *parameters, jev_value=jev_value)
+
+    for control in inputs:
+        control.change(
+            update, inputs=inputs, outputs=note, queue=False, show_progress="hidden", api_visibility="private"
+        )
+    mode.change(
+        lambda value: gr.update(visible=value == jev_value),
+        inputs=mode,
+        outputs=controls,
+        queue=False,
+        show_progress="hidden",
+        api_visibility="private",
+    )
+    return maximum, wait
+
+
 def credential_controls(prefix, gradio_module=None):
     if gradio_module is None:
         import gradio as gr

@@ -23,6 +23,7 @@ OFFLINE_ENVIRONMENT: dict[str, str] = {
 }
 
 DISABLED_LIVE_TESTS: dict[str, str] = {
+    "QWEN_QUANTIZED_CACHE_GPU_TEST": "0",
     "QWEN_W4A8_GPU_TEST": "0",
     "ANIMA_29B_LIVE_API_TEST": "0",
     "ANIMA_38B_LIVE_API_TEST": "0",

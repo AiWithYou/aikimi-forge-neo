@@ -8,11 +8,23 @@ Fixed modes never construct the SDK client and never call a cloud service.
 
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 from pathlib import Path
 
-from .common import ExperimentCancelled, JevClient, RunLog
+from .common import (
+    REPLAY_ENV,
+    ExperimentCancelled,
+    JevBudget,
+    ReplayError,
+    RunLog,
+    client_available,
+    close_client,
+    create_client,
+    decision_count,
+    replay_paths_from_environment,
+)
 
 
 def _samples(x, layout):
@@ -38,6 +50,7 @@ class H3Controller:
         self.keeps = [100.0 if mode == "dense" else 10.0 if mode == "fixed10" else 5.0] * 50
         self.previous, self.pending, self.actual = {}, {}, {}
         self.disabled = False
+        self.tensor_shapes = {}
 
     def initialize(self):
         if self.mode != "jev" or not self.initial_decision:
@@ -59,12 +72,12 @@ class H3Controller:
     def _decide(self, state, allowed, fallback, initial=False):
         self.last_decision_step = -1 if initial else self.step
         try:
-            result = self.client.decide(state, allowed, fallback)
+            result = self.client.decide({**state, "tensor_shapes": self.tensor_shapes}, allowed, fallback)
             self.keeps = (
                 [result[str(i)] for i in range(50)] if initial else [5.0] + [result[str(i)] for i in range(1, 50)]
             )
             reason = "jev"
-        except ExperimentCancelled:
+        except (ExperimentCancelled, ReplayError):
             raise
         except Exception as exc:
             self.disabled = True
@@ -79,6 +92,8 @@ class H3Controller:
             api_wait_seconds=self.client.wait_seconds,
             controller_policy="speed_v3",
             diagnostics=getattr(self.client, "last_diagnostics", {}),
+            replay=getattr(self.client, "last_replay", None),
+            replay_calls=getattr(self.client, "replay_calls", 0),
         )
 
     def observe(self, layer, before, after):
@@ -106,7 +121,8 @@ class H3Controller:
             self.mode == "jev"
             and index < 3
             and not self.disabled
-            and self.client.calls < self.max_calls
+            and decision_count(self.client) < self.max_calls
+            and client_available(self.client)
             and (self.last_decision_step is None or index - self.last_decision_step >= self.update_interval)
         ):
             import torch
@@ -161,6 +177,9 @@ class AikimiH3SparseExperiment:
             "optional": {
                 "decision_cadence": (["once", "interval", "step"], {"default": "once"}),
                 "decision_interval": ("INT", {"default": 2, "min": 1, "max": 100}),
+                "job_max_calls": ("INT", {"default": 0, "min": 0, "max": 1000}),
+                "job_max_wait_seconds": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 3600.0}),
+                "replay_logs": ("STRING", {"default": ""}),
             },
         }
 
@@ -168,7 +187,18 @@ class AikimiH3SparseExperiment:
     FUNCTION = "patch"
     CATEGORY = "Aikimi/Experiments"
 
-    def patch(self, model, mode, sdk_python="", prompt_context="", decision_cadence="once", decision_interval=2):
+    def patch(
+        self,
+        model,
+        mode,
+        sdk_python="",
+        prompt_context="",
+        decision_cadence="once",
+        decision_interval=2,
+        job_max_calls=0,
+        job_max_wait_seconds=0.0,
+        replay_logs="",
+    ):
         import comfy.model_management as mm
         import comfy.patcher_extension as pe
         from comfy_extras.nodes_sparse_attention import (
@@ -184,7 +214,11 @@ class AikimiH3SparseExperiment:
             raise ValueError("Unknown H3 Jev cadence")
         if type(decision_interval) is not int or not 1 <= decision_interval <= 100:
             raise ValueError("H3 Jev decision interval must be 1..100")
-        if mode == "jev":
+        JevBudget(job_max_calls, job_max_wait_seconds)
+        replay_paths = (
+            replay_paths_from_environment({REPLAY_ENV: replay_logs}) if replay_logs else replay_paths_from_environment()
+        )
+        if mode == "jev" and not replay_paths:
             from .common import cloud_environment
 
             cloud_environment()
@@ -232,7 +266,15 @@ class AikimiH3SparseExperiment:
                 c.actual[str(index)] = (
                     "native_sla_producer" if eligible else "dense" if mode == "dense" else "native_producer_not_used"
                 )
-                observe = mode == "jev" and c.step < 3 and not c.disabled and c.client.calls < c.max_calls
+                observe = (
+                    mode == "jev"
+                    and c.step < 3
+                    and not c.disabled
+                    and decision_count(c.client) < c.max_calls
+                    and client_available(c.client)
+                )
+                if observe:
+                    c.tensor_shapes[str(index)] = list(args["img"].shape)
                 before = _samples(args["img"], args["layout"]) if observe else None
                 out = extra["original_block"]({**args, "attention": attention} if eligible else args)
                 if observe:
@@ -276,6 +318,8 @@ class AikimiH3SparseExperiment:
                     "mode": mode,
                     "decision_cadence": decision_cadence,
                     "decision_interval": decision_interval,
+                    "job_max_calls": job_max_calls,
+                    "job_max_wait_seconds": job_max_wait_seconds,
                     "steps": 4,
                     "sampler": "res_multistep",
                     "timing_scope": "sampling_only",
@@ -289,7 +333,18 @@ class AikimiH3SparseExperiment:
             c = None
             status = "failed"
             try:
-                client = JevClient(Path(sdk_python), 20, cancelled) if mode == "jev" else None
+                client = (
+                    create_client(
+                        Path(sdk_python) if sdk_python else None,
+                        20,
+                        cancelled,
+                        replay_paths=replay_paths,
+                        budget=JevBudget(job_max_calls, job_max_wait_seconds),
+                        prompt_sha256=hashlib.sha256(prompt_context.encode()).hexdigest(),
+                    )
+                    if mode == "jev"
+                    else None
+                )
                 c = H3Controller(
                     mode,
                     log,
@@ -315,16 +370,27 @@ class AikimiH3SparseExperiment:
                     status = "cancelled"
                 raise
             finally:
-                log.finish(
-                    status,
-                    api_calls=client.calls if client else 0,
-                    api_wait_seconds=client.wait_seconds if client else 0,
-                )
-                p.controller = None
-                p.reset()
-                if c is not None:
-                    c.previous.clear()
-                    c.pending.clear()
+                try:
+                    try:
+                        close_client(client, status)
+                    except ReplayError:
+                        status = "failed"
+                        raise
+                finally:
+                    try:
+                        log.finish(
+                            status,
+                            api_calls=client.calls if client else 0,
+                            api_wait_seconds=client.wait_seconds if client else 0,
+                            replay_calls=getattr(client, "replay_calls", 0),
+                        )
+                    finally:
+                        p.controller = None
+                        p.reset()
+                        if c is not None:
+                            c.previous.clear()
+                            c.pending.clear()
+                            c.tensor_shapes.clear()
 
         m.add_wrapper_with_key(pe.WrappersMP.SAMPLER_SAMPLE, "aikimi_jev", wrapper)
         return (m,)

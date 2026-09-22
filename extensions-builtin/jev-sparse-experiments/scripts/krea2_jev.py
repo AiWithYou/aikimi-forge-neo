@@ -9,7 +9,9 @@ from modules_forge.jev_sparse import krea2, krea2_jobs
 from modules_forge.jev_sparse.ui import credential_controls
 
 
-def api_usage(mode, tile_mode, cadence="once", interval=2, tile_cadence="once"):
+def api_usage(
+    mode, tile_mode, cadence="once", interval=2, tile_cadence="once", job_max_calls=0, job_max_wait_seconds=0
+):
     calls = int(mode == "jev") + int(tile_mode == "jev")
     if not calls:
         return "**Jev API：0回** · キーなしで使えます。"
@@ -26,16 +28,20 @@ def api_usage(mode, tile_mode, cadence="once", interval=2, tile_cadence="once"):
         parts.append("タイル：生成全体で1回" if tile_cadence == "once" else "タイル：拡大段階ごとに1回")
     repeating = (mode == "jev" and cadence != "once") or (tile_mode == "jev" and tile_cadence != "once")
     title = "Jev API" if repeating else f"Jev API：最大{calls}回／1生成"
+    if job_max_calls:
+        parts.append(f"生成全体で最大{int(job_max_calls)}回")
+    if job_max_wait_seconds:
+        parts.append(f"待ち時間合計{float(job_max_wait_seconds):g}秒まで")
     return f"**{title}** · " + " ／ ".join(parts)
 
 
-def update_controls(mode, tile_mode, cadence, interval, tile_cadence):
+def update_controls(mode, tile_mode, cadence, interval, tile_cadence, job_max_calls=0, job_max_wait_seconds=0):
     return (
         gr.update(interactive=mode == "fixed"),
         gr.update(visible=mode == "jev"),
         gr.update(visible=mode == "jev" and cadence == "interval"),
         gr.update(visible=tile_mode == "jev"),
-        api_usage(mode, tile_mode, cadence, interval, tile_cadence),
+        api_usage(mode, tile_mode, cadence, interval, tile_cadence, job_max_calls, job_max_wait_seconds),
     )
 
 
@@ -105,8 +111,26 @@ class Script(scripts.Script):
                     label="タイル配分のJev再判定頻度",
                     elem_id=prefix + "-tile-cadence",
                 )
+            with gr.Row():
+                job_calls = gr.Number(
+                    value=0,
+                    minimum=0,
+                    maximum=1000,
+                    precision=0,
+                    label="生成全体のAPI回数上限（0＝無制限）",
+                    elem_id=prefix + "-job-max-calls",
+                )
+                job_wait = gr.Number(
+                    value=0,
+                    minimum=0,
+                    maximum=3600,
+                    precision=1,
+                    label="生成全体のAPI待ち時間上限・秒（0＝無制限）",
+                    elem_id=prefix + "-job-max-wait",
+                )
+            replay_logs = gr.Textbox(value="", visible=False)
             usage = gr.Markdown(api_usage("off", "off"), elem_id=prefix + "-api-usage")
-            frequency_inputs = [mode, tile_mode, cadence, interval, tile_cadence]
+            frequency_inputs = [mode, tile_mode, cadence, interval, tile_cadence, job_calls, job_wait]
             for control in frequency_inputs:
                 control.change(
                     update_controls,
@@ -144,14 +168,28 @@ class Script(scripts.Script):
             (cadence, "Krea2 Sparse cadence"),
             (interval, "Krea2 Sparse interval"),
             (tile_cadence, "Krea2 tile cadence"),
+            (job_calls, "Krea2 Jev job max calls"),
+            (job_wait, "Krea2 Jev job wait seconds"),
         ]
-        return [mode, keep, minimum, tile_mode, timeout, cadence, interval, tile_cadence]
+        return [
+            mode,
+            keep,
+            minimum,
+            tile_mode,
+            timeout,
+            cadence,
+            interval,
+            tile_cadence,
+            job_calls,
+            job_wait,
+            replay_logs,
+        ]
 
     def process(self, p, *args):
         options = krea2_jobs.parse_options(*args)
         session = krea2_jobs.current_session()
         p._krea2_jev_owned = session is None
-        p._krea2_jev_session = session or krea2_jobs.Session(options)
+        p._krea2_jev_session = session or krea2_jobs.Session(options, prompt=str(getattr(p, "prompt", "")))
         p._krea2_jev_completed = False
         if options.mode != "off":
             p.extra_generation_params.update(
@@ -162,6 +200,8 @@ class Script(scripts.Script):
                     "Krea2 Sparse timeout": options.timeout,
                     "Krea2 Sparse cadence": options.decision_cadence,
                     "Krea2 Sparse interval": options.update_interval,
+                    "Krea2 Jev job max calls": options.job_max_calls,
+                    "Krea2 Jev job wait seconds": options.job_max_wait_seconds,
                 }
             )
 
@@ -184,6 +224,8 @@ class Script(scripts.Script):
                 run=session.run,
                 prompt=str(p.prompt),
                 cancelled=krea2_jobs.cancelled,
+                client=session.get_client() if session.options.mode == "jev" else None,
+                owns_client=False,
             )
         except Exception as exc:
             # Forge catches script callback exceptions. Raise during sampling too,

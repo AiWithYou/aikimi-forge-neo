@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextvars
 import functools
+import hashlib
 import json
 import math
 import struct
@@ -11,7 +12,17 @@ from collections import Counter, defaultdict
 from contextlib import contextmanager
 from pathlib import Path
 
-from .common import ExperimentCancelled, JevClient, RunLog, sdk_python
+from .common import (
+    REPLAY_ENV,
+    ExperimentCancelled,
+    JevBudget,
+    ReplayError,
+    RunLog,
+    client_available,
+    close_client,
+    create_client,
+    replay_paths_from_environment,
+)
 from .credentials import cloud_source
 from .krea2 import Options
 
@@ -28,6 +39,9 @@ def parse_options(
     decision_cadence="once",
     interval=2,
     tile_cadence="once",
+    job_max_calls=0,
+    job_max_wait_seconds=0,
+    replay_logs="",
 ):
     if isinstance(keep, bool) or isinstance(timeout, bool):
         raise ValueError("保持率と待ち時間は数値で指定してください。")
@@ -35,6 +49,8 @@ def parse_options(
         raise ValueError("最小token数は整数で指定してください。")
     if isinstance(interval, bool) or int(interval) != interval:
         raise ValueError("再判定の間隔は整数で指定してください。")
+    if isinstance(job_max_calls, bool) or int(job_max_calls) != job_max_calls:
+        raise ValueError("Jevの生成全体上限は整数で指定してください。")
     options = Options(
         mode=mode,
         keep_percent=float(keep),
@@ -44,6 +60,9 @@ def parse_options(
         decision_cadence=decision_cadence,
         update_interval=int(interval),
         tile_cadence=tile_cadence,
+        job_max_calls=int(job_max_calls),
+        job_max_wait_seconds=job_max_wait_seconds,
+        replay_logs=replay_logs,
     )
     options.validate()
     return options
@@ -96,7 +115,9 @@ def krea_selected(p):
 
 
 class TileAllocator:
-    def __init__(self, mode, log_root, timeout=10, *, client=None, is_cancelled=None, cadence="once"):
+    def __init__(
+        self, mode, log_root, timeout=10, *, client=None, is_cancelled=None, cadence="once", owns_client=True, prompt=""
+    ):
         if mode not in {"rules", "jev"}:
             raise ValueError("Invalid tile allocation mode")
         if cadence not in {"once", "stage"}:
@@ -107,8 +128,11 @@ class TileAllocator:
             log_root,
             "krea2-tiles",
             {"mode": mode, "cadence": cadence, "api_call_limit": 1 if cadence == "once" else "upscale_stages"},
+            prompt,
         )
         self.client = client
+        self.owns_client = owns_client
+        self.decisions = 0
         self.cancelled = is_cancelled or cancelled
         self.decided = False
         self.choices = {}
@@ -128,13 +152,15 @@ class TileAllocator:
     def bucket(cls, score, knee):
         return min(7, int(cls.importance(score, knee) * 8))
 
-    def prepare(self, scores, minimum, maximum, knee):
+    def prepare(self, scores, minimum, maximum, knee, *, layout=None):
         if minimum < 1 or maximum < minimum:
             raise ValueError("Invalid tile step limits")
         if self.cancelled():
             raise ExperimentCancelled("Generation cancelled")
         self.stage += 1
         if self.circuit_open or (self.decided and self.cadence == "once"):
+            return
+        if self.mode == "jev" and self.client is not None and not client_available(self.client):
             return
         self.decided = True
         self.choices = {}
@@ -146,7 +172,11 @@ class TileAllocator:
             return
         try:
             if self.client is None:
-                self.client = JevClient(sdk_python(), self.timeout, self.cancelled, environment=cloud_source())
+                self.client = create_client(
+                    timeout=self.timeout,
+                    cancelled=self.cancelled,
+                    environment=None if replay_paths_from_environment() else cloud_source(),
+                )
             self.choices = self.client.decide(
                 {
                     "decision_kind": "tile_steps",
@@ -154,6 +184,12 @@ class TileAllocator:
                     "constraints": "SPEED-FIRST. Choose 0 or a supplied positive step count for each observed detail group. Zero retains the enlarged base and adds no generated detail. Groups are ordered from weak (0) to strong (7) measured texture/edge detail. Prefer skipping very weak, flat groups, minimum positive steps for typical groups, maximum for unusually strong detail. These are aggregate numerical proxies, not semantic image analysis or measured quality. Do not invent subjects, faces or text. No forced quota. Choices apply until the next scheduled stage decision. Respect supplied positive step bounds.",
                     "stage": self.stage,
                     "decision_cadence": self.cadence,
+                    "tile_layout": {
+                        "count": len(scores),
+                        "detail_group_order": [str(self.bucket(score, knee)) for score in scores],
+                        "geometry": layout,
+                        "detail_knee": knee,
+                    },
                     "groups": {
                         key: {
                             "tiles": len(values),
@@ -170,6 +206,7 @@ class TileAllocator:
                 float(maximum),
             )
             self.source = "jev"
+            self.decisions += 1
             diagnostics = {
                 key: {"steps": int(value), "confidence": self.client.last_diagnostics.get(key, {}).get("confidence")}
                 for key, value in self.choices.items()
@@ -182,8 +219,10 @@ class TileAllocator:
                 diagnostics=diagnostics,
                 api_calls=self.client.calls,
                 api_wait_seconds=self.client.wait_seconds,
+                replay=getattr(self.client, "last_replay", None),
+                replay_calls=getattr(self.client, "replay_calls", 0),
             )
-        except ExperimentCancelled:
+        except (ExperimentCancelled, ReplayError):
             raise
         except Exception as exc:
             self.source = "rules_fallback"
@@ -204,6 +243,12 @@ class TileAllocator:
         return steps
 
     def close(self, status):
+        if self.owns_client:
+            try:
+                close_client(self.client, status)
+            except ReplayError:
+                self.log.finish("failed", error_type="ReplayError")
+                raise
         self.log.finish(
             status,
             selected_step_counts=dict(self.counts),
@@ -211,28 +256,57 @@ class TileAllocator:
             source=self.source,
             api_calls=self.client.calls if self.client else 0,
             api_wait_seconds=self.client.wait_seconds if self.client else 0,
+            replay_calls=getattr(self.client, "replay_calls", 0),
+            decisions=self.decisions,
         )
 
 
 class Session:
-    def __init__(self, options, log_root=None):
+    def __init__(self, options, log_root=None, *, prompt=""):
         options.validate()
         self.options = options
         self.log_root = Path(log_root or Path(__file__).resolve().parents[2] / "outputs/jev-sparse")
         self.run = None
         self.allocator = None
         self.closed = False
+        self.prompt = prompt
+        self.client = None
+        self.budget = JevBudget(options.job_max_calls, options.job_max_wait_seconds)
+        self.replay_paths = (
+            replay_paths_from_environment({REPLAY_ENV: options.replay_logs}) if options.replay_logs else None
+        )
 
-    def prepare_tiles(self, scores, minimum, maximum, knee):
+    def get_client(self):
+        if self.closed:
+            raise RuntimeError("Krea2 generation session is closed")
+        if self.client is None and "jev" in {self.options.mode, self.options.tile_mode}:
+            paths = self.replay_paths if self.replay_paths is not None else replay_paths_from_environment()
+            self.client = create_client(
+                timeout=self.options.timeout,
+                cancelled=cancelled,
+                environment=None if paths else cloud_source(),
+                budget=self.budget,
+                replay_paths=paths,
+                prompt_sha256=hashlib.sha256(self.prompt.encode()).hexdigest(),
+            )
+        return self.client
+
+    def prepare_tiles(self, scores, minimum, maximum, knee, *, layout=None):
         if self.closed:
             raise RuntimeError("Krea2 generation session is closed")
         if self.options.tile_mode == "off":
             return None
         if self.allocator is None:
             self.allocator = TileAllocator(
-                self.options.tile_mode, self.log_root, self.options.timeout, cadence=self.options.tile_cadence
+                self.options.tile_mode,
+                self.log_root,
+                self.options.timeout,
+                cadence=self.options.tile_cadence,
+                client=self.get_client() if self.options.tile_mode == "jev" else None,
+                owns_client=False,
+                prompt=self.prompt,
             )
-        self.allocator.prepare(scores, minimum, maximum, knee)
+        self.allocator.prepare(scores, minimum, maximum, knee, layout=layout)
         return self.allocator
 
     def close(self, status):
@@ -240,11 +314,18 @@ class Session:
             return
         self.closed = True
         try:
-            if self.run is not None:
-                self.run.close(status)
+            try:
+                close_client(self.client, status)
+            except ReplayError:
+                status = "failed"
+                raise
         finally:
-            if self.allocator is not None:
-                self.allocator.close(status)
+            try:
+                if self.run is not None:
+                    self.run.close(status)
+            finally:
+                if self.allocator is not None:
+                    self.allocator.close(status)
 
 
 def current_session():
@@ -264,7 +345,7 @@ def generation_scope(p):
     if not krea_selected(p):
         yield None
         return
-    session = Session(options)
+    session = Session(options, prompt=str(getattr(p, "prompt", "")))
     token = _JOB.set(session)
     status = "failed"
     try:
@@ -292,11 +373,11 @@ def whole_image_job(function):
     return wrapped
 
 
-def prepare_tile_allocation(p, scores, minimum, maximum, knee):
+def prepare_tile_allocation(p, scores, minimum, maximum, knee, *, layout=None):
     session = current_session()
     if session is None:
         return None
-    allocator = session.prepare_tiles(scores, minimum, maximum, knee)
+    allocator = session.prepare_tiles(scores, minimum, maximum, knee, layout=layout)
     if allocator is not None:
         p.extra_generation_params.update(
             {
