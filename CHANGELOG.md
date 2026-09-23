@@ -15,8 +15,8 @@
 
 - 表示名を「Aikimi Forge Neo」に変更。ブラウザーのタイトル、画面下部、通知、診断、起動メッセージと現行ガイドを更新しました。
 - 公式Tag Autocompleteの旧ファイル経路とプロンプト欄の構造をGradio 6へ合わせ、`txt2img`・`img2img`でタグ候補の表示とTab入力を復旧しました。タグデータは有効な拡張の必要ファイルだけを配信します。
-- GPU待ち行列の先頭待機者へ所有権を引き継ぎ、新着処理の割り込みと待機中断後の停止を修正しました（[#7](https://github.com/AiWithYou/aikimi-studio-neo/pull/7)）。
-- 独立した依存環境の監査が、本体側の失敗で省略されないようにしました（[#8](https://github.com/AiWithYou/aikimi-studio-neo/pull/8)）。既存の依存関係の指摘は引き続き監査結果に残ります。
+- GPU待ち行列の先頭待機者へ所有権を引き継ぎ、新着処理の割り込みと待機中断後の停止を修正しました（[#7](https://github.com/AiWithYou/aikimi-forge-neo/pull/7)）。
+- 独立した依存環境の監査が、本体側の失敗で省略されないようにしました（[#8](https://github.com/AiWithYou/aikimi-forge-neo/pull/8)）。既存の依存関係の指摘は引き続き監査結果に残ります。
 
 ## v1.4.1 — 2026-09-22
 

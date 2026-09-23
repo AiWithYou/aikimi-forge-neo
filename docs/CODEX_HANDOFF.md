@@ -1,6 +1,6 @@
 # Codexへの引き継ぎ：生成ジョブの安全性
 
-更新: 2026-09-12。対象: `AiWithYou/aikimi-studio-neo` の `neo`。
+更新: 2026-09-12。対象: `AiWithYou/aikimi-forge-neo` の `neo`。
 
 `bb1a2c97` までfast-forwardしてから実装した。開始時の背景除去関連・H3 CSSなど11ファイルの既存差分は保持している。
 

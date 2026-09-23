@@ -5,7 +5,7 @@
 Baseline: `a8ba1e2ab48e4cea34aa8639661a4c40a952881b` on `neo`.
 This change is independent of the GPU queue correction in PR #7.
 
-In [security run 35710355496](https://github.com/AiWithYou/aikimi-studio-neo/actions/runs/35710355496),
+In [security run 35710355496](https://github.com/AiWithYou/aikimi-forge-neo/actions/runs/35710355496),
 the main dependency audit failed on the existing Accelerate 1.14.0 requirement.
 The subsequent asset, browser-test, and preprocessor audits were all skipped.
 Their absence is not evidence that those environments are vulnerability-free.

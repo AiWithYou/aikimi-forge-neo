@@ -2,7 +2,7 @@
 
 ## Baseline and scope
 
-Repository: `AiWithYou/aikimi-studio-neo`, default branch `neo`.
+Repository: `AiWithYou/aikimi-forge-neo`, default branch `neo`.
 Baseline commit: `a8ba1e2ab48e4cea34aa8639661a4c40a952881b`.
 
 This is a focused source audit of shared GPU ownership and its adjacent lifecycle

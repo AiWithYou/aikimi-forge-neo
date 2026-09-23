@@ -179,8 +179,8 @@ Krea2・Animaを選んでも、操作中の`txt2img`／`img2img`タブは維持�
 ### はじめて使う場合
 
 ```powershell
-git clone --branch neo https://github.com/AiWithYou/aikimi-studio-neo.git
-cd aikimi-studio-neo
+git clone --branch neo https://github.com/AiWithYou/aikimi-forge-neo.git
+cd aikimi-forge-neo
 .\aikimi-setup.bat
 ```
 
@@ -342,9 +342,12 @@ LANなどの別端末から利用する場合は認証が必要です。認証�
 WebUIを終了し、Aikimi Forge NeoをダウンロードしたフォルダーでPowerShellを開いて、次を実行してください。このリポジトリの`neo`ブランチを最新版に更新します。
 
 ```powershell
+git remote set-url origin https://github.com/AiWithYou/aikimi-forge-neo.git
 git switch neo
 git pull --ff-only origin neo
 ```
+
+既存のローカルフォルダー名を変更する必要はありません。`origin`の更新は一度行えば十分です。
 
 更新が終わったら、`aikimi-launch.bat`をダブルクリックするか、普段使っている起動コマンドでWebUIを起動してください。導入済みのモデルや保存した画像を、ダウンロードし直す必要はありません。
 
