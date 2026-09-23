@@ -13,7 +13,10 @@ from fastapi.responses import JSONResponse
 
 from modules import gradio_runtime, initialize, initialize_util, timer
 from modules.aikimi_security.auth import install_remote_auth_middleware
-from modules.aikimi_security.gradio_file_guard import install_gradio_file_url_guard
+from modules.aikimi_security.gradio_file_guard import (
+    install_gradio_file_url_guard,
+    install_gradio_legacy_file_route,
+)
 from modules.aikimi_security.paths import build_gradio_allowed_paths, build_gradio_blocked_paths
 from modules.aikimi_security.redaction import safe_error_message
 from modules_forge.initialization import initialize_forge
@@ -155,6 +158,7 @@ def webui_worker():
             app_kwargs=app_kwargs,
             debug=cmd_opts.gradio_debug,
         )
+        install_gradio_legacy_file_route(prepared_app)
         install_gradio_file_url_guard(prepared_app)
         install_remote_auth_middleware(prepared_app, cmd_opts)
         tunnel_baseline = gradio_runtime.tunnel_snapshot()

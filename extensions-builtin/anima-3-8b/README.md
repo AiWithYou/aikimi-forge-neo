@@ -1,8 +1,8 @@
-# Anima 3.8B for Aikimi Studio Neo
+# Anima 3.8B for Aikimi Forge Neo
 
-これは、Anima 3.8Bの52層DiTとQwen3.5 4B conditioningを、Aikimi Studio Neoの通常の`txt2img`と`img2img`で利用するためのbuilt-in Extensionです。最新版のv1.1はSemantic Connector v2をcheckpointに内包し、denoiseの各stepへ意味特徴を反映します。旧v1のprogressive cross-attention adapterにも引き続き対応します。
+これは、Anima 3.8Bの52層DiTとQwen3.5 4B conditioningを、Aikimi Forge Neoの通常の`txt2img`と`img2img`で利用するためのbuilt-in Extensionです。最新版のv1.1はSemantic Connector v2をcheckpointに内包し、denoiseの各stepへ意味特徴を反映します。旧v1のprogressive cross-attention adapterにも引き続き対応します。
 
-実装は[GumGum10/forge-anima-3.8B](https://github.com/GumGum10/forge-anima-3.8B)のcommit `59c27e5702f95c13dc5c08953637371d4749a034`を基にしています。Aikimi Studio Neoへの同梱にあたり、52層checkpointの必須検査、offline tokenizerの優先読込、INT8 ConvRotセットアップ、28↔40↔52 LoRA変換、省VRAM処理を統合しました。
+実装は[GumGum10/forge-anima-3.8B](https://github.com/GumGum10/forge-anima-3.8B)のcommit `59c27e5702f95c13dc5c08953637371d4749a034`を基にしています。Aikimi Forge Neoへの同梱にあたり、52層checkpointの必須検査、offline tokenizerの優先読込、INT8 ConvRotセットアップ、28↔40↔52 LoRA変換、省VRAM処理を統合しました。
 
 ## セットアップ
 

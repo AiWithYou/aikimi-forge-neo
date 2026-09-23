@@ -43,7 +43,7 @@ onAfterUiUpdate(function () {
     // Multiple copies of the images are in the DOM when one is selected. Dedup with a Set to get the real number generated.
     const imgs = new Set(Array.from(galleryPreviews).map((img) => img.src));
 
-    const notification = new Notification("Aikimi Studio Neo", {
+    const notification = new Notification("Aikimi Forge Neo", {
         body: `Generated ${imgs.size > 1 ? imgs.size - opts.return_grid : 1} image${imgs.size > 1 ? "s" : ""}`,
         icon: headImg,
         image: headImg,

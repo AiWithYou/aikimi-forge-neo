@@ -74,7 +74,7 @@ function Invoke-AikimiModelSetup {
     }
     if ($PreserveSource) { $modelArguments += '--keep-source' }
 
-    Write-Host "Aikimi Studio Neo / $SelectedModel"
+    Write-Host "Aikimi Forge Neo / $SelectedModel"
     if ($PlanOnly) {
         Write-Host '実行予定（ダウンロード・変更なし）'
         Write-Host '1. Neo内のPython 3.13環境を準備'
@@ -124,7 +124,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
         if (-not $Model) {
             if ($NoPause) { throw '-Modelにkrea2 / anima38 / sensenova / h3を指定してください。' }
-            Write-Host 'Aikimi Studio Neo モデルセットアップ'
+            Write-Host 'Aikimi Forge Neo モデルセットアップ'
             Write-Host '1  Krea2                    INT8配布版を取得'
             Write-Host '2  Anima 3.8B v1.1          BF16取得・INT8自動変換'
             Write-Host '3  SenseNova U1.5           INT8モデル・専用環境'

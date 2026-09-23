@@ -1,6 +1,6 @@
 # Third-party notices
 
-この文書は、Aikimi Studio Neoが利用または案内する主なthird-party成果物への索引です。各成果物のlicense本文と配布元の条件が優先されます。この文書は、モデルやassetの利用許諾を新たに与えるものではありません。
+この文書は、Aikimi Forge Neoが利用または案内する主なthird-party成果物への索引です。各成果物のlicense本文と配布元の条件が優先されます。この文書は、モデルやassetの利用許諾を新たに与えるものではありません。
 
 ## コード基盤
 
@@ -49,7 +49,7 @@ docsのPDF、`html/ui.webp`、`html/card-no-preview.jpg`も配布assetです。�
 
 ## 外部サービス
 
-MiniMax H3 Studioは、既定でローカルComfyUIだけを使います。H3のContext-IRと2K Regenerateは外部有料API向けですが、Aikimi Studio NeoのStudioは呼び出しません。将来外部APIを追加する場合は、送信データ、費用、利用規約、秘密情報の保存方法を別途明記してください。
+MiniMax H3 Studioは、既定でローカルComfyUIだけを使います。H3のContext-IRと2K Regenerateは外部有料API向けですが、Aikimi Forge NeoのStudioは呼び出しません。将来外部APIを追加する場合は、送信データ、費用、利用規約、秘密情報の保存方法を別途明記してください。
 
 ## CD Tuner / MiniMax H3 NegPiP
 

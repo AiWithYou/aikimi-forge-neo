@@ -66,11 +66,11 @@ $Arguments = switch ($Profile) {
         $GradioAuth = Join-Path $RepositoryRoot "secrets\gradio-auth.txt"
         $ApiAuth = Join-Path $RepositoryRoot "secrets\api-auth.txt"
         if (-not (Test-Path -LiteralPath $GradioAuth -PathType Leaf)) {
-            Write-Host "[Aikimi Studio Neo] LANAuthenticated requires secrets\gradio-auth.txt. See docs/security-model.md." -ForegroundColor Red
+            Write-Host "[Aikimi Forge Neo] LANAuthenticated requires secrets\gradio-auth.txt. See docs/security-model.md." -ForegroundColor Red
             exit 2
         }
         if (-not (Test-Path -LiteralPath $ApiAuth -PathType Leaf)) {
-            Write-Host "[Aikimi Studio Neo] LANAuthenticated requires secrets\api-auth.txt. See docs/security-model.md." -ForegroundColor Red
+            Write-Host "[Aikimi Forge Neo] LANAuthenticated requires secrets\api-auth.txt. See docs/security-model.md." -ForegroundColor Red
             exit 2
         }
         @($Common + @(
@@ -88,6 +88,6 @@ if (Test-Path -LiteralPath $ModelPathConfig -PathType Leaf) {
     $Arguments += @("--forge-ref-comfy-yaml", $ModelPathConfig)
 }
 
-Write-Host "[Aikimi Studio Neo] Launch profile: $Profile"
+Write-Host "[Aikimi Forge Neo] Launch profile: $Profile"
 & (Join-Path $RepositoryRoot "webui.bat") @Arguments
 exit $LASTEXITCODE

@@ -1,4 +1,4 @@
-<h2 align="center">Aikimi Studio Neo (Docker)</h2>
+<h2 align="center">Aikimi Forge Neo (Docker)</h2>
 
 > [!Warning]
 > Requires an **NVIDIA** GPU<br>

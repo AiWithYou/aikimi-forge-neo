@@ -2,7 +2,7 @@
 
 ## 現在の固定構成
 
-Aikimi Studio Neoは、WindowsとPython 3.13を対象に、次の組み合わせを直接依存として固定しています。
+Aikimi Forge Neoは、WindowsとPython 3.13を対象に、次の組み合わせを直接依存として固定しています。
 
 - Gradio `6.17.3`
 - gradio-client `2.5.0`
@@ -17,11 +17,11 @@ Gradioは`requirements.txt`から導入します。起動コードに別のGradi
 
 ## 6.17.3を選んだ理由
 
-旧版のGradio 4.40.0には、ファイル漏えい、CORS、SSRF、Windows上のパストラバーサルなど、Aikimi Studio Neoの利用方法に関係する既知の脆弱性が複数あります。特に、Python 3.13以降のWindowsでは、認証を有効にしていても任意ファイルを読み取られる可能性があるため、6.7.0未満は利用できません。
+旧版のGradio 4.40.0には、ファイル漏えい、CORS、SSRF、Windows上のパストラバーサルなど、Aikimi Forge Neoの利用方法に関係する既知の脆弱性が複数あります。特に、Python 3.13以降のWindowsでは、認証を有効にしていても任意ファイルを読み取られる可能性があるため、6.7.0未満は利用できません。
 
 2026年8月26日に、Gradio 6.17.3をPython 3.13の隔離環境へ導入し、`pip-audit`でGradioに既知の脆弱性が検出されないことを確認しました。Gradio 6.17.3はhuggingface-hub 1.5.0も許容するため、CVE-2026-9856を修正したTransformers 5.10.4と同じ環境で利用できます。
 
-Gradio 6.18.0以降では、複数の同種コンポーネントを同時に表示したときに画面が停止する問題が修正済みです。モデル依存関係はhuggingface-hub 1.5.0へ移行しましたが、Aikimi Studio Neoは6.17.3の固定assetに限定したcompat workaroundを使用しています。次回のGradio更新では、このworkaroundと静的asset routeのguardを再監査し、実WebUIで挙動を確認します。
+Gradio 6.18.0以降では、複数の同種コンポーネントを同時に表示したときに画面が停止する問題が修正済みです。モデル依存関係はhuggingface-hub 1.5.0へ移行しましたが、Aikimi Forge Neoは6.17.3の固定assetに限定したcompat workaroundを使用しています。次回のGradio更新では、このworkaroundと静的asset routeのguardを再監査し、実WebUIで挙動を確認します。
 
 参考資料:
 
@@ -33,7 +33,7 @@ Gradio 6.18.0以降では、複数の同種コンポーネントを同時に表�
 
 ## 6.17.3の既知制約
 
-Gradio 6.6.0から6.17.xには、1回のイベントで複数の同種コンポーネントを`visible=False`から`visible=True`へ変更すると、ブラウザーが応答しなくなる既知の問題があります。Aikimi Studio Neoでは、次の方針で影響を抑えます。
+Gradio 6.6.0から6.17.xには、1回のイベントで複数の同種コンポーネントを`visible=False`から`visible=True`へ変更すると、ブラウザーが応答しなくなる既知の問題があります。Aikimi Forge Neoでは、次の方針で影響を抑えます。
 
 - component constructorの`visible=False`を変更せず、通常の非表示componentはlazyを維持
 - 通常のcallbackが返す`gr.update(visible=False)`もBoolean `False`のままにし、不要なsubtreeをmountしない
@@ -47,7 +47,7 @@ Gradio 6.6.0から6.17.xには、1回のイベントで複数の同種コンポ�
 
 ### Tabs overflowの限定compat workaround
 
-Gradio 6.17.3には、多数の`TabItem`を登録した場合に、frontendのoverflow幅計測と1項目ごとのtab登録がreactive updateを繰り返す問題もあります。Aikimi Studio Neoでは、`modules/gradio_frontend_compat.py`が次の条件をすべて満たした場合だけ、該当処理を配信時に置き換えます。
+Gradio 6.17.3には、多数の`TabItem`を登録した場合に、frontendのoverflow幅計測と1項目ごとのtab登録がreactive updateを繰り返す問題もあります。Aikimi Forge Neoでは、`modules/gradio_frontend_compat.py`が次の条件をすべて満たした場合だけ、該当処理を配信時に置き換えます。
 
 - Gradioのversionが`6.17.3`
 - frontend assetのfilenameが監査時の固定値と一致
@@ -59,15 +59,15 @@ workaroundはsite-packagesやwheelを変更せず、FastAPIの完全一致route�
 
 置換後はoverflow menuの計算を行わず、全tab buttonを表示すると同時に、初期tab一覧を1回のbatchで同期します。画面幅に収まらない場合のfallbackは、CSSの横スクロールです。このworkaroundは、Gradio 6.17.3のTabs mount stormへ対象を限定しています。PR #13509のSvelte 5移行全体は、依存関係を更新する段階で別途評価します。
 
-固定されたtab構成の初期表示、複数回の切替、keyboard focusとactivation、`gr.render`によるtab追加、ブラウザーreloadはChromium回帰テストの対象です。一方、backendから既存`Tab.visible`だけを更新してtab buttonを増減する動作は、patchを適用しないGradio 6.17.3でも反映されません。Aikimi Studio Neoの固定tabはこの動作へ依存しませんが、extensionは既存tabの動的な表示切替を前提にしないでください。この制約は、Gradio 6.18.0以降へ移行する際に再評価します。
+固定されたtab構成の初期表示、複数回の切替、keyboard focusとactivation、`gr.render`によるtab追加、ブラウザーreloadはChromium回帰テストの対象です。一方、backendから既存`Tab.visible`だけを更新してtab buttonを増減する動作は、patchを適用しないGradio 6.17.3でも反映されません。Aikimi Forge Neoの固定tabはこの動作へ依存しませんが、extensionは既存tabの動的な表示切替を前提にしないでください。この制約は、Gradio 6.18.0以降へ移行する際に再評価します。
 
 ## Gradio 6の静的asset route
 
 WebUIとForge Canvasがheadへ埋め込むJavaScriptとCSSは、Gradio 6の`API_PREFIX`から作る相対URL `gradio_api/file=`を使います。相対URLにより、WebUIをrootへ置いた場合もsubpathへmountした場合も、同じmount prefixのfile routeへ接続できます。
 
-`allowed_paths`は、rootの`script.js`と`style.css`、activeなroot／extensionの`.js`と`.mjs`、active extensionの`style.css`、Forge Canvasの`canvas.js`と`canvas.css`、有効時の`notification.mp3`、card placeholderを個別fileとして登録します。これらのparent directoryは登録しません。extensionのPython、任意HTML、設定file、model、inactive extensionのassetは拒否します。outputとtemporaryだけは、管理directory単位の許可を維持します。
+`allowed_paths`は、rootの`script.js`と`style.css`、activeなroot／extensionの`.js`と`.mjs`、active extensionの`style.css`、Forge Canvasの`canvas.js`と`canvas.css`、有効時の`notification.mp3`、card placeholderを個別fileとして登録します。公式Tag Autocompleteが有効な場合だけ、その`tags`直下のCSV・JSONと既知の一時データファイルを追加します。これらのparent directoryは登録しません。extensionのPython、任意HTML、設定file、model、inactive extensionのassetは拒否します。outputとtemporaryだけは、管理directory単位の許可を維持します。
 
-Gradio 6.17.3の`/gradio_api/file=`には、外部URLを302へ返すopen redirectがあります。そこでAikimi Studio Neoは、現行routeとdeprecated routeのGET／HEADを認証middlewareの内側で検査し、HTTP、HTTPS、protocol-relative、userinfo、encoded URLをtarget非表示のHTTP 403で拒否する設計です。local exact assetの配信は維持し、Gradioを後続修正版へ更新する段階でguardの撤去可否を再評価します。
+Gradio 6.17.3の`/gradio_api/file=`には、外部URLを302へ返すopen redirectがあります。そこでAikimi Forge Neoは、現行routeとdeprecated routeのGET／HEADを認証middlewareの内側で検査し、HTTP、HTTPS、protocol-relative、userinfo、encoded URLをtarget非表示のHTTP 403で拒否する設計です。Tag Autocompleteの旧`/file=`は現行routeへ転送し、同じ認証とallowlistを適用します。local exact assetの配信は維持し、Gradioを後続修正版へ更新する段階でguardの撤去可否を再評価します。
 
 ## Gradio callbackのAPI visibility
 

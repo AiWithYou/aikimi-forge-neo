@@ -1,8 +1,8 @@
-# Aikimi Studio Neo security model
+# Aikimi Forge Neo security model
 
 ## 既定の境界
 
-Aikimi Studio Neoは、信頼済みのWindows利用者が同じ端末のブラウザーから使う構成を既定とします。通常起動ではWebUIとAPIを`127.0.0.1`へbindし、LAN、Gradio share、ngrokへ公開しません。
+Aikimi Forge Neoは、信頼済みのWindows利用者が同じ端末のブラウザーから使う構成を既定とします。通常起動ではWebUIとAPIを`127.0.0.1`へbindし、LAN、Gradio share、ngrokへ公開しません。
 
 推奨入口は次です。
 

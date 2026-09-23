@@ -14,6 +14,7 @@ from modules.aikimi_security.auth import install_remote_auth_middleware
 from modules.aikimi_security.gradio_file_guard import (
     GradioExternalFileURLGuardMiddleware,
     install_gradio_file_url_guard,
+    install_gradio_legacy_file_route,
 )
 
 
@@ -100,6 +101,38 @@ class GradioFileURLGuardTests(unittest.TestCase):
                 response = client.get(request_path)
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertIn("window.guardAsset", response.text)
+
+    def test_legacy_file_route_uses_gradio_allowlist_and_rejects_external_urls(self):
+        from gradio.routes import App
+
+        with gr.Blocks() as blocks:
+            gr.Markdown("legacy file route")
+        blocks.allowed_paths = [str(self.asset)]
+        app = App.create_app(blocks)
+        self.assertTrue(install_gradio_legacy_file_route(app))
+        self.assertFalse(install_gradio_legacy_file_route(app))
+        install_gradio_file_url_guard(app)
+
+        with TestClient(app) as client:
+            route = "/file=" + self.asset.as_posix()
+            redirect = client.get(route, follow_redirects=False)
+            self.assertEqual(redirect.status_code, 307)
+            self.assertTrue(redirect.headers["location"].startswith("/gradio_api/file="))
+            response = client.get(route)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("window.guardAsset", response.text)
+
+            private = Path(self.temp.name) / "private.txt"
+            private.write_text("private", encoding="utf-8")
+            self.assertEqual(client.get("/file=" + private.as_posix()).status_code, 403)
+            external = client.get("/file=https://redirect.invalid/path", follow_redirects=False)
+            self.assertEqual(external.status_code, 403)
+            self.assertNotIn("location", external.headers)
+
+        with TestClient(app, root_path="/aikimi") as client:
+            redirect = client.get(route, follow_redirects=False)
+            self.assertEqual(redirect.status_code, 307)
+            self.assertTrue(redirect.headers["location"].startswith("/aikimi/gradio_api/file="))
 
     def test_remote_authentication_still_runs_before_the_guard(self):
         app = self.build_app()

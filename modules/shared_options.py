@@ -222,7 +222,7 @@ options_templates.update(
             "api_enable_requests": OptionInfo(True, 'Allow "http://" and "https://" URLs as input images', restrict_api=True),
             "api_forbid_local_requests": OptionInfo(
                 True,
-                "Forbid URLs to local/private resources (always enforced by Aikimi Studio Neo)",
+                "Forbid URLs to local/private resources (always enforced by Aikimi Forge Neo)",
                 component_args={"interactive": False},
                 restrict_api=True,
             ),

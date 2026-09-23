@@ -10,7 +10,7 @@ python --version
 git --version
 ```
 
-Aikimi Studio Neoの対象はPython 3.13です。別のPythonで作成した`venv`を使い回さないでください。再構築前に必要なローカル設定を退避し、modelや生成物を削除対象へ含めないでください。
+Aikimi Forge Neoの対象はPython 3.13です。別のPythonで作成した`venv`を使い回さないでください。再構築前に必要なローカル設定を退避し、modelや生成物を削除対象へ含めないでください。
 
 ```powershell
 .\aikimi-launch.ps1 -Profile LocalSafe
@@ -113,7 +113,7 @@ nvidia-smi
 
 ## MiniMax H3 backendへ接続できない
 
-H3 Studioはloopback ComfyUI、必要node、model、core revisionを検査します。UNC path、network drive、外部URL runtimeは拒否します。外部launcherが起動したComfyUIをAikimi Studio Neoが自動停止することはありません。
+H3 Studioはloopback ComfyUI、必要node、model、core revisionを検査します。UNC path、network drive、外部URL runtimeは拒否します。外部launcherが起動したComfyUIをAikimi Forge Neoが自動停止することはありません。
 
 runtime cardで次を確認してください。
 

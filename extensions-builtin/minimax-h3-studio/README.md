@@ -1,6 +1,6 @@
 # MiniMax H3 Studio
 
-Aikimi Studio Neo内で音声付き動画を生成する専用GUIです。H3用のComfyUI・Python・モデルは、H3 Studioからまとめて準備できます。完成したMP4と生成条件は`outputs/minimax_h3`へ保存します。
+Aikimi Forge Neo内で音声付き動画を生成する専用GUIです。H3用のComfyUI・Python・モデルは、H3 Studioからまとめて準備できます。完成したMP4と生成条件は`outputs/minimax_h3`へ保存します。
 
 **画像生成・参照画像編集は`H3 Image`タブを使います。** 標準H3の最小5フレームからPNGへ直接出力する実験機能です。追加モデル・追加拡張は不要で、既存の動画タブは変更しません。使い方と検証範囲は[画像生成ガイド](IMAGE_GUIDE.md)を参照してください。
 

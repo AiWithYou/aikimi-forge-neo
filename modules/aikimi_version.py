@@ -1,3 +1,3 @@
-"""Forge本体とは独立したAikimi Studio Neoの配布バージョン。"""
+"""Forge本体とは独立したAikimi Forge Neoの配布バージョン。"""
 
-VERSION = "1.4.1"
+VERSION = "1.4.2"

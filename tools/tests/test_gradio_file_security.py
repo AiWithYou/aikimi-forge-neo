@@ -143,6 +143,59 @@ class GradioFileSecurityTests(unittest.TestCase):
         self.assertNotIn(self.inactive_extension_javascript.resolve(), result)
         self.assertNotIn(self.private_html.resolve(), result)
 
+    def test_active_tag_autocomplete_can_serve_only_its_data_files(self):
+        extension = self.data_root / "extensions" / "tag-autocomplete"
+        javascript = extension / "javascript" / "tagAutocomplete.js"
+        helper = extension / "scripts" / "tag_autocomplete_helper.py"
+        tags = extension / "tags"
+        temporary = tags / "temp"
+        for directory in (javascript.parent, helper.parent, temporary):
+            directory.mkdir(parents=True, exist_ok=True)
+        javascript.write_text("// tag autocomplete", encoding="utf-8")
+        helper.write_text("# helper", encoding="utf-8")
+        tag_file = tags / "danbooru.csv"
+        tag_file.write_text("1girl,0,1\n", encoding="utf-8")
+        chant_file = tags / "demo-chants.json"
+        chant_file.write_text("{}", encoding="utf-8")
+        generated_file = temporary / "lora.txt"
+        generated_file.write_text("", encoding="utf-8")
+        private_file = tags / "private.txt"
+        private_file.write_text("private", encoding="utf-8")
+
+        allowed = build_gradio_allowed_paths(
+            self.script_root,
+            self.data_root,
+            javascript_paths=[javascript],
+        )
+        for path in (javascript, tag_file, chant_file, generated_file):
+            self.assertIn(str(path.resolve()), allowed)
+        for path in (extension, tags, temporary, helper, private_file):
+            self.assertNotIn(str(path.resolve()), allowed)
+
+        from gradio.routes import file_fetch
+
+        policy = SimpleNamespace(allowed_paths=allowed, blocked_paths=[])
+        response = file_fetch(str(tag_file), SimpleNamespace(headers={}), policy, self.data_root / "upload")
+        self.assertEqual(response.status_code, 200)
+
+    def test_tag_autocomplete_data_symlink_cannot_escape_extension(self):
+        extension = self.data_root / "extensions" / "tag-autocomplete"
+        javascript = extension / "javascript" / "tagAutocomplete.js"
+        helper = extension / "scripts" / "tag_autocomplete_helper.py"
+        tags = extension / "tags"
+        for directory in (javascript.parent, helper.parent, tags):
+            directory.mkdir(parents=True, exist_ok=True)
+        javascript.write_text("// tag autocomplete", encoding="utf-8")
+        helper.write_text("# helper", encoding="utf-8")
+        outside = self.base / "private.csv"
+        outside.write_text("private", encoding="utf-8")
+        try:
+            (tags / "escape.csv").symlink_to(outside)
+        except OSError as exc:
+            self.skipTest(f"symlink creation is unavailable: {exc}")
+        with self.assertRaises(UnsafeAllowedPathError):
+            build_gradio_allowed_paths(self.script_root, self.data_root, javascript_paths=[javascript])
+
     def test_fresh_managed_directories_are_created_before_first_output(self):
         script_root = self.base / "fresh-repository"
         data_root = self.base / "fresh-data"

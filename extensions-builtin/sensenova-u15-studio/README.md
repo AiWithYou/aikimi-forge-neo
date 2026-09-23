@@ -1,12 +1,12 @@
 # SenseNova U1.5 Studio
 
-SenseNova U1.5 Studioは、正式版の[sensenova/SenseNova-U1.5-8B-MoT](https://huggingface.co/sensenova/SenseNova-U1.5-8B-MoT)をAikimi Studio Neoから実行する専用GUIです。テキスト生成と、単一または複数の参照画像を使った画像編集に対応します。
+SenseNova U1.5 Studioは、正式版の[sensenova/SenseNova-U1.5-8B-MoT](https://huggingface.co/sensenova/SenseNova-U1.5-8B-MoT)をAikimi Forge Neoから実行する専用GUIです。テキスト生成と、単一または複数の参照画像を使った画像編集に対応します。
 
 既定のweightは、正式版を基にしたコミュニティ配布のINT8 ConvRotです。SenseNova固有の画像token化、画像decoder、三分岐guidance、生成ループを保つため、Forgeの通常checkpointやKSamplerには接続しません。Forgeは入力検証、画面、保存、キャンセルを担当し、生成は隔離workerが専用ランタイムを使って実行します。
 
 ## セットアップ
 
-Aikimi Studio Neoのリポジトリ直下にある次のファイルを実行してください。
+Aikimi Forge Neoのリポジトリ直下にある次のファイルを実行してください。
 
 ```text
 download_sensenova_u15_int8.bat

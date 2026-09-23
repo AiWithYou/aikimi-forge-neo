@@ -28,6 +28,6 @@ cmd_opts.disable_extension_access = cmd_opts.webui_is_non_local and not cmd_opts
 
 if remote_reasons:
     print(
-        "[Aikimi Studio Neo] WARNING: authenticated remote mode is enabled "
+        "[Aikimi Forge Neo] WARNING: authenticated remote mode is enabled "
         f"({', '.join(remote_reasons)}). Treat every enabled extension as remotely reachable."
     )
