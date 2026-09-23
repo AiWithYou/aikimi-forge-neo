@@ -232,12 +232,28 @@ input[type="checkbox"].input-accordion-checkbox {
     max-width: calc(100vw - 1rem);
 }
 
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .autocompleteParent:has(.sideInfo[style*="display: block"]) {
+    width: min(35rem, calc(100vw - 1rem));
+}
+
 :is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .autocompleteResults:not(.sideInfo) {
-    width: 100%;
+    width: min(18rem, calc(100vw - 1rem)) !important;
     min-width: 0;
-    flex-basis: auto;
+    flex-basis: min(18rem, calc(100vw - 1rem)) !important;
     margin-top: 0;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+}
+
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .sideInfo {
+    width: min(16rem, calc(100vw - 1rem));
+    flex-basis: min(16rem, calc(100vw - 1rem));
+    margin-top: 0;
+}
+
+@media (max-width: 640px) {
+    :is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .sideInfo {
+        height: min(18rem, 28vh);
+    }
 }
 
 :is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .autocompleteResultsList {
@@ -610,7 +626,8 @@ div.toprow-compact-tools {
 
 #setting_sd_modules div.wrap-inner {
     min-width: 20vw;
-    height: 40px !important;
+    min-height: 40px;
+    height: max-content !important;
     cursor: pointer;
     padding: 0em 2em 0em 0.5em;
 }
@@ -623,6 +640,37 @@ div.toprow-compact-tools {
 
 #forge_ui_dtype input {
     width: 12em;
+}
+
+@media (max-width: 640px) {
+    #quicksettings {
+        display: grid !important;
+        grid-template-columns: minmax(6rem, 0.6fr) minmax(0, 1.4fr);
+        gap: 0.75rem;
+        align-items: end;
+    }
+
+    #quicksettings > div {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    #forge_ui_preset { grid-column: 1; }
+    #setting_sd_model_checkpoint { grid-column: 2; }
+    #setting_sd_modules { grid-column: 1 / -1; }
+    #forge_ui_dtype { grid-column: 2; }
+
+    #forge_refresh_checkpoint {
+        grid-column: 1;
+        margin: 0;
+        justify-self: start;
+        align-self: end;
+    }
+
+    #forge_ui_preset input,
+    #setting_sd_model_checkpoint input {
+        width: 100% !important;
+    }
 }
 
 #settings {
