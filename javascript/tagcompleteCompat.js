@@ -30,6 +30,15 @@
         if (typeof showResults === "function" && typeof getCaretCoordinates === "function") {
             const originalShowResults = showResults;
             let activeArea = null;
+            let observedPopup = null;
+            let resizeFrame = null;
+            const popupResize = new ResizeObserver(() => {
+                if (resizeFrame !== null) return;
+                resizeFrame = requestAnimationFrame(() => {
+                    resizeFrame = null;
+                    if (activeArea) positionResults(activeArea);
+                });
+            });
 
             function positionResults(area) {
                 const id = area.closest("#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt")?.id;
@@ -37,6 +46,11 @@
 
                 const popup = area.parentElement?.querySelector(".autocompleteParent");
                 if (!popup || popup.style.display !== "flex") return;
+                if (observedPopup !== popup) {
+                    if (observedPopup) popupResize.unobserve(observedPopup);
+                    popupResize.observe(popup);
+                    observedPopup = popup;
+                }
 
                 const margin = 8;
                 const areaRect = area.getBoundingClientRect();
