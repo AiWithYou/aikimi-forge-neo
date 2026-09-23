@@ -160,6 +160,84 @@ class QwenCoreTests(unittest.TestCase):
             self.assertEqual(core.Request("test", width=width, height=height, seed=7).resolved().seed, 7)
         self.assertGreaterEqual(core.Request("test").resolved().seed, 0)
 
+    def test_turbo_requires_four_steps_and_base_keeps_its_range(self):
+        for precision in ("turbo_bf16", "turbo_q4_k_m"):
+            with self.subTest(precision=precision):
+                with self.assertRaisesRegex(core.QwenImage21Error, "4 steps"):
+                    core.Request("test", precision=precision, steps=40).resolved()
+                self.assertEqual(core.Request("test", precision=precision, steps=4).resolved().steps, 4)
+        self.assertEqual(core.Request("test", precision="int8", steps=40).resolved().steps, 40)
+        self.assertEqual(core.Request("test", precision="base_q4_k_m", steps=40).resolved().steps, 40)
+        with self.assertRaisesRegex(core.QwenImage21Error, "Sparse Attention"):
+            core.Request("test", precision="base_q4_k_m", sparse_mode="fixed").resolved()
+
+    def test_regular_gguf_uses_shared_assets_without_teacher_transformer(self):
+        from modules_forge.qwen_image21 import regular_gguf
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            installed_runtime(root)
+            (root / "model/transformer/weights.safetensors").unlink()
+            inventory = core.read_json(root / "model-files.json")
+            inventory["files"] = [item for item in inventory["files"] if not item["path"].startswith("transformer/")]
+            core.atomic_json(root / "model-files.json", inventory)
+            gguf = root / regular_gguf.FOLDER / regular_gguf.NAME
+            gguf.parent.mkdir(parents=True)
+            gguf.write_bytes(b"q4")
+            with patch.object(regular_gguf, "SIZE", 2), patch.object(regular_gguf, "SHA256", "unused"):
+                core.atomic_json(
+                    root / regular_gguf.INVENTORY,
+                    {
+                        "model": regular_gguf.MODEL_ID,
+                        "revision": regular_gguf.REVISION,
+                        "file": regular_gguf.NAME,
+                        "size": 2,
+                        "sha256": "unused",
+                    },
+                )
+                self.assertEqual(core.runtime_manifest(root, "base_q4_k_m")["model_revision"], core.MODEL_REVISION)
+                with self.assertRaises(core.QwenImage21Error):
+                    core.runtime_manifest(root, "int8")
+                gguf.write_bytes(b"broken")
+                with self.assertRaisesRegex(core.QwenImage21Error, "サイズ不一致"):
+                    core.runtime_manifest(root, "base_q4_k_m")
+
+    def test_turbo_can_use_shared_assets_without_teacher_transformer(self):
+        from modules_forge.qwen_image21.turbo import GGUF_ID, GGUF_NAME, GGUF_REVISION
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            installed_runtime(root)
+            (root / "model/transformer/weights.safetensors").unlink()
+            inventory = core.read_json(root / "model-files.json")
+            inventory["files"] = [item for item in inventory["files"] if not item["path"].startswith("transformer/")]
+            core.atomic_json(root / "model-files.json", inventory)
+            gguf = root / "turbo/gguf" / GGUF_NAME
+            gguf.parent.mkdir(parents=True)
+            gguf.write_bytes(b"q4")
+            scheduler = root / "turbo/scheduler/scheduler_config.json"
+            scheduler.parent.mkdir(parents=True)
+            scheduler.write_bytes(b"{}")
+            core.atomic_json(
+                root / "turbo-files.json",
+                {
+                    "turbo_q4_k_m": {
+                        "model": GGUF_ID,
+                        "revision": GGUF_REVISION,
+                        "files": {
+                            f"gguf/{GGUF_NAME}": {"size": 2, "sha256": "unused"},
+                            "scheduler/scheduler_config.json": {"size": 2, "sha256": "unused"},
+                        },
+                    }
+                },
+            )
+            self.assertEqual(core.runtime_manifest(root, "turbo_q4_k_m")["model_revision"], core.MODEL_REVISION)
+            with self.assertRaises(core.QwenImage21Error):
+                core.runtime_manifest(root)
+            gguf.write_bytes(b"broken")
+            with self.assertRaisesRegex(core.QwenImage21Error, "サイズ不一致"):
+                core.runtime_manifest(root, "turbo_q4_k_m")
+
     def test_runtime_checks_pinned_versions_and_weight_inventory(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -418,6 +496,19 @@ class QwenUiTests(unittest.TestCase):
         self.assertIsNone(output.image_mode)
         self.assertFalse(props["qwen21-stop"]["interactive"])
         self.assertFalse(props["qwen21-rewrite-prompt"]["value"])
+        self.assertEqual(
+            [value for _, value in props["qwen21-precision"]["choices"]],
+            ["base_q4_k_m", "int8", "w4a8", "bf16", "turbo_bf16", "turbo_q4_k_m"],
+        )
+        self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8")[0]["value"], 4)
+        self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8")[1]["value"], "off")
+        self.assertNotIn("value", self.ui.profile_settings("bf16", "int8")[0])
+        self.assertEqual(self.ui.profile_settings("int8", "turbo_q4_k_m")[0]["value"], 40)
+        self.assertEqual(self.ui.profile_settings("base_q4_k_m", "turbo_q4_k_m")[0]["value"], 40)
+        self.assertEqual(self.ui.profile_settings("base_q4_k_m", "turbo_q4_k_m")[1]["value"], "off")
+        links = "\n".join(item["props"].get("value", "") for item in config["components"] if item["type"] == "markdown")
+        self.assertIn("https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo", links)
+        self.assertIn("https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF", links)
         self.assertFalse(props["qwen21-effective-prompt"]["interactive"])
         self.assertEqual(gr.utils.get_type_hints(self.ui.start)["request"], gr.Request)
         files = next(component for component in tab.blocks.values() if isinstance(component, gr.File))

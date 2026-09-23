@@ -474,12 +474,21 @@ class WorkerLoaderTests(unittest.TestCase):
             def set_progress_bar_config(self, **kwargs):
                 pass
 
+        class Scheduler:
+            @classmethod
+            def from_pretrained(cls, path, **kwargs):
+                events.append(("scheduler", "load", path, kwargs))
+                return types.SimpleNamespace(config=types.SimpleNamespace(shift_terminal=None))
+
         self.Component = Component
         self.validator = mock.Mock()
         self.modules = {
             "torch": self.torch,
             "diffusers": types.SimpleNamespace(
-                BitsAndBytesConfig=Config, QwenImage21Pipeline=Pipe, QwenImage21Transformer2DModel=Component
+                BitsAndBytesConfig=Config,
+                QwenImage21Pipeline=Pipe,
+                QwenImage21Transformer2DModel=Component,
+                FlowMatchEulerDiscreteScheduler=Scheduler,
             ),
             "transformers": types.SimpleNamespace(BitsAndBytesConfig=Config, Qwen3VLForConditionalGeneration=Component),
             "bitsandbytes.nn": types.SimpleNamespace(Linear8bitLt=Linear8bitLt),
@@ -553,6 +562,59 @@ class WorkerLoaderTests(unittest.TestCase):
         self.assertEqual(self.events[1][2], "cuda:0")
         self.assertEqual(runtime["int8_layers"], {})
         self.assertEqual(self.events[0][3]["torch_dtype"], "bfloat16")
+
+    def test_turbo_bf16_replaces_transformer_and_scheduler(self):
+        runtime = self.load(precision="turbo_bf16")
+        self.assertEqual(
+            [event[:2] for event in self.events],
+            [("transformer", "load"), ("pipeline", "load"), ("scheduler", "load"), ("pipeline", "offload")],
+        )
+        self.assertEqual(self.events[0][3]["subfolder"], "transformer")
+        self.assertIs(self.events[1][3]["transformer"], self.components["transformer"])
+        self.assertIsNone(runtime["pipe"].scheduler.config.shift_terminal)
+
+    def test_turbo_q4_loads_gguf_transformer_and_int8_encoder(self):
+        gguf = object()
+        with (
+            mock.patch("modules_forge.qwen_image21.turbo.load_gguf_transformer", return_value=gguf) as load_gguf,
+            mock.patch.object(worker.importlib.metadata, "version", return_value="0.19.0"),
+        ):
+            runtime = self.load(precision="turbo_q4_k_m")
+        load_gguf.assert_called_once_with(self.job)
+        self.assertEqual(
+            [event[:2] for event in self.events],
+            [
+                ("text_encoder", "load"),
+                ("text_encoder", "to"),
+                ("pipeline", "load"),
+                ("scheduler", "load"),
+                ("pipeline", "offload"),
+            ],
+        )
+        self.assertIs(self.events[2][3]["transformer"], gguf)
+        self.assertEqual(runtime["int8_layers"], {"text_encoder": 2})
+        self.assertEqual(runtime["versions"]["gguf"], "0.19.0")
+
+    def test_regular_q4_loads_gguf_transformer_with_base_scheduler(self):
+        gguf = object()
+        with (
+            mock.patch("modules_forge.qwen_image21.regular_gguf.load_gguf_transformer", return_value=gguf) as load_gguf,
+            mock.patch.object(worker.importlib.metadata, "version", return_value="0.19.0"),
+        ):
+            runtime = self.load(precision="base_q4_k_m")
+        load_gguf.assert_called_once_with(self.job)
+        self.assertEqual(
+            [event[:2] for event in self.events],
+            [
+                ("text_encoder", "load"),
+                ("text_encoder", "to"),
+                ("pipeline", "load"),
+                ("pipeline", "offload"),
+            ],
+        )
+        self.assertIs(self.events[2][3]["transformer"], gguf)
+        self.assertEqual(runtime["int8_layers"], {"text_encoder": 2})
+        self.assertEqual(runtime["versions"]["gguf"], "0.19.0")
 
     def test_int8_gpu_mode_still_stages_loading_and_only_moves_pipeline_at_end(self):
         self.load(memory_mode="gpu")

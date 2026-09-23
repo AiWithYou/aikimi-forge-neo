@@ -31,8 +31,8 @@
 | Krea2 | Comfy-Org/Krea-2、Qwen | 固定revisionのKrea 2 Community License PDFと各Qwen license |
 | Anima 3.8B | lylogummy/Anima-3.8B、circlestone-labs/Anima、Qwen | 各model card、CircleStone Labs license、Qwen license |
 | SenseNova U1.5 | SenseNova、starsFriday、joyfox | 各固定revisionのmodel cardとruntime LICENSE |
-| MiniMax H3 | MiniMaxAI、ComfyUI | MiniMax H3 Community LicenseとComfyUI側のnotice |
-| Qwen Image 2.1 | Qwen、Hugging Face Diffusers、bitsandbytes | [Qwen Research License](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/b3179ad355be050328e483a9dfdd9e60cd62adfa/LICENSE)（研究・評価目的の非商用利用。商用は別途許諾）、Diffusers Apache-2.0、bitsandbytes MIT |
+| MiniMax H3 | MiniMaxAI、ComfyUI、[KijaiのUnion 2.0変換済み重み](https://huggingface.co/Kijai/MiniMax-H3-experimental/tree/e042fe480f58806578713532b8ae4e3d47d1bd63/model_patches) | MiniMax H3 Community License、変換モデルの配布ページ、ComfyUI側のnotice。重みはGitに含めません。 |
+| Qwen Image 2.1 | Qwen、Hugging Face Diffusers、bitsandbytes、[Unsloth通常版GGUF](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF)、[Viggle Turbo](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo)、[Abiray Turbo GGUF](https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF) | [Qwen Research License](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/b3179ad355be050328e483a9dfdd9e60cd62adfa/LICENSE)（研究・評価目的の非商用利用。商用は別途許諾）、各変換モデルの配布ページ、Diffusers Apache-2.0、bitsandbytes MIT。重みはGitに含めません。 |
 | Qwen Image 2.1のプロンプト補助 | Qwen PE-T2I、PE-I2I、Transformers、bitsandbytes | 各固定版のQwen Research License（[PE-T2I](https://huggingface.co/Qwen/Qwen-Image-2.1-PE-T2I/blob/f3ed7985c788ad75b3ab7223e0c4c51e2a43545b/LICENSE)、[PE-I2I](https://huggingface.co/Qwen/Qwen-Image-2.1-PE-I2I/blob/72927bc08afc99b7888ceb7d7d51a12db3700bbd/LICENSE)）。導入先にLICENSEを保持し、量子化済み重みはGitに含めません。 |
 
 Animaの配布repositoryは、upstream AnimaとNVIDIA由来条件の確認を求めています。条件を短く言い換えて断定せず、利用時点の原文を確認してください。Krea2にも独自のcommunity licenseがあります。
@@ -64,4 +64,4 @@ See [integration guide](docs/cd-tuner-negpip.md) for limitations and verificatio
 
 ## ComfyUI MiniMax H3 compiler patch
 
-The patch under `patches/minimax-h3/` modifies [ComfyUI](https://github.com/Comfy-Org/ComfyUI) revision `efa6c8f804bff78b46a0fd458ebd2e47bba07a30`, distributed under GPL-3.0. It adjusts the H3 compiler recording boundary and includes regression tests. The separately installed official comfy-aimdo CI wheel is identified by source revision and SHA-256 in `runtime-provenance.json`; no wheel or model weights are bundled.
+The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comfy-Org/ComfyUI) revisions `efa6c8f804bff78b46a0fd458ebd2e47bba07a30` and `912fca4f39b875a0360f2c5170568176ea813ded`, distributed under GPL-3.0. They adjust the H3 compiler recording boundary and include regression tests. The separately installed official comfy-aimdo CI wheel is identified by source revision and SHA-256 in `runtime-provenance.json`; no wheel or model weights are bundled.

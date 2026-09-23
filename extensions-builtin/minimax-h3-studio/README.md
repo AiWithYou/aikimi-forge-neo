@@ -31,6 +31,35 @@ H3は`127.0.0.1:8189`を使用します。起動中のH3に対するセットア
 
 生成設定は、まず `動作確認`、通常は `標準`、完成版だけ `高品質` を選ぶと迷いません。3つともH3の公式20 Stepsを維持し、解像度だけで速度と品質を切り替えます。設定カードの「相対負荷」は `標準 / 5秒 / 20 Steps` を1.00倍とした比較値で、所要時間の予測ではありません。
 
+## ComfyUIで続きを編集
+
+H3 Studioの「ComfyUIで続きを編集」から「現在の設定をComfyUIで編集」、または「選択した履歴の生成をComfyUIで編集」を押します。専用ComfyUIが起動し、プロンプト、確定したSeed、モデル、参照素材と制御動画を編集可能なノードとして開きます。**読み込みだけではキューに送信されません。** 変更後の生成はComfyUIで明示的に実行してください。ブラウザーのポップアップが閉じられた場合は、画面に出るリンクから開けます。
+
+現在の設定を書き出す時点でSeedが`-1`なら一度だけ確定し、その値を記録します。生成済み動画は、この版で保存したワークフロー記録のある履歴だけ開けます。旧履歴から設定・素材を推測して再構築しません。実行グラフと素材は専用ComfyUIの`input`へ、動画との対応記録は出力MP4の隣へ保存します。`input/aikimi_h3_workflows`と`input/aikimi_h3_...`の素材を削除すると履歴を開けなくなります。記録に含む生成環境・Seed・参照接続は再編集の出発点で、GPUでビット単位まで同じ動画が出る保証ではありません。素材の複製に必要な空き容量を確保してください。
+
+引き継ぎパックはローカルの固定ファイルを検証して専用ComfyUIへ導入します。外部のComfyUIや別PCへのURL公開には対応しません。読み込みでノード仕様や選択中のモデルが合わない場合は、その内容を表示して停止します。ComfyUIの編集画面を壊さないよう、既存ワークフローを退避できる場合はJSONを保存できます。
+
+## Union 2.0と更新版VAE
+
+Fun ControlNetのUnion 1に加えて、Union 2.0のCanny、Gray、前処理済み動画を選べます。CannyとGrayは入力動画から生成します。Depth・Pose・HED・MLSD・Scribble・Layoutなどは事前に加工した動画を指定してください。映像を24fpsにそろえ、中央切り抜きと短い動画の末尾補完を適用します。元動画の音声は制御に使いません。Union 1の重みを名前だけ変更してUnion 2.0に使うことはできません。
+
+Neoを停止し、既存のH3専用環境を準備したうえで、リポジトリのルートから以下を実行します。
+
+```powershell
+venv\Scripts\python.exe tools\upgrade_minimax_h3_union2_vae.py --check
+venv\Scripts\python.exe tools\upgrade_minimax_h3_union2_vae.py --apply
+venv\Scripts\python.exe tools\prepare_minimax_h3_union2.py --list --precision int8
+venv\Scripts\python.exe tools\prepare_minimax_h3_union2.py --download --precision int8 --repository Kijai/MiniMax-H3-experimental --filename model_patches/minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors
+```
+
+`--list`は配布リビジョン、モデル構造、サイズ、ハッシュが確認できる候補を表示します。候補が変わった場合は一覧の値を確認して、対象を明示してください。`--download`は約4.22GiBの重みを取得し、作業コピーを含めてモデルサイズの2倍＋1GiB以上の空き容量が必要です。既に取得済みの対応重みは`--source <ファイル>`で検証して導入できます。通常のH3セットアップや起動時にUnion 2.0の重みを自動ダウンロードしません。
+
+既定のINT8候補は[Kijaiの変換済みUnion 2.0重み](https://huggingface.co/Kijai/MiniMax-H3-experimental/tree/e042fe480f58806578713532b8ae4e3d47d1bd63/model_patches)です。元の[Union 2.0モデル仕様](https://huggingface.co/alibaba-pai/MiniMax-H3-Fun-Controlnet-Union-2.0)とH3の利用条件も確認してください。モデル重みはGitリポジトリに含めません。
+
+更新スクリプトはH3専用ComfyUIを固定コミットへ更新し、旧`.venv`を残して新しい`.venv-union2-vae`を構築します。NeoやH3を停止し、`--check`の事前確認を通してから実行してください。元の状態へ戻す場合は、更新後にH3を停止し、`--rollback`を使います。専用ComfyUIに別の編集がある場合は上書きせず停止します。
+
+VAEの「標準」は更新したCoreの処理を使います。「更新版 ＋ FP16積算」は比較用の明示的な選択で、使用時は起動引数との一致を確認します。既存の外部Fast VAE Decodeとは別の選択です。Union 2.0、更新版VAEとも、ノード構成とローカル導入・CPU側の回帰テストを確認済みです。実動画の推論、画質と速度の比較は未検証です。
+
 ## 長尺生成
 
 「長尺生成」を開いて有効にすると、長さの指定が1区間あたりの秒数になります。区間数と重なりから合計秒数を表示し、共通プロンプトに各行の区間指示を追加して連続生成します。区間指示が空欄なら共通プロンプトだけを使います。

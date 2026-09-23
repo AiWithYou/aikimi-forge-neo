@@ -1,17 +1,38 @@
 # Qwen Image 2.1
 
-Qwenの公式Diffusersパイプラインを専用環境で実行する画像生成・編集タブです。Neo本体の依存関係を変更せず、既存のQwen-Imageモデルと併用できます。
+QwenのDiffusersパイプラインを専用環境で実行する画像生成・編集タブです。通常版はUnslothのQ4_K_M GGUFを既定で導入し、Viggleの4ステップTurbo重みも選べます。Neo本体の依存関係は変更しません。
 
 ## 導入と使い方
 
 1. Neoを終了し、ルートの`aikimi-qwen-image21-setup.bat`を実行します。Python 3.13、Git、NVIDIA GPUが必要です。
-2. 公式モデル一式約33GBと専用環境を準備します。環境の容量も含めて余裕を確保してください。同じBATを再実行すると取得済みファイルを再利用し、モデルのサイズとSHA-256を検証します。
+2. [Unslothの通常版Q4_K_M GGUF](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF)約4.20GBと、公式配布の共通部品（テキストエンコーダー・VAEなど）約18.9GB、専用環境を準備します。環境の容量も含めて余裕を確保してください。同じBATを再実行すると取得済みファイルを再利用し、モデルのサイズとSHA-256を検証します。
 3. 普段の`aikimi-launch.bat`で起動し、上部の**Qwen Image 2.1**を開きます。
-4. プロンプトを入力し、最初は**INT8・CPU退避・1024×1024・40 steps**で生成します。Seedが`-1`なら毎回ランダムです。実際に使ったSeedは結果と一緒に保存します。
+4. プロンプトを入力し、最初は**通常版Q4_K_M・CPU退避・1024×1024・40 steps**で生成します。Seedが`-1`なら毎回ランダムです。実際に使ったSeedは結果と一緒に保存します。
+
+GGUFは画像生成本体だけです。共通のテキストエンコーダーを実行時にINT8化し、VAEは公式配布を使います。GGUFの4.20GBは導入全体や必要VRAMの大きさではありません。既存の公式フルモデルを使うINT8 / W4A8 / BF16を追加する場合は `aikimi-qwen-image21-setup.bat --official-full` を実行します。通常版Q4_K_Mでは40 stepsが初期値で、Stepsは変更できます。Sparse AttentionはOFFで使用します。導入済みファイルを再検証するには `--verify` を付けます。公式フルモデルの検証は `--official-full --verify` です。
+
+2026年9月23日にRTX 3090で通常版Q4_K_MのSHA-256照合、256×256・40 steps・CPU退避での新規生成と、生成画像1枚を参照した色変更編集を確認しました。Unsloth配布の結合MLP重みをDiffusers用に分割し、GGUFにBF16として格納された正規化重みを復元して読み込みます。確認画像は赤いマグの生成と青いマグへの変更です。1024px以上の画質・速度評価はこの確認に含みません。
 
 参照なしで新規生成、参照を追加すると画像編集になります。最大10枚を順番に指定できます。画像内の人物や物を指すときは「1枚目」「2枚目」のようにプロンプトに書いてください。透過背景を有効にすると公式の透過指示をプロンプトへ加え、生成したアルファチャンネルをPNGへ保存します。背景が確実に透明になることを保証する後処理ではありません。
 
 結果は画面から保存し、そのまま次の編集の参照にも使えます。保存先は`outputs/qwen-image-2.1/`です。各生成の`request.json`、`result.json`、`output.png`、`worker.log`に設定・画像・実行記録が残ります。停止はその画面で開始したジョブにだけ作用します。ブラウザーを閉じてもジョブは継続し、実プロセスの停止確認が終わるまでGPU使用権を保持します。
+
+## Viggle Turbo（BF16 / Q4_K_M）
+
+画面の**モデル・精度**で `Viggle Turbo · BF16` または `Viggle Turbo · Q4_K_M` を選びます。選択時にStepsは4へ変わり固定され、Sparse AttentionはOFFになります。通常版へ戻すと40 stepsに戻ります。両Turboモデルはテキストからの生成と参照画像編集に使えます。CFGは1.0、negative promptは使わず、Viggle配布の`shift_terminal=null`スケジューラーを読み込みます。
+
+Neoを終了して、必要な方だけ導入してください。既に通常版を導入している場合は共通のテキストエンコーダー・VAEを再利用します。Turboから導入する場合はその共通部品だけを取得し、公式フルモデルのTransformer（約14GB）は取得しません。生成中の自動ダウンロードはありません。
+
+```powershell
+.\aikimi-qwen-image21-setup.bat --turbo-bf16-only
+.\aikimi-qwen-image21-setup.bat --turbo-q4-only
+```
+
+BF16は[ViggleのフルTransformer](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo)（約14.2GB）を使います。Q4_K_Mは[AbirayのGGUF量子化](https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF)（約4.19GB）と共通テキストエンコーダーのINT8を使います。GGUFはTransformerのみの量子化で、テキストエンコーダーやVAEを含む全体容量・VRAMを4.19GBに抑えるものではありません。少ないVRAMでは**CPUへ退避**を選んでください。Q4_K_Mを使う専用環境には`gguf==0.19.0`を追加します。
+
+両配布元のv0.1はプレビュー版です。複雑な複数参照編集や小さな文字は通常版より崩れやすく、Viggleは編集の忠実さでフルTransformerをLoRA版より推奨しています。最初は1024×1024、参照1枚で確認してください。重みはQwen Research Licenseの非商用研究・評価用途に限られます。配布元の[利用条件](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo/blob/bafc91e4cc934f5fb1406b22496a0bed9b99c548/LICENSE)を確認してください。
+
+導入済みファイルのSHA-256確認はセットアップBATに`--verify`と選んだTurbo導入フラグを付けます。通常版とTurboはモデル選択ごとに読み込み直し、同じ選択ならメモリに保持したモデルを再利用します。
 
 ## 囲んだ場所を編集する
 
@@ -116,6 +137,7 @@ CPU退避では、PNG保存後に未使用のPyTorch GPUキャッシュを解放
 ## 固定版と検証
 
 - モデル: `Qwen/Qwen-Image-2.1`、revision `b3179ad355be050328e483a9dfdd9e60cd62adfa`
+- 通常版GGUF: `unsloth/Qwen-Image-2.1-GGUF`、revision `2c31ccd392b367a6637841a143813320a02dff55`、`qwen-image-2.1-Q4_K_M.gguf`
 - Diffusers: `6256aa7666cedd47443adc8f82da9a10e110b09c`（Qwen Image 2.1対応の公式コミット）
 - Transformers 5.17.0、bitsandbytes 0.50.2、Accelerate 1.15.0
 - PyTorch 2.11.0 / CUDA 13.0。対応するNVIDIAドライバーとBF16対応GPUが必要です。

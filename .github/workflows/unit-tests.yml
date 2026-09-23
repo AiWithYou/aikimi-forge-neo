@@ -63,6 +63,16 @@ jobs:
           echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
       - name: Run the offline CPU suite
         run: python tools/run_ci_tests.py --verbosity 1
+      - name: Run H3 workflow and Union 2.0 contracts
+        run: >-
+          python -m pytest
+          tools/tests/test_h3_handoff_store.py
+          tools/tests/test_h3_handoff_runtime_pack.py
+          tools/tests/test_h3_handoff_integration.py
+          tools/tests/test_h3_union2_vae.py
+          tools/tests/test_h3_union2_installers.py -q
+      - name: Run H3 workflow conversion contracts
+        run: node --test tools/tests/h3_handoff_core.test.mjs
       - name: Run YuE2 contracts without model downloads
         run: python -m pytest tests/yue2 -q
       - name: Run Jev contracts without API calls or models

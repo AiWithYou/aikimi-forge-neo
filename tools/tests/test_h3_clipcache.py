@@ -10,6 +10,7 @@ from unittest import mock
 from modules_forge import minimax_h3_bridge as bridge
 from modules_forge import minimax_h3_clipcache as cache
 from modules_forge.minimax_h3_acceleration import H3Acceleration
+from modules_forge.minimax_h3_handoff_store import PACK as HANDOFF_PACK
 from modules_forge.minimax_h3_negpip import H3NegPiP
 from tools.install_minimax_h3_clipcache import install
 
@@ -60,7 +61,7 @@ class ClipCachePolicyTests(unittest.TestCase):
         before = copy.deepcopy(graph)
         cache.apply_clipcache(graph, "off")
         self.assertEqual(graph, before)
-        self.assertEqual(H3Acceleration().runtime_packs(), ())
+        self.assertEqual(H3Acceleration().runtime_packs(), (HANDOFF_PACK,))
 
     def test_cached_keyframes_keep_all_generation_inputs(self):
         request = bridge.H3Request(
@@ -109,7 +110,7 @@ class ClipCachePolicyTests(unittest.TestCase):
         option = H3Acceleration(clip_cache="auto")
         command = bridge._runtime_command(Path("python"), 8199, acceleration=option)
         self.assertIn("--disable-all-custom-nodes", command)
-        self.assertEqual(command[command.index("--whitelist-custom-nodes") + 1 :], [cache.CLIP_CACHE_PACK])
+        self.assertEqual(command[command.index("--whitelist-custom-nodes") + 1 :], [HANDOFF_PACK, cache.CLIP_CACHE_PACK])
         self.assertTrue(bridge._runtime_arguments_are_allowed(command[1:]))
         self.assertFalse(bridge._runtime_arguments_are_allowed(command[1:] + ["ComfyUI-Manager"]))
 

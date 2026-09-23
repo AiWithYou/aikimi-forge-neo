@@ -53,7 +53,19 @@ class H3AccelerationUITests(unittest.TestCase):
         cls.temp.cleanup()
 
     def callback(self, name):
-        return next((index, fn) for index, fn in self.demo.fns.items() if fn.fn.__name__ == name)
+        return next((index, fn) for index, fn in self.demo.fns.items() if fn.fn is not None and fn.fn.__name__ == name)
+
+    def test_workflow_handoff_buttons_keep_current_and_history_separate(self):
+        _, current = self.callback("_open_current_workflow")
+        _, history = self.callback("_open_history_workflow")
+        self.assertEqual(current.outputs[0].elem_id, "h3-workflow-status")
+        self.assertEqual(history.outputs[0].elem_id, "h3-workflow-status")
+        self.assertNotEqual(current.outputs[1], history.outputs[1])
+        self.assertEqual(history.inputs[0].elem_id, "h3-history-selector")
+        scripts = [dependency["js"] for dependency in self.demo.config["dependencies"] if dependency.get("js")]
+        self.assertEqual(sum("about:blank" in script for script in scripts), 4)
+        self.assertEqual(sum("aikimi-h3=" in script for script in scripts), 2)
+        self.assertTrue(all("/prompt" not in script for script in scripts))
 
     def test_hybrid_controls_reach_generation_history_and_duration_summary(self):
         from modules_forge.minimax_h3_hybrid import H3Hybrid
@@ -70,7 +82,7 @@ class H3AccelerationUITests(unittest.TestCase):
         self.assertEqual(tuple(update["value"] for update in result[22 + 9 + len(H3NegPiP().values()):22 + 14 + len(H3NegPiP().values())]), option.hybrid.values())
         self.assertIn("27.12", hybrid_summary(*option.hybrid.values(), 10))
         self.assertEqual(hybrid_summary(*H3Hybrid().values(), 10), "")
-        summaries = [fn for fn in self.demo.fns.values() if fn.fn.__name__ == "hybrid_summary"]
+        summaries = [fn for fn in self.demo.fns.values() if fn.fn is not None and fn.fn.__name__ == "hybrid_summary"]
         self.assertTrue(summaries)
         self.assertTrue(all(fn.inputs[-1].elem_id == "h3-duration" for fn in summaries))
 

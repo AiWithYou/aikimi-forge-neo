@@ -19,6 +19,7 @@ from modules_forge.minimax_h3_clipcache import (
     apply_clipcache,
     validate_clipcache_nodes,
 )
+from modules_forge.minimax_h3_handoff_store import PACK as HANDOFF_PACK
 from modules_forge.minimax_h3_negpip import NEGPIP_NODE, NEGPIP_PACK, H3NegPiP
 
 TURBO_MODEL = "minimax_h3_fused_refdelta_r1024_turbo8_mystic07_int8_convrot.safetensors"
@@ -67,7 +68,7 @@ class H3Acceleration:
         for name, allowed in (
             ("model_variant", {"base", "fused_turbo", "w4a8"}),
             ("video_vae", {"fp16", "int8"}),
-            ("decode_mode", {"standard", "fast"}),
+            ("decode_mode", {"standard", "fast", "fp16_accumulation"}),
             ("attention", {"dense", "sol", "sla"}),
             ("clip_cache", {"off", "auto", "refresh"}),
         ):
@@ -133,7 +134,7 @@ class H3Acceleration:
 
 
     def runtime_packs(self) -> tuple[str, ...]:
-        return ((FAST_VAE_PACK,) if self.decode_mode == "fast" else ()) + ((NEGPIP_PACK,) if self.negpip.enabled else ()) + ((CLIP_CACHE_PACK,) if self.clip_cache != "off" else ()) + ((negpip_cache.PACK,) if self.negpip.enabled and self.clip_cache != "off" else ()) + ((hybrid.PACK,) if self.hybrid.enabled else ())
+        return (HANDOFF_PACK,) + ((FAST_VAE_PACK,) if self.decode_mode == "fast" else ()) + ((NEGPIP_PACK,) if self.negpip.enabled else ()) + ((CLIP_CACHE_PACK,) if self.clip_cache != "off" else ()) + ((negpip_cache.PACK,) if self.negpip.enabled and self.clip_cache != "off" else ()) + ((hybrid.PACK,) if self.hybrid.enabled else ())
 
     def model_files(self, base: Mapping) -> dict:
         result = dict(base)

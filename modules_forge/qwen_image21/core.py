@@ -24,6 +24,14 @@ MAX_OUTPUT_PIXELS = 2400 * 1792
 SETUP_COMMAND = "aikimi-qwen-image21-setup.bat"
 
 
+def precision_label(precision: str) -> str:
+    return {
+        "base_q4_k_m": "通常版 Q4_K_M (Unsloth)",
+        "turbo_bf16": "Viggle Turbo BF16",
+        "turbo_q4_k_m": "Viggle Turbo Q4_K_M",
+    }.get(precision, precision.upper())
+
+
 class QwenImage21Error(ValueError):
     """An actionable input, runtime, or artifact error."""
 
@@ -130,8 +138,14 @@ class Request:
             raise QwenImage21Error("幅・高さは32の倍数、総画素数は約430万画素（2400×1792）以内で指定してください。")
         steps = integer(self.steps, "Steps", 1, 100)
         seed = integer(self.seed, "Seed", -1, 2**63 - 1)
-        if self.precision not in {"int8", "bf16", "w4a8"}:
-            raise QwenImage21Error("精度はINT8・W4A8・BF16から指定してください。")
+        if self.precision not in {"int8", "bf16", "w4a8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m"}:
+            raise QwenImage21Error("モデル・精度の指定が不正です。")
+        if self.precision.startswith("turbo_") and steps != 4:
+            raise QwenImage21Error("Viggle Turboは4 stepsで生成してください。")
+        if self.precision.startswith("turbo_") and self.sparse_mode != "off":
+            raise QwenImage21Error("Viggle TurboではSparse AttentionをOFFにしてください。")
+        if self.precision == "base_q4_k_m" and self.sparse_mode != "off":
+            raise QwenImage21Error("GGUF版ではSparse AttentionをOFFにしてください。")
         if self.memory_mode not in {"offload", "gpu"}:
             raise QwenImage21Error("メモリ設定が不正です。")
         if not isinstance(self.transparent, bool):
@@ -207,7 +221,7 @@ class Request:
         return asdict(self)
 
 
-def runtime_manifest(root: Path) -> dict:
+def runtime_manifest(root: Path, precision: str = "int8") -> dict:
     """Read only installed, revision-matched local assets; never trigger downloads."""
     try:
         manifest = read_json(root / "runtime.json")
@@ -258,19 +272,36 @@ def runtime_manifest(root: Path) -> dict:
                 raise ValueError(f"不足またはサイズ不一致: {relative}")
             if relative.suffix in {".safetensors", ".bin"} and len(relative.parts) > 1:
                 components.add(relative.parts[0])
-        if not {"transformer", "text_encoder", "vae"}.issubset(components):
-            raise ValueError("Transformer・テキストエンコーダー・VAEの記録が不足しています。")
+        required = {"text_encoder", "vae"}
+        if not precision.startswith("turbo_") and precision != "base_q4_k_m":
+            required.add("transformer")
+        if not required.issubset(components):
+            raise ValueError("必要なTransformer・テキストエンコーダー・VAEの記録が不足しています。")
     except (OSError, ValueError) as exc:
         raise QwenImage21Error(f"モデルの検証に失敗しました（{exc}）。{SETUP_COMMAND}を再実行してください。") from exc
+    if precision.startswith("turbo_"):
+        from .turbo import turbo_manifest
+
+        turbo_manifest(root, precision)
+    elif precision == "base_q4_k_m":
+        from .regular_gguf import regular_manifest
+
+        regular_manifest(root)
     return {**manifest, "python": str(python.absolute()), "model": str(model.resolve())}
 
 
 def runtime_status(root: Path) -> str:
+    from .regular_gguf import regular_status
+    from .turbo import turbo_status
+
     try:
-        runtime_manifest(root)
+        runtime_manifest(root, "int8")
     except QwenImage21Error as exc:
-        return str(exc)
-    return "導入済み。INT8 / W4A8 / BF16を選べます。W4A8の追加環境はセットアップBATの --runtime-only で準備できます。"
+        base = str(exc)
+    else:
+        base = "公式フルモデルを導入済み。INT8 / W4A8 / BF16を選べます。"
+
+    return "\n".join((regular_status(root), base, turbo_status(root, "turbo_bf16"), turbo_status(root, "turbo_q4_k_m")))
 
 
 def runtime_lock(root: Path):

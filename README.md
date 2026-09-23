@@ -1,6 +1,6 @@
 # Aikimi Forge Neo
 
-**v1.4.4** · [変更履歴](CHANGELOG.md)
+**v1.4.5** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -34,17 +34,17 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
-| **Qwen Image 2.1**（統合） | 新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・CPU退避も選べます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
+| **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
-| **MiniMax H3 Studio**（統合） | 音声付き動画を生成。専用ComfyUI・Python・標準INT8モデルのセットアップと既存モデルの共有に対応。任意でW4A8モデルを追加できます。 |
+| **MiniMax H3 Studio**（統合） | 音声付き動画を生成。専用ComfyUI・Python・標準INT8モデルのセットアップと既存モデルの共有に対応。任意でW4A8モデル、Fun ControlNet Union 2.0、更新版VAEを追加できます。現在の設定や保存済み動画の実行グラフを、編集可能なComfyUIワークフローとして開けます。[導入・検証範囲](extensions-builtin/minimax-h3-studio/README.md#comfyuiで続きを編集) |
 | **YuE2 Music**（統合） | 歌詞と曲調から作曲。ABC楽譜の生成・編集、別アレンジの生成、複数候補のA/B試聴、Seed・生成条件の保存と復元に対応。公式Python版と任意のaudio.cpp／GGUF版を専用環境で実行します。 |
 | **MiniMax H3 Image**（統合・実験） | `H3 Image`タブで静止画生成と参照画像による編集。PNGと生成条件を保存します。実モデルでのGPU画像生成・画質・速度は未検証です。 |
 
 モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
 
-**v1.4.4では、狭い画面のモデル選択欄の重なりを解消しました。** v1.4.3でTag Autocompleteの候補を入力位置の近くに表示し、タグ名と件数を横並びにしています。導入手順は[Tag Autocomplete](#tag-autocomplete)を参照してください。
+**v1.4.5では、H3のComfyUIワークフロー引き継ぎ、Union 2.0／VAE更新、Qwen Image 2.1の通常版GGUFとTurboを追加しました。** 詳細は[変更履歴](CHANGELOG.md)と各機能のガイドを参照してください。v1.4.4では狭い画面のモデル選択欄の重なりを解消しました。
 
 **v1.4.1では、全モデル共通の「モデルを解放」を画面上部から使えます。** 保持・5分後に自動解放・毎回解放を選べます。ちびあいきみはForge系（Krea2・Animaなど）、SenseNova、H3動画・画像、Qwen、YuE2の環境・実行状況を表示します。Qwenは「変換モデルを保存」でINT8・W4A8を準備し、次回から自動再利用できます。PE-I2Iとマスク外固定編集の結果は[元画像との比較](docs/assets/qwen-image21-v1.4.0/README.md)で確認できます。
 
@@ -78,7 +78,7 @@ Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLi
 | **Jev / Sparse Attention**（追加） | Krea2・Anima・Qwen Image 2.1・H3で任意にON/OFF。再判定頻度と、生成全体のAPI回数・待ち時間上限を設定できます。問い合わせ用プロセスと接続をジョブ中に再利用し、記録済み判定の通信なし再生にも対応。Krea2・Anima・Qwenは固定保持率も選べます。[共通設定](docs/jev-sparse.md) |
 | **H3 NegPiP**（統合） | H3 Studio／H3 Imageでプロンプト内の負の重みを使用。切替後は実行環境の再起動が必要で、Sparse Attentionとは併用できません。 |
 | **H3 CLIP条件キャッシュ**（統合＋追加） | 同じプロンプト・参照素材の条件を再利用し、Qwen3-VLの再ロードと再計算を省略。固定版CLIPCachedの導入が必要です。 |
-| **H3 Fun ControlNet · INT8**（統合） | 元動画のCannyや前処理済みのDepth・Pose動画で、動きと構図を制御。INT8制御モデルと対応ComfyUIが必要です。 |
+| **H3 Fun ControlNet · INT8**（統合） | Union 1のCanny／前処理済み動画に加え、Union 2.0のCanny・Gray／8種類の前処理済み動画を選択。Union 2.0は専用の変換済み重みと更新版ComfyUIが必要です。[導入手順](extensions-builtin/minimax-h3-studio/README.md#union-20と更新版vae) |
 
 ### 機能別ガイド
 
@@ -210,14 +210,14 @@ Krea2・Anima・SenseNova・H3は`aikimi-setup.bat`のメニューから選び�
 
 | モデル | 導入方法 | 自動で準備する内容 |
 |---|---|---|
-| Qwen Image 2.1 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) | 公式モデル一式（約33GB）・INT8/W4A8対応の専用Python環境 |
+| Qwen Image 2.1 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) | [Unsloth通常版Q4_K_M GGUF](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF)（約4.20GB）・公式共通部品（約18.9GB）・専用Python環境 |
 | Krea2 | `aikimi-setup.bat` → `1` | INT8 ConvRot配布版・エンコーダー・VAE |
 | Anima 3.8B v1.1 | `aikimi-setup.bat` → `2` | BF16取得・INT8 ConvRot変換・エンコーダー・VAE |
 | SenseNova U1.5 | `aikimi-setup.bat` → `3` | INT8 ConvRot配布版・8-Step LoRA・専用Python環境 |
 | MiniMax H3 | `aikimi-setup.bat` → `4` | 標準INT8モデル一式・専用ComfyUI・Python環境 |
 | YuE2 Music | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → `1：公式Python` | YuE2-3B・音声復号モデル・専用Python 3.12環境 |
 
-Qwenの導入済み環境にW4A8用ライブラリだけを追加する場合は `aikimi-qwen-image21-setup.bat --runtime-only`、任意のプロンプト書き換えは `--prompt-rewriter-only` を使います。書き換えは導入時に約19GBの元重みを取得し、検証後は約6.13GBのNF4版を保持します。通常の画像生成には書き換えモデルは不要です。[詳細](extensions-builtin/qwen-image21-studio/README.md)
+Qwenの公式フルモデルを使うINT8 / W4A8 / BF16は `aikimi-qwen-image21-setup.bat --official-full` で追加します。導入済み環境にW4A8用ライブラリだけを追加する場合は `--runtime-only`、任意のプロンプト書き換えは `--prompt-rewriter-only` を使います。書き換えは導入時に約19GBの元重みを取得し、検証後は約6.13GBのNF4版を保持します。通常の画像生成には書き換えモデルは不要です。[詳細](extensions-builtin/qwen-image21-studio/README.md)
 
 H3の追加W4A8モデルは [`download_minimax_h3_w4a8_models.bat`](download_minimax_h3_w4a8_models.bat) で取得できます（両モードで約24.3GB、途中再開とSHA-256検証に対応）。標準INT8を初期設定として保持します。[導入と検証範囲](docs/w4a8.md)
 

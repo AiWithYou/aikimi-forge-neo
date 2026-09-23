@@ -210,10 +210,25 @@ class ModelCacheTests(unittest.TestCase):
         with (
             patch.object(bridge, "_MANAGED_PROCESS", process),
             patch.object(bridge, "_loopback_server_process", side_effect=[object(), None]),
+            patch.object(bridge, "_queue_counts", return_value=(0, 0)) as queue,
             patch.object(bridge, "_stop_managed_runtime") as stop,
         ):
             bridge._release_retained_runtime("http://127.0.0.1:8189")
+        queue.assert_called_once_with("http://127.0.0.1:8189")
         stop.assert_called_once()
+
+    def test_h3_release_keeps_runtime_while_comfy_queue_is_busy(self):
+        from modules_forge import minimax_h3_bridge as bridge
+
+        with (
+            patch.object(bridge, "_MANAGED_PROCESS", Mock()),
+            patch.object(bridge, "_loopback_server_process", return_value=object()),
+            patch.object(bridge, "_queue_counts", return_value=(1, 0)),
+            patch.object(bridge, "_stop_managed_runtime") as stop,
+        ):
+            with self.assertRaisesRegex(bridge.H3BridgeError, "キューが空ではない"):
+                bridge._release_retained_runtime("http://127.0.0.1:8189")
+        stop.assert_not_called()
 
     def test_h3_external_runtime_is_not_killed(self):
         from modules_forge import minimax_h3_bridge as bridge

@@ -19,6 +19,7 @@ from modules_forge import minimax_h3_bridge as bridge
 from modules_forge import minimax_h3_images as images
 from modules_forge.cd_tuner_state import TensorEditLedger
 from modules_forge.minimax_h3_acceleration import FAST_VAE_PACK, H3Acceleration
+from modules_forge.minimax_h3_handoff_store import PACK as HANDOFF_PACK
 from modules_forge.minimax_h3_negpip import (
     BUNDLE_BLOBS,
     NEGPIP_NODE,
@@ -140,7 +141,7 @@ class NegPiPPolicyTests(unittest.TestCase):
         self.assertEqual(bridge.build_workflow(altered, {}, seed=7), expected)
         self.assertNotIn("17", expected)
         self.assertNotIn(NEGPIP_NODE, altered.acceleration.extra_nodes())
-        self.assertEqual(altered.acceleration.runtime_packs(), ())
+        self.assertEqual(altered.acceleration.runtime_packs(), (HANDOFF_PACK,))
 
     def test_fast_vae_and_negpip_keep_independent_graph_stages(self):
         option = H3Acceleration(decode_mode="fast", negpip=H3NegPiP(enabled=True))
@@ -148,7 +149,7 @@ class NegPiPPolicyTests(unittest.TestCase):
         graph = bridge.build_workflow(request, {}, seed=3)
         self.assertEqual(graph["11"]["class_type"], "MiniMaxH3FastVAEDecode")
         self.assertEqual(graph["9"]["inputs"]["model"], ["17", 0])
-        self.assertEqual(option.runtime_packs(), (FAST_VAE_PACK, NEGPIP_PACK))
+        self.assertEqual(option.runtime_packs(), (HANDOFF_PACK, FAST_VAE_PACK, NEGPIP_PACK))
 
     def test_sparse_combination_is_rejected_explicitly(self):
         for attention in ("sol", "sla"):
@@ -229,6 +230,8 @@ class NegPiPRuntimeTests(unittest.TestCase):
                 "none",
                 "--async-offload",
                 "2",
+                "--whitelist-custom-nodes",
+                HANDOFF_PACK,
             ],
         )
 
@@ -246,8 +249,9 @@ class NegPiPRuntimeTests(unittest.TestCase):
 
     def test_exact_equals_form_is_supported_without_widening_allowlist(self):
         base = bridge._runtime_command(Path("python"), 8188)[1:]
+        base = base[:base.index("--whitelist-custom-nodes")]
         self.assertEqual(
-            bridge.runtime_profile_from_args([*base, f"--whitelist-custom-nodes={NEGPIP_PACK}"], 8188), "fast"
+            bridge.runtime_profile_from_args([*base, f"--whitelist-custom-nodes={HANDOFF_PACK}"], 8188), "fast"
         )
         self.assertIsNone(bridge.runtime_profile_from_args([*base, "--whitelist-custom-nodes=../other"], 8188))
 
@@ -591,6 +595,7 @@ class NegPiPUITests(unittest.TestCase):
 
     def test_image_ui_binds_negpip_to_generation_and_runtime_controls(self):
         package = ModuleType("modules")
+        package.__path__ = [str(ROOT / "modules")]
         callbacks = ModuleType("modules.script_callbacks")
         callbacks.on_ui_tabs = mock.Mock()
         paths = ModuleType("modules.paths")

@@ -82,6 +82,14 @@ def saved_components(model_path, precision, *, versions=None, check_cancel=lambd
 
 def saved_status(runtime, precision):
     """Inspect the dedicated runtime without importing its GPU libraries."""
+    if precision == "base_q4_k_m":
+        from .regular_gguf import regular_status
+
+        return regular_status(Path(runtime))
+    if precision.startswith("turbo_"):
+        from .turbo import turbo_status
+
+        return turbo_status(Path(runtime), precision)
     if precision == "bf16":
         return "BF16は元のモデルを使用します。"
     try:

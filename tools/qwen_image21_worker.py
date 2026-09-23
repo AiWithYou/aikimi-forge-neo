@@ -24,9 +24,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from modules_forge.qwen_image21.quantized_cache import INT8_SKIP_MODULES  # noqa: E402
+from modules_forge.qwen_image21.regular_gguf import MODEL_ID as REGULAR_MODEL_ID  # noqa: E402
+from modules_forge.qwen_image21.regular_gguf import REVISION as REGULAR_REVISION  # noqa: E402
+from modules_forge.qwen_image21.turbo import PROFILES as TURBO_PROFILES  # noqa: E402
 
 DIFFUSERS_REVISION = "6256aa7666cedd47443adc8f82da9a10e110b09c"
 MODEL_ID = "Qwen/Qwen-Image-2.1"
+PROFILES = {**TURBO_PROFILES, "base_q4_k_m": (REGULAR_MODEL_ID, REGULAR_REVISION)}
 EVENT_PREFIX = "QWEN_IMAGE21_EVENT "
 # Keep the small input/output and timestep projections in BF16. Attention and
 # feed-forward projections inside every denoising block use LLM.int8().
@@ -76,10 +80,20 @@ def _cache_key(model_path: Path, precision: str, memory_mode: str) -> tuple:
     )
     manifests = tuple(
         (name, path.stat().st_size, path.stat().st_mtime_ns)
-        for name in ("runtime.json", "model-files.json")
+        for name in ("runtime.json", "model-files.json", "turbo-files.json", "regular-gguf-files.json")
         if (path := model_path.parent / name).is_file()
     )
-    return str(model_path), precision, memory_mode, metadata, manifests
+    turbo = tuple(
+        (str(path.relative_to(model_path.parent)), path.stat().st_size, path.stat().st_mtime_ns)
+        for path in sorted((model_path.parent / "turbo").rglob("*"))
+        if path.is_file() and ".cache" not in path.relative_to(model_path.parent).parts
+    )
+    regular = tuple(
+        (str(path.relative_to(model_path.parent)), path.stat().st_size, path.stat().st_mtime_ns)
+        for path in sorted((model_path.parent / "regular-gguf").rglob("*"))
+        if path.is_file() and ".cache" not in path.relative_to(model_path.parent).parts
+    )
+    return str(model_path), precision, memory_mode, metadata, manifests, turbo, regular
 
 
 def _model_revision(model_path: Path) -> str | None:
@@ -99,7 +113,7 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     if operation not in {"generate", "prepare"}:
         raise ValueError("Unsupported operation")
     for key, default, allowed in (
-        ("precision", "int8", {"int8", "bf16", "w4a8"}),
+        ("precision", "int8", {"int8", "bf16", "w4a8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m"}),
         ("memory_mode", "offload", {"offload", "gpu"}),
     ):
         value = payload.get(key, request.get(key, default))
@@ -125,6 +139,16 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= 100:
         raise ValueError("steps must be an integer between 1 and 100.")
     request["steps"] = steps
+    if request["precision"].startswith("turbo_"):
+        if steps != 4:
+            raise ValueError("Viggle Turbo requires exactly 4 steps.")
+        from modules_forge.qwen_image21.turbo import turbo_manifest
+
+        turbo_manifest(model_path.parent, request["precision"])
+    elif request["precision"] == "base_q4_k_m":
+        from modules_forge.qwen_image21.regular_gguf import regular_manifest
+
+        regular_manifest(model_path.parent)
     seed = request.get("seed", 0)
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**63:
         raise ValueError("seed must be an integer between 0 and 2^63 - 1.")
@@ -204,6 +228,13 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     from modules_forge.qwen_image21_environment import validate_running_versions
 
     validate_running_versions()
+    if request["precision"] in {"base_q4_k_m", "turbo_q4_k_m"}:
+        try:
+            gguf_version = importlib.metadata.version("gguf")
+        except importlib.metadata.PackageNotFoundError:
+            gguf_version = None
+        if gguf_version != "0.19.0":
+            raise RuntimeError("Q4_K_Mにはgguf==0.19.0が必要です。aikimi-qwen-image21-setup.bat を実行してください。")
     _check_cancel(job)
     import torch
     from diffusers import BitsAndBytesConfig as DiffusersBitsAndBytesConfig
@@ -225,18 +256,22 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         load_or_create,
     )
 
-    if request["precision"] == "int8":
-        loaders = (
-            (
-                "transformer",
-                QwenImage21Transformer2DModel,
-                DiffusersBitsAndBytesConfig(
-                    load_in_8bit=True,
-                    llm_int8_skip_modules=list(INT8_SKIP_MODULES),
-                ),
-            ),
+    if request["precision"] in {"int8", "base_q4_k_m", "turbo_q4_k_m"}:
+        loaders = [
             ("text_encoder", Qwen3VLForConditionalGeneration, TransformersBitsAndBytesConfig(load_in_8bit=True)),
-        )
+        ]
+        if request["precision"] == "int8":
+            loaders.insert(
+                0,
+                (
+                    "transformer",
+                    QwenImage21Transformer2DModel,
+                    DiffusersBitsAndBytesConfig(
+                        load_in_8bit=True,
+                        llm_int8_skip_modules=list(INT8_SKIP_MODULES),
+                    ),
+                ),
+            )
         for name, model_class, quantization in loaders:
             _check_cancel(job)
             _progress(job, "loading", f"{name} を INT8 で読み込み中", 0.08 if name == "transformer" else 0.17)
@@ -275,6 +310,18 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             )
             components[name] = component
             torch.cuda.empty_cache()
+            _check_cancel(job)
+        if request["precision"] in {"base_q4_k_m", "turbo_q4_k_m"}:
+            if request["precision"] == "base_q4_k_m":
+                from modules_forge.qwen_image21.regular_gguf import load_gguf_transformer
+
+                label = "通常版"
+            else:
+                from modules_forge.qwen_image21.turbo import load_gguf_transformer
+
+                label = "Turbo"
+            _progress(job, "loading", f"{label} Q4_K_M GGUF Transformerを読み込み中", 0.27)
+            components["transformer"] = load_gguf_transformer(model_path)
             _check_cancel(job)
     elif request["precision"] == "w4a8":
         from modules_forge.qwen_image21.w4a8 import load_model, load_saved_model, save_model, validate_dependency
@@ -322,6 +369,16 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             components[name] = component
             torch.cuda.empty_cache()
             _check_cancel(job)
+    elif request["precision"] == "turbo_bf16":
+        _progress(job, "loading", "Turbo BF16 Transformerを読み込み中", 0.10)
+        components["transformer"] = QwenImage21Transformer2DModel.from_pretrained(
+            str(model_path.parent / "turbo" / "bf16"),
+            subfolder="transformer",
+            torch_dtype=torch.bfloat16,
+            local_files_only=True,
+            use_safetensors=True,
+        )
+        _check_cancel(job)
     pipe = QwenImage21Pipeline.from_pretrained(
         str(model_path),
         torch_dtype=torch.bfloat16,
@@ -329,6 +386,14 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         use_safetensors=True,
         **components,
     )
+    if request["precision"].startswith("turbo_"):
+        from diffusers import FlowMatchEulerDiscreteScheduler
+
+        pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
+            str(model_path.parent / "turbo"), subfolder="scheduler", local_files_only=True
+        )
+        if pipe.scheduler.config.shift_terminal is not None:
+            raise RuntimeError("Turbo scheduler must have shift_terminal=null.")
     _check_cancel(job)
     if request["memory_mode"] == "offload":
         pipe.enable_model_cpu_offload(gpu_id=0, device="cuda")
@@ -337,6 +402,8 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     pipe.set_progress_bar_config(disable=True)
     _check_cancel(job)
     versions = _versions()
+    if request["precision"] in {"base_q4_k_m", "turbo_q4_k_m"}:
+        versions["gguf"] = importlib.metadata.version("gguf")
     if w4a8_stats:
         versions["comfy-kitchen"] = importlib.metadata.version("comfy-kitchen")
     return {
@@ -520,9 +587,11 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         _check_cancel(job)
         memory = _idle_cuda_memory(torch, request["memory_mode"])
         metadata = {
-            "model": MODEL_ID,
+            "model": PROFILES[request["precision"]][0] if request["precision"] in PROFILES else MODEL_ID,
             "model_path": str(model_path),
-            "model_revision": _model_revision(model_path),
+            "model_revision": PROFILES[request["precision"]][1]
+            if request["precision"] in PROFILES
+            else _model_revision(model_path),
             "diffusers_revision": DIFFUSERS_REVISION,
             "prompt": request["prompt"],
             "effective_prompt": prompt,
