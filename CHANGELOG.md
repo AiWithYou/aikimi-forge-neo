@@ -1,5 +1,12 @@
 # 変更履歴
 
+## v1.5.0 — 2026-09-24
+
+- H3のComfyUIワークフロー引き継ぎ、Fun ControlNet Union 2.0、更新版VAE、Qwen Image 2.1の通常版GGUFとViggle Turboを含むv1.4.5以降の変更をv1.5.0としてまとめました。
+- H3 Studioの高速化設定にComfy CompilerのON/OFFを追加。ControlNet生成が最初のStepで止まる環境でOFFを選び、専用runtimeを再起動できます。起動引数との不一致は生成前に検出します。
+- RTX 3090でUnion 1／2.0とVAE設定を同一素材・Seedで生成し、所要時間・VRAM・出力の比較を[検証記録](docs/minimax-h3-union2-vae-benchmark.md)へ記載しました。Union 2.0は追加機能が必要な場合に選ぶ任意モデルです。
+- 回帰テストとワークフローの引き継ぎテストを実施しました。
+
 ## v1.4.5 — 2026-09-23
 
 - H3 Studioの現在設定と生成履歴から、確定Seed・モデル・参照素材を含む編集可能なComfyUIワークフローを開けるようにしました。入力素材とグラフをローカルに保存し、読み込みだけでは生成しません。履歴は今回以降に保存した記録が対象です。

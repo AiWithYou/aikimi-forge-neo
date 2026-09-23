@@ -1,6 +1,6 @@
 # Aikimi Forge Neo
 
-**v1.4.5** · [変更履歴](CHANGELOG.md)
+**v1.5.0** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -44,7 +44,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 
 モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
 
-**v1.4.5では、H3のComfyUIワークフロー引き継ぎ、Union 2.0／VAE更新、Qwen Image 2.1の通常版GGUFとTurboを追加しました。** 詳細は[変更履歴](CHANGELOG.md)と各機能のガイドを参照してください。v1.4.4では狭い画面のモデル選択欄の重なりを解消しました。
+**v1.5.0では、H3のComfyUIワークフロー引き継ぎ、Union 2.0／VAE更新、Qwen Image 2.1の通常版GGUFとTurboをまとめ、H3の実GPU比較と回帰確認を追加しました。** 実測条件と結果は[H3の比較記録](docs/minimax-h3-union2-vae-benchmark.md)、導入条件は各機能のガイドを参照してください。
 
 **v1.4.1では、全モデル共通の「モデルを解放」を画面上部から使えます。** 保持・5分後に自動解放・毎回解放を選べます。ちびあいきみはForge系（Krea2・Animaなど）、SenseNova、H3動画・画像、Qwen、YuE2の環境・実行状況を表示します。Qwenは「変換モデルを保存」でINT8・W4A8を準備し、次回から自動再利用できます。PE-I2Iとマスク外固定編集の結果は[元画像との比較](docs/assets/qwen-image21-v1.4.0/README.md)で確認できます。
 
@@ -78,7 +78,7 @@ Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLi
 | **Jev / Sparse Attention**（追加） | Krea2・Anima・Qwen Image 2.1・H3で任意にON/OFF。再判定頻度と、生成全体のAPI回数・待ち時間上限を設定できます。問い合わせ用プロセスと接続をジョブ中に再利用し、記録済み判定の通信なし再生にも対応。Krea2・Anima・Qwenは固定保持率も選べます。[共通設定](docs/jev-sparse.md) |
 | **H3 NegPiP**（統合） | H3 Studio／H3 Imageでプロンプト内の負の重みを使用。切替後は実行環境の再起動が必要で、Sparse Attentionとは併用できません。 |
 | **H3 CLIP条件キャッシュ**（統合＋追加） | 同じプロンプト・参照素材の条件を再利用し、Qwen3-VLの再ロードと再計算を省略。固定版CLIPCachedの導入が必要です。 |
-| **H3 Fun ControlNet · INT8**（統合） | Union 1のCanny／前処理済み動画に加え、Union 2.0のCanny・Gray／8種類の前処理済み動画を選択。Union 2.0は専用の変換済み重みと更新版ComfyUIが必要です。[導入手順](extensions-builtin/minimax-h3-studio/README.md#union-20と更新版vae) |
+| **H3 Fun ControlNet · INT8**（統合） | Union 1のCanny／前処理済み動画に加え、Union 2.0のCanny・Gray／8種類の前処理済み動画を選択。Union 2.0のINT8重みは約4.22 GiBで、CannyだけならUnion 1の約2.14 GiBを実用上の第一候補とします。[比較と導入手順](extensions-builtin/minimax-h3-studio/README.md#union-20と更新版vae) |
 
 ### 機能別ガイド
 

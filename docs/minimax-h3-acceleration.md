@@ -12,6 +12,7 @@ Baseline controls verified against upstream sources on 2026-09-06; the optional 
 | Video decoding | VAEDecode | MiniMax H3 Fast VAE Decode | Batched spatial tiles use more VRAM and can be slower. |
 | Attention | Comfy Kitchen dense | Sol-Attn or SLA via official BlockSparseAttention | Approximate attention can change motion, detail and audio. |
 | CLIP conditioning | Native encoder on each execution | CLIPCached auto / refresh | Stores conditioning and reference metadata on disk; repeated inputs can avoid the encoder. Incompatible with NegPiP. |
+| Comfy Compiler | On | Off | Use off when a ControlNet run remains at its first sampler step. Restart the managed runtime after changing this setting. Initialization time and VRAM use can change. |
 
 See the [CLIPCached integration guide](minimax-h3-clipcache.md) for the pinned installer, cache modes, storage and validation. The managed runtime only permits its selected node pack. The default graph remains unchanged when the cache is off.
 
@@ -61,4 +62,4 @@ Generation JSON schema 2 records the selected acceleration settings, model filen
 
 Recorded acceleration values are **requested settings**, not measurements of effective sparsity or the Fast VAE's final OOM fallback batch. Use backend logs for those details. Compare the same prompt, input media, seed, size, duration and sampler; compare motion, fine detail, speech and synchronized audio as well as elapsed time and peak memory.
 
-No model weights or third-party implementation code are vendored. Follow the source models' and node pack's license terms. GPU output quality and end-to-end speed have not been measured by this integration's CPU/Gradio tests. Context-IR, 2K Regenerate, Fun Union and arbitrary-time guides are not added by this change; no paid API is invoked.
+No model weights or third-party implementation code are vendored. Follow the source models' and node pack's license terms. CPU/Gradio tests do not measure GPU quality or end-to-end speed; the limited [RTX 3090 Fun ControlNet comparison](minimax-h3-union2-vae-benchmark.md) is documented separately. Context-IR, 2K Regenerate and arbitrary-time guides are outside these controls; no paid API is invoked.

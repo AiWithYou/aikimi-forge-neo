@@ -41,7 +41,7 @@ H3 Studioの「ComfyUIで続きを編集」から「現在の設定をComfyUIで
 
 ## Union 2.0と更新版VAE
 
-Fun ControlNetのUnion 1に加えて、Union 2.0のCanny、Gray、前処理済み動画を選べます。CannyとGrayは入力動画から生成します。Depth・Pose・HED・MLSD・Scribble・Layoutなどは事前に加工した動画を指定してください。映像を24fpsにそろえ、中央切り抜きと短い動画の末尾補完を適用します。元動画の音声は制御に使いません。Union 1の重みを名前だけ変更してUnion 2.0に使うことはできません。
+Fun ControlNetのUnion 1に加えて、Union 2.0のCanny、Gray、前処理済み動画を選べます。Cannyだけなら、重みが小さいUnion 1をまず選んでください（Union 1 INT8は約2.14 GiB、Union 2.0 INT8は約4.22 GiB）。Union 2.0はGrayなど追加の制御方式が必要な場合の任意モデルです。CannyとGrayは入力動画から生成します。Depth・Pose・HED・MLSD・Scribble・Layoutなどは事前に加工した動画を指定してください。映像を24fpsにそろえ、中央切り抜きと短い動画の末尾補完を適用します。元動画の音声は制御に使いません。Union 1の重みを名前だけ変更してUnion 2.0に使うことはできません。
 
 Neoを停止し、既存のH3専用環境を準備したうえで、リポジトリのルートから以下を実行します。
 
@@ -58,7 +58,9 @@ venv\Scripts\python.exe tools\prepare_minimax_h3_union2.py --download --precisio
 
 更新スクリプトはH3専用ComfyUIを固定コミットへ更新し、旧`.venv`を残して新しい`.venv-union2-vae`を構築します。NeoやH3を停止し、`--check`の事前確認を通してから実行してください。元の状態へ戻す場合は、更新後にH3を停止し、`--rollback`を使います。専用ComfyUIに別の編集がある場合は上書きせず停止します。
 
-VAEの「標準」は更新したCoreの処理を使います。「更新版 ＋ FP16積算」は比較用の明示的な選択で、使用時は起動引数との一致を確認します。既存の外部Fast VAE Decodeとは別の選択です。Union 2.0、更新版VAEとも、ノード構成とローカル導入・CPU側の回帰テストを確認済みです。実動画の推論、画質と速度の比較は未検証です。
+VAEの「標準」は更新したCoreの処理を使います。「更新版 ＋ FP16積算」は比較用の明示的な選択で、使用時は起動引数との一致を確認します。既存の外部Fast VAE Decodeとは別の選択です。Union 1／2.0と更新版VAEの同条件GPU生成は[RTX 3090での比較記録](../../docs/minimax-h3-union2-vae-benchmark.md)を参照してください。少数ステップの単発比較を一般的な画質・速度の優劣として扱わないでください。
+
+ControlNet生成が最初のStepで進まない場合は「高速化 > Comfy Compiler」を「OFF」にし、「実行環境とモデル > 選択設定で再起動」を押してください。通常は「ON」のまま使用します。この設定は生成前に実際の起動引数と照合します。
 
 ## 長尺生成
 

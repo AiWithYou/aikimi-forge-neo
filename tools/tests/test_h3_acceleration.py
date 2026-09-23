@@ -146,6 +146,19 @@ class H3AccelerationTests(unittest.TestCase):
                 self.assertIsNone(self.bridge.runtime_profile_from_args(fast + tail, 8188))
             self.assertIsNone(self.bridge.runtime_profile_from_args(base + ["--whitelist-custom-nodes", "another-pack"], 8188))
 
+    def test_compiler_off_requires_matching_runtime_and_roundtrips(self):
+        option = H3Acceleration(compiler_mode="off")
+        self.assertEqual(H3Acceleration.from_values(option.values()), option)
+        self.assertEqual(H3Acceleration.from_dict({"compiler_mode": "off"}), option)
+        self.assertEqual(H3Acceleration.from_values(H3Acceleration().values()[:-1]), H3Acceleration())
+        ready = self.ready(option)
+        self.assertEqual(ready.runtime_args.count("--disable-comfy-compiler"), 1)
+        self.assertEqual(self.bridge.runtime_profile_from_args(ready.runtime_args, 8188), "fast")
+        self.bridge.validate_readiness(ready)
+        with self.assertRaisesRegex(self.bridge.H3BridgeError, "Compiler"):
+            self.bridge.validate_readiness(replace(ready, runtime_args=self.ready().runtime_args))
+        self.assertIsNone(self.bridge.runtime_profile_from_args((*ready.runtime_args, "--disable-comfy-compiler"), 8188))
+
     def test_incompatible_node_kitchen_or_whitelist_is_rejected(self):
         option = H3Acceleration(decode_mode="fast", attention="sla")
         ready = self.ready(option)

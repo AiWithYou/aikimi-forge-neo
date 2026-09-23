@@ -41,6 +41,8 @@ def acceleration_note(*values) -> str:
             notes.append("NegPiPの重み・適用時間も専用キャッシュへ保存します。通常用とは分離し、NegPiP設定の変更時は再計算します。")
         if option.clip_cache == "refresh":
             notes.append("再計算モードを選択中です。生成するたびに条件を計算し直して保存します。再利用する場合は自動へ戻してください。")
+    if option.compiler_mode == "off":
+        notes.append("Comfy Compilerを無効にします。H3のControlNetが最初のStepで進まない場合の回避策です。切替後は選択設定で再起動してください。初期化時間やVRAM使用量が変わる可能性があります。")
     if not notes:
         notes.append("標準構成：従来モデル＋FP16 VAE＋通常デコード＋Kitchen dense。高速化による追加の近似は無効です。")
     return (
@@ -105,6 +107,11 @@ def create_acceleration_controls(duration):
             value=defaults.clip_cache, label="5. CLIP条件キャッシュ", interactive=False, elem_id="h3-clip-cache",
             info="CLIPCachedが必要です。プロンプト・参照由来の条件やサムネイルを選択先ComfyUIのディスクに保存します。自動削除はありません。",
         )
+        compiler_mode = gr.Dropdown(
+            choices=[("標準 · 有効", "on"), ("無効 · ControlNetの初回Stepが止まる場合", "off")],
+            value=defaults.compiler_mode, label="6. Comfy Compiler", interactive=False,
+            info="切替後は「選択設定で再起動」を押してください。", elem_id="h3-compiler-mode",
+        )
         note = gr.HTML(acceleration_note(*defaults.values()), elem_id="h3-acceleration-note")
         reset = gr.Button("標準構成（高速化・キャッシュ・NegPiPオフ）+ 20 Stepsに戻す", interactive=False, elem_id="h3-acceleration-reset")
         from modules_forge.jev_sparse.ui import credential_controls
@@ -120,7 +127,7 @@ def create_acceleration_controls(duration):
         )
     negpip_controls = create_negpip_controls(prefix="h3", interactive=False)
     hybrid_controls, hybrid_note = create_hybrid_controls()
-    controls = [model, vae, decode, batch, attention, tau, keep, start, *negpip_controls, clip_cache, *hybrid_controls, jev_cadence, jev_interval, jev_max_calls, jev_max_wait]
+    controls = [model, vae, decode, batch, attention, tau, keep, start, *negpip_controls, clip_cache, *hybrid_controls, jev_cadence, jev_interval, jev_max_calls, jev_max_wait, compiler_mode]
     summary_inputs = hybrid_controls + [duration]
     for control in summary_inputs:
         control.change(hybrid_summary, inputs=summary_inputs, outputs=[hybrid_note], queue=False, show_progress="hidden")
