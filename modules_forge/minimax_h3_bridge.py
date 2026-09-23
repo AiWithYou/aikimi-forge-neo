@@ -17,25 +17,34 @@ import threading
 import time
 import urllib.parse
 import uuid
-from dataclasses import dataclass, field
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any
 
 import httpx
 
 from modules.aikimi_security.redaction import sanitized_subprocess_environment
-from modules_forge.gpu_ownership import GPUOwnership, release_forge_vram
+from modules_forge import minimax_h3_fun_control as fun_control
+from modules_forge import minimax_h3_handoff as workflow_handoff
+from modules_forge import minimax_h3_hybrid as hybrid
+from modules_forge import minimax_h3_negpip_cache as negpip_cache
 from modules_forge import minimax_h3_pending as pending_jobs
-from modules_forge.minimax_h3_runtime import SERVER_URL, installed_runtime_root, managed_runtime_root, model_root, setup_lock
+from modules_forge import minimax_h3_union2_vae as union2_vae
+from modules_forge.gpu_ownership import GPUOwnership, release_forge_vram
 from modules_forge.minimax_h3_acceleration import FAST_VAE_PACK, SPARSE_COMMIT, H3Acceleration
 from modules_forge.minimax_h3_clipcache import CLIP_CACHE_PACK, CLIP_CACHE_REVISION, require_clipcache
-from modules_forge import minimax_h3_negpip_cache as negpip_cache
-from modules_forge import minimax_h3_fun_control as fun_control
-from modules_forge import minimax_h3_hybrid as hybrid
+from modules_forge.minimax_h3_handoff_store import PACK as HANDOFF_PACK
 from modules_forge.minimax_h3_negpip import NEGPIP_NODE, NEGPIP_PACK, custom_node_whitelist, install_bundled_negpip
-
+from modules_forge.minimax_h3_runtime import (
+    SERVER_URL,
+    installed_runtime_root,
+    managed_runtime_root,
+    model_root,
+    setup_lock,
+)
 
 H3_FPS = 24
 H3_MIN_SECONDS = 5.0
@@ -581,9 +590,12 @@ def _runtime_arguments_are_allowed(arguments: Sequence[str]) -> bool:
         "--disable-async-offload",
         "--disable-pinned-memory",
     }
-    arguments = tuple(str(argument) for argument in arguments)
+    try:
+        arguments = union2_vae.strip_selected_fast(tuple(str(argument) for argument in arguments))
+    except ValueError:
+        return False
     whitelist = custom_node_whitelist(arguments)
-    if whitelist is None or set(whitelist) - {FAST_VAE_PACK, NEGPIP_PACK, CLIP_CACHE_PACK, negpip_cache.PACK, hybrid.PACK}:
+    if whitelist is None or set(whitelist) - {HANDOFF_PACK, FAST_VAE_PACK, NEGPIP_PACK, CLIP_CACHE_PACK, negpip_cache.PACK, hybrid.PACK}:
         return False
     index = 0
     saw_main = False
@@ -625,7 +637,10 @@ def runtime_profile_from_args(
     arguments: Sequence[str],
     expected_port: int | None = None,
 ) -> str | None:
-    arguments = tuple(str(argument) for argument in arguments)
+    try:
+        arguments = union2_vae.strip_selected_fast(tuple(str(argument) for argument in arguments))
+    except ValueError:
+        return None
     async_value = _cli_option_value(arguments, "--async-offload")
     if async_value == "":
         async_value = "2"
@@ -701,8 +716,8 @@ def runtime_profile_from_args(
 def h3_core_optimization_status(runtime_root: Path, minimum_commit: str = H3_MINIMUM_COMFY_COMMIT) -> tuple[bool, str | None]:
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        revision_result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+        revision_result = subprocess.run(  # noqa: S603 - fixed local Git command
+            ["git", "rev-parse", "HEAD"],  # noqa: S607 - Git resolves from the managed PATH
             cwd=runtime_root,
             check=False,
             capture_output=True,
@@ -715,8 +730,8 @@ def h3_core_optimization_status(runtime_root: Path, minimum_commit: str = H3_MIN
         revision = revision_result.stdout.strip() if revision_result.returncode == 0 else None
         if not revision:
             return False, None
-        ancestor_result = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", minimum_commit, revision],
+        ancestor_result = subprocess.run(  # noqa: S603 - fixed local Git command
+            ["git", "merge-base", "--is-ancestor", minimum_commit, revision],  # noqa: S607
             cwd=runtime_root,
             check=False,
             capture_output=True,
@@ -866,8 +881,10 @@ class ComfyH3Client:
         value = self._request_json("/queue")
         if not isinstance(value, dict):
             raise H3BridgeError("ComfyUI queue の形式が不正です。")
-        running = value.get("queue_running") or []
-        pending = value.get("queue_pending") or []
+        if "queue_running" not in value or "queue_pending" not in value:
+            raise H3BridgeError("ComfyUI queue の必須項目がありません。空と推測しません。")
+        running = value["queue_running"]
+        pending = value["queue_pending"]
         if not isinstance(running, list) or not isinstance(pending, list):
             raise H3BridgeError("ComfyUI queue の形式が不正です。")
         return len(running), len(pending)
@@ -1054,6 +1071,12 @@ def inspect_readiness(
 
 
 def _python_for_runtime(runtime_root: Path) -> Path:
+    try:
+        updated_python = union2_vae.preferred_python(runtime_root)
+    except (OSError, ValueError) as exc:
+        raise H3BridgeError(str(exc)) from exc
+    if updated_python is not None:
+        return _resolve_local_path(updated_python, "更新版H3専用Python")
     python = runtime_root.parent / ".venv" / "Scripts" / "python.exe"
     if python.is_file():
         return _resolve_local_path(python, "H3専用Python")
@@ -1092,6 +1115,8 @@ def _runtime_command(
         command.extend(["--async-offload", "2"])
     else:
         command.extend(["--cache-none", "--disable-async-offload", "--disable-pinned-memory"])
+    if acceleration.decode_mode == "fp16_accumulation":
+        command.extend(["--fast", "fp16_accumulation"])
     if packs := acceleration.runtime_packs():
         command.extend(["--whitelist-custom-nodes", *packs])
     return command
@@ -1196,6 +1221,10 @@ def _start_runtime_locked(
                     f" 実行中: {managed_root} ({managed_url}) / 要求: {runtime_root} ({normalized_url})"
                 )
         elif listening_root is None:
+            try:
+                workflow_handoff.install_bundle(runtime_root)
+            except (OSError, ValueError) as exc:
+                raise H3BridgeError(str(exc)) from exc
             if acceleration.negpip.enabled:
                 try:
                     install_bundled_negpip(runtime_root)
@@ -1205,7 +1234,7 @@ def _start_runtime_locked(
                     raise H3BridgeError(str(exc)) from exc
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             with stdout_path.open("ab") as stdout, stderr_path.open("ab") as stderr:
-                _MANAGED_PROCESS = subprocess.Popen(
+                _MANAGED_PROCESS = subprocess.Popen(  # noqa: S603 - validated local runtime command
                     command,
                     cwd=runtime_root,
                     stdin=subprocess.DEVNULL,
@@ -1435,6 +1464,10 @@ def validate_readiness(
 ) -> RuntimeReadiness:
     acceleration = readiness.acceleration
     acceleration.validate()
+    try:
+        union2_vae.check_runtime(readiness, decode_mode=acceleration.decode_mode)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise H3BridgeError(str(exc)) from exc
     if runtime_profile not in RUNTIME_PROFILES:
         raise H3BridgeError(f"未対応のH3 runtime profileです: {runtime_profile}")
     if not readiness.connected:
@@ -2108,7 +2141,7 @@ def mirror_result(
         "attention_backend": "comfy-kitchen-int8" if request.acceleration.attention == "dense" else f"comfy-kitchen-sparse-{request.acceleration.attention}",
         "acceleration": request.acceleration.to_dict(),
         "fun_control": request.control.to_dict(),
-        "fun_control_model": fun_control.MODEL if request.control.enabled else None,
+        "fun_control_model": request.control.model_name if request.control.enabled else None,
         "clip_cache_revision": CLIP_CACHE_REVISION if request.acceleration.clip_cache != "off" else None,
         "selected_models": {
             name: filename for name, (_, filename) in request.acceleration.model_files(MODEL_FILES).items()
@@ -2147,13 +2180,20 @@ def mirror_result(
     return target
 
 
-def _estimated_required_free_gib(request: H3Request, runtime_profile: str) -> float:
+def _estimated_required_free_gib(request: H3Request, runtime_profile: str, runtime_root: Path | None = None) -> float:
     if runtime_profile not in RUNTIME_PROFILES:
         raise H3BridgeError(f"未対応のH3 runtime profileです: {runtime_profile}")
     width, height = request.dimensions
     decoded_video_gib = width * height * request.frame_count * 3 * 4 / 1024**3
     safety_gib = 2.0 if runtime_profile == RUNTIME_PROFILE_LOW_RAM else 4.0
-    control_gib = decoded_video_gib + fun_control.MODEL_BYTES / 1024**3 if request.control.enabled else 0.0
+    control_gib = 0.0
+    if request.control.enabled:
+        model_bytes = fun_control.MODEL_BYTES
+        if runtime_root is not None:
+            model_path = fun_control.model_root(runtime_root) / "model_patches" / request.control.model_name
+            if model_path.is_file():
+                model_bytes = model_path.stat().st_size
+        control_gib = decoded_video_gib + model_bytes / 1024**3
     return decoded_video_gib + safety_gib + control_gib
 
 
@@ -2175,8 +2215,9 @@ def _validate_request_runtime_constraints(
     if request.control.enabled:
         control_client = ComfyH3Client(readiness.server_url)
         try:
-            fun_control.validate_model(readiness.runtime_root)
-            fun_control.validate_nodes(control_client.object_info(fun_control.NODES))
+            union2_vae.check_runtime(readiness, decode_mode=request.acceleration.decode_mode, union2=request.control.is_union2)
+            fun_control.validate_model(readiness.runtime_root, request.control)
+            fun_control.validate_nodes(control_client.object_info(fun_control.NODES), request.control)
         except ValueError as exc:
             raise H3BridgeError(str(exc)) from exc
         finally:
@@ -2194,7 +2235,7 @@ def _validate_request_runtime_constraints(
         available_values[label] = float(value)
     if not available_values:
         return
-    required_free_gib = _estimated_required_free_gib(request, runtime_profile)
+    required_free_gib = _estimated_required_free_gib(request, runtime_profile, readiness.runtime_root)
     limiting_label, limiting_free_gib = min(available_values.items(), key=lambda item: item[1])
     if limiting_free_gib >= required_free_gib:
         return
@@ -2257,6 +2298,12 @@ def _release_retained_runtime(server_url):
             if listener is not None:
                 raise H3BridgeError("外部起動のH3実行環境は自動終了できません。終了後にモデルを解放してください。")
             return
+        running, pending = _queue_counts(server_url)
+        if running or pending:
+            raise H3BridgeError(
+                "ComfyUIの生成・待機キューが空ではないため、モデルを解放しません。"
+                f"（実行中 {running} / 待機 {pending}）"
+            )
         _stop_managed_runtime(listener)
         if process.poll() is None or _loopback_server_process(server_url) is not None:
             raise H3BridgeError("H3実行環境の終了を確認できません。モデルを解放し直してください。")
@@ -2318,6 +2365,10 @@ def _run_generation(
                 acceleration=request.acceleration,
             )
             _validate_request_runtime_constraints(request, readiness, runtime_profile)
+            handoff_record, handoff_warning = workflow_handoff.capture_generation(
+                request, workflow, prepared, seed, readiness, runtime_root,
+                runtime_profile, submission_id,
+            )
             client = ComfyH3Client(server_url, timeout=hybrid.POLL_TIMEOUT_SECONDS if request.acceleration.hybrid.enabled else 15.0)
             if _is_cancelled_job(submission_id):
                 raise H3GenerationCancelled("生成を停止しました。")
@@ -2417,9 +2468,10 @@ def _run_generation(
                 else:  # pragma: no cover - loop either breaks or raises
                     raise H3BridgeError(f"完成済みH3ジョブの結果を取得できません: {history_error}")
                 target = mirror_result(source, output_directory, request, prompt_id, seed, readiness)
+                handoff_warning = workflow_handoff.finish_generation(target, handoff_record, handoff_warning, source=source)
                 yield {
                     "stage": "complete",
-                    "message": "音声付き動画を保存しました",
+                    "message": "音声付き動画を保存しました" + (" — " + handoff_warning if handoff_warning else ""),
                     "progress": 1.0,
                     "prompt_id": prompt_id,
                     "seed": seed,

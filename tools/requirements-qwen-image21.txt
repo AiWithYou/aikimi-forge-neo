@@ -6,3 +6,4 @@ comfy-kitchen==0.2.31
 accelerate==1.15.0
 Pillow==12.3.0
 safetensors==0.8.0
+gguf==0.19.0

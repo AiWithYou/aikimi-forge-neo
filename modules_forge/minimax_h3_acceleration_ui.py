@@ -8,6 +8,7 @@ import gradio as gr
 from modules_forge.minimax_h3_acceleration import H3Acceleration
 from modules_forge.minimax_h3_hybrid_ui import create_hybrid_controls, hybrid_summary
 from modules_forge.minimax_h3_negpip_ui import create_negpip_controls
+from modules_forge.minimax_h3_union2_vae import DECODE_CHOICES
 
 
 def acceleration_note(*values) -> str:
@@ -22,6 +23,10 @@ def acceleration_note(*values) -> str:
         notes.append("MATLOWAI版はTurboとMysticを焼き込んだ派生モデルです。動き・質感・音が標準と変わります。モデル選択だけではStepsを変えません。4/8 Stepsボタンで明示適用してください。")
     if option.video_vae == "int8":
         notes.append("INT8 ConvRot VAEは量子化による画質差やGPU依存の不具合があり得ます。黒画面・ノイズが出る場合はFP16で比較してください。")
+    if option.decode_mode == "fp16_accumulation":
+        notes.append("更新版の標準VAEDecodeを使用します。VAEの最適化・タイル境界修正・オフロード時の修正を含む専用ComfyUIが必要です。旧環境へは黙って戻しません。")
+    if option.decode_mode == "fp16_accumulation":
+        notes.append("--fast fp16_accumulationだけを明示的に許可します。VAE限定ではなくランタイム共通の精度設定です。切替後は再起動し、同じSeedで比較してください。")
     if option.decode_mode == "fast":
         notes.append("Fast VAEはタイルを一括処理します。切替後はruntimeを再起動してください。")
     if option.attention != "dense":
@@ -74,9 +79,9 @@ def create_acceleration_controls(duration):
             info="Kijai配布のINT8 ConvRot Video VAEをmodels/vaeへ配置します。", elem_id="h3-video-vae",
         )
         decode = gr.Dropdown(
-            choices=[("VAEDecode · 標準", "standard"), ("Fast VAE Decode", "fast")],
+            choices=DECODE_CHOICES,
             value=defaults.decode_mode, label="3. Videoデコード", interactive=False,
-            info="FastのみComfyUI-MiniMax-H3-MotionCacheを許可します。他のcustom nodeは無効のままです。",
+            info="更新版はtools/upgrade_minimax_h3_union2_vae.pyで導入。FP16積算は全体の精度設定。Fastは別の外部ノードです。",
             elem_id="h3-decode-mode",
         )
         batch = gr.Slider(1, 8, value=defaults.tile_batch_size, step=1, label="Fast VAE tile batch · 大きいほどVRAM増", visible=False, interactive=False, elem_id="h3-tile-batch")

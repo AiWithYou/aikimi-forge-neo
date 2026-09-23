@@ -18,6 +18,7 @@ from .core import (
     atomic_json,
     copy_inputs,
     inside,
+    precision_label,
     read_json,
     runtime_lock,
     runtime_manifest,
@@ -94,7 +95,7 @@ class Studio:
         request = request.resolved()
         if not isinstance(owner, str) or not owner:
             raise QwenImage21Error("ブラウザーのQwen Image 2.1タブから操作してください。")
-        runtime_manifest(self.runtime)
+        runtime_manifest(self.runtime, request.precision)
         if request.rewrite_prompt and not request.input_images:
             rewriter_manifest(self.runtime)
         if request.rewrite_edit_prompt and request.input_images:
@@ -117,7 +118,7 @@ class Studio:
                     self._residency.release_resource(ENGINE)
                     self._runtime_lock = runtime_lock(self.runtime)
                     new_lock = True
-                entry = runtime_manifest(self.runtime)
+                entry = runtime_manifest(self.runtime, request.precision)
                 if request.rewrite_prompt and not request.input_images:
                     rewriter_manifest(self.runtime)
                 if request.rewrite_edit_prompt and request.input_images:
@@ -319,7 +320,7 @@ class Studio:
                 preservation_message = " · 範囲外固定" if request.preserve_unmasked else ""
                 final = {
                     "state": "complete",
-                    "message": f"完了 · Seed {request.seed} · {request.width}×{request.height} · {request.precision.upper()}{rewrite_message}{preservation_message}",
+                    "message": f"完了 · Seed {request.seed} · {request.width}×{request.height} · {precision_label(request.precision)}{rewrite_message}{preservation_message}",
                     "output_path": str(preferred),
                     "original_output_path": str(output),
                     "preserved_output_path": str(preferred) if request.preserve_unmasked else "",

@@ -6,22 +6,15 @@ import subprocess
 import sys
 import tempfile
 import time
-from types import SimpleNamespace
 import unittest
 import uuid
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import modules_forge.minimax_h3_bridge as h3_bridge
-from tools.tests.media_fixtures import write_video
-
 from modules_forge.minimax_h3_bridge import (
-    ComfyH3Client,
-    H3BridgeError,
-    H3JobNotFound,
-    H3Request,
-    HistoryItem,
     H3_AUDIO_VAE,
     H3_FL_MODEL,
     H3_MINIMUM_COMFY_COMMIT,
@@ -33,11 +26,16 @@ from modules_forge.minimax_h3_bridge import (
     MODE_TEXT,
     RUNTIME_PROFILE_FAST,
     RUNTIME_PROFILE_LOW_RAM,
+    ComfyH3Client,
+    H3BridgeError,
+    H3JobNotFound,
+    H3Request,
+    HistoryItem,
     RuntimeReadiness,
     _active_generation_count,
+    _cleanup_after_terminal,
     _clear_active_generation,
     _clear_cancelled_job,
-    _cleanup_after_terminal,
     _copy_to_comfy_input,
     _generation_poll_interval,
     _is_cancelled_job,
@@ -59,8 +57,8 @@ from modules_forge.minimax_h3_bridge import (
     extract_history_video,
     generation_preset_values,
     h3_core_optimization_status,
-    history_html,
     history_choices,
+    history_html,
     inspect_readiness,
     list_history,
     load_history_request,
@@ -70,8 +68,8 @@ from modules_forge.minimax_h3_bridge import (
     prepare_media,
     progress_html,
     prompt_template,
-    reference_guide_html,
     readiness_html,
+    reference_guide_html,
     relative_workload,
     resolve_runtime_root,
     restart_runtime,
@@ -82,6 +80,7 @@ from modules_forge.minimax_h3_bridge import (
     snap_h3_frames,
     validate_request,
 )
+from tools.tests.media_fixtures import write_video
 
 
 class MiniMaxH3GeometryTests(unittest.TestCase):
@@ -410,6 +409,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             core_revision=H3_MINIMUM_COMFY_COMMIT,
             h3_core_optimized=True,
             runtime_profile=runtime_profile,
+            runtime_args=tuple(_runtime_command(Path("python.exe"), 8188, runtime_profile)[1:]),
             model_files=files,
             server_model_files=files,
         )
@@ -426,7 +426,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             ),
             SimpleNamespace(
                 status="LISTEN",
-                laddr=SimpleNamespace(ip="0.0.0.0", port=8188),
+                laddr=SimpleNamespace(ip="0.0.0.0", port=8188),  # noqa: S104 - test rejects wildcard bind
                 pid=123,
             ),
         ]
@@ -511,6 +511,8 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
                 "none",
                 "--async-offload",
                 "2",
+                "--whitelist-custom-nodes",
+                "Aikimi-H3-WorkflowBridge",
             ],
         )
         for harmful_flag in (
@@ -703,7 +705,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
 
     def test_readiness_html_never_labels_async_one_as_fast_profile(self):
         arguments = _runtime_command(Path("python.exe"), 8188, RUNTIME_PROFILE_FAST)[1:]
-        arguments[-1] = "1"
+        arguments[arguments.index("--async-offload") + 1] = "1"
         readiness = RuntimeReadiness(
             runtime_root=Path("runtime"),
             server_url="http://127.0.0.1:8188",

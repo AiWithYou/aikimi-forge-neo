@@ -16,9 +16,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from modules_forge.minimax_h3_acceleration import (  # noqa: E402
-    FAST_VAE_NODE, FAST_VAE_PACK, INT8_VIDEO_VAE, SPARSE_NODE, TURBO_MODEL,
+    FAST_VAE_NODE,
+    FAST_VAE_PACK,
+    INT8_VIDEO_VAE,
+    SPARSE_NODE,
+    TURBO_MODEL,
     H3Acceleration,
 )
+from modules_forge.minimax_h3_handoff_store import PACK as HANDOFF_PACK  # noqa: E402
 
 
 def load_bridge():
@@ -57,7 +62,9 @@ class H3AccelerationTests(unittest.TestCase):
     def request(self, **kwargs):
         return self.bridge.H3Request(mode="text", prompt="test prompt", **kwargs)
 
-    def ready(self, option=H3Acceleration()):
+    def ready(self, option=None):
+        if option is None:
+            option = H3Acceleration()
         return self.bridge.RuntimeReadiness(
             runtime_root=Path("."), server_url="http://127.0.0.1:8188", connected=True,
             ck_attention_available=True, h3_core_optimized=True, core_revision="test-revision",
@@ -129,11 +136,11 @@ class H3AccelerationTests(unittest.TestCase):
     def test_only_explicit_fast_vae_allows_exactly_one_custom_pack(self):
         for profile in ("fast", "low_ram"):
             base = self.bridge._runtime_command(Path("python"), 8188, profile)[1:]
-            self.assertNotIn("--whitelist-custom-nodes", base)
+            self.assertEqual(base[-2:], ["--whitelist-custom-nodes", HANDOFF_PACK])
             fast = self.bridge._runtime_command(Path("python"), 8188, profile, H3Acceleration(decode_mode="fast"))[1:]
             self.assertIn("--disable-all-custom-nodes", fast)
             self.assertIn("--disable-api-nodes", fast)
-            self.assertEqual(fast[-2:], ["--whitelist-custom-nodes", FAST_VAE_PACK])
+            self.assertEqual(fast[-3:], ["--whitelist-custom-nodes", HANDOFF_PACK, FAST_VAE_PACK])
             self.assertEqual(self.bridge.runtime_profile_from_args(fast, 8188), profile)
             for tail in (["another-pack"], ["--whitelist-custom-nodes", FAST_VAE_PACK], ["--enable-manager"]):
                 self.assertIsNone(self.bridge.runtime_profile_from_args(fast + tail, 8188))

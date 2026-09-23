@@ -243,6 +243,17 @@ jobs:
             tools/tests/test_minimax_h3_setup.py
             modules_forge/minimax_h3_runtime.py
             modules_forge/minimax_h3_setup_ui.py
+            modules_forge/minimax_h3_handoff.py
+            modules_forge/minimax_h3_handoff_store.py
+            modules_forge/minimax_h3_union2_vae.py
+            extensions-builtin/minimax-h3-studio/comfyui_nodes/Aikimi-H3-WorkflowBridge/__init__.py
+            tools/prepare_minimax_h3_union2.py
+            tools/upgrade_minimax_h3_union2_vae.py
+            tools/tests/test_h3_handoff_integration.py
+            tools/tests/test_h3_handoff_runtime_pack.py
+            tools/tests/test_h3_handoff_store.py
+            tools/tests/test_h3_union2_installers.py
+            tools/tests/test_h3_union2_vae.py
             tools/tests/chromium_helpers.py
             tools/tests/test_additional_module_identity.py
             tools/tests/test_aikimi_setup.py

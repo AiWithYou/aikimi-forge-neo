@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from modules_forge import qwen_image21_environment as environment
-from modules_forge.qwen_image21.core import DIFFUSERS_REVISION, MODEL_REVISION, atomic_json
+from modules_forge.qwen_image21.core import DIFFUSERS_REVISION, MODEL_REVISION, QwenImage21Error, atomic_json
 from tools import setup_qwen_image21 as setup
 
 
@@ -53,6 +53,39 @@ class QwenSetupTests(unittest.TestCase):
             execute.assert_not_called()
             self.assertFalse(target.exists())
 
+    def test_default_dry_run_uses_unsloth_and_full_flag_keeps_official_source(self):
+        from modules_forge.qwen_image21 import regular_gguf
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "not-created"
+            for flags, model, precision in (
+                ([], regular_gguf.MODEL_ID, ["base_q4_k_m"]),
+                (["--official-full"], setup.MODEL_ID, ["int8", "w4a8", "bf16"]),
+            ):
+                with self.subTest(flags=flags), mock.patch("builtins.print") as printed:
+                    self.assertEqual(setup.main(["--root", str(root), *flags, "--dry-run"]), 0)
+                    plan = json.loads(printed.call_args.args[0])
+                    self.assertEqual(plan["model"], model)
+                    self.assertEqual(plan["precision"], precision)
+            self.assertFalse(root.exists())
+
+    def test_turbo_dry_run_points_to_pinned_models_without_writing_files(self):
+        from modules_forge.qwen_image21.turbo import GGUF_ID, GGUF_REVISION, VIGGLE_ID, VIGGLE_REVISION
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "not-created"
+            for flag, model, revision in (
+                ("--turbo-q4-only", GGUF_ID, GGUF_REVISION),
+                ("--turbo-bf16-only", VIGGLE_ID, VIGGLE_REVISION),
+            ):
+                with self.subTest(flag=flag), mock.patch("builtins.print") as printed:
+                    self.assertEqual(setup.main(["--root", str(root), flag, "--dry-run"]), 0)
+                    plan = json.loads(printed.call_args.args[0])
+                    self.assertEqual((plan["model"], plan["model_revision"]), (model, revision))
+                    self.assertGreater(plan["model_bytes"], 4_000_000_000)
+                    self.assertGreater(plan["shared_model_bytes"], 18_000_000_000)
+            self.assertFalse(root.exists())
+
     def test_runtime_only_never_registers_a_missing_model(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
@@ -67,6 +100,27 @@ class QwenSetupTests(unittest.TestCase):
             download.assert_not_called()
             self.assertFalse((target / "runtime.json").exists())
             lock.close.assert_called_once()
+
+    def test_default_install_downloads_shared_assets_and_unsloth_gguf(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            python = root / "worker-env/Scripts/python.exe"
+            with (
+                mock.patch("builtins.print"),
+                mock.patch("modules_forge.qwen_image21.core.runtime_lock") as lock,
+                mock.patch(
+                    "modules_forge.qwen_image21.core.runtime_manifest",
+                    side_effect=[*[QwenImage21Error("missing")] * 4, {}],
+                ) as manifest,
+                mock.patch.object(setup, "install_environment", return_value=python),
+                mock.patch.object(setup, "download_model") as download,
+                mock.patch.object(setup, "execute") as execute,
+            ):
+                self.assertEqual(setup.main(["--root", str(root)]), 0)
+            download.assert_called_once_with(root, python, shared_only=True)
+            self.assertIn("--download-regular-gguf", execute.call_args.args[0])
+            self.assertEqual(manifest.call_args.args, (root, "base_q4_k_m"))
+            lock.return_value.close.assert_called_once()
 
     def test_corrupt_download_does_not_publish_an_install_record(self):
         with tempfile.TemporaryDirectory() as directory:

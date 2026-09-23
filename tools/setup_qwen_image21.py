@@ -52,7 +52,7 @@ def install_environment(root):
         [
             python,
             "-c",
-            "from diffusers import QwenImage21Pipeline, QwenImage21Transformer2DModel, AutoencoderKLQwenImage21; from transformers import Qwen3VLForConditionalGeneration; import bitsandbytes; print('Qwen Image 2.1 / INT8 imports OK')",
+            "from diffusers import QwenImage21Pipeline, QwenImage21Transformer2DModel, AutoencoderKLQwenImage21, GGUFQuantizationConfig, FlowMatchEulerDiscreteScheduler; from transformers import Qwen3VLForConditionalGeneration; import bitsandbytes, gguf; print('Qwen Image 2.1 / Turbo imports OK')",
         ]
     )
     frozen = execute([python, "-m", "pip", "freeze"], capture_output=True, text=True, encoding="utf-8").stdout
@@ -60,19 +60,32 @@ def install_environment(root):
     return python.absolute()
 
 
-def download_model(root, python):
+def download_model(root, python, *, shared_only=False):
     # Download through the dedicated interpreter: the main environment is untouched.
-    execute([python, Path(__file__).resolve(), "--download-only", "--root", root])
+    execute(
+        [
+            python,
+            Path(__file__).resolve(),
+            "--download-only",
+            "--root",
+            root,
+            *(["--shared-only"] if shared_only else []),
+        ]
+    )
 
 
-def fetch_and_verify(root):
+def fetch_and_verify(root, *, include_transformer=True):
     from huggingface_hub import HfApi, snapshot_download
 
     destination = root / "model"
     info = HfApi().model_info(MODEL_ID, revision=MODEL_REVISION, files_metadata=True)
     if info.sha != MODEL_REVISION:
         raise RuntimeError("モデルの固定リビジョンを確認できません。")
-    files = [item for item in info.siblings if item.rfilename != ".gitattributes"]
+    files = [
+        item
+        for item in info.siblings
+        if item.rfilename != ".gitattributes" and (include_transformer or not item.rfilename.startswith("transformer/"))
+    ]
     snapshot_download(
         MODEL_ID,
         revision=MODEL_REVISION,
@@ -252,12 +265,27 @@ def prepare_rewriter(root, *, editing=False):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Qwen Image 2.1 / INT8専用環境と公式モデルを準備")
+    parser = argparse.ArgumentParser(description="Qwen Image 2.1専用環境とモデルを準備")
     parser.add_argument("--root", type=Path, default=RUNTIME)
     parser.add_argument("--runtime-only", action="store_true", help="依存環境のみ導入。モデルは取得しません")
     parser.add_argument("--verify", action="store_true", help="既存ファイルのサイズとSHA-256を再検証")
     parser.add_argument("--dry-run", action="store_true", help="導入内容のみ表示")
     parser.add_argument("--download-only", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--shared-only", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--download-regular-gguf", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--download-turbo-profile", choices=["turbo_bf16", "turbo_q4_k_m"], help=argparse.SUPPRESS)
+    model_group = parser.add_mutually_exclusive_group()
+    model_group.add_argument(
+        "--official-full", action="store_true", help="公式フルモデルを導入（INT8 / W4A8 / BF16用）"
+    )
+    model_group.add_argument("--turbo-bf16-only", action="store_true", help="Viggle Turbo BF16と共通部品を導入")
+    model_group.add_argument(
+        "--turbo-q4-only",
+        "--turbo-q4-k-m-only",
+        dest="turbo_q4_only",
+        action="store_true",
+        help="Viggle Turbo Q4_K_Mと共通部品を導入",
+    )
     parser.add_argument(
         "--prompt-rewriter-only", action="store_true", help="任意のプロンプト書き換えモデルだけを4bitで追加"
     )
@@ -273,28 +301,69 @@ def main(argv=None):
     parser.add_argument("--prepare-rewriter", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--prepare-edit-rewriter", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    turbo_profile = "turbo_bf16" if args.turbo_bf16_only else "turbo_q4_k_m" if args.turbo_q4_only else None
     only_rewriters = args.prompt_rewriter_only or args.edit_prompt_rewriter_only
     include_rewriter = args.prompt_rewriter_only or args.with_prompt_rewriter
     include_edit_rewriter = args.edit_prompt_rewriter_only or args.with_edit_prompt_rewriter
     if args.runtime_only and (include_rewriter or include_edit_rewriter):
         parser.error("--runtime-only と書き換えモデルの導入は同時に指定できません。")
+    if args.runtime_only and args.official_full:
+        parser.error("--runtime-only と --official-full は同時に指定できません。")
+    if only_rewriters and args.official_full:
+        parser.error("書き換えモデルだけの導入と --official-full は同時に指定できません。")
+    if turbo_profile and (args.runtime_only or include_rewriter or include_edit_rewriter):
+        parser.error("Turbo単独導入と他の導入オプションは同時に指定できません。")
     root = args.root.expanduser().absolute()
     if args.dry_run:
         from modules_forge.qwen_image21 import prompt_rewriter as rewriter
 
         selected_model, selected_revision, _ = rewriter.profile(args.edit_prompt_rewriter_only)
+        if turbo_profile:
+            from modules_forge.qwen_image21.turbo import PROFILES
+
+            selected_model, selected_revision, _ = PROFILES[turbo_profile]
+        elif not args.official_full and not only_rewriters:
+            from modules_forge.qwen_image21.regular_gguf import MODEL_ID as GGUF_MODEL_ID
+            from modules_forge.qwen_image21.regular_gguf import REVISION as GGUF_REVISION
+
+            selected_model, selected_revision = GGUF_MODEL_ID, GGUF_REVISION
         print(  # noqa: T201 -- Explicit installer dry-run output.
             json.dumps(
                 {
                     "runtime": str(root),
-                    "model": selected_model if only_rewriters else MODEL_ID,
-                    "model_revision": selected_revision if only_rewriters else MODEL_REVISION,
+                    "model": selected_model if only_rewriters or turbo_profile or not args.official_full else MODEL_ID,
+                    "model_revision": selected_revision
+                    if only_rewriters or turbo_profile or not args.official_full
+                    else MODEL_REVISION,
                     "diffusers_revision": DIFFUSERS_REVISION,
-                    "model_bytes": None if only_rewriters else 33_131_616_240,
-                    "precision": ["nf4-double"] if only_rewriters else ["int8", "bf16"],
-                    "license": f"https://huggingface.co/{selected_model}/blob/{selected_revision}/LICENSE"
+                    "model_bytes": (
+                        None
+                        if only_rewriters
+                        else 14_230_284_584
+                        if turbo_profile == "turbo_bf16"
+                        else 4_189_346_592
+                        if turbo_profile == "turbo_q4_k_m"
+                        else 33_131_614_660
+                        if args.official_full
+                        else 4_199_565_024
+                    ),
+                    "shared_model_bytes": 18_901_299_599
+                    if not only_rewriters and (turbo_profile or not args.official_full)
+                    else None,
+                    "precision": ["nf4-double"]
                     if only_rewriters
-                    else TERMS,
+                    else [turbo_profile]
+                    if turbo_profile
+                    else ["int8", "w4a8", "bf16"]
+                    if args.official_full
+                    else ["base_q4_k_m"],
+                    "license": (
+                        f"https://huggingface.co/{selected_model}/blob/{selected_revision}/LICENSE"
+                        if only_rewriters
+                        else "https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo/blob/bafc91e4cc934f5fb1406b22496a0bed9b99c548/LICENSE"
+                        if turbo_profile
+                        else TERMS
+                    ),
                     "prompt_rewriter": {
                         "model": rewriter.MODEL_ID,
                         "revision": rewriter.MODEL_REVISION,
@@ -322,12 +391,22 @@ def main(argv=None):
         )
         return 0
     if args.download_only:
-        fetch_and_verify(root)
+        fetch_and_verify(root, include_transformer=not args.shared_only)
+        return 0
+    if args.download_regular_gguf:
+        from modules_forge.qwen_image21.regular_gguf import download_regular
+
+        download_regular(root)
+        return 0
+    if args.download_turbo_profile:
+        from modules_forge.qwen_image21.turbo import download_turbo
+
+        download_turbo(root, args.download_turbo_profile)
         return 0
     if args.prepare_rewriter or args.prepare_edit_rewriter:
         prepare_rewriter(root, editing=args.prepare_edit_rewriter)
         return 0
-    from modules_forge.qwen_image21.core import atomic_json, read_json, runtime_lock, runtime_manifest
+    from modules_forge.qwen_image21.core import QwenImage21Error, atomic_json, read_json, runtime_lock, runtime_manifest
 
     root.mkdir(parents=True, exist_ok=True)
     lock = runtime_lock(root)
@@ -355,7 +434,8 @@ def main(argv=None):
                     execute([python, "-X", "utf8", Path(__file__).resolve(), flag, "--root", root])
             return 0
         if args.verify:
-            runtime_manifest(root)
+            selected_precision = turbo_profile or ("int8" if args.official_full else "base_q4_k_m")
+            runtime_manifest(root, selected_precision)
             record = read_json(root / "model-files.json")
             if record.get("revision") != MODEL_REVISION or not record.get("files"):
                 raise RuntimeError("固定モデルの検証記録がありません。再セットアップしてください。")
@@ -365,6 +445,14 @@ def main(argv=None):
                     raise ValueError("検証記録に不正なパスがあります。")
                 if not path.is_file() or path.stat().st_size != item["size"] or sha256(path) != item["sha256"]:
                     raise RuntimeError(f"モデル検証失敗: {item['path']}")
+            if turbo_profile:
+                from modules_forge.qwen_image21.turbo import turbo_manifest
+
+                turbo_manifest(root, turbo_profile, verify_hashes=True)
+            elif not args.official_full:
+                from modules_forge.qwen_image21.regular_gguf import regular_manifest
+
+                regular_manifest(root, verify_hashes=True)
             print("Qwen Image 2.1: 全モデルファイルのSHA-256が一致しました。")  # noqa: T201
             if include_rewriter or include_edit_rewriter:
                 from modules_forge.qwen_image21.prompt_rewriter import rewriter_manifest
@@ -378,7 +466,26 @@ def main(argv=None):
         print(f"Qwen Image 2.1の利用条件: {TERMS}")  # noqa: T201
         python = install_environment(root)
         if not args.runtime_only:
-            download_model(root, python)
+            if turbo_profile:
+                for existing in ("int8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m"):
+                    try:
+                        runtime_manifest(root, existing)
+                    except QwenImage21Error:
+                        continue
+                    break
+                else:
+                    download_model(root, python, shared_only=True)
+            elif args.official_full:
+                download_model(root, python)
+            else:
+                for existing in ("int8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m"):
+                    try:
+                        runtime_manifest(root, existing)
+                    except QwenImage21Error:
+                        continue
+                    break
+                else:
+                    download_model(root, python, shared_only=True)
             atomic_json(
                 root / "runtime.json",
                 {
@@ -389,6 +496,23 @@ def main(argv=None):
                     "diffusers_revision": DIFFUSERS_REVISION,
                 },
             )
+            if turbo_profile:
+                execute(
+                    [
+                        python,
+                        "-X",
+                        "utf8",
+                        Path(__file__).resolve(),
+                        "--download-turbo-profile",
+                        turbo_profile,
+                        "--root",
+                        root,
+                    ]
+                )
+                runtime_manifest(root, turbo_profile)
+            elif not args.official_full:
+                execute([python, "-X", "utf8", Path(__file__).resolve(), "--download-regular-gguf", "--root", root])
+                runtime_manifest(root, "base_q4_k_m")
             print("準備完了。Neoを起動してQwen Image 2.1を開いてください。")  # noqa: T201
         for enabled, flag in (
             (include_rewriter, "--prepare-rewriter"),

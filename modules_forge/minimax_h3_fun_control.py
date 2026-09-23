@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from modules_forge.minimax_h3_runtime import model_root
+from modules_forge.minimax_h3_union2_vae import UNION2_MODEL, inspect_union2
 
 MODEL = "minimax_h3_fun_controlnet_union_pruned_int8_convrot.safetensors"
 MODEL_BYTES = 2296635360
@@ -22,8 +23,16 @@ class H3FunControl:
     def enabled(self):
         return self.mode != "off"
 
+    @property
+    def is_union2(self):
+        return isinstance(self.mode, str) and self.mode.startswith("v2_")
+
+    @property
+    def model_name(self):
+        return UNION2_MODEL if self.is_union2 else MODEL
+
     def validate(self):
-        if not isinstance(self.mode, str) or self.mode not in {"off", "canny", "preprocessed"}:
+        if not isinstance(self.mode, str) or self.mode not in {"off", "canny", "preprocessed", "v2_canny", "v2_gray", "v2_preprocessed"}:
             raise ValueError("Fun ControlNetの入力方式が不正です。")
         if isinstance(self.strength, bool) or not isinstance(self.strength, (int, float)) or not math.isfinite(self.strength) or not 0.01 <= self.strength <= 2:
             raise ValueError("Fun ControlNetの強さは0.01〜2で指定してください。")
@@ -42,13 +51,20 @@ class H3FunControl:
         return result
 
 
-def validate_model(runtime_root):
-    path = model_root(Path(runtime_root)) / "model_patches" / MODEL
+def validate_model(runtime_root, control=None):
+    control = control or H3FunControl()
+    control.validate()
+    path = model_root(Path(runtime_root)) / "model_patches" / control.model_name
+    if control.is_union2:
+        inspect_union2(path)
+        return
     if not path.is_file() or path.stat().st_size != MODEL_BYTES:
         raise ValueError(f"Fun ControlNet INT8モデルがありません。models/model_patches/{MODEL}を配置してください。")
 
 
-def validate_nodes(nodes):
+def validate_nodes(nodes, control=None):
+    control = control or H3FunControl()
+    control.validate()
     for name in NODES:
         if name not in nodes:
             raise ValueError("Fun ControlNetの標準ノードがありません。対応版ComfyUIへ更新してください。")
@@ -60,9 +76,10 @@ def validate_nodes(nodes):
     optional = nodes["MiniMaxH3FunControlNetApply"].get("input", {}).get("optional", {})
     if not optional.get("control_video") or optional["control_video"][0] != "IMAGE":
         raise ValueError("Fun ControlNetの制御動画入力が未対応です。")
-    choices = nodes["ModelPatchLoader"].get("input", {}).get("required", {}).get("name", [[]])[0]
-    if MODEL not in choices:
-        raise ValueError("接続先ComfyUIにFun ControlNet INT8モデルがありません。")
+    definition = nodes["ModelPatchLoader"].get("input", {}).get("required", {}).get("name", [[]])
+    choices = definition[1].get("options", []) if len(definition) > 1 and definition[0] == "COMBO" else definition[0]
+    if not isinstance(choices, (list, tuple)) or control.model_name not in choices:
+        raise ValueError(f"接続先ComfyUIに選択したFun ControlNetモデルがありません: {control.model_name}")
 
 
 def prepare_video(source, target, width, height, frame_count, mode):
@@ -105,9 +122,12 @@ def prepare_video(source, target, width, height, frame_count, mode):
                 if converted_index != current_index:
                     resized = ImageOps.fit(current.to_image(), (width, height), method=Image.Resampling.BILINEAR)
                     rgb = np.asarray(resized.convert("RGB"))
-                    if mode == "canny":
+                    if mode in {"canny", "v2_canny"}:
                         edges = cv2.Canny(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), 100, 200)
                         rgb = np.repeat(edges[..., None], 3, axis=-1)
+                    elif mode == "v2_gray":
+                        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+                        rgb = np.repeat(gray[..., None], 3, axis=-1)
                     converted_index = current_index
                 frame = av.VideoFrame.from_ndarray(rgb, format="rgb24")
                 frame.pts = index
@@ -124,7 +144,7 @@ def apply_workflow(graph, control, video_name):
         raise ValueError("Fun ControlNetの制御動画が準備されていません。")
     if any(str(number) in graph for number in range(100, 104)):
         raise ValueError("Fun ControlNetのノードIDが重複しています。")
-    graph["100"] = {"class_type": "ModelPatchLoader", "inputs": {"name": MODEL}}
+    graph["100"] = {"class_type": "ModelPatchLoader", "inputs": {"name": control.model_name}}
     graph["101"] = {"class_type": "LoadVideo", "inputs": {"file": video_name}}
     graph["102"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["101", 0]}}
     graph["103"] = {

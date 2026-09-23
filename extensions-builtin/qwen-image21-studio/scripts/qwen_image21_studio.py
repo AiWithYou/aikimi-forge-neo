@@ -15,6 +15,8 @@ from modules_forge.qwen_image21.core import (
     MAX_REFERENCE_IMAGES,
     QwenImage21Error,
     Request,
+    precision_label,
+    runtime_manifest,
     runtime_status,
 )
 from modules_forge.qwen_image21.quantized_cache import saved_status
@@ -364,7 +366,7 @@ def poll_save(identifier, precision, request: gr.Request):
             text += f" · 経過 {state['elapsed']:.0f} 秒"
         return (
             text,
-            gr.update(interactive=done and precision != "bf16"),
+            gr.update(interactive=done and precision in {"int8", "w4a8"}),
             gr.update(visible=not done, interactive=not done),
             gr.update(active=not done),
             gr.update(interactive=done),
@@ -372,7 +374,7 @@ def poll_save(identifier, precision, request: gr.Request):
     except JobNotFound as exc:
         return (
             str(exc),
-            gr.update(interactive=precision != "bf16"),
+            gr.update(interactive=precision in {"int8", "w4a8"}),
             gr.update(visible=False),
             gr.update(active=False),
             gr.update(interactive=True),
@@ -386,7 +388,33 @@ def model_save_status(precision, identifier, request: gr.Request):
                 return gr.update(), gr.update(interactive=False)
         except JobNotFound:
             pass
-    return saved_status(RUNTIME, precision), gr.update(interactive=precision != "bf16")
+    return saved_status(RUNTIME, precision), gr.update(interactive=precision in {"int8", "w4a8"})
+
+
+def profile_settings(precision, previous_precision):
+    turbo = precision in {"turbo_bf16", "turbo_q4_k_m"}
+    if turbo:
+        return gr.update(value=4, interactive=False), gr.update(value="off", interactive=False), precision
+    steps = (
+        gr.update(value=40, interactive=True)
+        if previous_precision.startswith("turbo_")
+        else gr.update(interactive=True)
+    )
+    if precision == "base_q4_k_m":
+        return steps, gr.update(value="off", interactive=False), precision
+    return steps, gr.update(interactive=True), precision
+
+
+def default_precision():
+    try:
+        runtime_manifest(RUNTIME, "base_q4_k_m")
+    except QwenImage21Error:
+        try:
+            runtime_manifest(RUNTIME, "int8")
+        except QwenImage21Error:
+            return "base_q4_k_m"
+        return "int8"
+    return "base_q4_k_m"
 
 
 def refresh_saved_after_generation(identifier, precision, request: gr.Request):
@@ -411,7 +439,7 @@ def assistant_status(identifier, request: gr.Request):
         return '<span data-state="idle"></span>'
     stage = state.get("stage", "loading") if not state["done"] else state["state"]
     label = safe_error_message(state.get("message", ""), limit=240)
-    precision = state.get("precision", "").upper()
+    precision = precision_label(state.get("precision", ""))
     return '<span data-state="{}" data-progress="{}" data-message="{}" data-model="{}" data-result="{}" data-job="{}"></span>'.format(
         html.escape(str(stage), quote=True),
         html.escape(str(state.get("progress", 0)), quote=True),
@@ -608,6 +636,7 @@ def select_result_variant(identifier, variant, request: gr.Request):
 def on_ui_tabs():
     from modules_forge.forge_canvas.canvas import ForgeCanvas
 
+    selected_precision = default_precision()
     with gr.Blocks(analytics_enabled=False, elem_id="qwen-image21-studio") as tab:
         with gr.Row(elem_id="qwen21-workspace"):
             with gr.Column(scale=8, min_width=340, elem_id="qwen21-visual"):
@@ -778,16 +807,33 @@ def on_ui_tabs():
                     value="未実行", label="進行状況", lines=2, interactive=False, elem_id="qwen21-status"
                 )
                 precision = gr.Radio(
-                    [("INT8 · メモリ節約", "int8"), ("W4A8 · さらに節約", "w4a8"), ("BF16", "bf16")],
-                    value="int8",
-                    label="精度",
+                    [
+                        ("通常 · Q4_K_M (Unsloth)", "base_q4_k_m"),
+                        ("通常 · INT8", "int8"),
+                        ("通常 · W4A8", "w4a8"),
+                        ("通常 · BF16", "bf16"),
+                        ("Viggle Turbo · BF16", "turbo_bf16"),
+                        ("Viggle Turbo · Q4_K_M", "turbo_q4_k_m"),
+                    ],
+                    value=selected_precision,
+                    label="モデル・精度",
                     elem_id="qwen21-precision",
                 )
+                gr.Markdown(
+                    "通常版: [Unsloth Q4_K_M](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF)"
+                    " · Turbo: [Viggle BF16](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo)"
+                    " · [Q4_K_M GGUF](https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF)"
+                )
                 with gr.Row():
-                    save_model = gr.Button("変換モデルを保存", size="sm", elem_id="qwen21-save-model")
+                    save_model = gr.Button(
+                        "変換モデルを保存",
+                        size="sm",
+                        interactive=selected_precision in {"int8", "w4a8"},
+                        elem_id="qwen21-save-model",
+                    )
                     stop_save = gr.Button("保存を停止", size="sm", visible=False, elem_id="qwen21-stop-save")
                 save_status = gr.Textbox(
-                    value=saved_status(RUNTIME, "int8"),
+                    value=saved_status(RUNTIME, selected_precision),
                     label="モデルの保存状態",
                     show_label=False,
                     interactive=False,
@@ -818,7 +864,8 @@ def on_ui_tabs():
                             ("数値ルール · 通信なし", "rules"),
                             ("Jev速度優先 · 集約統計を外部送信", "jev"),
                         ],
-                        value=sparse_defaults.mode,
+                        value="off" if selected_precision == "base_q4_k_m" else sparse_defaults.mode,
+                        interactive=selected_precision != "base_q4_k_m",
                         label="Sparse Attention",
                         elem_id="qwen21-sparse-mode",
                         info="Jevは保存済みのキーを使用します。画像・プロンプトは送信しません。方式の変更は次の生成から適用します。",
@@ -829,7 +876,7 @@ def on_ui_tabs():
                         value=sparse_defaults.keep_percent,
                         step=1,
                         label="固定Sparseの保持率 %",
-                        visible=sparse_defaults.mode == "fixed",
+                        visible=selected_precision != "base_q4_k_m" and sparse_defaults.mode == "fixed",
                     )
                     sparse_mode.change(
                         lambda mode: gr.update(visible=mode == "fixed"),
@@ -852,15 +899,19 @@ def on_ui_tabs():
 
                     credential_controls("qwen21")
                     gr.Markdown("初回は `aikimi-qwen-image21-setup.bat` で専用環境とモデルを準備します。")
+                    gr.Markdown("公式フル版 (INT8 / W4A8 / BF16): `aikimi-qwen-image21-setup.bat --official-full`")
+                    gr.Markdown("Turbo BF16: `aikimi-qwen-image21-setup.bat --turbo-bf16-only`")
+                    gr.Markdown("Turbo Q4_K_M: `aikimi-qwen-image21-setup.bat --turbo-q4-only`")
                     gr.Markdown("書き換えを追加: `aikimi-qwen-image21-setup.bat --prompt-rewriter-only`")
                     gr.Markdown("編集用の書き換えを追加: `aikimi-qwen-image21-setup.bat --edit-prompt-rewriter-only`")
                     check = gr.Button("導入状態を確認", size="sm")
-                    environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=2)
+                    environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=5)
         job, selected, annotation_target = gr.State(""), gr.State(-1), gr.State("")
         mask_target, variant_job = gr.State(""), gr.State("")
         back, forward = gr.State(-1), gr.State(1)
         timer = gr.Timer(1, active=False)
         save_job = gr.State("")
+        profile_state = gr.State(selected_precision)
         save_timer = gr.Timer(1, active=False)
         save_model.click(
             save_quantized,
@@ -878,6 +929,9 @@ def on_ui_tabs():
         ).then(assistant_status, inputs=save_job, outputs=assistant, **PRIVATE)
         stop_save.click(cancel, inputs=save_job, outputs=[save_status, stop_save], queue=False, **PRIVATE)
         precision.change(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
+        precision.change(
+            profile_settings, inputs=[precision, profile_state], outputs=[steps, sparse_mode, profile_state], **PRIVATE
+        )
         tab.load(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
         workspace_view.change(switch_workspace, inputs=workspace_view, outputs=[edit_view, result_view], **PRIVATE)
         generate.click(

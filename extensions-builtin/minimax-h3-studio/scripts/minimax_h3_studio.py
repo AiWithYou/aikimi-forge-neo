@@ -11,11 +11,7 @@ from modules import script_callbacks
 from modules.paths import data_path, script_path
 from modules_forge.minimax_h3_acceleration import H3Acceleration
 from modules_forge.minimax_h3_acceleration_ui import create_acceleration_controls
-from modules_forge.minimax_h3_fun_control import H3FunControl
 from modules_forge.minimax_h3_bridge import (
-    H3BridgeError,
-    H3GenerationCancelled,
-    H3Request,
     H3_SERVER_URL,
     MODE_KEYFRAMES,
     MODE_REFERENCES,
@@ -24,9 +20,13 @@ from modules_forge.minimax_h3_bridge import (
     RUNTIME_PROFILE_LOW_RAM,
     RUNTIME_PROFILE_RAM,
     RUNTIME_PROFILES,
+    H3BridgeError,
+    H3GenerationCancelled,
+    H3Request,
     append_prompt_section,
     cache_history_video,
     cancel_generation,
+    ensure_ready,
     generation_preset_values,
     history_choices,
     history_html,
@@ -38,16 +38,16 @@ from modules_forge.minimax_h3_bridge import (
     prompt_template,
     readiness_html,
     reference_guide_html,
-    restart_runtime,
     resolve_runtime_root,
+    restart_runtime,
     run_generation,
     settings_summary_html,
-    ensure_ready,
     validate_request,
 )
+from modules_forge.minimax_h3_fun_control import H3FunControl
 from modules_forge.minimax_h3_runtime import installed_runtime_root, managed_runtime_root
 from modules_forge.minimax_h3_setup_ui import initial_setup_state, setup_updates
-
+from modules_forge.minimax_h3_union2_vae import CONTROL_CHOICES
 
 OUTPUT_DIRECTORY = Path(data_path) / "outputs" / "minimax_h3"
 LOG_DIRECTORY = Path(data_path) / "logs" / "minimax_h3"
@@ -287,8 +287,8 @@ def _validation_target(request: H3Request) -> str:
     if not request.prompt or not request.prompt.strip() or len(request.prompt) > 20_000:
         return "prompt"
     try:
-        request.dimensions
-        request.frame_count
+        _ = request.dimensions
+        _ = request.frame_count
     except (H3BridgeError, TypeError, ValueError, OverflowError):
         return "settings"
     if not 1 <= int(request.steps) <= 100:
@@ -719,6 +719,34 @@ def _request_from_ui(
         control=H3FunControl(str(control_mode), float(control_strength)),
         control_video=os.fspath(control_video) if control_video else None,
     )
+
+
+def _open_current_workflow(runtime_value, server_url, runtime_profile, *values):
+    from modules_forge import minimax_h3_handoff as handoff
+
+    try:
+        request = _request_from_ui(*values)
+        record, target = handoff.export_current(
+            request, resolve_runtime_root(runtime_value), server_url,
+            LOG_DIRECTORY, runtime_profile,
+        )
+        return handoff.result_html(record, target), target
+    except (H3BridgeError, OSError, ValueError, TypeError) as exc:
+        return _status_error(str(exc)), ""
+
+
+def _open_history_workflow(selected, runtime_value, server_url):
+    from modules_forge import minimax_h3_handoff as handoff
+
+    try:
+        items, _, _ = _history_state(runtime_value)
+        record, target = handoff.export_history(
+            selected, items, resolve_runtime_root(runtime_value), server_url,
+            LOG_DIRECTORY,
+        )
+        return handoff.result_html(record, target), target
+    except (H3BridgeError, OSError, ValueError, TypeError) as exc:
+        return _status_error(str(exc)), ""
 
 
 def _generate(
@@ -1178,9 +1206,9 @@ def _build_ui():
                             elem_id="h3-duration",
                         )
                         acceleration_controls, acceleration_buttons = create_acceleration_controls(duration)
-                        with gr.Accordion("Fun ControlNet · INT8 / 動きと構図", open=False, elem_id="h3-fun-control"):
+                        with gr.Accordion("Fun ControlNet · Union 1 / 2.0", open=False, elem_id="h3-fun-control"):
                             control_mode = gr.Dropdown(
-                                choices=[("オフ", "off"), ("元動画から輪郭を抽出 · Canny", "canny"), ("前処理済み動画 · Depth / Pose / HED / MLSDなど", "preprocessed")],
+                                choices=CONTROL_CHOICES,
                                 value="off", label="制御動画の使い方", interactive=False, elem_id="h3-control-mode",
                             )
                             control_video = gr.File(
@@ -1191,7 +1219,7 @@ def _build_ui():
                                 0.05, 2.0, value=1.0, step=0.05, label="ControlNetの強さ",
                                 interactive=False, elem_id="h3-control-strength",
                             )
-                            gr.Markdown("INT8 ConvRot版（約2.30GB）を使用します。動画の先頭から生成する長さを24fpsで取り出し、中央を切り抜いて解像度を合わせます。短い動画は最後のフレームで補います。元の音声は参照しません。")
+                            gr.Markdown("Union 1は既存INT8、Union 2.0は専用の変換済み重みを使います。Canny・Grayは元動画から作成し、Depth・Pose・HED・MLSD・Scribble・Layoutは前処理済み動画を指定します。tools/prepare_minimax_h3_union2.pyで導入できます。24fps・中央切り抜き・短い動画の末尾補完は従来通りです。元の音声は参照しません。")
                         fun_control_controls = [control_mode, control_video, control_strength]
                         with gr.Row(elem_classes=["h3-generate-row"]):
                             generate_button = gr.Button(
@@ -1303,6 +1331,23 @@ def _build_ui():
                     gr.HTML(
                         '<p class="h3-output-note">映像と32kHzステレオ音声は同じ推論から生成され、MP4へ同期保存されます。</p>'
                     )
+
+                    with gr.Accordion("ComfyUIで続きを編集", open=True, elem_id="h3-workflow-handoff"):
+                        gr.Markdown(
+                            "プロンプト・確定Seed・モデル・参照接続を編集可能なノードとして開きます。"
+                            "この操作では生成しません。-1は書き出す際に一度だけ確定します。"
+                        )
+                        export_current_button = gr.Button(
+                            "現在の設定をComfyUIで編集", elem_id="h3-workflow-current",
+                        )
+                        export_history_button = gr.Button(
+                            "選択した履歴の生成をComfyUIで編集", elem_id="h3-workflow-history",
+                        )
+                        handoff_status = gr.HTML(elem_id="h3-workflow-status")
+                        handoff_current_target = gr.Textbox(visible=False)
+                        handoff_history_target = gr.Textbox(visible=False)
+                        handoff_current_target.do_not_save_to_config = True
+                        handoff_history_target.do_not_save_to_config = True
 
                     with gr.Accordion(
                         "実行環境とモデル", open=installed_runtime_root(Path(script_path)) is None,
@@ -1671,7 +1716,7 @@ def _build_ui():
             )
         turbo_inputs = [aspect, quality, duration, ref_image_size]
         turbo_outputs = [acceleration_controls[0], steps, scheduler, settings_summary, preset_state]
-        for button, callback in zip(acceleration_buttons[:2], [_turbo_four_updates, _turbo_eight_updates]):
+        for button, callback in zip(acceleration_buttons[:2], [_turbo_four_updates, _turbo_eight_updates], strict=True):
             button.click(callback, inputs=turbo_inputs, outputs=turbo_outputs, queue=False, show_progress="hidden")
         acceleration_buttons[2].click(
             _reset_acceleration_updates, inputs=turbo_inputs,
@@ -1679,9 +1724,7 @@ def _build_ui():
             queue=False, show_progress="hidden",
         )
 
-        generate_button.click(
-            fn=_generate,
-            inputs=[
+        generation_inputs = [
                 runtime_path,
                 server_url,
                 runtime_profile,
@@ -1701,7 +1744,25 @@ def _build_ui():
                 ref_image_size,
                 *fun_control_controls,
                 *acceleration_controls,
-            ],
+        ]
+
+        for button, callback, inputs, window_key, target in (
+            (export_current_button, _open_current_workflow, generation_inputs, "current", handoff_current_target),
+            (export_history_button, _open_history_workflow, [history_selector, runtime_path, server_url], "history", handoff_history_target),
+        ):
+            button.click(
+                fn=callback, inputs=inputs, outputs=[handoff_status, target],
+                js='(...values) => {\n    const windows = window.__aikimiH3WorkflowWindows ||= Object.create(null);\n    const key = "__KEY__";\n    let popup = windows[key];\n    try { if (popup && !popup.closed && popup.location.href === "about:blank") return values; } catch (_) {}\n    popup = window.open("about:blank", "_blank");\n    if (popup) {\n        popup.opener = null;\n        popup.document.title = "H3ワークフローを準備中";\n        popup.document.body.textContent = "H3の設定と素材を保存しています。生成は自動実行しません。";\n    }\n    windows[key] = popup;\n    return values;\n}'.replace("__KEY__", window_key),
+                show_progress="hidden", trigger_mode="once", concurrency_limit=1,
+                concurrency_id="h3-runtime-control", api_visibility="private",
+            ).success(
+                fn=None, inputs=[target], outputs=[],
+                js='(url) => {\n    const windows = window.__aikimiH3WorkflowWindows || {};\n    const popup = windows["__KEY__"];\n    delete windows["__KEY__"];\n    let ownedBlank = false;\n    try { ownedBlank = !!popup && !popup.closed && popup.location.href === "about:blank"; } catch (_) {}\n    if (/^http:\\/\\/(127\\.0\\.0\\.1|localhost):[0-9]+\\/#aikimi-h3=[0-9a-f]{32}$/.test(url || "")) {\n        if (ownedBlank) popup.location.replace(url);\n        else window.open(url, "_blank", "noopener,noreferrer");\n    } else if (ownedBlank) popup.close();\n    return [];\n}'.replace("__KEY__", window_key),
+            )
+
+        generate_button.click(
+            fn=_generate,
+            inputs=generation_inputs,
             outputs=[
                 progress,
                 result_video,
