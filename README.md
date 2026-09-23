@@ -1,6 +1,6 @@
 # Aikimi Forge Neo
 
-**v1.4.2** · [変更履歴](CHANGELOG.md)
+**v1.4.3** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -44,7 +44,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 
 モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
 
-**v1.4.2では、表示名をAikimi Forge Neoに変更し、公式Tag AutocompleteをGradio 6の通常プロンプト欄で使えるようにしました。** インストール手順は[Tag Autocomplete](#tag-autocomplete)に記載しています。
+**v1.4.3では、Tag Autocompleteの候補を入力位置の近くに表示し、タグ名と件数を横並びにしました。** 画面端でも候補が見切れない配置です。導入手順は[Tag Autocomplete](#tag-autocomplete)を参照してください。
 
 **v1.4.1では、全モデル共通の「モデルを解放」を画面上部から使えます。** 保持・5分後に自動解放・毎回解放を選べます。ちびあいきみはForge系（Krea2・Animaなど）、SenseNova、H3動画・画像、Qwen、YuE2の環境・実行状況を表示します。Qwenは「変換モデルを保存」でINT8・W4A8を準備し、次回から自動再利用できます。PE-I2Iとマスク外固定編集の結果は[元画像との比較](docs/assets/qwen-image21-v1.4.0/README.md)で確認できます。
 
@@ -200,7 +200,7 @@ Danbooruタグなどの入力候補を使う場合は、公式の[Tag Autocomple
 git clone https://github.com/DominikDoom/a1111-sd-webui-tagcomplete.git extensions/tag-autocomplete
 ```
 
-txt2img・img2imgのプロンプト欄で文字を入力すると候補が表示され、TabまたはEnterで選べます。
+txt2img・img2imgのプロンプト欄で入力すると、候補と件数が横並びで現れ、TabまたはEnterで選べます。位置がずれる場合は、Aikimi Forge Neoを更新して再起動してください。
 
 <a id="model-setup"></a>
 

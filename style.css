@@ -226,6 +226,53 @@ input[type="checkbox"].input-accordion-checkbox {
 
 /* txt2img/img2img specific */
 
+/* Keep Tag Autocomplete suggestions readable in Gradio 6's prompt fields. */
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .autocompleteParent {
+    width: min(18rem, calc(100vw - 1rem));
+    max-width: calc(100vw - 1rem);
+}
+
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .autocompleteResults:not(.sideInfo) {
+    width: 100%;
+    min-width: 0;
+    flex-basis: auto;
+    margin-top: 0;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+}
+
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .autocompleteResultsList {
+    margin: 0;
+    padding: 0;
+}
+
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .autocompleteResultsList > li {
+    padding: 0.45rem 0.65rem;
+    line-height: 1.35;
+}
+
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .autocompleteResultsList > li.selected {
+    box-shadow: inset 3px 0 0 var(--primary-500);
+}
+
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .resultsFlexContainer {
+    align-items: baseline;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .acListItem {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+:is(#txt2img_prompt, #txt2img_neg_prompt, #img2img_prompt, #img2img_neg_prompt) .acMetaText {
+    flex: 0 0 auto;
+    padding-left: 0;
+    color: color-mix(in srgb, var(--body-text-color) 72%, var(--background-fill-primary));
+    font-variant-numeric: tabular-nums;
+}
+
 .block.token-counter {
     position: absolute;
     display: inline-block;
