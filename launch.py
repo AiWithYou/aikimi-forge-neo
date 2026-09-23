@@ -44,7 +44,7 @@ def main():
             requested_paths=getattr(args, "gradio_allowed_path", ()),
         )
     except (AuthenticationConfigError, RemoteAccessError, UnsafeAllowedPathError) as exc:
-        raise SystemExit(f"Aikimi Studio Neo launch policy error: {exc}") from exc
+        raise SystemExit(f"Aikimi Forge Neo launch policy error: {exc}") from exc
 
     # Framework environment variables must not silently widen the reviewed CLI
     # policy. Gradio temporary files stay under the managed data tmp directory.
@@ -59,7 +59,7 @@ def main():
     try:
         os.makedirs(managed_gradio_temp, exist_ok=True)
     except OSError as exc:
-        raise SystemExit("Aikimi Studio Neo could not prepare its managed temporary directory.") from exc
+        raise SystemExit("Aikimi Forge Neo could not prepare its managed temporary directory.") from exc
     os.environ["GRADIO_TEMP_DIR"] = managed_gradio_temp
 
     if args.dump_sysinfo:

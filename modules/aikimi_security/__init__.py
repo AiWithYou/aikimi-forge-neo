@@ -1,4 +1,4 @@
-"""Security primitives shared by Aikimi Studio Neo launch, API, and diagnostics code."""
+"""Security primitives shared by Aikimi Forge Neo launch, API, and diagnostics code."""
 
 # Web-framework middleware is imported from its concrete module so lightweight
 # asset checks can use redaction without installing FastAPI or Starlette.

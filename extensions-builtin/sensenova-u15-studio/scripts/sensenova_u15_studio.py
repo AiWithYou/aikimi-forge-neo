@@ -852,7 +852,7 @@ def _build_ui():
                                 label="固定済みConvRotランタイム",
                             )
                             gr.Markdown(
-                                "未準備の場合はAikimi Studio Neo直下の`download_sensenova_u15_int8.bat`を実行します。"
+                                "未準備の場合はAikimi Forge Neo直下の`download_sensenova_u15_int8.bat`を実行します。"
                             )
                             refresh_button = gr.Button(
                                 "準備状況を再確認",

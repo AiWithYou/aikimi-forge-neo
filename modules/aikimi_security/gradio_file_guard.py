@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from starlette.middleware import Middleware
-from starlette.requests import HTTPConnection
-from starlette.responses import JSONResponse
+from starlette.requests import HTTPConnection, Request
+from starlette.responses import JSONResponse, RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 _FILE_ROUTE_MARKERS = (
@@ -16,8 +16,11 @@ _FILE_ROUTE_MARKERS = (
     # variants of this route. Keep the guard narrower than general file paths.
     "/gradio_api/file=",
     "/gradio_api/file/",
+    # Tag Autocomplete still requests the pre-Gradio-6 file route.
+    "/file=",
 )
 _GUARD_INSTALLED_ATTRIBUTE = "_aikimi_gradio_file_url_guard_installed"
+_LEGACY_ROUTE_INSTALLED_ATTRIBUTE = "_aikimi_gradio_legacy_file_route_installed"
 _MAX_DECODE_PASSES = 4
 
 
@@ -108,4 +111,21 @@ def install_gradio_file_url_guard(app: Any) -> bool:
     if app.middleware_stack is not None:
         app.middleware_stack = app.build_middleware_stack()
     setattr(app, _GUARD_INSTALLED_ATTRIBUTE, True)
+    return True
+
+
+def install_gradio_legacy_file_route(app: Any) -> bool:
+    """Pass old ``/file=`` requests through Gradio's current file policy."""
+
+    if getattr(app, _LEGACY_ROUTE_INSTALLED_ATTRIBUTE, False):
+        return False
+
+    async def legacy_file(request: Request) -> RedirectResponse:
+        target = quote(request.path_params["path"], safe="/:")
+        query = f"?{request.url.query}" if request.url.query else ""
+        root_path = str(request.scope.get("root_path", "")).rstrip("/")
+        return RedirectResponse(f"{root_path}/gradio_api/file={target}{query}", status_code=307)
+
+    app.add_api_route("/file={path:path}", legacy_file, methods=["GET", "HEAD"], include_in_schema=False)
+    setattr(app, _LEGACY_ROUTE_INSTALLED_ATTRIBUTE, True)
     return True

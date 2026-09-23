@@ -2,7 +2,7 @@
 
 ## 全体像
 
-Aikimi Studio Neoは、Forge Neo本体へすべてのruntimeを埋め込まず、機能ごとに責務を分けます。
+Aikimi Forge Neoは、Forge Neo本体へすべてのruntimeを埋め込まず、機能ごとに責務を分けます。
 
 ```text
 Windows launcher / Docker entrypoint
@@ -86,7 +86,7 @@ Studioは入力とUI、bridgeはjob、VRAM解放、worker process、保存、can
 
 ## MiniMax H3
 
-MiniMax H3 Studioは、Aikimi Studio NeoへComfyUI runtime全体を組み込みません。
+MiniMax H3 Studioは、Aikimi Forge NeoへComfyUI runtime全体を組み込みません。
 
 ```text
 extensions-builtin/minimax-h3-studio

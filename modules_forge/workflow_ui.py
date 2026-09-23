@@ -17,7 +17,7 @@ def workflow_hero(
     *,
     badges: Sequence[str] = (),
     steps: Sequence[str] = (),
-    eyebrow: str = "AIKIMI NEO · IMG2IMG WORKFLOW",
+    eyebrow: str = "AIKIMI FORGE NEO · IMG2IMG WORKFLOW",
 ) -> str:
     """Build the compact introduction shown above a workflow's controls."""
 

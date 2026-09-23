@@ -898,7 +898,7 @@ def create_ui():
     for _interface, label, _ifid in interfaces:
         shared.tab_names.append(label)
 
-    with gr.Blocks(analytics_enabled=False, title="Aikimi Studio Neo") as demo:
+    with gr.Blocks(analytics_enabled=False, title="Aikimi Forge Neo") as demo:
         settings.add_quicksettings()
 
         from modules.ui_gpu_residency import create_ui as create_gpu_residency_ui
@@ -968,7 +968,7 @@ def versions_html():
         _versions.append(f"xformers: {importlib.metadata.version('xformers')}")
 
     return f"""
-Aikimi Studio Neo v{VERSION}
+Aikimi Forge Neo v{VERSION}
 &#x2000;•&#x2000;
 engine: <a href="https://github.com/Haoming02/sd-webui-forge-classic/tree/neo">Forge Neo {forge_version.release}</a>
 &#x2000;•&#x2000;

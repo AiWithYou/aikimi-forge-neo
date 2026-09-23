@@ -1236,7 +1236,7 @@ def _print_human(report: Mapping[str, object], stdout: TextIO) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Install and verify pinned Aikimi Studio Neo model profiles safely.")
+    parser = argparse.ArgumentParser(description="Install and verify pinned Aikimi Forge Neo model profiles safely.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     list_parser = subparsers.add_parser("list", help="List available profiles")

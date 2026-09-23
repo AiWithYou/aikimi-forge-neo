@@ -82,6 +82,56 @@ def _is_stylesheet_asset(path: Path, script_root: Path, data_root: Path) -> bool
     )
 
 
+_TAG_AUTOCOMPLETE_TEMP_FILES = (
+    "emb.txt",
+    "hyp.txt",
+    "lora.txt",
+    "lyco.txt",
+    "styles.txt",
+    "umi_tags.txt",
+    "wc.txt",
+    "wce.txt",
+    "wc_yaml.json",
+)
+
+
+def _tag_autocomplete_data_files(asset: Path, script_root: Path, data_root: Path) -> set[Path]:
+    """Expose only data read by an active Tag Autocomplete JavaScript asset."""
+
+    if asset.name.casefold() != "tagautocomplete.js":
+        return set()
+    if not any(
+        parts is not None
+        and len(parts) == 4
+        and parts[0] == "extensions"
+        and parts[2:] == ("javascript", "tagautocomplete.js")
+        for parts in (_relative_parts(asset, root) for root in (script_root, data_root))
+    ):
+        return set()
+    extension_root = asset.parent.parent
+    if not (extension_root / "scripts" / "tag_autocomplete_helper.py").is_file():
+        return set()
+    tags_root = _resolved(extension_root / "tags")
+    if not _within(tags_root, extension_root):
+        raise UnsafeAllowedPathError("Tag Autocomplete data resolves outside its extension directory.")
+    if not tags_root.is_dir():
+        return set()
+
+    candidates = [path for pattern in ("*.csv", "*.json") for path in tags_root.glob(pattern)]
+    temp_root = _resolved(tags_root / "temp")
+    if not _within(temp_root, tags_root):
+        raise UnsafeAllowedPathError("Tag Autocomplete temporary data resolves outside its tags directory.")
+    candidates.extend(temp_root / name for name in _TAG_AUTOCOMPLETE_TEMP_FILES)
+    result: set[Path] = set()
+    for path in candidates:
+        resolved = _resolved(path)
+        if not _within(resolved, tags_root):
+            raise UnsafeAllowedPathError("Tag Autocomplete data file resolves outside its tags directory.")
+        if resolved.is_file():
+            result.add(resolved)
+    return result
+
+
 def build_gradio_allowed_paths(
     script_path: str | Path,
     data_path: str | Path,
@@ -138,6 +188,7 @@ def build_gradio_allowed_paths(
             )
         if candidate.is_file():
             exact_files.add(candidate)
+            exact_files.update(_tag_autocomplete_data_files(candidate, script_root, data_root))
 
     for path in stylesheet_paths:
         candidate = _resolved(path)

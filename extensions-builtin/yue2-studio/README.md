@@ -1,4 +1,4 @@
-# YuE2 Music for Aikimi Studio Neo · 0.1.0
+# YuE2 Music for Aikimi Forge Neo · 0.1.0
 
 Forgeの既存タブを置き換えず、**YuE2 Music**タブを追加します。モデルの重みは同梱しません。
 

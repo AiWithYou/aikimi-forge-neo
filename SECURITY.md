@@ -2,7 +2,7 @@
 
 ## 対応版
 
-Aikimi Studio Neoは、default branchである`neo`の最新commitだけをセキュリティ修正の対象とします。リポジトリに残るupstream由来のtagは、Aikimi Studio Neoの保守版を示すものではありません。
+Aikimi Forge Neoは、default branchである`neo`の最新commitだけをセキュリティ修正の対象とします。リポジトリに残るupstream由来のtagは、Aikimi Forge Neoの保守版を示すものではありません。
 
 ## 脆弱性の報告
 
@@ -14,7 +14,7 @@ Aikimi Studio Neoは、default branchである`neo`の最新commitだけをセ�
 
 報告には、可能な範囲で次を含めてください。
 
-- Aikimi Studio Neoのcommit SHA
+- Aikimi Forge Neoのcommit SHA
 - WindowsとPythonの版
 - 問題が発生する最小手順
 - 想定した安全境界と実際の挙動
@@ -23,7 +23,7 @@ Aikimi Studio Neoは、default branchである`neo`の最新commitだけをセ�
 
 ## sysinfoとログ
 
-Aikimi Studio Neoは、認証情報、URL userinfo、tokenに見える値、機密性が高いパスを共通処理でマスクします。ただし、自動マスクだけで安全を保証できません。sysinfoやログを共有する前に、次を目視で確認してください。
+Aikimi Forge Neoは、認証情報、URL userinfo、tokenに見える値、機密性が高いパスを共通処理でマスクします。ただし、自動マスクだけで安全を保証できません。sysinfoやログを共有する前に、次を目視で確認してください。
 
 - `Authorization`と`Cookie`
 - API、Gradio、ngrok、Hugging Faceの認証情報
@@ -36,7 +36,7 @@ Aikimi Studio Neoは、認証情報、URL userinfo、tokenに見える値、機�
 
 通常起動は`127.0.0.1`だけを使います。LAN、share、ngrok、loopback以外のserver nameは既定で無効です。外部公開には`--aikimi-remote`と明示的な公開指定が必要で、WebUIとAPIを有効にする場合は両方の認証も必要です。
 
-外部公開は、TLS終端、firewall、利用者管理、更新手順まで用意できる環境だけで使ってください。Aikimi Studio NeoのBasic認証だけを、インターネットへ直接公開するための完全な境界とは扱わないでください。詳しい条件は[docs/security-model.md](docs/security-model.md)を参照してください。
+外部公開は、TLS終端、firewall、利用者管理、更新手順まで用意できる環境だけで使ってください。Aikimi Forge NeoのBasic認証だけを、インターネットへ直接公開するための完全な境界とは扱わないでください。詳しい条件は[docs/security-model.md](docs/security-model.md)を参照してください。
 
 ## 対象外のデータ
 

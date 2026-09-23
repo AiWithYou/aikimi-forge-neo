@@ -1,4 +1,4 @@
-# CD Tuner · Aikimi Studio Neo
+# CD Tuner · Aikimi Forge Neo
 
 [hako-mikan/sd-webui-cd-tuner](https://github.com/hako-mikan/sd-webui-cd-tuner)のForge Neo向け同梱版です。
 

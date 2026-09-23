@@ -92,7 +92,7 @@ def _public_line(value: object, *, limit: int = 320) -> str:
 def app_version() -> str:
     from modules.aikimi_version import VERSION
 
-    return f"Aikimi Studio Neo v{VERSION}"
+    return f"Aikimi Forge Neo v{VERSION}"
 
 
 def _short_commit(root: Path) -> str | None:
@@ -341,7 +341,7 @@ def _application_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     suffix = f" · commit {commit}" if commit else ""
     return DiagnosticCheck(
         "application",
-        "Aikimi Studio Neo",
+        "Aikimi Forge Neo",
         CheckState.READY if commit else CheckState.WARNING,
         f"{app_version()}{suffix}.",
         "No action is required." if commit else "Use a Git checkout to make updates and support reports reproducible.",
@@ -527,7 +527,7 @@ def render_diagnostics_html(
     return (
         f'<section class="aikimi-diagnostics is-{state.value}" aria-labelledby="aikimi-diagnostics-title">'
         '<header class="aikimi-diagnostics-header">'
-        '<div><p class="aikimi-diagnostics-eyebrow">AIKIMI NEO · SYSTEM CHECK</p>'
+        '<div><p class="aikimi-diagnostics-eyebrow">AIKIMI FORGE NEO · SYSTEM CHECK</p>'
         '<h3 id="aikimi-diagnostics-title">Diagnostics</h3>'
         "<p>Checks are local and do not download models, generate media, or expose credentials and paths.</p></div>"
         f'<span class="aikimi-diagnostics-overall">{state.label}</span>'

@@ -1,6 +1,6 @@
-# Aikimi Studio Neo
+# Aikimi Forge Neo
 
-**v1.4.1** · [変更履歴](CHANGELOG.md)
+**v1.4.2** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -12,7 +12,7 @@
 
 ## Forge Neoとの違い
 
-**Aikimi Studio Neoは、Forge Neoの生成基盤に、本ブランチ独自の仕上げ処理、専用UI、モデル導入支援、操作・効率の改善を加えたものです。** 本リポジトリの既定ブランチ`neo`で提供しています。
+**Aikimi Forge Neoは、Forge Neoの生成基盤に、本ブランチ独自の仕上げ処理、専用UI、モデル導入支援、操作・効率の改善を加えたものです。** 本リポジトリの既定ブランチ`neo`で提供しています。
 
 | 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
@@ -43,6 +43,8 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **MiniMax H3 Image**（統合・実験） | `H3 Image`タブで静止画生成と参照画像による編集。PNGと生成条件を保存します。実モデルでのGPU画像生成・画質・速度は未検証です。 |
 
 モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
+
+**v1.4.2では、表示名をAikimi Forge Neoに変更し、公式Tag AutocompleteをGradio 6の通常プロンプト欄で使えるようにしました。** インストール手順は[Tag Autocomplete](#tag-autocomplete)に記載しています。
 
 **v1.4.1では、全モデル共通の「モデルを解放」を画面上部から使えます。** 保持・5分後に自動解放・毎回解放を選べます。ちびあいきみはForge系（Krea2・Animaなど）、SenseNova、H3動画・画像、Qwen、YuE2の環境・実行状況を表示します。Qwenは「変換モデルを保存」でINT8・W4A8を準備し、次回から自動再利用できます。PE-I2Iとマスク外固定編集の結果は[元画像との比較](docs/assets/qwen-image21-v1.4.0/README.md)で確認できます。
 
@@ -190,6 +192,16 @@ cd aikimi-studio-neo
 
 `LocalSafe`は自分のPC内だけで利用する通常起動です。初回は必要なライブラリを自動導入します。既定のPyTorchは`2.11.0+cu130`、torchvisionは`0.26.0+cu130`なので、対応するNVIDIAドライバーを用意してください。
 
+### Tag Autocomplete
+
+Danbooruタグなどの入力候補を使う場合は、公式の[Tag Autocomplete](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete)を追加してNeoを再起動します。
+
+```powershell
+git clone https://github.com/DominikDoom/a1111-sd-webui-tagcomplete.git extensions/tag-autocomplete
+```
+
+txt2img・img2imgのプロンプト欄で文字を入力すると候補が表示され、TabまたはEnterで選べます。
+
 <a id="model-setup"></a>
 
 ### モデルの導入
@@ -327,7 +339,7 @@ LANなどの別端末から利用する場合は認証が必要です。認証�
 
 ### 更新方法
 
-WebUIを終了し、Aikimi Studio NeoをダウンロードしたフォルダーでPowerShellを開いて、次を実行してください。このリポジトリの`neo`ブランチを最新版に更新します。
+WebUIを終了し、Aikimi Forge NeoをダウンロードしたフォルダーでPowerShellを開いて、次を実行してください。このリポジトリの`neo`ブランチを最新版に更新します。
 
 ```powershell
 git switch neo

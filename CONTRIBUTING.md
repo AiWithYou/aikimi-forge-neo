@@ -1,8 +1,8 @@
-# Contributing to Aikimi Studio Neo
+# Contributing to Aikimi Forge Neo
 
 ## 基本方針
 
-Aikimi Studio Neoは、Windows向けの安全な既定値を保ちながら、Forge Neo由来の画像生成、動画生成、高解像度処理、Anima、SenseNova、MiniMax H3、Aikimi UIを維持します。変更は目的ごとに小さく分け、既存の公開APIとbat入口を理由なく削除しないでください。
+Aikimi Forge Neoは、Windows向けの安全な既定値を保ちながら、Forge Neo由来の画像生成、動画生成、高解像度処理、Anima、SenseNova、MiniMax H3、Aikimi UIを維持します。変更は目的ごとに小さく分け、既存の公開APIとbat入口を理由なく削除しないでください。
 
 ## 開発環境
 
@@ -68,7 +68,7 @@ PowerShell、security、dependencyのCI相当手順は[docs/release-checklist.md
 
 ## upstream同期
 
-通常利用者はAikimi Studio Neoの`origin/neo`だけを更新します。Forge Neo upstreamとの同期はmaintainer作業です。
+通常利用者はAikimi Forge Neoの`origin/neo`だけを更新します。Forge Neo upstreamとの同期はmaintainer作業です。
 
 ```powershell
 git remote add upstream https://github.com/Haoming02/sd-webui-forge-classic.git
