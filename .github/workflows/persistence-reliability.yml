@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "modules/**"
+      - "modules_forge/gpu_ownership.py"
+      - "modules_forge/gpu_residency.py"
+      - "tools/tests/test_fifo_lock_handoff.py"
       - "tools/tests/test_persistence_reliability.py"
       - "tools/tests/test_video_writer_ffmpeg.py"
       - "tools/tests/test_option_migrations.py"
@@ -13,6 +16,9 @@ on:
     branches: [neo]
     paths:
       - "modules/**"
+      - "modules_forge/gpu_ownership.py"
+      - "modules_forge/gpu_residency.py"
+      - "tools/tests/test_fifo_lock_handoff.py"
       - "tools/tests/test_persistence_reliability.py"
       - "tools/tests/test_video_writer_ffmpeg.py"
       - "tools/tests/test_option_migrations.py"
@@ -58,12 +64,14 @@ jobs:
       - name: Check the focused helper and regression-test surface
         run: >-
           python -m ruff check
-          modules/atomic_file.py modules/video_writer.py
+          modules/atomic_file.py modules/video_writer.py modules/fifo_lock.py
+          tools/tests/test_fifo_lock_handoff.py
           tools/tests/test_persistence_reliability.py tools/tests/test_video_writer_ffmpeg.py
       - name: Check formatting
         run: >-
           python -m ruff format --check
-          modules/atomic_file.py modules/video_writer.py
+          modules/atomic_file.py modules/video_writer.py modules/fifo_lock.py
+          tools/tests/test_fifo_lock_handoff.py
           tools/tests/test_persistence_reliability.py tools/tests/test_video_writer_ffmpeg.py
       - name: Run settings, cleanup, streaming and encoder regressions
         run: >-
@@ -71,3 +79,4 @@ jobs:
           tools.tests.test_persistence_reliability
           tools.tests.test_video_writer_ffmpeg
           tools.tests.test_option_migrations
+          tools.tests.test_fifo_lock_handoff
