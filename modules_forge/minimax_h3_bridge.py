@@ -589,6 +589,7 @@ def _runtime_arguments_are_allowed(arguments: Sequence[str]) -> bool:
         "--disable-api-nodes",
         "--disable-async-offload",
         "--disable-pinned-memory",
+        "--disable-comfy-compiler",
     }
     try:
         arguments = union2_vae.strip_selected_fast(tuple(str(argument) for argument in arguments))
@@ -675,6 +676,7 @@ def runtime_profile_from_args(
         and len(_cli_option_values(arguments, "--preview-method")) == 1
         and _cli_option_value(arguments, "--preview-method") == "none"
         and len(_cli_option_values(arguments, "--vram-headroom")) <= 1
+        and len(_cli_option_values(arguments, "--disable-comfy-compiler")) <= 1
         and headroom_matches
         and not any(_cli_option_values(arguments, option) for option in forbidden)
     )
@@ -1117,6 +1119,8 @@ def _runtime_command(
         command.extend(["--cache-none", "--disable-async-offload", "--disable-pinned-memory"])
     if acceleration.decode_mode == "fp16_accumulation":
         command.extend(["--fast", "fp16_accumulation"])
+    if acceleration.compiler_mode == "off":
+        command.append("--disable-comfy-compiler")
     if packs := acceleration.runtime_packs():
         command.extend(["--whitelist-custom-nodes", *packs])
     return command
@@ -1495,6 +1499,9 @@ def validate_readiness(
             f"H3 backendの起動設定が一致しません（選択: {expected} / 接続中: {detected}）。"
             " 実行環境とモデルの「選択設定で再起動」を押してください。"
         )
+    compiler_disabled = len(_cli_option_values(readiness.runtime_args, "--disable-comfy-compiler")) == 1
+    if compiler_disabled != (acceleration.compiler_mode == "off"):
+        raise H3BridgeError("Comfy Compilerの選択と起動引数が一致しません。「選択設定で再起動」を押してください。")
     whitelist = custom_node_whitelist(readiness.runtime_args)
     expected_whitelist = acceleration.runtime_packs()
     if whitelist != expected_whitelist:

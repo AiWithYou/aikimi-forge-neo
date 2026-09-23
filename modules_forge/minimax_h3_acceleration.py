@@ -52,6 +52,7 @@ class H3Acceleration:
     jev_interval: int = 2
     jev_max_calls: int = 0
     jev_max_wait_seconds: float = 0.0
+    compiler_mode: str = "on"
 
     def validate(self) -> None:
         from modules_forge.jev_sparse.common import JevBudget
@@ -71,6 +72,7 @@ class H3Acceleration:
             ("decode_mode", {"standard", "fast", "fp16_accumulation"}),
             ("attention", {"dense", "sol", "sla"}),
             ("clip_cache", {"off", "auto", "refresh"}),
+            ("compiler_mode", {"on", "off"}),
         ):
             value = getattr(self, name)
             if not isinstance(value, str) or value not in allowed:
@@ -112,7 +114,7 @@ class H3Acceleration:
         if not values:
             return cls()
         previous_count = 8 + len(H3NegPiP().values())
-        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6, previous_count + 8, previous_count + 10):
+        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6, previous_count + 8, previous_count + 10, previous_count + 11):
             raise ValueError("H3 追加設定の項目数が一致しません。UIを再読み込みしてください。")
         result = cls(
             *values[:8], negpip=H3NegPiP.from_values(values[8:previous_count]),
@@ -122,6 +124,7 @@ class H3Acceleration:
             jev_interval=values[previous_count + 7] if len(values) >= previous_count + 8 else 2,
             jev_max_calls=values[previous_count + 8] if len(values) >= previous_count + 10 else 0,
             jev_max_wait_seconds=values[previous_count + 9] if len(values) >= previous_count + 10 else 0.0,
+            compiler_mode=values[previous_count + 10] if len(values) >= previous_count + 11 else "on",
         )
         result.validate()
         return result
@@ -130,7 +133,7 @@ class H3Acceleration:
         return asdict(self)
 
     def values(self) -> tuple:
-        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid", "jev_cadence", "jev_interval", "jev_max_calls", "jev_max_wait_seconds"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values() + (self.jev_cadence, self.jev_interval, self.jev_max_calls, self.jev_max_wait_seconds)
+        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid", "jev_cadence", "jev_interval", "jev_max_calls", "jev_max_wait_seconds", "compiler_mode"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values() + (self.jev_cadence, self.jev_interval, self.jev_max_calls, self.jev_max_wait_seconds, self.compiler_mode)
 
 
     def runtime_packs(self) -> tuple[str, ...]:

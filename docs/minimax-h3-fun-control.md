@@ -40,7 +40,7 @@ DepthやPoseの自動抽出モデルは、この機能では追加しません�
 
 接続先はComfyUI標準の`ModelPatchLoader`と`MiniMaxH3FunControlNetApply`です。標準ノードやINT8モデルがない場合は、生成要求を送る前に理由を表示して停止します。ComfyUIは`efa6c8f804bff78b46a0fd458ebd2e47bba07a30`（0.34.0）に後述の修正を適用し、Comfy Kitchen 0.2.33を使用しています。
 
-ComfyUI側の`comfy/ldm/minimax/model.py`には、Comfy Compilerの記録範囲を生成本体の内側へ移す修正を適用しています。追加機能の準備が終わってからメモリ記録を開始し、生成本体から戻った時点で記録を終了する構成です。その後に追加機能の片付けを実行するため、VAE前処理やNegPiPの片付けが記録中に入りません。H3の起動時にコンパイラを無効にするオプションは付けません。修正前から起動している場合は「選択設定で再起動」で反映してください。
+ComfyUI側の`comfy/ldm/minimax/model.py`には、Comfy Compilerの記録範囲を生成本体の内側へ移す修正を適用しています。追加機能の準備が終わってからメモリ記録を開始し、生成本体から戻った時点で記録を終了する構成です。その後に追加機能の片付けを実行するため、VAE前処理やNegPiPの片付けが記録中に入りません。v1.5.0では、ControlNet生成が最初のStepで進まない場合のため、H3 StudioからComfy CompilerをOFFにして専用runtimeを再起動する選択肢を追加しました。従来の既定値はONです。
 
 comfy-aimdo 0.5.2には、メモリ記録中の解放で失敗する不具合がありました。[公式修正 #109](https://github.com/Comfy-Org/comfy-aimdo/pull/109)を含む`f708e317bd2dedfb2d2a8518f7c568fee280bc69`の公式CIビルド、0.5.3.dev13を導入し、ComfyUIの`requirements.txt`も同版に固定しています。この版は検証時点でPyPI未公開です。
 
