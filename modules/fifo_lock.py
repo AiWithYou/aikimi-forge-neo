@@ -1,9 +1,11 @@
-import threading
+"""FIFO lock with explicit ownership handoff, including cross-thread release."""
+
 import collections
+import threading
 
 
 # reference: https://gist.github.com/vitaliyp/6d54dd76ca2c3cdfc1149d33007dc34a
-class FIFOLock(object):
+class FIFOLock:
     def __init__(self):
         self._lock = threading.Lock()
         self._inner_lock = threading.Lock()
@@ -11,25 +13,39 @@ class FIFOLock(object):
 
     def acquire(self, blocking=True):
         with self._inner_lock:
-            lock_acquired = self._lock.acquire(False)
-            if lock_acquired:
+            if self._lock.acquire(False):
                 return True
-            elif not blocking:
+            if not blocking:
                 return False
 
             release_event = threading.Event()
             self._pending_threads.append(release_event)
 
-        release_event.wait()
-        return self._lock.acquire()
+        try:
+            release_event.wait()
+            # release() transfers the still-locked mutex to this waiter. A new
+            # caller must not acquire it while the selected waiter is waking up.
+            return True
+        except BaseException:
+            with self._inner_lock:
+                try:
+                    self._pending_threads.remove(release_event)
+                except ValueError:
+                    # Ownership was already transferred. Do not strand either
+                    # the mutex or the next waiter when this wait is interrupted.
+                    self._release_next()
+            raise
+
+    def _release_next(self):
+        """Transfer or release ownership while holding _inner_lock."""
+        if self._pending_threads:
+            self._pending_threads.popleft().set()
+        else:
+            self._lock.release()
 
     def release(self):
         with self._inner_lock:
-            if self._pending_threads:
-                release_event = self._pending_threads.popleft()
-                release_event.set()
-
-            self._lock.release()
+            self._release_next()
 
     __enter__ = acquire
 
