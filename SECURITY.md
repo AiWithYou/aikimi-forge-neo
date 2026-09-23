@@ -8,7 +8,7 @@ Aikimi Forge Neoは、default branchである`neo`の最新commitだけをセキ
 
 認証情報、個人パス、未公開モデル、生成物、sysinfo、再現用データを公開Issueや公開コメントへ投稿しないでください。GitHub Private Vulnerability Reportingが有効な場合は、次の非公開フォームを使います。
 
-<https://github.com/AiWithYou/aikimi-studio-neo/security/advisories/new>
+<https://github.com/AiWithYou/aikimi-forge-neo/security/advisories/new>
 
 フォームを開けない場合は、秘密を公開せず、リポジトリ所有者と別途合意した非公開経路を使ってください。このリポジトリには、監査時点で公開済みの専用セキュリティメールアドレスがありません。リリース担当者は、第三者へ配布する前にGitHub Private Vulnerability Reportingを有効にします。
 

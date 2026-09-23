@@ -46,8 +46,8 @@
 ## Building Locally
 
 ```bash
-git clone --branch neo https://github.com/AiWithYou/aikimi-studio-neo.git
-cd aikimi-studio-neo/docker
+git clone --branch neo https://github.com/AiWithYou/aikimi-forge-neo.git
+cd aikimi-forge-neo/docker
 docker build -t aikimi-neo-local .
 ```
 

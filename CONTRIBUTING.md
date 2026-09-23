@@ -15,8 +15,8 @@ Aikimi Forge Neoは、Windows向けの安全な既定値を保ちながら、For
 取得方法は次のとおりです。
 
 ```powershell
-git clone --branch neo https://github.com/AiWithYou/aikimi-studio-neo.git
-cd aikimi-studio-neo
+git clone --branch neo https://github.com/AiWithYou/aikimi-forge-neo.git
+cd aikimi-forge-neo
 ```
 
 通常の起動と依存準備には、Local Safe profileを使います。

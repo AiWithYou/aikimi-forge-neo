@@ -3,7 +3,7 @@
 以下をWindowsのローカルCodex等へ渡し、実機で確認してください。ネットワーク・大容量取得・GPU使用が発生します。モデル利用条件は利用者本人が確認し、未承諾のまま `--accept-model-terms` を付けないでください。
 
 ```text
-対象: AiWithYou/aikimi-studio-neo の neo
+対象: AiWithYou/aikimi-forge-neo の neo
 追加機能: YuE2 Music 0.1.0
 
 1. git status と現在のブランチ・コミットを記録する。

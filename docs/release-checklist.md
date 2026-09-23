@@ -2,7 +2,7 @@
 
 ## 1. 対象と履歴
 
-- [ ] release対象repositoryが`AiWithYou/aikimi-studio-neo`である
+- [ ] release対象repositoryが`AiWithYou/aikimi-forge-neo`である
 - [ ] default branchが`neo`である
 - [ ] READMEのclone URLと`cd`先が正しい
 - [ ] upstream同期基準をcommit SHAで記録した
