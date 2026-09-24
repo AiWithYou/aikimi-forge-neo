@@ -9,11 +9,13 @@ from pathlib import Path
 
 DIFFUSERS_REVISION = "6256aa7666cedd47443adc8f82da9a10e110b09c"
 VERSIONS = {
-    "torch": "2.11.0+cu130",
-    "torchvision": "0.26.0+cu130",
+    "torch": "2.13.0+cu130",
+    "torchvision": "0.28.0+cu130",
     "transformers": "5.17.0",
     "bitsandbytes": "0.50.2",
-    "accelerate": "1.15.0",
+    "accelerate": "1.15.0+aikimi.1",
+    "setuptools": "83.0.0",
+    "pip": "26.2.1",
     "Pillow": "12.3.0",
     "safetensors": "0.8.0",
 }

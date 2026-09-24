@@ -44,8 +44,8 @@ def install_environment(root):
         venv.EnvBuilder(with_pip=True).create(environment)
     uv = shutil.which("uv")
     prefix = [uv, "pip", "install", "--python", python] if uv else [python, "-m", "pip", "install"]
-    execute([*prefix, "torch==2.11.0", "torchvision==0.26.0", "--index-url", "https://download.pytorch.org/whl/cu130"])
-    execute([*prefix, "-r", REQUIREMENTS])
+    execute([*prefix, "torch==2.13.0", "torchvision==0.28.0", "--index-url", "https://download.pytorch.org/whl/cu130"])
+    execute([*prefix, "-r", REQUIREMENTS], cwd=ROOT)
     execute([python, "-m", "pip", "check"])
     # Import the actual new classes. A version string alone cannot detect an older checkout.
     execute(

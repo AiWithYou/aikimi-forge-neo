@@ -13,6 +13,7 @@ extend-exclude = [
     "repositories",
     "tmp",
     "venv",
+    "vendor",
 ]
 
 [tool.ruff.lint]

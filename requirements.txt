@@ -1,12 +1,11 @@
 GitPython==3.1.61
 Pillow==12.3.0
-accelerate==1.14.0
+./vendor/accelerate
 anyio==4.14.2
 audioop-lts==0.2.2;python_version>="3.13"
 av==17.1.0
 comfy-kitchen==0.2.33
 diffusers==0.38.0
-diskcache==5.6.3
 einops==0.8.2
 facexlib==0.3.0
 # Gradio 6.17.3 remains pinned because the frontend compatibility patch targets
@@ -38,9 +37,7 @@ rich==14.3.4
 safetensors==0.8.0
 scikit-image==0.25.2
 scipy==1.18.0
-# PyTorch 2.11 requires setuptools<82. This pin fixes the older advisories;
-# PYSEC-2026-3447 remains tracked until the CUDA/PyTorch stack can move.
-setuptools==81.0.0
+setuptools==83.0.0
 spandrel-extra-arches==0.2.0
 spandrel==0.4.2
 starlette==1.6.0

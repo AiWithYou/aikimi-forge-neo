@@ -1,0 +1,5 @@
+# Audit the complete CUDA stack selected by modules/launch_utils.py as well.
+-r ../requirements.txt
+torch==2.13.0+cu130
+torchvision==0.28.0+cu130
+pip==26.2.1

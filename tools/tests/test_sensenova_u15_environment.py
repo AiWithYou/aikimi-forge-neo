@@ -41,8 +41,8 @@ class SenseNovaEnvironmentTests(unittest.TestCase):
 
     def test_all_worker_requirements_are_exactly_pinned(self):
         versions = environment.expected_versions()
-        self.assertEqual(versions["transformers"], "4.57.6")
-        self.assertEqual(versions["huggingface-hub"], "0.36.2")
+        self.assertEqual(versions["transformers"], "5.10.4")
+        self.assertEqual(versions["huggingface-hub"], "1.5.0")
         self.assertTrue(
             all(version and not any(character in version for character in "*<>,;") for version in versions.values())
         )

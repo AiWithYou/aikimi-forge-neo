@@ -282,6 +282,9 @@ def requirements_met(requirements_file):
             if " #" in line:
                 line = line.split(" #", 1)[0].rstrip()
 
+            if line == "./vendor/accelerate":
+                line = "accelerate==1.15.0+aikimi.1"
+
             try:
                 requirement = Requirement(line)
             except InvalidRequirement:
@@ -303,9 +306,22 @@ def requirements_met(requirements_file):
     return True
 
 
+def _managed_torch_needs_upgrade():
+    """Upgrade previous default CUDA wheels while preserving explicit overrides."""
+    if os.environ.get("TORCH_COMMAND") or os.environ.get("TORCH_INDEX_URL"):
+        return False
+    import importlib.metadata
+
+    try:
+        installed = importlib.metadata.version("torch")
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    return installed in {"2.11.0+cu130", "2.12.0+cu130"}
+
+
 def prepare_environment():
     torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
-    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.11.0+cu130 torchvision==0.26.0+cu130 --extra-index-url {torch_index_url}")
+    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.13.0+cu130 torchvision==0.28.0+cu130 --extra-index-url {torch_index_url}")
     xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
     bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.49.2")
 
@@ -329,7 +345,7 @@ def prepare_environment():
     print(f"Python {sys.version}")
     print(f"Version: {tag}")
 
-    if args.reinstall_torch or not is_installed("torch") or not is_installed("torchvision"):
+    if args.reinstall_torch or not is_installed("torch") or not is_installed("torchvision") or _managed_torch_needs_upgrade():
         run(f'"{python}" -m {torch_command}', "Installing torch and torchvision", "Couldn't install torch", live=True)
         startup_timer.record("install torch")
 
