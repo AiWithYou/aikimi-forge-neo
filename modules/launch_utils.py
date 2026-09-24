@@ -310,8 +310,6 @@ def _managed_torch_needs_upgrade():
     """Upgrade previous default CUDA wheels while preserving explicit overrides."""
     if os.environ.get("TORCH_COMMAND") or os.environ.get("TORCH_INDEX_URL"):
         return False
-    import importlib.metadata
-
     try:
         installed = importlib.metadata.version("torch")
     except importlib.metadata.PackageNotFoundError:
