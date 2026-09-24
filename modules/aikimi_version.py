@@ -1,3 +1,3 @@
 """Forge本体とは独立したAikimi Forge Neoの配布バージョン。"""
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"

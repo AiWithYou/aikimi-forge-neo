@@ -71,7 +71,7 @@ def clear_runtime() -> None:
         torch.cuda.empty_cache()
 
 
-def _cache_key(model_path: Path, precision: str, memory_mode: str) -> tuple:
+def _cache_key(model_path: Path, precision: str, memory_mode: str, control: bool = False) -> tuple:
     # Include weight shards as well as configs: overwriting files in the same
     # directory must not silently reuse an older resident checkpoint.
     metadata = tuple(
@@ -94,7 +94,13 @@ def _cache_key(model_path: Path, precision: str, memory_mode: str) -> tuple:
         for path in sorted((model_path.parent / "regular-gguf").rglob("*"))
         if path.is_file() and ".cache" not in path.relative_to(model_path.parent).parts
     )
-    return str(model_path), precision, memory_mode, metadata, manifests, turbo, regular
+    patch = None
+    if control:
+        from modules_forge.qwen_image21.fun_controlnet import checkpoint_path
+
+        path = checkpoint_path(model_path.parent)
+        patch = (str(path), path.stat().st_size, path.stat().st_mtime_ns)
+    return str(model_path), precision, memory_mode, metadata, manifests, turbo, regular, patch
 
 
 def _model_revision(model_path: Path) -> str | None:
@@ -169,6 +175,19 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         if not isinstance(path, str) or not Path(path).is_absolute() or not Path(path).is_file():
             raise ValueError("Each input image must be an existing absolute local file path.")
     request["input_images"] = images
+    control_image = request.get("control_image", "")
+    if control_image:
+        if not isinstance(control_image, str) or not Path(control_image).is_absolute() or not Path(control_image).is_file():
+            raise ValueError("ControlNet requires an existing absolute local image path.")
+        if request["precision"] != "int8":
+            raise ValueError("Fun ControlNet INT8 requires the regular Qwen INT8 base model.")
+        if request.get("sparse_mode", "off") != "off":
+            raise ValueError("Fun ControlNet requires Sparse Attention to be off.")
+    strength = request.get("control_strength", 1.0)
+    if isinstance(strength, bool) or not isinstance(strength, (int, float)) or not math.isfinite(strength) or not 0 <= strength <= 2:
+        raise ValueError("control_strength must be between 0 and 2.")
+    request["control_image"] = control_image
+    request["control_strength"] = float(strength)
     if operation == "prepare" and request["precision"] not in {"int8", "w4a8"}:
         raise ValueError("Only INT8 and W4A8 models need conversion")
     return job, model_path, request
@@ -387,6 +406,15 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         use_safetensors=True,
         **components,
     )
+    controlnet = None
+    if request.get("control_image"):
+        from modules_forge.qwen_image21.fun_controlnet import installed
+        from modules_forge.qwen_image21.fun_controlnet_runtime import FunUnion
+
+        info = installed(model_path.parent)
+        _progress(job, "loading", "Fun ControlNet INT8を読み込み中", 0.28)
+        controlnet = FunUnion.from_checkpoint(Path(info["path"]))
+        controlnet.attach(pipe.transformer)
     if request["precision"].startswith("turbo_"):
         from diffusers import FlowMatchEulerDiscreteScheduler
 
@@ -409,6 +437,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         versions["comfy-kitchen"] = importlib.metadata.version("comfy-kitchen")
     return {
         "pipe": pipe,
+        "controlnet": controlnet,
         "int8_layers": counts,
         "w4a8": w4a8_stats,
         "disk_cache": disk_cache,
@@ -419,7 +448,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
 
 def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -> tuple[dict[str, Any], bool]:
     global _RESIDENT_RUNTIME, _RESIDENT_KEY
-    key = _cache_key(model_path, request["precision"], request["memory_mode"])
+    key = _cache_key(model_path, request["precision"], request["memory_mode"], bool(request.get("control_image")))
     if _RESIDENT_RUNTIME is not None and key == _RESIDENT_KEY:
         _progress(job, "loaded", "読み込み済みモデルを再利用", 0.30)
         return _RESIDENT_RUNTIME, True
@@ -603,6 +632,29 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             runtime["pipe"].vae.disable_tiling()
 
         images = _load_images(request["input_images"])
+        controlnet = runtime.get("controlnet")
+        control_info = None
+        if controlnet is not None:
+            from PIL import Image, ImageOps
+
+            from modules_forge.qwen_image21.fun_controlnet import installed
+
+            with Image.open(request["control_image"]) as source:
+                control = ImageOps.fit(
+                    ImageOps.exif_transpose(source).convert("RGB"),
+                    (request["width"], request["height"]),
+                    method=Image.Resampling.LANCZOS,
+                )
+            control.save(job / "control.png")
+            control_generator = torch.Generator(device="cpu").manual_seed(request["seed"])
+            controlnet.set_control(runtime["pipe"], control, request["control_strength"], control_generator)
+            control_info = {
+                **installed(model_path.parent),
+                "kind": request.get("control_kind", "preprocessed"),
+                "strength": request["control_strength"],
+                "image": "control.png",
+            }
+            _check_cancel(job)
         prompt = rewrite["rewritten_prompt"] if rewrite["applied"] else request["prompt"].strip()
         if request.get("transparent", False):
             prompt = (
@@ -626,22 +678,26 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
 
         _progress(job, "sampling", "プロンプトと参照画像を処理中", 0.30)
         sampling_started = time.monotonic()
-        output = runtime["pipe"](
-            prompt=prompt,
-            image=images or None,
-            width=request["width"],
-            height=request["height"],
-            num_inference_steps=request["steps"],
-            true_cfg_scale=1.0,
-            use_kv_cache=True,
-            output_resolution=1024,
-            generator=generator,
-            num_images_per_prompt=1,
-            output_type="pil",
-            return_dict=True,
-            callback_on_step_end=on_step,
-            callback_on_step_end_tensor_inputs=[],
-        )
+        try:
+            output = runtime["pipe"](
+                prompt=prompt,
+                image=images or None,
+                width=request["width"],
+                height=request["height"],
+                num_inference_steps=request["steps"],
+                true_cfg_scale=1.0,
+                use_kv_cache=controlnet is None,
+                output_resolution=1024,
+                generator=generator,
+                num_images_per_prompt=1,
+                output_type="pil",
+                return_dict=True,
+                callback_on_step_end=on_step,
+                callback_on_step_end_tensor_inputs=[],
+            )
+        finally:
+            if controlnet is not None:
+                controlnet.clear_control()
         sampling_seconds = time.monotonic() - sampling_started
         _check_cancel(job)
         image = output.images[0]
@@ -672,6 +728,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "prompt": request["prompt"],
             "effective_prompt": prompt,
             "prompt_rewrite": rewrite,
+            "fun_controlnet": control_info,
             "preservation": preservation.get("preservation", {}),
             "width": image.width,
             "height": image.height,
@@ -683,7 +740,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "memory_mode": request["memory_mode"],
             "compute_dtype": "bfloat16",
             "true_cfg_scale": 1.0,
-            "use_kv_cache": True,
+            "use_kv_cache": controlnet is None,
             "input_resolution": 1024,
             "input_image_count": len(images),
             "input_image_names": [Path(path).name for path in request["input_images"]],

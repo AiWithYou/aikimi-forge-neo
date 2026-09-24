@@ -325,6 +325,22 @@ class QwenServiceTests(unittest.TestCase):
         self.assertEqual(self.lease.releases, 0)
         self.assertFalse(self.worker.started.is_set())
 
+    def test_fun_control_map_is_copied_into_job_before_worker_starts(self):
+        from modules_forge.qwen_image21 import fun_controlnet
+
+        control = self.root / "pose.png"
+        Image.new("RGB", (32, 32), "white").save(control)
+        with patch.object(fun_controlnet, "installed", return_value={"path": str(control)}):
+            identifier = self.studio.start(
+                self.request(control_kind="pose", control_image=str(control)), "owner"
+            )
+        self.assertEqual(self.wait_done(identifier)["state"], "complete")
+        snapshot = core.read_json(self.studio.outputs / identifier / "request.json")
+        control.unlink()
+        self.assertEqual(snapshot["control_kind"], "pose")
+        self.assertTrue(Path(snapshot["control_image"]).is_file())
+        self.assertEqual(Path(snapshot["control_image"]).name, "control-source.png")
+
     def test_rewriter_model_required_only_for_enabled_t2i(self):
         with patch.object(service, "rewriter_manifest", side_effect=core.QwenImage21Error("missing rewriter")) as check:
             with self.assertRaisesRegex(core.QwenImage21Error, "missing rewriter"):

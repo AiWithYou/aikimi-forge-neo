@@ -52,7 +52,7 @@ def install_environment(root):
         [
             python,
             "-c",
-            "from diffusers import QwenImage21Pipeline, QwenImage21Transformer2DModel, AutoencoderKLQwenImage21, GGUFQuantizationConfig, FlowMatchEulerDiscreteScheduler; from transformers import Qwen3VLForConditionalGeneration; import bitsandbytes, gguf; print('Qwen Image 2.1 / Turbo imports OK')",
+            "from diffusers import QwenImage21Pipeline, QwenImage21Transformer2DModel, AutoencoderKLQwenImage21, GGUFQuantizationConfig, FlowMatchEulerDiscreteScheduler; from transformers import Qwen3VLForConditionalGeneration; from comfy_kitchen import int8_linear; import bitsandbytes, gguf; print('Qwen Image 2.1 / Turbo / Fun INT8 imports OK')",
         ]
     )
     frozen = execute([python, "-m", "pip", "freeze"], capture_output=True, text=True, encoding="utf-8").stdout
