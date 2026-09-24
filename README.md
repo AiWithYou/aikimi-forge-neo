@@ -2,6 +2,8 @@
 
 **v1.5.1** · [変更履歴](CHANGELOG.md)
 
+**2026-09-24の追加更新：** 本体・SenseNova・Qwenの依存関係を修正し、監査の期限付き除外を撤去しました。導入済みのSenseNova・Qwenは[更新方法](#更新方法)に沿って専用環境も更新してください。[修正・検証記録](docs/audits/2026-09-24-dependency-remediation.md)
+
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
 **Qwen Image 2.1・Krea2・Anima・SenseNovaの画像生成・編集、MiniMax H3の音声付き動画、YuE2の作曲を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
@@ -190,7 +192,7 @@ cd aikimi-forge-neo
 
 **初回はセットアップBAT、普段は起動BATを使います。** 既存のモデルで始める場合は、セットアップを省いて`aikimi-launch.bat`で起動できます。モデルの配置先は各ガイドを参照してください。
 
-`LocalSafe`は自分のPC内だけで利用する通常起動です。初回は必要なライブラリを自動導入します。既定のPyTorchは`2.11.0+cu130`、torchvisionは`0.26.0+cu130`なので、対応するNVIDIAドライバーを用意してください。
+`LocalSafe`は自分のPC内だけで利用する通常起動です。初回は必要なライブラリを自動導入します。既定のPyTorchは`2.13.0+cu130`、torchvisionは`0.28.0+cu130`なので、対応するNVIDIAドライバーを用意してください。
 
 ### Tag Autocomplete
 
@@ -349,7 +351,19 @@ git pull --ff-only origin neo
 
 既存のローカルフォルダー名を変更する必要はありません。`origin`の更新は一度行えば十分です。
 
-更新が終わったら、`aikimi-launch.bat`をダブルクリックするか、普段使っている起動コマンドでWebUIを起動してください。導入済みのモデルや保存した画像を、ダウンロードし直す必要はありません。
+**2026-09-24の依存関係更新を取り込む場合**、導入済みのSenseNova・Qwenは、WebUIを起動する前に該当するコマンドを実行してください。モデルを取得し直さず、専用環境を更新します。
+
+```powershell
+# SenseNovaを導入済みの場合
+.\download_sensenova_u15_int8.ps1 -RuntimeOnly
+
+# Qwen Image 2.1を導入済みの場合
+.\aikimi-qwen-image21-setup.bat --runtime-only
+```
+
+その後、`aikimi-launch.bat`または普段の起動コマンドでWebUIを起動してください。本体は通常の依存準備で、旧既定のCUDA 13.0環境をPyTorch 2.13.0へ更新します。`TORCH_COMMAND`や`TORCH_INDEX_URL`を独自指定している場合は、その指定が優先されます。
+
+導入済みのモデル・設定・保存した画像は引き続き使えます。メタデータキャッシュの保存形式を変更したため、初回は一部のメタデータを再計算します。修正内容と検証範囲は[依存関係の監査記録](docs/audits/2026-09-24-dependency-remediation.md)を参照してください。
 
 <a id="test"></a>
 

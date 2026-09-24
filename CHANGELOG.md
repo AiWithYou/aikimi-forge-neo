@@ -1,5 +1,13 @@
 # 変更履歴
 
+## 未リリース — 2026-09-24
+
+- 本体・SenseNova・Qwenの既定環境をPyTorch 2.13.0／torchvision 0.28.0へ更新し、setuptools 83.0.0を導入できるようにしました。SenseNovaはTransformers 5.10.4へ移行しています。
+- Accelerateのチェックポイント索引でディレクトリ外のファイルを参照できる問題を修正した保守版を同梱しました。本体のメタデータキャッシュをSQLite／JSONへ移行し、diskcacheへの依存を除去しました。
+- 依存監査の期限付き除外を撤去し、固定Git版DiffusersとCUDA版PyTorchも含めて監査します。SenseNovaの実画像生成とQwenのCUDA・オフロード検証も通過しました。[修正・検証記録](docs/audits/2026-09-24-dependency-remediation.md)
+- Windowsで常駐workerの終了前に一時ログを削除しようとして失敗する問題を修正しました。
+- 導入済みのSenseNova・Qwenは専用環境の更新が必要です。[更新手順](README.md#更新方法)を参照してください。
+
 ## v1.5.1 — 2026-09-24
 
 - H3のDynamicVRAMを使うプロファイルで追加の空き容量を確保するようにしました。旧設定の専用runtimeをそのまま再利用せず、起動引数の一致を確認します。
