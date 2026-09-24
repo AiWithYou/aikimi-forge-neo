@@ -50,7 +50,9 @@ class ResidentWorker:
             from modules_forge.yue2_studio.service import ProcessTree
 
             self.root.mkdir(parents=True, exist_ok=True)
-            self._temporary = tempfile.TemporaryDirectory(prefix=self.name + "-", dir=self.root)
+            # weakref's exit handler may run before our atexit.close callback.
+            # Only close() may remove files, after the worker releases its log.
+            self._temporary = tempfile.TemporaryDirectory(prefix=self.name + "-", dir=self.root, delete=False)
             self.directory = Path(self._temporary.name)
             boot_log = self.directory / "startup.log"
             with boot_log.open("wb") as stream:

@@ -124,9 +124,15 @@ class ResidentProcessTests(unittest.TestCase):
                 self.assertEqual(records[0]["pid"], records[1]["pid"])
                 self.assertEqual([record["count"] for record in records], [1, 2])
                 process = worker.process
+                directory = worker.directory
+                # Reproduce weakref finalization preceding the atexit callback.
+                # The live worker still owns startup.log, especially on Windows.
+                worker._temporary._finalizer()
+                self.assertTrue(directory.is_dir())
                 worker.close()
 
                 self.assertIsNotNone(process.poll())
+                self.assertFalse(directory.exists())
             finally:
                 worker.close()
 
