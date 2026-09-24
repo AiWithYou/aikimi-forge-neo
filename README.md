@@ -1,8 +1,8 @@
 # Aikimi Forge Neo
 
-**v1.5.1** · [変更履歴](CHANGELOG.md)
+**v2.0.0** · [変更履歴](CHANGELOG.md)
 
-**2026-09-24の追加更新：** 本体・SenseNova・Qwenの依存関係を修正し、監査の期限付き除外を撤去しました。導入済みのSenseNova・Qwenは[更新方法](#更新方法)に沿って専用環境も更新してください。[修正・検証記録](docs/audits/2026-09-24-dependency-remediation.md)
+**v2.0.0（2026-09-24）：** 本体・SenseNova・Qwenの依存関係を修正し、監査の期限付き除外を撤去しました。導入済みのSenseNova・Qwenは[更新方法](#更新方法)に沿って専用環境も更新してください。[修正・検証記録](docs/audits/2026-09-24-dependency-remediation.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
