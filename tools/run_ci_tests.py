@@ -1,4 +1,4 @@
-"""Run the GPU-free Aikimi unit-test suite with network downloads disabled."""
+"""Run Aikimi unittest or pytest suites in the shared CPU/offline profile."""
 
 from __future__ import annotations
 
@@ -73,11 +73,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="unittest runner verbosity",
     )
-    parser.add_argument(
+    execution_mode = parser.add_mutually_exclusive_group()
+    execution_mode.add_argument(
         "--module",
         action="append",
         default=[],
         help="dotted unittest module or test name; repeat to bypass filename discovery",
+    )
+    execution_mode.add_argument(
+        "--pytest",
+        nargs=argparse.REMAINDER,
+        default=None,
+        help="run pytest in the same isolated profile; place last, followed by test paths and pytest options",
     )
     parser.add_argument(
         "--preload",
@@ -130,7 +137,10 @@ def isolated_h3_records():
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    arguments = build_parser().parse_args(argv)
+    parser = build_parser()
+    arguments = parser.parse_args(argv)
+    if arguments.pytest is not None and not arguments.pytest:
+        parser.error("--pytest requires pytest arguments, for example: tests/yue2 -q")
     validate_python_version()
     configure_ci_environment(os.environ)
     configure_import_path(sys.path)
@@ -146,9 +156,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             "Aikimi CI test profile: Python 3.13, CPU only, external model downloads disabled",
             flush=True,
         )
+        if arguments.pytest is not None:
+            # Import pytest only after CPU/offline policy, Forge argv isolation,
+            # and the temporary H3 record store are active. Test collection and
+            # plugin imports must not see the caller's live-test environment.
+            pytest = importlib.import_module("pytest")
+            return int(pytest.main(arguments.pytest))
         suite = load_tests(arguments.start_directory, arguments.pattern, arguments.module)
         result = unittest.TextTestRunner(verbosity=arguments.verbosity).run(suite)
-    return 0 if result.wasSuccessful() else 1
+    if not result.wasSuccessful():
+        return 1
+    # Match unittest's no-tests exit convention without misclassifying a
+    # class-level skip or a setUpClass error as an empty successful run.
+    if result.testsRun == 0 and not result.skipped:
+        print("No tests were run or skipped; check the discovery path and pattern.", file=sys.stderr)
+        return 5
+    return 0
 
 
 if __name__ == "__main__":
