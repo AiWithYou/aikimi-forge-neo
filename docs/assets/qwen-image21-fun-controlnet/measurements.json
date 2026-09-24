@@ -1,110 +1,101 @@
 [
   {
-    "name": "pose-anime",
-    "control_kind": "pose",
-    "control_source": "pose-control.png",
-    "prompt": "Waist-up 2D anime character portrait of a smiling adult performer facing forward. Coral-pink hair in two high buns, expressive eyes, ivory off-shoulder ruffled dress, soft blue theater background. Her elbows angle outward and her hands rest naturally near her hips. Exactly two arms, natural anatomy, clean ink outlines, flat cel shading and vivid hand-painted anime colors. Follow the shoulder and arm placement from the pose map.",
+    "name": "anime-reference-only",
+    "control_kind": "off",
+    "control_source": null,
+    "references": [
+      "anime-character-reference.jpg"
+    ],
+    "prompt": "Use Image 1 as the character identity and color reference: the same young adult woman with long silver-blue high ponytail, pale blue eyes, and a blue-and-white sailor dress. Create a NEW full-body 2D anime illustration of her balancing on one foot on a narrow stepping stone over a rain puddle, her other leg lifted behind. Her left arm holds an open transparent umbrella diagonally above and left of her head; her right arm reaches far right to release a tiny origami crane. Wide, airy asymmetric composition, entire body visible, delicate blue cel shading, luminous rainy twilight. Keep her identity and outfit from Image 1 while following the separate lineart guide for pose and object positions.",
     "seed": 43,
     "steps": 40,
     "size": [
-      896,
-      704
+      768,
+      1024
     ],
-    "control_strength": 1.0,
-    "load_seconds": 282.684,
-    "sampling_seconds": 144.94,
-    "peak_allocated_mib": 12007.8,
+    "control_strength": null,
+    "load_seconds": 284.144,
+    "sampling_seconds": 49.706,
+    "peak_allocated_mib": 12403.1,
     "reused_model": false,
-    "image_sha256": "b183a40558714c923821bb8d2f449ae3b29fe39d5dc0fd34c980da8ec77f10f4"
+    "image_sha256": "7748bd0b9c29ce19d65d249783facd48b9b5a52ff44cf6391ae176b58af8d604"
   },
   {
-    "name": "pose-3d",
-    "control_kind": "pose",
-    "control_source": "pose-control.png",
-    "prompt": "Waist-up polished 3D animated-film portrait of a smiling adult performer facing forward. Dark hair in two high buns, satin teal off-shoulder dress, sculpted fabric folds, warm theater background and soft rim lighting. Her elbows angle outward and her hands rest naturally near her hips. Exactly two arms, natural anatomy, physically based materials and realistic depth. Follow the shoulder and arm placement from the pose map.",
+    "name": "ring-3d-prompt-only",
+    "control_kind": "off",
+    "control_source": null,
+    "references": [],
+    "prompt": "Cinematic 3D environment render of an impossible canal-side observatory. A huge hollow vertical limestone ring supports a small dome on top; a long raised bridge passes through the ring opening and connects to a separate lighthouse at right. Several arches at staggered heights, rocky islands, water, and a single tiny boat in the foreground. Warm sunrise light, physically based stone and water, strong depth, detailed but coherent architecture. Follow the supplied lineart layout.",
     "seed": 43,
     "steps": 40,
     "size": [
-      896,
-      704
+      1024,
+      768
     ],
-    "control_strength": 1.0,
+    "control_strength": null,
     "load_seconds": 0.0,
-    "sampling_seconds": 45.116,
-    "peak_allocated_mib": 12007.2,
+    "sampling_seconds": 38.057,
+    "peak_allocated_mib": 9765.5,
     "reused_model": true,
-    "image_sha256": "b99f2c56275583031608b6603202e7fd244e25cf0130b670e757eb57cd8b3cfc"
+    "image_sha256": "2d16273fc6d6bea29343cbb924eaab896bd9fcf95806922cc3c19e4a9b666ab8"
   },
   {
-    "name": "gray-anime",
-    "control_kind": "gray",
-    "control_source": "gray-control.png",
-    "prompt": "Hand-drawn 2D anime background painting of seven small houseplants in round ceramic pots arranged in two rows on a sunlit shelf. Distinct broad and spiky leaves, pastel green foliage, colorful terracotta and blue pots, warm afternoon light, bold dark ink outlines, simplified flat cel-shaded colors, visible watercolor brush texture, cozy botanical studio. Stylized animation background art. Keep the two-row arrangement from the grayscale control image.",
-    "seed": 43,
-    "steps": 40,
-    "size": [
-      768,
-      896
+    "name": "anime-reference-lineart",
+    "control_kind": "lineart",
+    "control_source": "anime-pose-lineart.png",
+    "references": [
+      "anime-character-reference.jpg"
     ],
-    "control_strength": 0.4,
-    "load_seconds": 0.0,
-    "sampling_seconds": 48.34,
-    "peak_allocated_mib": 12086.0,
-    "reused_model": true,
-    "image_sha256": "34b26d05b2137cb8a027c8f1dfa25b583174563875aac76de921b5ab02b7418a"
-  },
-  {
-    "name": "gray-3d",
-    "control_kind": "gray",
-    "control_source": "gray-control.png",
-    "prompt": "Photorealistic 3D product render of a collection of seven small houseplants in round ceramic pots arranged in two rows on a tabletop. Ferns and succulents with distinct leaves, glazed terracotta and ivory pots, detailed pebbles, bright studio backdrop, ray-traced soft shadows, realistic materials and depth of field. Match the arrangement and silhouettes in the grayscale control image.",
+    "prompt": "Use Image 1 as the character identity and color reference: the same young adult woman with long silver-blue high ponytail, pale blue eyes, and a blue-and-white sailor dress. Create a NEW full-body 2D anime illustration of her balancing on one foot on a narrow stepping stone over a rain puddle, her other leg lifted behind. Her left arm holds an open transparent umbrella diagonally above and left of her head; her right arm reaches far right to release a tiny origami crane. Wide, airy asymmetric composition, entire body visible, delicate blue cel shading, luminous rainy twilight. Keep her identity and outfit from Image 1 while following the separate lineart guide for pose and object positions.",
     "seed": 43,
     "steps": 40,
     "size": [
       768,
-      896
+      1024
     ],
-    "control_strength": 1.0,
+    "control_strength": 0.8,
     "load_seconds": 0.0,
-    "sampling_seconds": 49.186,
-    "peak_allocated_mib": 12084.7,
+    "sampling_seconds": 120.265,
+    "peak_allocated_mib": 13555.1,
     "reused_model": true,
-    "image_sha256": "7045059634e4d96e5ba10e568491075b6a17b1c58d9b0dab9162d59aeb715bbb"
+    "image_sha256": "a5d10048a0794c841a40b2f1bd9800b3859c71f7f435af894aff256d2d40c8ca"
   },
   {
-    "name": "scribble-anime",
+    "name": "ring-3d-control",
     "control_kind": "scribble",
-    "control_source": "scribble-control.png",
-    "prompt": "Full-body 2D anime sports illustration of an adult soccer player dribbling a round football near his left foot, arms angled outward for balance. Bright orange jersey, navy shorts, running shoes, green pitch and blurred stadium crowd. Detailed expressive face and hands, complete colored skin, bold clean ink outlines, dynamic cel shading. Follow the athlete and ball placement from the scribble map.",
+    "control_source": "ring-observatory-scribble.png",
+    "references": [],
+    "prompt": "Cinematic 3D environment render of an impossible canal-side observatory. A huge hollow vertical limestone ring supports a small dome on top; a long raised bridge passes through the ring opening and connects to a separate lighthouse at right. Several arches at staggered heights, rocky islands, water, and a single tiny boat in the foreground. Warm sunrise light, physically based stone and water, strong depth, detailed but coherent architecture. Follow the supplied lineart layout.",
     "seed": 43,
     "steps": 40,
     "size": [
-      768,
-      800
+      1024,
+      768
     ],
     "control_strength": 0.65,
-    "load_seconds": 0.0,
-    "sampling_seconds": 44.56,
-    "peak_allocated_mib": 11985.7,
-    "reused_model": true,
-    "image_sha256": "5f899fbb85cb0222c83cbc797ec89a218e99ad50a578e322afbb2238d266d711"
+    "load_seconds": 279.011,
+    "sampling_seconds": 151.579,
+    "peak_allocated_mib": 12200.2,
+    "reused_model": false,
+    "image_sha256": "e16fec9edd04080a4d2ce7bf9151be63050c7f56c4d8fb171fd8456d5ce2c937"
   },
   {
-    "name": "scribble-3d",
+    "name": "ring-3d-copper",
     "control_kind": "scribble",
-    "control_source": "scribble-control.png",
-    "prompt": "Full-body 3D animated-film render of an adult soccer player dribbling a round football near his left foot, arms angled outward for balance. Teal jersey, navy shorts, running shoes, green pitch and softly blurred stadium crowd. Detailed expressive face and hands, complete colored skin, natural anatomy, physically based fabric and skin, cinematic soft light. Follow the athlete and ball placement from the scribble map.",
+    "control_source": "ring-observatory-scribble.png",
+    "references": [],
+    "prompt": "Cinematic 3D render of a fantastical clockwork observatory over a misty sea. A massive hollow upright copper ring with a domed viewing room on top, a long curving elevated bridge threading through its opening toward a separate beacon tower at the right, multiple arches at different heights, rocky islets, and one tiny boat at lower right. Aged copper, wet stone, amber windows, dramatic dusk lighting, physically based materials and atmospheric depth. Follow the supplied lineart layout.",
     "seed": 43,
     "steps": 40,
     "size": [
-      768,
-      800
+      1024,
+      768
     ],
     "control_strength": 0.65,
-    "load_seconds": 0.0,
-    "sampling_seconds": 44.659,
-    "peak_allocated_mib": 11987.3,
-    "reused_model": true,
-    "image_sha256": "7f4cabba710c52030bc727f58cefef1f019ec549cc154d253766415abbd06e16"
+    "load_seconds": 285.526,
+    "sampling_seconds": 151.36,
+    "peak_allocated_mib": 12203.2,
+    "reused_model": false,
+    "image_sha256": "ee079d2663eea87da221e623ccb755bc41b6d856261974b6a8dd549fea9dd7cc"
   }
 ]

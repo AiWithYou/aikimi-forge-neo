@@ -1,8 +1,10 @@
 # Aikimi Forge Neo
 
-**v2.1.0** · [変更履歴](CHANGELOG.md)
+**v2.1.1** · [変更履歴](CHANGELOG.md)
 
-**v2.1.0（2026-09-24）：** Qwen Image 2.1にFun ControlNet UnionのINT8対応を追加しました。前処理済みのPose・Gray・Scribbleなどで構図を制御できます。[導入・使い方](extensions-builtin/qwen-image21-studio/README.md#fun-controlnet-union--int8)と[アニメ調・3D調の作例](docs/assets/qwen-image21-fun-controlnet/README.md)を掲載しています。
+**v2.1.1（2026-09-24）：** Qwen Image 2.1 Fun ControlNet Unionの作例を、ユーザー提供の人物参照画像と新規生成したLineart・Scribble条件画像へ更新しました。画像参照とControlNetを併用した2Dアニメ、複雑な橋の構図を指定した3D絵を、制御なしとの比較で示します。[導入・使い方](extensions-builtin/qwen-image21-studio/README.md#fun-controlnet-union--int8)と[作例・再現条件](docs/assets/qwen-image21-fun-controlnet/README.md)を掲載しています。
+
+**v2.1.0（2026-09-24）：** Qwen Image 2.1の通常版INT8にFun ControlNet UnionのINT8 ConvRotパッチを追加しました。Pose・Gray・Scribbleなどの前処理済み画像で構図を制御できます。
 
 **v2.0.0（2026-09-24）：** 本体・SenseNova・Qwenの依存関係を修正し、監査の期限付き除外を撤去しました。導入済みのSenseNova・Qwenは[更新方法](#更新方法)に沿って専用環境も更新してください。[修正・検証記録](docs/audits/2026-09-24-dependency-remediation.md)
 

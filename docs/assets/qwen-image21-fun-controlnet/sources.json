@@ -1,0 +1,24 @@
+[
+  {
+    "file": "anime-character-reference.jpg",
+    "origin": "User-supplied image for these examples, 2026-09-24",
+    "sha256": "34557629673d99610e277010a4bbbf5fefc9569dfcce8195434d7cedb9a98c8b"
+  },
+  {
+    "file": "anime-pose-lineart.png",
+    "origin": "New ImageGen composition based on the user-supplied character image, 2026-09-24",
+    "description": "Full-body one-foot balance on a stepping stone, umbrella at upper left, origami crane at right; monochrome lineart.",
+    "sha256": "25e314e80dc261ea11b67d04a380c6d87b689f585c58b93d1fa704b3f496675f"
+  },
+  {
+    "file": "ring-observatory-lineart.png",
+    "origin": "New ImageGen composition from a text prompt, 2026-09-24",
+    "description": "Upright ring observatory with dome, bridge passing through the ring to a separate lighthouse, multiple arches, and one small boat; monochrome lineart.",
+    "sha256": "c99424f4fd62325471d9e7cdb98d818abf9604ea357fb1fc65ab025eea9d4a39"
+  },
+  {
+    "file": "ring-observatory-scribble.png",
+    "origin": "Deterministic black-background preprocessing of ring-observatory-lineart.png with tools/prepare_qwen21_fun_example_scribble.py",
+    "sha256": "fbe2bce01f12dd8c78d7245b7c678eca3d55e22afffaa84b4c75218a2a77a5bf"
+  }
+]
