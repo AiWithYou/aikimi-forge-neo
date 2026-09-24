@@ -38,6 +38,25 @@ ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所
 
 [同じ人物参照による全8方式とInpainting＋Control、3D建築の実生成例、条件画像、実測記録](../../docs/assets/qwen-image21-fun-controlnet/README.md)を掲載しています。モデル重みはGitに含めません。公式重みと派生版には[非商用のQwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/blob/8a4702014d4dabb5f896fcba917e2ee0a961465f/LICENSE)が適用されます。商用利用には提供元の別途許諾が必要です。
 
+## Fun Acc 4-step LoRA · INT8
+
+[Alibaba PAI公式のFun Acc LoRA](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs)は、Qwen Image 2.1の新規生成と参照画像編集を**4回のモデル評価（4 NFE）**で行うPDDアダプターです。通常のLoRA読み込みに加えて、配布元の専用PDDスケジューラ、sigma列、stepコールバックを使います。Qwen本体のTransformerとテキストエンコーダーは既存のbitsandbytes INT8を再利用し、LoRAの差分やPDDの出力ヘッドは浮動小数点のままです。全体を一律INT8に変換する機能ではありません。
+
+1. Neoを終了し、`aikimi-qwen-image21-setup.bat --official-full`で通常版INT8用の公式フルモデルを導入します。GGUFだけでは利用できません。
+2. 専用環境で約346MBのLoRA重み、PDD設定、利用条件を取得し、固定revisionのSHA-256を検証します。
+
+```powershell
+.\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_fun_acc_lora.py --download
+# 導入済みファイルを再検証する場合
+.\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_fun_acc_lora.py --verify
+```
+
+3. Qwenタブの**Fun Acc · 4 steps（通常版INT8）**をONにして生成します。モデル・精度は通常版INT8、Stepsは4に固定されます。OFFにすると通常版INT8・40 stepsへ戻ります。CPUへ退避を選べます。Fun AccではSparse AttentionとFun ControlNetを同時に使いません。切替時は読み込み済みモデルを再読み込みし、結果の`metadata.json`にLoRA revisionとスケジューラを保存します。
+
+配布元は[小さく密な文字の可読性低下、編集画像のぼけ・暗さ、細部の劣化](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs#limitations)を挙げています。4 NFEは生成全体の所要時間が必ず10分の1になるという意味ではありません。重みはGitに含めません。重みには[Qwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs/blob/f7545234760e1847cd8e89e52bd951cb0b7e327f/LICENSE)が適用され、非商用の研究・評価用途に限られます。
+
+2026年9月25日にRTX 3090で、通常版INT8・CPU退避・1024×1024・4 steps・固定Seedの直接worker実行を確認しました。新規生成した白いティーポットを参照画像にして青へ変える編集も行い、どちらもRGBA PNG・専用PDDスケジューラ・KVキャッシュOFFを記録し、画像を確認しています。初回のモデル読み込みは約382秒、生成部分は約20秒でした。編集は再起動したworkerで読み込み約149秒、生成部分は約26秒です。この確認に40 stepsとの同条件の速度・画質比較は含めていません。
+
 ## Viggle Turbo（BF16 / Q4_K_M）
 
 画面の**モデル・精度**で `Viggle Turbo · BF16` または `Viggle Turbo · Q4_K_M` を選びます。選択時にStepsは4へ変わり固定され、Sparse AttentionはOFFになります。通常版へ戻すと40 stepsに戻ります。両Turboモデルはテキストからの生成と参照画像編集に使えます。CFGは1.0、negative promptは使わず、Viggle配布の`shift_terminal=null`スケジューラーを読み込みます。

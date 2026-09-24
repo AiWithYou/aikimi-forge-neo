@@ -1,6 +1,8 @@
 # Aikimi Forge Neo
 
-**v2.2.1** · [変更履歴](CHANGELOG.md)
+**v2.3.0** · [変更履歴](CHANGELOG.md)
+
+**v2.3.0（2026-09-25）：** Qwen Image 2.1に[Alibaba PAIのFun Acc 4-step LoRA](extensions-builtin/qwen-image21-studio/README.md#fun-acc-4-step-lora--int8)を追加しました。通常版INT8の生成・参照画像編集で専用PDDスケジューラを使います。重みは追加導入し、画面のチェックで切り替えます。
 
 **v2.2.1（2026-09-25）：** ユーザー提供の同じアニメ人物を参照し、Qwen Image 2.1 Fun ControlNet Unionの全8方式とInpainting＋Controlを試しました。公式の40 steps・FlowMatch Eulerスケジューラ・制御強度1.0を確認し、1152×1536の人物作例と生成条件を[作例ページ](docs/assets/qwen-image21-fun-controlnet/README.md)に掲載しています。
 
@@ -26,7 +28,7 @@
 
 | 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
-| **モデル対応** | Qwen Image 2.1のINT8・W4A8と任意の4bitプロンプト書き換え、Anima 3.8B v1.1、SenseNova、MiniMax H3の専用Studio、YuE2 Musicの作曲・楽譜編集。 |
+| **モデル対応** | Qwen Image 2.1のINT8・W4A8、Fun Acc 4-step LoRA、任意の4bitプロンプト書き換え、Anima 3.8B v1.1、SenseNova、MiniMax H3の専用Studio、YuE2 Musicの作曲・楽譜編集。 |
 | **導入** | 画像・動画モデルを選ぶセットアップBATと、Qwen Image 2.1・YuE2の専用BAT。モデルの取得・変換と、必要な専用環境の準備。 |
 | **仕上げ** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
 | **操作** | 全モデル共通の保持設定・手動解放、ちびあいきみによる環境・実行状態の表示、追加機能へのショートカット、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
@@ -44,7 +46,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
-| **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun ControlNet Unionの8種類の前処理済み制御画像とInpainting＋Controlを使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
+| **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun Acc 4-step LoRAと、Fun ControlNet Unionの8種類の前処理済み制御画像・Inpainting＋Controlを個別に使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |

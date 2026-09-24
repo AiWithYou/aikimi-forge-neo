@@ -136,6 +136,7 @@ class Request:
     control_image: str = ""
     control_strength: float = 1.0
     control_inpaint: bool = False
+    fun_acc: bool = False
     operation: str = "generate"
 
     def resolved(self) -> Request:
@@ -155,6 +156,12 @@ class Request:
             raise QwenImage21Error("モデル・精度の指定が不正です。")
         if self.precision.startswith("turbo_") and steps != 4:
             raise QwenImage21Error("Viggle Turboは4 stepsで生成してください。")
+        if not isinstance(self.fun_acc, bool):
+            raise QwenImage21Error("Fun Accの指定が不正です。")
+        if self.fun_acc and (self.operation != "generate" or self.precision != "int8" or steps != 4):
+            raise QwenImage21Error("Fun Accは通常版INT8・4 stepsの画像生成で使用してください。")
+        if self.fun_acc and (self.sparse_mode != "off" or self.control_kind != "off"):
+            raise QwenImage21Error("Fun AccではSparse AttentionとFun ControlNetをOFFにしてください。")
         if self.precision.startswith("turbo_") and self.sparse_mode != "off":
             raise QwenImage21Error("Viggle TurboではSparse AttentionをOFFにしてください。")
         if self.precision == "base_q4_k_m" and self.sparse_mode != "off":

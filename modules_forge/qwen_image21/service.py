@@ -97,6 +97,13 @@ class Studio:
         if not isinstance(owner, str) or not owner:
             raise QwenImage21Error("ブラウザーのQwen Image 2.1タブから操作してください。")
         runtime_manifest(self.runtime, request.precision)
+        if request.fun_acc:
+            from .fun_acc_lora import installed
+
+            try:
+                installed(self.runtime)
+            except (OSError, ValueError) as exc:
+                raise QwenImage21Error("Fun Acc 4-step LoRAが未導入か不完全です。導入コマンドを実行してください。") from exc
         if request.control_kind != "off":
             from .fun_controlnet import installed
 
@@ -127,6 +134,10 @@ class Studio:
                     self._runtime_lock = runtime_lock(self.runtime)
                     new_lock = True
                 entry = runtime_manifest(self.runtime, request.precision)
+                if request.fun_acc:
+                    from .fun_acc_lora import installed
+
+                    installed(self.runtime)
                 if request.rewrite_prompt and not request.input_images:
                     rewriter_manifest(self.runtime)
                 if request.rewrite_edit_prompt and request.input_images:

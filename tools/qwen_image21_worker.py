@@ -71,7 +71,7 @@ def clear_runtime() -> None:
         torch.cuda.empty_cache()
 
 
-def _cache_key(model_path: Path, precision: str, memory_mode: str, control: bool = False) -> tuple:
+def _cache_key(model_path: Path, precision: str, memory_mode: str, control: bool = False, fun_acc: bool = False) -> tuple:
     # Include weight shards as well as configs: overwriting files in the same
     # directory must not silently reuse an older resident checkpoint.
     metadata = tuple(
@@ -100,7 +100,18 @@ def _cache_key(model_path: Path, precision: str, memory_mode: str, control: bool
 
         path = checkpoint_path(model_path.parent)
         patch = (str(path), path.stat().st_size, path.stat().st_mtime_ns)
-    return str(model_path), precision, memory_mode, metadata, manifests, turbo, regular, patch
+    adapter = None
+    if fun_acc:
+        from modules_forge.qwen_image21.fun_acc_lora import CONFIG, adapter_dir, installed
+
+        info = installed(model_path.parent)
+        path = Path(info["path"])
+        config_path = adapter_dir(model_path.parent) / CONFIG
+        adapter = (
+            str(path), path.stat().st_size, path.stat().st_mtime_ns,
+            config_path.stat().st_size, config_path.stat().st_mtime_ns,
+        )
+    return str(model_path), precision, memory_mode, metadata, manifests, turbo, regular, patch, adapter
 
 
 def _model_revision(model_path: Path) -> str | None:
@@ -146,6 +157,18 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= 100:
         raise ValueError("steps must be an integer between 1 and 100.")
     request["steps"] = steps
+    fun_acc = request.get("fun_acc", False)
+    if not isinstance(fun_acc, bool):
+        raise ValueError("fun_acc must be a boolean.")
+    if fun_acc:
+        if operation != "generate" or request["precision"] != "int8" or steps != 4:
+            raise ValueError("Fun Acc requires regular INT8 and exactly 4 steps.")
+        if request.get("sparse_mode", "off") != "off" or request.get("control_kind", "off") != "off":
+            raise ValueError("Fun Acc requires Sparse Attention and Fun ControlNet to be off.")
+        from modules_forge.qwen_image21.fun_acc_lora import installed
+
+        installed(model_path.parent)
+    request["fun_acc"] = fun_acc
     if request["precision"].startswith("turbo_"):
         if steps != 4:
             raise ValueError("Viggle Turbo requires exactly 4 steps.")
@@ -182,6 +205,8 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     if control_inpaint and not control_image:
         raise ValueError("Inpainting + Control requires a ControlNet image.")
     if control_image:
+        if fun_acc:
+            raise ValueError("Fun Acc cannot be combined with Fun ControlNet.")
         if not isinstance(control_image, str) or not Path(control_image).is_absolute() or not Path(control_image).is_file():
             raise ValueError("ControlNet requires an existing absolute local image path.")
         if request["precision"] != "int8":
@@ -422,6 +447,18 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         use_safetensors=True,
         **components,
     )
+    fun_acc_info = None
+    fun_acc_config = None
+    if request.get("fun_acc", False):
+        from modules_forge.qwen_image21.fun_acc_lora import installed
+        from modules_forge.qwen_image21.pdd_vendor.qwenimage21_pdd import QwenImage21PDDScheduler, load_pdd_lora
+
+        fun_acc_info = installed(model_path.parent)
+        _progress(job, "loading", "Fun Acc 4-step LoRAを読み込み中", 0.28)
+        fun_acc_config = load_pdd_lora(pipe.transformer, fun_acc_info["path"])
+        pipe.transformer.eval()
+        pipe.scheduler = QwenImage21PDDScheduler.from_config(pipe.scheduler.config)
+        pipe.scheduler.register_to_config(**fun_acc_config)
     controlnet = None
     if request.get("control_image"):
         from modules_forge.qwen_image21.fun_controlnet import installed
@@ -454,6 +491,8 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     return {
         "pipe": pipe,
         "controlnet": controlnet,
+        "fun_acc": fun_acc_info,
+        "fun_acc_config": fun_acc_config,
         "int8_layers": counts,
         "w4a8": w4a8_stats,
         "disk_cache": disk_cache,
@@ -464,7 +503,10 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
 
 def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -> tuple[dict[str, Any], bool]:
     global _RESIDENT_RUNTIME, _RESIDENT_KEY
-    key = _cache_key(model_path, request["precision"], request["memory_mode"], bool(request.get("control_image")))
+    key = _cache_key(
+        model_path, request["precision"], request["memory_mode"],
+        bool(request.get("control_image")), request.get("fun_acc", False),
+    )
     if _RESIDENT_RUNTIME is not None and key == _RESIDENT_KEY:
         _progress(job, "loaded", "読み込み済みモデルを再利用", 0.30)
         return _RESIDENT_RUNTIME, True
@@ -699,9 +741,21 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 "The image has alpha channel and the background is transparent."
             )
         generator = torch.Generator(device="cpu").manual_seed(request["seed"])
+        pdd_callback = None
+        if runtime.get("fun_acc_config") is not None:
+            from modules_forge.qwen_image21.pdd_vendor.qwenimage21_pdd import pdd_step_callback
+
+            config = runtime["fun_acc_config"]
+            pdd_callback = pdd_step_callback(
+                runtime["pipe"].transformer,
+                torch.tensor(config["pdd_sigmas"], dtype=torch.float32),
+                config["pdd_block_size"],
+            )
 
         def on_step(_pipe, step: int, _timestep, callback_kwargs: dict) -> dict:
             _check_cancel(job)
+            if pdd_callback is not None:
+                pdd_callback(_pipe, step, _timestep, callback_kwargs)
             if step + 1 == request["steps"]:
                 _progress(job, "decoding", "画像へ変換中", 0.93)
             else:
@@ -723,7 +777,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 height=request["height"],
                 num_inference_steps=request["steps"],
                 true_cfg_scale=1.0,
-                use_kv_cache=controlnet is None,
+                use_kv_cache=controlnet is None and pdd_callback is None,
                 output_resolution=1024,
                 generator=generator,
                 num_images_per_prompt=1,
@@ -766,6 +820,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "effective_prompt": prompt,
             "prompt_rewrite": rewrite,
             "fun_controlnet": control_info,
+            "fun_acc": runtime.get("fun_acc"),
             "preservation": preservation.get("preservation", {}),
             "width": image.width,
             "height": image.height,
@@ -779,7 +834,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "true_cfg_scale": 1.0,
             "scheduler": runtime["pipe"].scheduler.__class__.__name__,
             "scheduler_config": dict(runtime["pipe"].scheduler.config),
-            "use_kv_cache": controlnet is None,
+            "use_kv_cache": controlnet is None and pdd_callback is None,
             "input_resolution": 1024,
             "input_image_count": len(images),
             "input_image_names": [Path(path).name for path in request["input_images"]],

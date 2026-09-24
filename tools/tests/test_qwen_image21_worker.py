@@ -52,6 +52,7 @@ class FakePipe:
         self.calls = []
         self.before_callback = None
         self.fail = False
+        self.scheduler = types.SimpleNamespace(config={})
         self.vae = mock.Mock(use_tiling=False)
         self.vae.enable_tiling.side_effect = lambda **_: setattr(self.vae, "use_tiling", True)
         self.vae.disable_tiling.side_effect = lambda: setattr(self.vae, "use_tiling", False)

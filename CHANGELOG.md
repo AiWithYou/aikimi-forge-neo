@@ -1,5 +1,10 @@
 # 変更履歴
 
+## v2.3.0 — 2026-09-25
+
+- Qwen Image 2.1の通常版INT8にAlibaba PAIのFun Acc 4-step PDD LoRAを追加。生成・参照画像編集で専用スケジューラとstepコールバックを使い、画面のチェックで通常版と切り替えます。
+- 固定revisionの重み・設定を取得してSHA-256で検証する導入スクリプトを追加。Fun Acc使用時は4 stepsに固定し、Sparse AttentionとFun ControlNetの同時使用を制限します。
+
 ## v2.2.1 — 2026-09-25
 
 - Qwen Image 2.1 Fun ControlNetの8方式すべてで、同じユーザー提供アニメ人物を参照する作例を追加。オリジナル構図から制御画像を作り、Inpainting＋Controlも掲載しました。

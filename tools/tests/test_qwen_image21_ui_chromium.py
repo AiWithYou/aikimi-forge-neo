@@ -132,6 +132,24 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             self.assertIn("前処理済みの制御画像", page.evaluate("document.body.innerText"))
             self.assertFalse(page.exceptions)
 
+    def test_fun_acc_switch_sets_int8_and_four_steps(self):
+        with cdp_page(self.chromium, self.url) as page:
+            self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 45000), timeout=50))
+            page.evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()")
+            self.assertTrue(page.evaluate(_wait_expression("#qwen21-fun-acc input", "true", 15000)))
+            page.evaluate("document.querySelector('#qwen21-fun-acc input').click()")
+            self.assertTrue(page.evaluate(_wait_expression(
+                "#qwen21-precision",
+                "element.querySelector('input[type=radio]:checked')?.value === 'int8'",
+                10000,
+            )), page.exceptions)
+            self.assertTrue(page.evaluate(_wait_expression(
+                "#qwen21-steps",
+                "Array.from(element.querySelectorAll('input')).some(input => input.value === '4')",
+                10000,
+            )), str(page.exceptions) + str(page.evaluate("document.querySelector('#qwen21-steps')?.outerHTML")))
+            self.assertFalse(page.exceptions)
+
     def test_completed_result_has_png_and_json_downloads_after_each_generation(self):
         with cdp_page(self.chromium, self.url) as page:
             peak_rss = 0
