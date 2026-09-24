@@ -48,7 +48,32 @@ prefix and image outputs matched exactly. A cached next-token output differed
 by at most `3.5762786865234375e-07` after the PyTorch upgrade. These are CPU
 float32 comparisons, not a claim that full GPU images are bit-identical.
 
-The GPU generation and GitHub CI results are recorded after their completion.
+## GPU and shutdown results
+
+- SenseNova: the real final INT8 ConvRot checkpoint loaded all 588 layers and
+  generated a nonuniform 512×512 PNG from two reference images, seed 42,
+  one quality-profile step, SDPA, bfloat16, low-VRAM mode. No CUDA OOMs or
+  allocation retries. Load: 13.470 s; sampling: 497.143 s. This is a functional
+  smoke test, not a speed comparison or a full quality evaluation.
+- Output SHA-256:
+  `2780d7bd65bdeddd251b364d3c79fbf1aeaf8d3650c9a0697fbb788e90098d18`.
+- Qwen: both native CUDA/Accelerate offload and actual tiny QwenImage21 /
+  Qwen3VL component stream-load/forward tests passed, including repeated
+  forwards without stale scales.
+- The GPU smoke exposed a shutdown ordering bug: TemporaryDirectory's
+  weakref finalizer could remove `startup.log` before the Windows worker
+  released its handle. ResidentWorker now owns deletion explicitly, after
+  confirmed process exit. A real-process regression invokes the weakref
+  finalizer while the worker is alive, verifies the directory survives, and
+  verifies close removes it. All 34 residency/service tests pass.
+
+## GitHub results
+
+The [security workflow on the remediation commit](https://github.com/AiWithYou/aikimi-forge-neo/actions/runs/35976917360)
+passed all seven jobs: Forge, SenseNova, Qwen, full-history Gitleaks and the
+three toolchain audits. There are no vulnerability exclusions. Lint and
+persistence/streaming reliability also passed on that commit. Final-head
+checks are verified separately after the shutdown follow-up is pushed.
 
 ## Reproduction
 
