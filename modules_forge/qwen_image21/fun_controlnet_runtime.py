@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import torch
 from diffusers.models.transformers.transformer_qwenimage21 import QwenImage21TransformerBlock
 from safetensors.torch import load_file
@@ -117,18 +118,49 @@ class FunUnion(nn.Module):
 
             self._handles.append(transformer.transformer_blocks[index * 2].register_forward_hook(add_hint))
 
-    def set_control(self, pipe, image, strength: float, generator: torch.Generator) -> None:
-        """Encode the RGB control map like VideoX-Fun, leaving inpaint channels zero."""
+    def set_control(
+        self, pipe, image, strength: float, generator: torch.Generator,
+        *, inpaint_image=None, mask_image=None,
+    ) -> None:
+        """Pack control, keep-mask, and masked source in VideoX-Fun's 129-channel order."""
+        if (inpaint_image is None) != (mask_image is None):
+            raise ValueError("Inpaintingには編集元とマスクを一緒に指定してください。")
+        if inpaint_image is not None and (
+            inpaint_image.size != image.size or mask_image.size != image.size
+        ):
+            raise ValueError("編集元・マスク・制御画像のサイズが一致しません。")
         processed = pipe.image_processor.preprocess(image, height=image.height, width=image.width)
         if processed.shape[1] != 3:
             raise ValueError("制御画像はRGB画像が必要です。")
         processed = torch.cat([processed, torch.ones_like(processed[:, :1])], dim=1)
         processed = processed.unsqueeze(2).to(device=pipe._execution_device, dtype=pipe.vae.dtype)
         with torch.no_grad():
+            if inpaint_image is not None:
+                mask_array = np.asarray(mask_image.convert("L"), dtype=np.uint8).copy()
+                keep = torch.from_numpy((mask_array < 128).astype(np.float32))
+                keep = keep.unsqueeze(0).unsqueeze(0).to(
+                    device=pipe._execution_device, dtype=pipe.vae.dtype
+                )
+                source = pipe.image_processor.preprocess(
+                    inpaint_image, height=image.height, width=image.width
+                )
+                if source.shape[1] != 3:
+                    raise ValueError("編集元はRGB画像が必要です。")
+                source = source.to(device=pipe._execution_device, dtype=pipe.vae.dtype)
+                source = source * keep
+                source = torch.cat([source, torch.ones_like(source[:, :1])], dim=1)
+                source_latents = pipe._encode_vae_image(source.unsqueeze(2), generator)
+            else:
+                source_latents = None
             latents = pipe._encode_vae_image(processed, generator)
-        zeros = torch.zeros_like(latents)
-        mask = torch.zeros_like(latents[:, :1])
-        context = torch.cat([latents, mask, zeros], dim=1)
+        if source_latents is None:
+            mask_latent = torch.zeros_like(latents[:, :1])
+            source_latents = torch.zeros_like(latents)
+        else:
+            mask_latent = F.interpolate(
+                keep, size=latents.shape[-2:], mode="nearest"
+            ).unsqueeze(2)
+        context = torch.cat([latents, mask_latent, source_latents], dim=1)
         self.context = pipe._pack_latents(context, 1, 129, context.shape[-2], context.shape[-1])
         self.strength = strength
 

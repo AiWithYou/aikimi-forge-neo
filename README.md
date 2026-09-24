@@ -1,6 +1,8 @@
 # Aikimi Forge Neo
 
-**v2.1.1** · [変更履歴](CHANGELOG.md)
+**v2.2.0** · [変更履歴](CHANGELOG.md)
+
+**v2.2.0（2026-09-24）：** Qwen Image 2.1 Fun ControlNet Unionの8種類すべてと**Inpainting＋Control**に対応しました。編集元・白黒マスク・制御画像をモデルへ渡して部分編集できます。ユーザー提供の2D人物参照とオリジナルの3D建築を使い、全方式の条件画像と実生成結果を[作例ページ](docs/assets/qwen-image21-fun-controlnet/README.md)に掲載しました。
 
 **v2.1.1（2026-09-24）：** Qwen Image 2.1 Fun ControlNet Unionの作例を、ユーザー提供の人物参照画像と新規生成したLineart・Scribble条件画像へ更新しました。画像参照とControlNetを併用した2Dアニメ、複雑な橋の構図を指定した3D絵を、制御なしとの比較で示します。[導入・使い方](extensions-builtin/qwen-image21-studio/README.md#fun-controlnet-union--int8)と[作例・再現条件](docs/assets/qwen-image21-fun-controlnet/README.md)を掲載しています。
 
@@ -40,7 +42,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
-| **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun ControlNet Unionの前処理済み制御画像も使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
+| **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun ControlNet Unionの8種類の前処理済み制御画像とInpainting＋Controlを使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
@@ -90,7 +92,7 @@ Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLi
 
 - [Krea2の高解像度処理](docs/krea2_local_supersample_detail_ja.md)
 - [Qwen Image 2.1：画像生成・編集・透過PNG・INT8・Fun ControlNet](extensions-builtin/qwen-image21-studio/README.md)
-- [Qwen Image 2.1 Fun ControlNet：アニメ調・3D調の作例](docs/assets/qwen-image21-fun-controlnet/README.md)
+- [Qwen Image 2.1 Fun ControlNet：全8種類とInpaintingのアニメ調・3D調作例](docs/assets/qwen-image21-fun-controlnet/README.md)
 - [Anima 3.8B](extensions-builtin/anima-3-8b/README.md)
 - [SenseNova U1.5 Studio](extensions-builtin/sensenova-u15-studio/README.md)
 - [YuE2 Music：作曲・楽譜編集・GGUF](extensions-builtin/yue2-studio/README.md)

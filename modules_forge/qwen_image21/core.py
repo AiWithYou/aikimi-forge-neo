@@ -135,6 +135,7 @@ class Request:
     control_kind: str = "off"
     control_image: str = ""
     control_strength: float = 1.0
+    control_inpaint: bool = False
     operation: str = "generate"
 
     def resolved(self) -> Request:
@@ -173,6 +174,10 @@ class Request:
             raise QwenImage21Error("Fun ControlNetの条件の種類が不正です。")
         if isinstance(self.control_strength, bool) or not isinstance(self.control_strength, (int, float)) or not math.isfinite(self.control_strength) or not 0 <= self.control_strength <= 2:
             raise QwenImage21Error("Fun ControlNetの強さは0〜2で指定してください。")
+        if not isinstance(self.control_inpaint, bool):
+            raise QwenImage21Error("Fun ControlNetのInpainting指定が不正です。")
+        if self.control_inpaint and self.control_kind == "off":
+            raise QwenImage21Error("Inpainting＋Controlには制御画像と種類を指定してください。")
         control_image = ""
         if self.control_kind != "off":
             if self.operation != "generate" or self.precision != "int8":
@@ -215,9 +220,9 @@ class Request:
         if not isinstance(self.edit_mask_path, (str, Path)):
             raise QwenImage21Error("編集マスクの形式が不正です。")
         mask_path = ""
-        if self.preserve_unmasked:
+        if self.preserve_unmasked or self.control_inpaint:
             if not 0 <= mask_reference < len(inputs) or not self.edit_mask_path:
-                raise QwenImage21Error("範囲外を固定するには編集元の参照画像と編集マスクを指定してください。")
+                raise QwenImage21Error("マスク編集には編集元の参照画像と編集マスクを指定してください。")
             mask_path, _ = validate_edit_mask(
                 inputs[mask_reference], str(self.edit_mask_path), output_size=(width, height)
             )

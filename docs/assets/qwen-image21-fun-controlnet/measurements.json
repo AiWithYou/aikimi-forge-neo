@@ -18,7 +18,8 @@
     "sampling_seconds": 49.706,
     "peak_allocated_mib": 12403.1,
     "reused_model": false,
-    "image_sha256": "7748bd0b9c29ce19d65d249783facd48b9b5a52ff44cf6391ae176b58af8d604"
+    "image_sha256": "7748bd0b9c29ce19d65d249783facd48b9b5a52ff44cf6391ae176b58af8d604",
+    "control_inpaint": false
   },
   {
     "name": "ring-3d-prompt-only",
@@ -37,7 +38,8 @@
     "sampling_seconds": 38.057,
     "peak_allocated_mib": 9765.5,
     "reused_model": true,
-    "image_sha256": "2d16273fc6d6bea29343cbb924eaab896bd9fcf95806922cc3c19e4a9b666ab8"
+    "image_sha256": "2d16273fc6d6bea29343cbb924eaab896bd9fcf95806922cc3c19e4a9b666ab8",
+    "control_inpaint": false
   },
   {
     "name": "anime-reference-lineart",
@@ -58,7 +60,8 @@
     "sampling_seconds": 120.265,
     "peak_allocated_mib": 13555.1,
     "reused_model": true,
-    "image_sha256": "a5d10048a0794c841a40b2f1bd9800b3859c71f7f435af894aff256d2d40c8ca"
+    "image_sha256": "a5d10048a0794c841a40b2f1bd9800b3859c71f7f435af894aff256d2d40c8ca",
+    "control_inpaint": false
   },
   {
     "name": "ring-3d-control",
@@ -77,7 +80,8 @@
     "sampling_seconds": 151.579,
     "peak_allocated_mib": 12200.2,
     "reused_model": false,
-    "image_sha256": "e16fec9edd04080a4d2ce7bf9151be63050c7f56c4d8fb171fd8456d5ce2c937"
+    "image_sha256": "e16fec9edd04080a4d2ce7bf9151be63050c7f56c4d8fb171fd8456d5ce2c937",
+    "control_inpaint": false
   },
   {
     "name": "ring-3d-copper",
@@ -96,6 +100,165 @@
     "sampling_seconds": 151.36,
     "peak_allocated_mib": 12203.2,
     "reused_model": false,
-    "image_sha256": "ee079d2663eea87da221e623ccb755bc41b6d856261974b6a8dd549fea9dd7cc"
+    "image_sha256": "ee079d2663eea87da221e623ccb755bc41b6d856261974b6a8dd549fea9dd7cc",
+    "control_inpaint": false
+  },
+  {
+    "name": "anime-reference-pose",
+    "control_kind": "pose",
+    "control_source": "anime-pose-guide.png",
+    "inpaint_source": null,
+    "inpaint_mask": null,
+    "references": [
+      "anime-character-reference.jpg"
+    ],
+    "prompt": "Use Image 1 as the character identity and color reference: the same young adult woman with long silver-blue high ponytail, pale blue eyes, and a blue-and-white sailor dress. Create a NEW full-body 2D anime illustration of her balancing on one foot on a narrow stepping stone over a rain puddle, her other leg lifted behind. Her left arm holds an open transparent umbrella diagonally above and left of her head; her right arm reaches far right to release a tiny origami crane. Wide, airy asymmetric composition, entire body visible, delicate blue cel shading, luminous rainy twilight. Keep her identity and outfit from Image 1 while following the separate pose guide for pose and object positions.",
+    "seed": 43,
+    "steps": 40,
+    "size": [
+      768,
+      1024
+    ],
+    "control_strength": 0.8,
+    "load_seconds": 346.204,
+    "sampling_seconds": 259.799,
+    "peak_allocated_mib": 13555.2,
+    "reused_model": false,
+    "image_sha256": "9d4c50388e420cb19abea06d85e25a6399fe24f7ae7fe2e7d257d90485d2698a",
+    "control_inpaint": false
+  },
+  {
+    "name": "ring-3d-canny",
+    "control_kind": "canny",
+    "control_source": "ring-canny.png",
+    "inpaint_source": null,
+    "inpaint_mask": null,
+    "references": [],
+    "prompt": "Cinematic 3D environment render of an impossible canal-side observatory. A huge hollow vertical limestone ring supports a small dome on top; a long raised bridge passes through the ring opening and connects to a separate lighthouse at right. Several arches at staggered heights, rocky islands, water, and a single tiny boat in the foreground. Warm sunrise light, physically based stone and water, strong depth, detailed but coherent architecture. Follow the supplied Canny edge layout.",
+    "seed": 43,
+    "steps": 40,
+    "size": [
+      1024,
+      768
+    ],
+    "control_strength": 0.8,
+    "load_seconds": 0.0,
+    "sampling_seconds": 73.853,
+    "peak_allocated_mib": 12202.4,
+    "reused_model": true,
+    "image_sha256": "a373c6fee8b7ed73ba14e0f4e28583c42f4a2a392f5b8baf1e064038df9d8622",
+    "control_inpaint": false
+  },
+  {
+    "name": "ring-3d-depth",
+    "control_kind": "depth",
+    "control_source": "ring-depth.png",
+    "inpaint_source": null,
+    "inpaint_mask": null,
+    "references": [],
+    "prompt": "Cinematic 3D environment render of an impossible canal-side observatory. A huge hollow vertical limestone ring supports a small dome on top; a long raised bridge passes through the ring opening and connects to a separate lighthouse at right. Several arches at staggered heights, rocky islands, water, and a single tiny boat in the foreground. Warm sunrise light, physically based stone and water, strong depth, detailed but coherent architecture. Follow the supplied depth layout.",
+    "seed": 43,
+    "steps": 40,
+    "size": [
+      1024,
+      768
+    ],
+    "control_strength": 0.8,
+    "load_seconds": 0.0,
+    "sampling_seconds": 70.072,
+    "peak_allocated_mib": 12202.0,
+    "reused_model": true,
+    "image_sha256": "bc1be98d74ac413552d209718e994e66451632603a2ffa6991ffce9098f03e0f",
+    "control_inpaint": false
+  },
+  {
+    "name": "ring-3d-gray",
+    "control_kind": "gray",
+    "control_source": "ring-gray.png",
+    "inpaint_source": null,
+    "inpaint_mask": null,
+    "references": [],
+    "prompt": "Cinematic 3D environment render of an impossible canal-side observatory. A huge hollow vertical limestone ring supports a small dome on top; a long raised bridge passes through the ring opening and connects to a separate lighthouse at right. Several arches at staggered heights, rocky islands, water, and a single tiny boat in the foreground. Warm sunrise light, physically based stone and water, strong depth, detailed but coherent architecture. Follow the supplied grayscale composition.",
+    "seed": 43,
+    "steps": 40,
+    "size": [
+      1024,
+      768
+    ],
+    "control_strength": 0.65,
+    "load_seconds": 0.0,
+    "sampling_seconds": 67.185,
+    "peak_allocated_mib": 12202.7,
+    "reused_model": true,
+    "image_sha256": "a615775bd4fade27775bb42c5b0ee796ac9c716e4a82946bf3603f92f20cbfef",
+    "control_inpaint": false
+  },
+  {
+    "name": "ring-3d-hed",
+    "control_kind": "hed",
+    "control_source": "ring-hed.png",
+    "inpaint_source": null,
+    "inpaint_mask": null,
+    "references": [],
+    "prompt": "Cinematic 3D environment render of an impossible canal-side observatory. A huge hollow vertical limestone ring supports a small dome on top; a long raised bridge passes through the ring opening and connects to a separate lighthouse at right. Several arches at staggered heights, rocky islands, water, and a single tiny boat in the foreground. Warm sunrise light, physically based stone and water, strong depth, detailed but coherent architecture. Follow the supplied soft HED edge layout.",
+    "seed": 43,
+    "steps": 40,
+    "size": [
+      1024,
+      768
+    ],
+    "control_strength": 0.8,
+    "load_seconds": 0.0,
+    "sampling_seconds": 72.202,
+    "peak_allocated_mib": 12202.8,
+    "reused_model": true,
+    "image_sha256": "292d8f6685fac3e0324e3ada31e8f066cebd4dd1512bae01590a7d7c72130f37",
+    "control_inpaint": false
+  },
+  {
+    "name": "ring-3d-mlsd",
+    "control_kind": "mlsd",
+    "control_source": "ring-mlsd.png",
+    "inpaint_source": null,
+    "inpaint_mask": null,
+    "references": [],
+    "prompt": "Cinematic 3D environment render of an impossible canal-side observatory. A huge hollow vertical limestone ring supports a small dome on top; a long raised bridge passes through the ring opening and connects to a separate lighthouse at right. Several arches at staggered heights, rocky islands, water, and a single tiny boat in the foreground. Warm sunrise light, physically based stone and water, strong depth, detailed but coherent architecture. Follow the supplied MLSD line segment layout.",
+    "seed": 43,
+    "steps": 40,
+    "size": [
+      1024,
+      768
+    ],
+    "control_strength": 0.8,
+    "load_seconds": 0.0,
+    "sampling_seconds": 74.007,
+    "peak_allocated_mib": 12202.8,
+    "reused_model": true,
+    "image_sha256": "5aab4df013dabfd6d124af3cd41e1bf7deff1fe60193cd286f6f588a781be4cf",
+    "control_inpaint": false
+  },
+  {
+    "name": "ring-3d-inpaint",
+    "control_kind": "canny",
+    "control_source": "ring-inpaint-canny.png",
+    "inpaint_source": "ring-3d-control.png",
+    "inpaint_mask": "ring-inpaint-mask.png",
+    "references": [
+      "ring-3d-control.png"
+    ],
+    "prompt": "Use Image 1 as the existing scene. Change only the huge circular observatory and its small dome inside the white edit mask from pale limestone to dark aged copper with turquoise patina in the seams. Keep the bridge passing through the ring, the right lighthouse, islands, boat, sky, sunset lighting, and water in their original positions. Photorealistic 3D architectural render.",
+    "seed": 43,
+    "steps": 40,
+    "size": [
+      1024,
+      768
+    ],
+    "control_strength": 0.8,
+    "load_seconds": 0.0,
+    "sampling_seconds": 168.434,
+    "peak_allocated_mib": 13539.7,
+    "reused_model": true,
+    "image_sha256": "eeb4df36fdf193a0736af67b3488c43c5cecb53ac47d98e715f3838350ef0bcc",
+    "control_inpaint": true
   }
 ]

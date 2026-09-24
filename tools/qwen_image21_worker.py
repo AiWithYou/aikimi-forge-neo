@@ -176,6 +176,11 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
             raise ValueError("Each input image must be an existing absolute local file path.")
     request["input_images"] = images
     control_image = request.get("control_image", "")
+    control_inpaint = request.get("control_inpaint", False)
+    if not isinstance(control_inpaint, bool):
+        raise ValueError("control_inpaint must be a boolean.")
+    if control_inpaint and not control_image:
+        raise ValueError("Inpainting + Control requires a ControlNet image.")
     if control_image:
         if not isinstance(control_image, str) or not Path(control_image).is_absolute() or not Path(control_image).is_file():
             raise ValueError("ControlNet requires an existing absolute local image path.")
@@ -188,6 +193,17 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         raise ValueError("control_strength must be between 0 and 2.")
     request["control_image"] = control_image
     request["control_strength"] = float(strength)
+    request["control_inpaint"] = control_inpaint
+    if control_inpaint:
+        from modules_forge.qwen_image21.annotations import validate_edit_mask
+
+        edit_mask = request.get("edit_mask")
+        if not isinstance(edit_mask, dict):
+            raise ValueError("Inpainting + Control requires an edit source and mask.")
+        source_path, mask_path = edit_mask.get("original_path"), edit_mask.get("mask_path")
+        if not all(isinstance(path, str) and Path(path).is_absolute() for path in (source_path, mask_path)):
+            raise ValueError("Inpainting + Control requires absolute edit source and mask paths.")
+        validate_edit_mask(source_path, mask_path, output_size=(request["width"], request["height"]))
     if operation == "prepare" and request["precision"] not in {"int8", "w4a8"}:
         raise ValueError("Only INT8 and W4A8 models need conversion")
     return job, model_path, request
@@ -635,7 +651,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         controlnet = runtime.get("controlnet")
         control_info = None
         if controlnet is not None:
-            from PIL import Image, ImageOps
+            from PIL import Image, ImageChops, ImageOps
 
             from modules_forge.qwen_image21.fun_controlnet import installed
 
@@ -646,13 +662,34 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                     method=Image.Resampling.LANCZOS,
                 )
             control.save(job / "control.png")
+            inpaint_source = inpaint_mask = None
+            if request["control_inpaint"]:
+                info = request["edit_mask"]
+                with Image.open(info["original_path"]) as source:
+                    inpaint_source = ImageOps.exif_transpose(source).convert("RGB")
+                with Image.open(info["mask_path"]) as source:
+                    source.load()
+                    oriented = ImageOps.exif_transpose(source)
+                    inpaint_mask = oriented.convert("L")
+                    if "A" in oriented.getbands() or "transparency" in oriented.info:
+                        inpaint_mask = ImageChops.multiply(
+                            inpaint_mask, oriented.convert("RGBA").getchannel("A")
+                        )
+                inpaint_source.save(job / "inpaint-source.png")
+                inpaint_mask.save(job / "inpaint-mask.png")
             control_generator = torch.Generator(device="cpu").manual_seed(request["seed"])
-            controlnet.set_control(runtime["pipe"], control, request["control_strength"], control_generator)
+            controlnet.set_control(
+                runtime["pipe"], control, request["control_strength"], control_generator,
+                inpaint_image=inpaint_source, mask_image=inpaint_mask,
+            )
             control_info = {
                 **installed(model_path.parent),
                 "kind": request.get("control_kind", "preprocessed"),
                 "strength": request["control_strength"],
                 "image": "control.png",
+                "inpaint": request["control_inpaint"],
+                **({"inpaint_source": "inpaint-source.png", "inpaint_mask": "inpaint-mask.png"}
+                   if request["control_inpaint"] else {}),
             }
             _check_cancel(job)
         prompt = rewrite["rewritten_prompt"] if rewrite["applied"] else request["prompt"].strip()

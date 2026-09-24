@@ -20,5 +20,50 @@
     "file": "ring-observatory-scribble.png",
     "origin": "Deterministic black-background preprocessing of ring-observatory-lineart.png with tools/prepare_qwen21_fun_example_scribble.py",
     "sha256": "fbe2bce01f12dd8c78d7245b7c678eca3d55e22afffaa84b4c75218a2a77a5bf"
+  },
+  {
+    "file": "ring-observatory-render-source.png",
+    "origin": "Original ImageGen 3D render of the ring observatory, 2026-09-24",
+    "sha256": "a7db1f0fa43b0ad485d412580e41b4db03c8db87f5a39a52f2b8695ab4145926"
+  },
+  {
+    "file": "ring-canny.png",
+    "origin": "OpenCV Canny(80,160) of ring-observatory-render-source.png after bilateral smoothing",
+    "sha256": "aee003401e384e451b85e30192e1b2244e301d422909d342065171594e58d5ba"
+  },
+  {
+    "file": "ring-gray.png",
+    "origin": "OpenCV RGB-to-grayscale conversion of ring-observatory-render-source.png",
+    "sha256": "ab896331411dd6fdb8b0742249482aa4628beb7b2f7499f3f8e199ecf491e379"
+  },
+  {
+    "file": "ring-hed.png",
+    "origin": "Legacy ControlNet HED annotator at half resolution, pinned lllyasviel/Annotators weights",
+    "sha256": "d0098578070504e0e6f73b9515c1de6c0086208ff9f16c4292658c60a4be64e9"
+  },
+  {
+    "file": "ring-mlsd.png",
+    "origin": "Legacy ControlNet MLSD annotator on original render, pinned lllyasviel/ControlNet weights",
+    "sha256": "a85df4bcb2d386f356af2ec3e9ba0b7199143971ad0a180f151a1ab3790db0f9"
+  },
+  {
+    "file": "ring-depth.png",
+    "origin": "Depth Anything V2 Small relative-depth estimate of original render, pinned Hugging Face revision",
+    "sha256": "f3ba6522a144dfb16b76c248ced78ea0a85d25322b1e289cf90fd39c812240ec"
+  },
+  {
+    "file": "anime-pose-guide.png",
+    "origin": "Hand traced sparse body skeleton from anime-pose-lineart.png",
+    "sha256": "8e154dfe82c3160a86bda76397641d3ec5f73744bb38a1c39ec153f5641efbad"
+  },
+  {
+    "file": "ring-inpaint-mask.png",
+    "origin": "Hand drawn white edit region for ring-3d-control.png; black keeps the surroundings",
+    "sha256": "d22141ceb9e25904c160d6db910f2db0bdc3cf01105e66b5470883102c28e995"
+  },
+  {
+    "file": "ring-inpaint-canny.png",
+    "origin": "OpenCV Canny(80,160) of the original Qwen render ring-3d-control.png after bilateral smoothing",
+    "sha256": "e39495b13545ccb52c440b627e755155d9a2363e00006f2916f98e6424114963"
   }
 ]

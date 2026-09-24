@@ -50,6 +50,13 @@ RING_COPPER_PROMPT = (
     "lighting, physically based materials and atmospheric depth. Follow the supplied "
     "lineart layout."
 )
+RING_INPAINT_PROMPT = (
+    "Use Image 1 as the existing scene. Change only the huge circular observatory "
+    "and its small dome inside the white edit mask from pale limestone to dark "
+    "aged copper with turquoise patina in the seams. Keep the bridge passing "
+    "through the ring, the right lighthouse, islands, boat, sky, sunset lighting, "
+    "and water in their original positions. Photorealistic 3D architectural render."
+)
 
 # The two unconditioned baselines run first to avoid unnecessary model reloads.
 CASES = {
@@ -70,6 +77,37 @@ CASES = {
     "ring-3d-copper": {
         "prompt": RING_COPPER_PROMPT, "size": (1024, 768),
         "kind": "scribble", "control": "ring-observatory-scribble.png", "strength": 0.65,
+    },
+    "anime-reference-pose": {
+        "prompt": ANIME_PROMPT.replace("separate lineart guide", "separate pose guide"),
+        "size": (768, 1024), "references": ("anime-character-reference.jpg",),
+        "kind": "pose", "control": "anime-pose-guide.png", "strength": 0.8,
+    },
+    "ring-3d-canny": {
+        "prompt": RING_PROMPT.replace("lineart layout", "Canny edge layout"),
+        "size": (1024, 768), "kind": "canny", "control": "ring-canny.png", "strength": 0.8,
+    },
+    "ring-3d-depth": {
+        "prompt": RING_PROMPT.replace("lineart layout", "depth layout"),
+        "size": (1024, 768), "kind": "depth", "control": "ring-depth.png", "strength": 0.8,
+    },
+    "ring-3d-gray": {
+        "prompt": RING_PROMPT.replace("lineart layout", "grayscale composition"),
+        "size": (1024, 768), "kind": "gray", "control": "ring-gray.png", "strength": 0.65,
+    },
+    "ring-3d-hed": {
+        "prompt": RING_PROMPT.replace("lineart layout", "soft HED edge layout"),
+        "size": (1024, 768), "kind": "hed", "control": "ring-hed.png", "strength": 0.8,
+    },
+    "ring-3d-mlsd": {
+        "prompt": RING_PROMPT.replace("lineart layout", "MLSD line segment layout"),
+        "size": (1024, 768), "kind": "mlsd", "control": "ring-mlsd.png", "strength": 0.8,
+    },
+    "ring-3d-inpaint": {
+        "prompt": RING_INPAINT_PROMPT, "size": (1024, 768),
+        "references": ("ring-3d-control.png",),
+        "kind": "canny", "control": "ring-inpaint-canny.png", "strength": 0.8,
+        "inpaint_source": "ring-3d-control.png", "inpaint_mask": "ring-inpaint-mask.png",
     },
 }
 
@@ -108,7 +146,13 @@ def main() -> None:
                     "control_kind": case.get("kind", "off"),
                     "control_image": str((ASSETS / control).resolve()) if control else "",
                     "control_strength": case.get("strength", 1.0),
+                    "control_inpaint": bool(case.get("inpaint_mask")),
                 }
+                if case.get("inpaint_mask"):
+                    request["edit_mask"] = {
+                        "original_path": str((ASSETS / case["inpaint_source"]).resolve()),
+                        "mask_path": str((ASSETS / case["inpaint_mask"]).resolve()),
+                    }
                 (job / "request.json").write_text(
                     json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
@@ -126,6 +170,9 @@ def main() -> None:
                 records[name] = {
                     "name": name, "control_kind": case.get("kind", "off"),
                     "control_source": control,
+                    "control_inpaint": bool(case.get("inpaint_mask")),
+                    "inpaint_source": case.get("inpaint_source"),
+                    "inpaint_mask": case.get("inpaint_mask"),
                     "references": list(case.get("references", ())),
                     "prompt": case["prompt"], "seed": 43, "steps": 40,
                     "size": [width, height],

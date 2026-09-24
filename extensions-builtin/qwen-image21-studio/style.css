@@ -26,7 +26,7 @@ body:has(#aikimi-feature-nav[data-active-feature="qwen_image21"]) #quicksettings
     min-width: 0;
 }
 
-#qwen21-annotation-panel:not(:has(#qwen21-preserve-unmasked input:checked)) #qwen21-mask-panel,
+body:not(:has(#qwen21-preserve-unmasked input:checked, #qwen21-control-inpaint input:checked)) #qwen21-mask-panel,
 #qwen21-mask-panel:has(#qwen21-mask-source input[value="paint"]:checked) #qwen21-mask-upload,
 #qwen21-mask-panel:has(#qwen21-mask-source input[value="upload"]:checked) #qwen21-mask-paint {
     display: none !important;
