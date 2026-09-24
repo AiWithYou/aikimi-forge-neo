@@ -1,5 +1,10 @@
 # 変更履歴
 
+## v2.2.0 — 2026-09-24
+
+- Qwen Image 2.1 Fun ControlNet UnionのInpainting＋Controlを追加。編集元・白黒マスク・制御画像を129チャンネルの制御条件へ渡し、既存の生成後の範囲外固定とは独立して選べます。
+- 公式が挙げるCanny、Depth、Gray、HED、Lineart、MLSD、Pose、Scribbleの全8種類とInpaintingについて、ユーザー提供の2D人物参照と新規生成した3D建築から条件画像と実生成作例を用意しました。素材の出自、前処理、生成条件、実測を記録しています。
+
 ## v2.1.1 — 2026-09-24
 
 - Qwen Image 2.1 Fun ControlNetの作例から公式配布の条件画像を除き、ユーザー提供の2D人物参照と新規生成したLineart・Scribble条件画像に差し替えました。人物参照＋別ポーズのLineart、複雑な建築の3D描画を、制御なしとの比較付きで掲載します。

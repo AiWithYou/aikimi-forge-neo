@@ -200,6 +200,24 @@ class EditMaskTests(unittest.TestCase):
         self.assertTrue(studio._jobs[identifier].done.wait(5))
         self.assertEqual(studio.status(identifier, "owner")["state"], "failed")
 
+    def test_service_snapshots_inpainting_mask_without_post_composite(self):
+        studio = self.studio(FakeResident())
+        request = self.request(
+            preserve_unmasked=False, control_inpaint=True,
+            control_kind="canny", control_image=str(self.original), precision="int8",
+        )
+        with patch("modules_forge.qwen_image21.fun_controlnet.installed", return_value={}):
+            identifier = studio.start(request, "owner")
+        self.assertTrue(studio._jobs[identifier].done.wait(5))
+        state = studio.status(identifier, "owner")
+        self.assertEqual(state["state"], "complete", state)
+        self.assertEqual([path.name for path in studio.artifacts(identifier, "owner")], ["output.png"])
+        directory = Path(state["output_path"]).parent
+        saved = core.read_json(directory / "request.json")
+        self.assertEqual(saved["edit_mask"]["mask_path"], str(directory / "edit-mask.png"))
+        self.assertEqual(saved["edit_mask"]["original_path"], saved["clean_input_images"][0])
+        self.assertTrue(saved["control_inpaint"])
+
     def test_edit_rewriter_preflight_is_independent_and_before_gpu_lease(self):
         studio = self.studio(FakeResident())
         with (
@@ -252,6 +270,30 @@ class EditMaskTests(unittest.TestCase):
         self.assertEqual(request.annotation_reference, -1)
         self.assertEqual((request.width, request.height), (256, 256))
         self.assertFalse(Path(request.edit_mask_path).exists())
+
+    def test_canvas_inpainting_uses_mask_without_post_composite(self):
+        ui = load_ui()
+        accepted = []
+
+        def submit(request, owner):
+            accepted.append(request.resolved())
+            return "accepted"
+
+        with patch.object(ui.STUDIO, "start", side_effect=submit):
+            result = ui.start_canvas(
+                "Turn the circle into copper", [str(self.original)], "reference",
+                False, "int8", "offload", "1", 2,
+                gr.Request(session_hash="owner"),
+                preserve_unmasked=False, control_inpaint=True,
+                mask_target=str(self.original), mask_source="upload",
+                mask_upload=str(self.mask), control_kind="canny",
+                control_image=str(self.original),
+            )
+        self.assertEqual(result[0], "accepted", result)
+        self.assertEqual(len(accepted), 1)
+        self.assertTrue(accepted[0].control_inpaint)
+        self.assertFalse(accepted[0].preserve_unmasked)
+        self.assertEqual(accepted[0].edit_mask_reference, 0)
 
     def test_result_selection_does_not_reset_after_viewing_raw(self):
         ui = load_ui()

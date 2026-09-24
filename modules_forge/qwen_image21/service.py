@@ -155,7 +155,7 @@ class Studio:
                         request.mask_feather,
                         directory,
                     )
-                    if request.preserve_unmasked
+                    if request.preserve_unmasked or request.control_inpaint
                     else {}
                 )
                 payload["edit_mask_path"] = payload["edit_mask"].get("mask_path", "")

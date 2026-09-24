@@ -212,7 +212,7 @@ def validate_edit_mask(reference_path: str, mask_path: str, *, output_size=None)
             raise QwenImage21Error("マスクと編集元のサイズが一致しません。同じ大きさのマスクを指定してください。")
         if output_size is not None and original.size != tuple(output_size):
             raise QwenImage21Error(
-                f"範囲外を固定するには編集元と同じ出力サイズ（{original.width}×{original.height}）を指定してください。"
+                f"マスク編集には編集元と同じ出力サイズ（{original.width}×{original.height}）を指定してください。"
             )
         bounds = mask.getbbox()
         if bounds is None:

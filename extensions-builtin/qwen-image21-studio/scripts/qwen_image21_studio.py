@@ -186,6 +186,7 @@ def start(
     control_kind="off",
     control_image=None,
     control_strength=1.0,
+    control_inpaint=False,
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
@@ -197,7 +198,7 @@ def start(
                 raise QwenImage21Error("同じサイズにする編集元の参照画像を指定してください。")
             index = (
                 edit_mask_reference
-                if preserve_unmasked
+                if preserve_unmasked or control_inpaint
                 else (reference_index(paths, annotation_target) if annotation_target else 0)
             )
             if not isinstance(index, int) or not 0 <= index < len(paths):
@@ -233,6 +234,7 @@ def start(
             control_kind=control_kind,
             control_image=control_image or "",
             control_strength=control_strength,
+            control_inpaint=control_inpaint,
         )
         identifier = STUDIO.start(generation, owner(request))
         return (
@@ -525,6 +527,7 @@ def start_canvas(
     control_kind="off",
     control_image=None,
     control_strength=1.0,
+    control_inpaint=False,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
@@ -539,10 +542,10 @@ def start_canvas(
                 foreground.save(directory / "marks.png", format="PNG")
                 editor = {"background": str(directory / "background.png"), "layers": [str(directory / "marks.png")]}
             mask_reference, mask_path = -1, ""
-            if preserve_unmasked:
+            if preserve_unmasked or control_inpaint:
                 paths = reference_paths(gallery)
                 if not mask_target:
-                    raise QwenImage21Error("範囲外を固定する編集元を開いてください。")
+                    raise QwenImage21Error("マスクで編集する参照画像を開いてください。")
                 mask_reference = reference_index(paths, mask_target)
                 if mask_source == "upload":
                     if not isinstance(mask_upload, (str, Path)) or not mask_upload:
@@ -550,7 +553,7 @@ def start_canvas(
                     mask_path = str(mask_upload)
                 elif mask_source == "paint":
                     if mask_background is None or mask_foreground is None:
-                        raise QwenImage21Error("範囲外を固定するには変更する範囲を塗ってください。")
+                        raise QwenImage21Error("マスクで変更する範囲を塗ってください。")
                     mask_background.save(directory / "mask-background.png", format="PNG")
                     mask_foreground.save(directory / "mask-paint.png", format="PNG")
                     painted_reference, _ = resolve_annotation(
@@ -595,6 +598,7 @@ def start_canvas(
                 control_kind,
                 control_image,
                 control_strength,
+                control_inpaint,
             )
     except Exception as exc:
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
@@ -607,9 +611,9 @@ def switch_workspace(view):
     )
 
 
-def refresh_mask(gallery, annotation_target, current_target, enabled=True):
+def refresh_mask(gallery, annotation_target, current_target, preserve_unmasked=True, control_inpaint=False):
     paths = reference_paths(gallery)
-    if not enabled or not annotation_target:
+    if not (preserve_unmasked or control_inpaint) or not annotation_target:
         return "", None, None, None
     try:
         index = reference_index(paths, annotation_target)
@@ -833,6 +837,12 @@ def on_ui_tabs():
                         sources=["upload", "clipboard"], interactive=True, height=180,
                         elem_id="qwen21-control-image",
                     )
+                    control_inpaint = gr.Checkbox(
+                        value=False,
+                        label="Inpainting＋Control（マスクをモデルへ渡す）",
+                        info="参照画像を開き、編集範囲をマスクで指定します。白い部分を再生成します。",
+                        elem_id="qwen21-control-inpaint",
+                    )
                     gr.Markdown("通常版INT8で利用。導入: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_controlnet.py --download`")
                 with gr.Row():
                     generate = gr.Button("生成・編集", variant="primary", elem_id="qwen21-generate")
@@ -1002,6 +1012,7 @@ def on_ui_tabs():
                 control_kind,
                 control_image,
                 control_strength,
+                control_inpaint,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,
@@ -1022,16 +1033,17 @@ def on_ui_tabs():
             **PRIVATE,
         )
         stop.click(cancel, inputs=job, outputs=[status, stop], queue=False, **PRIVATE)
-        preserve_unmasked.change(
-            lambda enabled: gr.update(value="reference") if enabled else gr.update(),
-            inputs=preserve_unmasked,
-            outputs=resolution,
-            **PRIVATE,
-        )
-        for component in (annotation_target, preserve_unmasked):
+        for component in (preserve_unmasked, control_inpaint):
+            component.change(
+                lambda enabled: gr.update(value="reference") if enabled else gr.update(),
+                inputs=component,
+                outputs=resolution,
+                **PRIVATE,
+            )
+        for component in (annotation_target, preserve_unmasked, control_inpaint):
             component.change(
                 refresh_mask,
-                inputs=[gallery, annotation_target, mask_target, preserve_unmasked],
+                inputs=[gallery, annotation_target, mask_target, preserve_unmasked, control_inpaint],
                 outputs=[mask_target, mask_canvas.background, mask_canvas.foreground, mask_upload],
                 **PRIVATE,
             )
