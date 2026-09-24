@@ -71,6 +71,7 @@ on:
       - "tools/tests/test_api_public_state.py"
       - "tools/tests/test_api_script_args.py"
       - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gpu_ownership.py"
       - "tools/tests/test_gpu_residency.py"
@@ -174,6 +175,7 @@ on:
       - "tools/tests/test_api_public_state.py"
       - "tools/tests/test_api_script_args.py"
       - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gpu_ownership.py"
       - "tools/tests/test_gpu_residency.py"
@@ -293,6 +295,7 @@ jobs:
           --module tools.tests.test_api_public_state
           --module tools.tests.test_api_script_args
           --module tools.tests.test_chromium_helpers
+          --module tools.tests.test_ci_audit_followup
           --module tools.tests.test_ci_workflow_boundaries
           --module tools.tests.test_qwen_image21_setup
           --module tools.tests.test_qwen_image21_service

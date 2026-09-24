@@ -7,12 +7,12 @@ import os
 import re
 import sys
 import unittest
+import unittest.mock as mock
 import uuid
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest import mock
 
 from tools import run_ci_tests as runner
 

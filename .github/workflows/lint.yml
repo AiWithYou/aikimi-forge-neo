@@ -61,6 +61,7 @@ on:
       - "tools/tests/test_aikimi_tabs_chromium.py"
       - "tools/tests/test_api_public_state.py"
       - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gradio_file_security.py"
       - "tools/tests/test_gradio_file_url_guard.py"
@@ -142,6 +143,7 @@ on:
       - "tools/tests/test_aikimi_tabs_chromium.py"
       - "tools/tests/test_api_public_state.py"
       - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gradio_file_security.py"
       - "tools/tests/test_gradio_file_url_guard.py"
@@ -262,6 +264,7 @@ jobs:
             tools/tests/test_aikimi_tabs_chromium.py
             tools/tests/test_api_public_state.py
             tools/tests/test_chromium_helpers.py
+            tools/tests/test_ci_audit_followup.py
             tools/tests/test_ci_workflow_boundaries.py
             tools/tests/test_gradio_file_security.py
             tools/tests/test_gradio_file_url_guard.py

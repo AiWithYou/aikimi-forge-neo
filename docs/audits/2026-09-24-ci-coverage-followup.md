@@ -114,3 +114,46 @@ its installation attempt failed; no Ruff success is claimed. GitHub Actions
 results must be inspected separately before merging. The earlier dependency
 findings and unmatched-package limits remain open unless independently
 resolved; this change does not mark them fixed.
+
+## Full-checkout integration on Windows (2026-09-24)
+
+The five-file archive patch was applied to the complete `e40a322d` checkout.
+Its original Git blobs matched the archive's source hashes. In this checkout,
+the existing `test_run_ci_tests.py` fixture returned a successful mock result
+without `testsRun` or `skipped`. The new empty-suite check raised
+`AttributeError`; the published draft PR's Linux CPU and Windows smoke jobs
+failed for the same reason. The fixture now uses a real `unittest.TestResult`
+with one completed test. The new regression module is also included in the explicit
+Windows smoke selection and Ruff lint list. A CodeQL review comment about
+mixing two import forms for `unittest` was addressed in that module.
+
+Local verification used Windows and the existing Python 3.13.14 environment:
+
+- Full CPU/offline unittest suite: 1,676 tests, success (52 skipped, one
+  expected failure).
+- H3 handoff and Union contracts: 89 passed, 19 subtests passed.
+- YuE2 contracts: 44 passed, five skipped. Jev contracts: 245 passed.
+- JavaScript H3 conversion contracts: 15 passed.
+- Focused runner and legacy-runner tests: 25 passed. Separate CLI invocations
+  returned 5 for empty unittest and pytest selections and 2 for `--pytest`
+  without arguments.
+- Ruff check and format passed for all three changed Python files. All four
+  changed workflows parsed as YAML; actionlint 1.7.12, six existing CI-boundary
+  tests and `git diff --check` passed.
+
+The original [PR #9](https://github.com/AiWithYou/aikimi-forge-neo/pull/9) checks
+at `b1484f9` also reported dependency review blocked by unavailable Dependency
+Graph support. During integration, the repository's Dependency Graph was
+enabled and its SBOM API returned 74 packages, resolving that prerequisite.
+
+The dependency findings remain open: Qwen's Git/dev Diffusers version cannot
+be matched by PyPI; Forge reports an Accelerate advisory; SenseNova reports 11
+advisory rows across three packages, with CUDA-local Torch wheels unmatched.
+PyPI was rechecked on 2026-09-24: the latest Accelerate is 1.15.0, diskcache
+5.6.3, and Diffusers 0.40.0. The existing [compatibility assessment](../security-model.md)
+documents why these versions do not provide a verified runtime-compatible
+remediation. Accelerate's [proposed fix](https://github.com/huggingface/accelerate/pull/4138)
+is closed without merging. SenseNova requires a separately validated
+Transformers migration; Qwen requires its pinned development code. This
+integration does not add a vulnerability exclusion or claim that the dependency
+audits passed.

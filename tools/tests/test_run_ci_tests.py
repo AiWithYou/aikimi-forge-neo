@@ -72,10 +72,8 @@ class RunCiTestsTests(unittest.TestCase):
         previous_records = minimax_h3_pending.DIRECTORY
         observed: dict[str, object] = {}
 
-        class SuccessfulResult:
-            @staticmethod
-            def wasSuccessful():
-                return True
+        successful_result = unittest.TestResult()
+        successful_result.testsRun = 1
 
         def load_tests(start_directory, pattern, modules):
             observed["pending_records"] = minimax_h3_pending.DIRECTORY
@@ -94,7 +92,7 @@ class RunCiTestsTests(unittest.TestCase):
             mock.patch.object(
                 run_ci_tests.unittest,
                 "TextTestRunner",
-                return_value=mock.Mock(run=mock.Mock(return_value=SuccessfulResult())),
+                return_value=mock.Mock(run=mock.Mock(return_value=successful_result)),
             ),
             mock.patch.object(run_ci_tests.os, "chdir"),
             mock.patch.object(run_ci_tests.sys, "path", ["tools", "stdlib"]),
