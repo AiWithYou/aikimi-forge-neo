@@ -93,6 +93,7 @@ Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLi
 - [Krea2の高解像度処理](docs/krea2_local_supersample_detail_ja.md)
 - [Qwen Image 2.1：画像生成・編集・透過PNG・INT8・Fun ControlNet](extensions-builtin/qwen-image21-studio/README.md)
 - [Qwen Image 2.1 Fun ControlNet：全8種類とInpaintingのアニメ調・3D調作例](docs/assets/qwen-image21-fun-controlnet/README.md)
+- [Qwen Image 2.1 Fun ControlNet：作例付きnote記事](docs/note_qwen21_fun_controlnet_gemini38_ja.md) ／ [記事のサムネイル](docs/assets/qwen-image21-fun-controlnet-note/thumbnail.png)
 - [Anima 3.8B](extensions-builtin/anima-3-8b/README.md)
 - [SenseNova U1.5 Studio](extensions-builtin/sensenova-u15-studio/README.md)
 - [YuE2 Music：作曲・楽譜編集・GGUF](extensions-builtin/yue2-studio/README.md)
