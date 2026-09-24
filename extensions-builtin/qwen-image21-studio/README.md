@@ -17,6 +17,25 @@ GGUFは画像生成本体だけです。共通のテキストエンコーダー�
 
 結果は画面から保存し、そのまま次の編集の参照にも使えます。保存先は`outputs/qwen-image-2.1/`です。各生成の`request.json`、`result.json`、`output.png`、`worker.log`に設定・画像・実行記録が残ります。停止はその画面で開始したジョブにだけ作用します。ブラウザーを閉じてもジョブは継続し、実プロセスの停止確認が終わるまでGPU使用権を保持します。
 
+## Fun ControlNet Union · INT8
+
+[公式のQwen Image 2.1 Fun ControlNet Union](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)を、[KijaiのINT8 ConvRot変換](https://huggingface.co/Kijai/QwenImage_experimental/tree/04987755e10002ff33e4ea307a811487dddd79d9/model_patches)で使えます。Canny、Depth、Gray、HED、Lineart、MLSD、Pose、Scribbleの**前処理済み画像**に対応します。種類の選択は記録用で、モデルは共通のUnion重みを使います。画像をアップロードしただけでCannyやPoseを抽出する機能ではありません。
+
+1. Neoを終了し、`aikimi-qwen-image21-setup.bat --official-full`で通常版INT8に必要な公式フルモデルを導入します。GGUFだけでは利用できません。
+2. Qwen専用環境で追加の約3.78GBの重みを取得・SHA-256検証します。
+
+```powershell
+.\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_fun_controlnet.py --download
+# 既存ファイルを再検証する場合
+.\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_fun_controlnet.py --verify
+```
+
+3. Qwenタブで**通常 · INT8**、**CPUへ退避**を選び、**Fun ControlNet · INT8**欄の種類、前処理済み画像、制御の強さを指定して生成します。公式の作例と同じ強さは`1.0`です。画像は出力と同じ縦横比に中央切り抜きしてリサイズし、ジョブの`control.png`へ保存します。結果のダウンロード欄にも含まれます。
+
+ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所へ制御を加えます。重みはINT8 ConvRotのまま読み込み、未量子化の入力層や正規化層はBF16です。モデル本体のINT8は既存のbitsandbytes形式で、両者の量子化方式は異なります。ControlNet使用時はKVキャッシュを無効にし、Sparse AttentionもOFFにします。通常版INT8以外の精度やTurboとの組み合わせは受け付けません。制御画像と通常の参照画像は別入力です。公式モデルのinpaint制御枝は今回の画面では未接続で、**マスク範囲外を元画像に固定**は生成後の合成です。
+
+[アニメ調と3D調の実生成例・条件画像・実測記録](../../docs/assets/qwen-image21-fun-controlnet/README.md)を掲載しています。モデル重みはGitに含めません。公式重みと派生版には[非商用のQwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/blob/8a4702014d4dabb5f896fcba917e2ee0a961465f/LICENSE)が適用されます。商用利用には提供元の別途許諾が必要です。
+
 ## Viggle Turbo（BF16 / Q4_K_M）
 
 画面の**モデル・精度**で `Viggle Turbo · BF16` または `Viggle Turbo · Q4_K_M` を選びます。選択時にStepsは4へ変わり固定され、Sparse AttentionはOFFになります。通常版へ戻すと40 stepsに戻ります。両Turboモデルはテキストからの生成と参照画像編集に使えます。CFGは1.0、negative promptは使わず、Viggle配布の`shift_terminal=null`スケジューラーを読み込みます。
@@ -130,16 +149,16 @@ CPU退避では、PNG保存後に未使用のPyTorch GPUキャッシュを解放
 
 上記の実INT8編集では、保存後のPyTorch予約メモリを2,794→88MiB、再実行時は2,716→88MiBへ減らせました。2回の実行で観測したGPU総使用量の最大は15,741MiB（デスクトップ等を含む）、workerのRSS最大は約21.9GiBです。INT8でもCPU退避先のRAMにはモデルが残ります。この検証では上部の**GPU・モデル保持 → 今すぐモデルを解放**でworkerの終了を確認し、PC全体のRAMはピーク約44.9GiBから約22.7GiBへ戻りました。共通設定には**自動（5分後に解放）**もあります。**毎回解放**を選ぶとRAMを保持しない代わりに、次の生成で初回読み込みが再び必要です。
 
-**ここでのINT8はbitsandbytes形式です。Comfy-Org配布のINT8 ConvRotや従来のForge用Qwen単体チェックポイントは、このタブでは読み込めません。** 量子化後の画質・速度・メモリ使用量は設定に依存します。BF16と同じ画像になるとは限りません。
+**Qwen本体のINT8はbitsandbytes形式です。Comfy-Org配布のQwen本体INT8 ConvRotや従来のForge用単体チェックポイントは、このタブでは読み込めません。** 上記のFun ControlNetだけは別のINT8 ConvRotパッチとして読み込みます。量子化後の画質・速度・メモリ使用量は設定に依存します。BF16と同じ画像になるとは限りません。
 
-1024角は試作向けの初期設定です。公式の2Kサイズも選べます。大きな画像や多数の参照はVRAMを多く使うため、参照を少なくして試してください。参照画像は公式パイプラインで約1MPを基準に前処理します。マスクは生成後の範囲外固定に使います。モデルへのマスク条件入力、denoise strength、ForgeのLoRA・ControlNet・追加スクリプトはこのタブには接続していません。
+1024角は試作向けの初期設定です。公式の2Kサイズも選べます。大きな画像や多数の参照はVRAMを多く使うため、参照を少なくして試してください。参照画像は公式パイプラインで約1MPを基準に前処理します。マスクは生成後の範囲外固定に使います。モデルへのマスク条件入力、denoise strength、Forge本体のLoRA・ControlNet・追加スクリプトはこのタブには接続していません。Qwen専用のFun ControlNetは上記の経路を使います。
 
 ## 固定版と検証
 
 - モデル: `Qwen/Qwen-Image-2.1`、revision `b3179ad355be050328e483a9dfdd9e60cd62adfa`
 - 通常版GGUF: `unsloth/Qwen-Image-2.1-GGUF`、revision `2c31ccd392b367a6637841a143813320a02dff55`、`qwen-image-2.1-Q4_K_M.gguf`
 - Diffusers: `6256aa7666cedd47443adc8f82da9a10e110b09c`（Qwen Image 2.1対応の公式コミット）
-- Transformers 5.17.0、bitsandbytes 0.50.2、Accelerate 1.15.0
+- Transformers 5.17.0、bitsandbytes 0.50.2、comfy-kitchen 0.2.31、Accelerate 1.15.0
 - PyTorch 2.11.0 / CUDA 13.0。対応するNVIDIAドライバーとBF16対応GPUが必要です。
 
 導入内容の表示だけなら`aikimi-qwen-image21-setup.bat --dry-run`、環境だけの準備は`--runtime-only`、モデルの完全性の再検証は`--verify`を付けて実行します。生成時にはモデルを自動取得しません。不足があればセットアップ方法を表示します。

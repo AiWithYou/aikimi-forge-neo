@@ -1,5 +1,11 @@
 # 変更履歴
 
+## v2.1.0 — 2026-09-24
+
+- Qwen Image 2.1の通常版INT8にFun ControlNet Unionを追加。KijaiのINT8 ConvRot重みをSHA-256と構造で検証して導入し、16ブロックの制御枝を既存の専用workerで実行します。
+- QwenタブからPose・Gray・Scribbleなどの前処理済み画像と制御強度を指定可能にしました。ジョブには制御画像、使用モデル、生成条件を保存します。通常版INT8・Sparse OFFで利用します。
+- [アニメ調・3D調の実生成例と再現条件](docs/assets/qwen-image21-fun-controlnet/README.md)を追加しました。
+
 ## v2.0.0 — 2026-09-24
 
 - 本体・SenseNova・Qwenの既定環境をPyTorch 2.13.0／torchvision 0.28.0へ更新し、setuptools 83.0.0を導入できるようにしました。SenseNovaはTransformers 5.10.4へ移行しています。

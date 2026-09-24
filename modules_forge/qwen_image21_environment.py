@@ -13,6 +13,7 @@ VERSIONS = {
     "torchvision": "0.28.0+cu130",
     "transformers": "5.17.0",
     "bitsandbytes": "0.50.2",
+    "comfy-kitchen": "0.2.31",
     "accelerate": "1.15.0+aikimi.1",
     "setuptools": "83.0.0",
     "pip": "26.2.1",

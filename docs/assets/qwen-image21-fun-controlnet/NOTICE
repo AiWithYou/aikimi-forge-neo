@@ -1,0 +1,8 @@
+Qwen is licensed under the Qwen RESEARCH LICENSE AGREEMENT, Copyright (c) 2026 Hangzhou Tongyi Laboratory Technology Co., Ltd. All Rights Reserved.
+
+Source control images in this directory were copied from alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union, revision 8a4702014d4dabb5f896fcba917e2ee0a961465f:
+pose-control.png: asset/control_4_00000931.png
+gray-control.png: asset/control_1_00014291.png
+scribble-control.png: asset/control_13_00000494.png
+
+The copied control images were not modified. Generated examples in this directory use the Qwen Image 2.1 model and Fun ControlNet Union INT8 patch. See README.md for their prompts and settings. The model weights are not distributed in this repository.

@@ -16,6 +16,7 @@ from .core import (
     QwenImage21Error,
     Request,
     atomic_json,
+    copy_control_image,
     copy_inputs,
     inside,
     precision_label,
@@ -96,6 +97,13 @@ class Studio:
         if not isinstance(owner, str) or not owner:
             raise QwenImage21Error("ブラウザーのQwen Image 2.1タブから操作してください。")
         runtime_manifest(self.runtime, request.precision)
+        if request.control_kind != "off":
+            from .fun_controlnet import installed
+
+            try:
+                installed(self.runtime)
+            except (OSError, ValueError) as exc:
+                raise QwenImage21Error("Fun ControlNet INT8が未導入か不完全です。導入コマンドを実行してください。") from exc
         if request.rewrite_prompt and not request.input_images:
             rewriter_manifest(self.runtime)
         if request.rewrite_edit_prompt and request.input_images:
@@ -128,6 +136,8 @@ class Studio:
                 job = Job(directory.name, owner, directory, operation=request.operation, precision=request.precision)
                 payload = request.to_dict()
                 clean_paths = copy_inputs(request.input_images, directory)
+                if request.control_image:
+                    payload["control_image"] = copy_control_image(request.control_image, directory)
                 model_paths, instruction, annotation = snapshot_annotation(
                     clean_paths, request.annotation_reference, request.annotation_layers, directory
                 )

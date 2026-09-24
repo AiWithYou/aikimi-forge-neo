@@ -115,6 +115,23 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
         cls.addClassCleanup(cls.demo.close)
         cls.url = f"http://127.0.0.1:{cls.port}/"
 
+    def test_fun_controlnet_inputs_render_in_qwen_tab(self):
+        with cdp_page(self.chromium, self.url) as page:
+            self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 25000), timeout=30))
+            page.evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()")
+            self.assertTrue(page.evaluate(_wait_expression("#qwen21-generate", "true")))
+            self.assertTrue(page.evaluate(_wait_expression("#qwen21-control-kind", "true", 8000), timeout=10), page.exceptions)
+            visible = page.evaluate("""(() => {
+                const ids=['qwen21-control-kind','qwen21-control-image'];
+                return ids.every(id => {
+                    const e=document.getElementById(id);
+                    return e && e.getBoundingClientRect().height > 0;
+                });
+            })()""")
+            self.assertTrue(visible, page.exceptions)
+            self.assertIn("前処理済みの制御画像", page.evaluate("document.body.innerText"))
+            self.assertFalse(page.exceptions)
+
     def test_completed_result_has_png_and_json_downloads_after_each_generation(self):
         with cdp_page(self.chromium, self.url) as page:
             peak_rss = 0

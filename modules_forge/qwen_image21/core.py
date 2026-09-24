@@ -98,6 +98,15 @@ def copy_inputs(paths, directory: Path) -> list[str]:
     return result
 
 
+def copy_control_image(path: str, directory: Path) -> str:
+    """Keep the selected control map with the job before Gradio clears uploads."""
+    validated = validate_images((path,))[0]
+    target = inside(directory, directory / "control-source.png")
+    with Image.open(validated) as source:
+        ImageOps.exif_transpose(source).convert("RGB").save(target, format="PNG")
+    return str(target)
+
+
 @dataclass(frozen=True)
 class Request:
     prompt: str
@@ -123,6 +132,9 @@ class Request:
     mask_feather: float = 0.0
     sparse_jev_max_calls: int = 0
     sparse_jev_max_wait_seconds: float = 0.0
+    control_kind: str = "off"
+    control_image: str = ""
+    control_strength: float = 1.0
     operation: str = "generate"
 
     def resolved(self) -> Request:
@@ -156,6 +168,20 @@ class Request:
             raise QwenImage21Error("編集指示の書き換え指定が不正です。")
         if not isinstance(self.preserve_unmasked, bool):
             raise QwenImage21Error("範囲外固定の指定が不正です。")
+        kinds = {"off", "canny", "depth", "gray", "hed", "lineart", "mlsd", "pose", "scribble"}
+        if not isinstance(self.control_kind, str) or self.control_kind not in kinds:
+            raise QwenImage21Error("Fun ControlNetの条件の種類が不正です。")
+        if isinstance(self.control_strength, bool) or not isinstance(self.control_strength, (int, float)) or not math.isfinite(self.control_strength) or not 0 <= self.control_strength <= 2:
+            raise QwenImage21Error("Fun ControlNetの強さは0〜2で指定してください。")
+        control_image = ""
+        if self.control_kind != "off":
+            if self.operation != "generate" or self.precision != "int8":
+                raise QwenImage21Error("Fun ControlNetは通常版INT8の画像生成で使用してください。")
+            if self.sparse_mode != "off":
+                raise QwenImage21Error("Fun ControlNetではSparse AttentionをOFFにしてください。")
+            if not self.control_image:
+                raise QwenImage21Error("前処理済みの制御画像を追加してください。")
+            control_image = validate_images((self.control_image,))[0]
         from modules_forge.jev_sparse.qwen21 import Options
 
         try:
@@ -215,6 +241,8 @@ class Request:
             mask_feather=feather,
             sparse_jev_max_calls=int(self.sparse_jev_max_calls),
             sparse_jev_max_wait_seconds=float(self.sparse_jev_max_wait_seconds),
+            control_image=control_image,
+            control_strength=float(self.control_strength),
         )
 
     def to_dict(self) -> dict:

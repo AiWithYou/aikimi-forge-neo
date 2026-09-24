@@ -183,6 +183,9 @@ def start(
     mask_feather=0,
     sparse_jev_max_calls=0,
     sparse_jev_max_wait_seconds=0,
+    control_kind="off",
+    control_image=None,
+    control_strength=1.0,
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
@@ -227,6 +230,9 @@ def start(
             mask_feather=mask_feather,
             sparse_jev_max_calls=sparse_jev_max_calls,
             sparse_jev_max_wait_seconds=sparse_jev_max_wait_seconds,
+            control_kind=control_kind,
+            control_image=control_image or "",
+            control_strength=control_strength,
         )
         identifier = STUDIO.start(generation, owner(request))
         return (
@@ -271,6 +277,9 @@ def poll(identifier, request: gr.Request, variant="preferred"):
                     paths.insert(0, str(STUDIO.artifact(identifier, owner(request))))
                 else:
                     paths.append(str(STUDIO.artifact(identifier, owner(request), "original")))
+            control = path.with_name("control.png")
+            if control.is_file():
+                paths.append(str(control))
             files = gr.update(value=[*paths, str(path.with_name("result.json"))], visible=True)
         elif done:
             output = gr.update(label="生成結果")
@@ -335,9 +344,10 @@ def use_result(identifier, gallery, request: gr.Request, variant="preferred"):
 
 
 def check_runtime():
+    from modules_forge.qwen_image21.fun_controlnet import status as controlnet_status
     from modules_forge.qwen_image21.prompt_rewriter import rewriter_status
 
-    return runtime_status(RUNTIME) + "\n" + rewriter_status(RUNTIME) + "\n" + rewriter_status(RUNTIME, editing=True)
+    return "\n".join((runtime_status(RUNTIME), controlnet_status(RUNTIME), rewriter_status(RUNTIME), rewriter_status(RUNTIME, editing=True)))
 
 
 def save_quantized(precision, request: gr.Request):
@@ -512,6 +522,9 @@ def start_canvas(
     mask_feather=0,
     sparse_jev_max_calls=0,
     sparse_jev_max_wait_seconds=0,
+    control_kind="off",
+    control_image=None,
+    control_strength=1.0,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
@@ -579,6 +592,9 @@ def start_canvas(
                 mask_feather,
                 sparse_jev_max_calls,
                 sparse_jev_max_wait_seconds,
+                control_kind,
+                control_image,
+                control_strength,
             )
     except Exception as exc:
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
@@ -800,6 +816,24 @@ def on_ui_tabs():
                     info="参照画像を使う編集用。画像と編集指示から使用するプロンプトを整えます。",
                     elem_id="qwen21-rewrite-edit-prompt",
                 )
+                with gr.Group():
+                    gr.Markdown("**Fun ControlNet · INT8**")
+                    with gr.Row():
+                        control_kind = gr.Dropdown(
+                            [("OFF", "off"), ("Canny", "canny"), ("Depth", "depth"),
+                             ("Gray", "gray"), ("HED", "hed"), ("Lineart", "lineart"),
+                             ("MLSD", "mlsd"), ("Pose", "pose"), ("Scribble", "scribble")],
+                            value="off", label="制御画像の種類（記録用）",
+                            info="種類に応じた画像を用意してください。自動抽出は行いません。",
+                            elem_id="qwen21-control-kind",
+                        )
+                        control_strength = gr.Slider(0, 2, value=1, step=0.05, label="制御の強さ")
+                    control_image = gr.Image(
+                        label="前処理済みの制御画像", type="filepath", image_mode="RGB",
+                        sources=["upload", "clipboard"], interactive=True, height=180,
+                        elem_id="qwen21-control-image",
+                    )
+                    gr.Markdown("通常版INT8で利用。導入: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_controlnet.py --download`")
                 with gr.Row():
                     generate = gr.Button("生成・編集", variant="primary", elem_id="qwen21-generate")
                     stop = gr.Button("停止", interactive=False, elem_id="qwen21-stop")
@@ -904,6 +938,7 @@ def on_ui_tabs():
                     gr.Markdown("Turbo Q4_K_M: `aikimi-qwen-image21-setup.bat --turbo-q4-only`")
                     gr.Markdown("書き換えを追加: `aikimi-qwen-image21-setup.bat --prompt-rewriter-only`")
                     gr.Markdown("編集用の書き換えを追加: `aikimi-qwen-image21-setup.bat --edit-prompt-rewriter-only`")
+                    gr.Markdown("Fun ControlNet INT8: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_controlnet.py --download`")
                     check = gr.Button("導入状態を確認", size="sm")
                     environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=5)
         job, selected, annotation_target = gr.State(""), gr.State(-1), gr.State("")
@@ -964,6 +999,9 @@ def on_ui_tabs():
                 mask_feather,
                 sparse_max_calls,
                 sparse_max_wait,
+                control_kind,
+                control_image,
+                control_strength,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,
