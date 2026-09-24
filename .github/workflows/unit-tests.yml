@@ -65,7 +65,7 @@ jobs:
         run: python tools/run_ci_tests.py --verbosity 1
       - name: Run H3 workflow and Union 2.0 contracts
         run: >-
-          python -m pytest
+          python tools/run_ci_tests.py --pytest
           tools/tests/test_h3_handoff_store.py
           tools/tests/test_h3_handoff_runtime_pack.py
           tools/tests/test_h3_handoff_integration.py
@@ -74,6 +74,6 @@ jobs:
       - name: Run H3 workflow conversion contracts
         run: node --test tools/tests/h3_handoff_core.test.mjs
       - name: Run YuE2 contracts without model downloads
-        run: python -m pytest tests/yue2 -q
+        run: python tools/run_ci_tests.py --pytest tests/yue2 -q
       - name: Run Jev contracts without API calls or models
-        run: python -m pytest tests/jev_sparse -q
+        run: python tools/run_ci_tests.py --pytest tests/jev_sparse -q

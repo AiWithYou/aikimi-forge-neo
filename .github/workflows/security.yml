@@ -36,6 +36,28 @@ jobs:
           extra-index-urls: https://download.pytorch.org/whl/cu130
           vulnerability-service: PyPI
 
+  qwen-pip-audit:
+    # Audit Qwen's separate requirements without inheriting Forge's exceptions.
+    # Strict mode must fail on unresolvable or unauditable dependencies, including
+    # Git/dev versions. An unmatched package is not a clean security result.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - name: Update pip to the audited patch release
+        run: python -m pip install --disable-pip-version-check pip==26.2.1
+      - name: Resolve and audit the separate Qwen requirements
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+        with:
+          inputs: tools/requirements-qwen-image21.txt
+          vulnerability-service: PyPI
+          internal-be-careful-extra-flags: --strict
+
   gitleaks-full-history:
     runs-on: ubuntu-latest
     timeout-minutes: 20
