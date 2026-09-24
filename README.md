@@ -2,7 +2,7 @@
 
 **v2.2.1** · [変更履歴](CHANGELOG.md)
 
-**v2.2.1（2026-09-25）：** Qwen Image 2.1 Fun ControlNet Unionの作例を、新しいユーザー提供のアニメ人物を全8方式で参照する比較へ更新しました。公式の40 steps・FlowMatch Eulerスケジューラ・制御強度1.0を確認し、高解像度で条件画像から再生成した結果とInpainting＋Controlを[作例ページ](docs/assets/qwen-image21-fun-controlnet/README.md)に掲載します。
+**v2.2.1（2026-09-25）：** ユーザー提供の同じアニメ人物を参照し、Qwen Image 2.1 Fun ControlNet Unionの全8方式とInpainting＋Controlを試しました。公式の40 steps・FlowMatch Eulerスケジューラ・制御強度1.0を確認し、1152×1536の人物作例と生成条件を[作例ページ](docs/assets/qwen-image21-fun-controlnet/README.md)に掲載しています。
 
 **v2.2.0（2026-09-24）：** Qwen Image 2.1 Fun ControlNet Unionの8種類すべてと**Inpainting＋Control**に対応しました。編集元・白黒マスク・制御画像をモデルへ渡して部分編集できます。ユーザー提供の2D人物参照とオリジナルの3D建築を使い、全方式の条件画像と実生成結果を[作例ページ](docs/assets/qwen-image21-fun-controlnet/README.md)に掲載しました。
 
