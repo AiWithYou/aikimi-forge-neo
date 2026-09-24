@@ -53,6 +53,8 @@ class GradioDependencyContractTests(unittest.TestCase):
             line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
+            if line == "./vendor/accelerate":
+                continue  # Local patched package; Gradio remains an exact PyPI pin.
             if " #" in line:
                 line = line.split(" #", 1)[0].rstrip()
             requirement = Requirement(line)

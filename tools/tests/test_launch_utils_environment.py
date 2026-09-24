@@ -40,6 +40,26 @@ class RequirementsMetTests(unittest.TestCase):
     def test_invalid_requirement_fails_closed(self):
         self.assertFalse(self._check("not a valid requirement !!!\n", {}))
 
+    def test_vendored_accelerate_requires_the_patched_build(self):
+        self.assertTrue(self._check("./vendor/accelerate\n", {"accelerate": "1.15.0+aikimi.1"}))
+        self.assertFalse(self._check("./vendor/accelerate\n", {"accelerate": "1.15.0"}))
+
+    def test_only_previous_managed_cuda_wheels_are_automatically_upgraded(self):
+        with patch.dict(os.environ, {}, clear=True):
+            for version, expected in (
+                ("2.11.0+cu130", True),
+                ("2.12.0+cu130", True),
+                ("2.13.0+cu130", False),
+                ("2.11.0+cpu", False),
+                ("2.11.0+rocm7.0", False),
+            ):
+                with patch("importlib.metadata.version", return_value=version):
+                    self.assertEqual(launch_utils._managed_torch_needs_upgrade(), expected)
+            with patch("importlib.metadata.version", return_value="2.11.0+cu130"):
+                for override in ("TORCH_COMMAND", "TORCH_INDEX_URL"):
+                    with patch.dict(os.environ, {override: "custom"}):
+                        self.assertFalse(launch_utils._managed_torch_needs_upgrade())
+
 
 class SafeSubprocessRunnerTests(unittest.TestCase):
     def test_run_uses_argument_list_without_a_shell_and_fixed_cwd(self):

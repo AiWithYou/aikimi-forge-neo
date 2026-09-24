@@ -99,7 +99,7 @@ class RuntimePerformanceTests(unittest.TestCase):
         import os
         import threading
 
-        ns = load_nodes("modules/cache.py", {"cache"}, {"caches": {}, "cache_lock": threading.Lock(), "cache_dir": "cache", "os": os, "diskcache": SimpleNamespace(Cache=factory)})
+        ns = load_nodes("modules/cache.py", {"cache"}, {"caches": {}, "cache_lock": threading.Lock(), "cache_dir": "cache", "os": os, "MetadataCache": factory})
         self.assertIs(ns["cache"]("metadata"), instance)
         self.assertIs(ns["cache"]("metadata"), instance)
         factory.assert_called_once()

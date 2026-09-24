@@ -10,6 +10,8 @@
 | Stable Diffusion WebUI Forge | Forge backend | ルート[LICENSE](LICENSE)とupstream notice |
 | Stable Diffusion WebUI Forge - Neo | 現在のupstream | ルート[LICENSE](LICENSE)とupstream notice |
 | Gradio 6.17.3 | WebUI frontend／backend | Apache-2.0。Aikimiは、PR #13509で修正された6.17.3のTabs reactive stormに対し、overflow計測を停止し、初期tab一覧をbatch同期する限定compat workaroundを利用。監査済みのversion、filename、SHA-256をすべて確認できた場合だけ、site-packagesを変更せず配信時に置換 |
+| Accelerate 1.15.0+aikimi.1 | チェックポイント読込・CPUオフロード | [Apache-2.0本文](vendor/accelerate/LICENSE)、[上流ソースの固定ハッシュと修正記録](vendor/accelerate/AIKIMI-PATCH.md) |
+| Transformers 4.57.6のmask構築手順 | SenseNovaのTransformers 5互換処理 | Hugging Face、Apache-2.0。`modules_forge/sensenova_transformers_compat.py`に適用範囲と由来を記載。ライセンス全文は同じApache-2.0の[vendor/accelerate/LICENSE](vendor/accelerate/LICENSE) |
 | ComfyUI由来package | workflowとmodel処理 | [modules_forge/packages/comfy/LICENSE](modules_forge/packages/comfy/LICENSE) |
 | GGUF package | GGUF読込 | [modules_forge/packages/gguf/LICENSE](modules_forge/packages/gguf/LICENSE) |
 | built-in ControlNet／IP-Adapter | built-in extension | 各extension directoryの`LICENSE` |

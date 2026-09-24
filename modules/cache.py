@@ -1,7 +1,7 @@
-import threading
-import diskcache
 import os
+import threading
 
+from modules.metadata_cache import MetadataCache
 from modules.paths import data_path
 
 cache_lock = threading.Lock()
@@ -9,8 +9,8 @@ cache_dir = os.environ.get("SD_WEBUI_CACHE_DIR", os.path.join(data_path, "cache"
 caches = {}
 
 
-dump_cache = lambda: None
-"""does nothing since diskcache"""
+def dump_cache():
+    """Compatibility no-op: writes are committed immediately."""
 
 
 def cache(subsection):
@@ -21,7 +21,7 @@ def cache(subsection):
         subsection (str): The subsection identifier for the cache.
 
     Returns:
-        diskcache.Cache: The cache data for the specified subsection.
+        MetadataCache: The cache data for the specified subsection.
     """
 
     cache_obj = caches.get(subsection)
@@ -29,7 +29,7 @@ def cache(subsection):
         with cache_lock:
             cache_obj = caches.get(subsection)
             if cache_obj is None:
-                cache_obj = diskcache.Cache(os.path.join(cache_dir, subsection))
+                cache_obj = MetadataCache(os.path.join(cache_dir, subsection))
                 caches[subsection] = cache_obj
 
     return cache_obj

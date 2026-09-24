@@ -379,6 +379,10 @@ def _load_runtime(payload: dict[str, Any]):
     from SenseNova.src.sensenova_u1.models.neo_unify import modeling_neo_chat, modeling_qwen3
     from SenseNova.src.sensenova_u1.models.neo_unify.utils import smart_resize
 
+    from modules_forge.sensenova_transformers_compat import install as install_transformers_compat
+
+    install_transformers_compat()
+
     streaming_stats: dict[str, Any] = {}
 
     @contextmanager

@@ -18,6 +18,8 @@ def expected_versions() -> dict[str, str]:
         line = line.strip()
         if not line or line.startswith("#"):
             continue
+        if line == "./vendor/accelerate":
+            line = "accelerate==1.15.0+aikimi.1"
         name, separator, version = line.partition("==")
         if not separator or not name or not version:
             raise ValueError("SenseNovaの依存定義には正確なバージョン指定が必要です。")

@@ -48,3 +48,6 @@ jev-api-key.dpapi
 /webui-user.local.bat
 /webui-user.sh
 notification.mp3
+
+/vendor/*/build/
+/vendor/*/src/*.egg-info/

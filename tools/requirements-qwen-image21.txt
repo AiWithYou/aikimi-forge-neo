@@ -3,7 +3,12 @@ diffusers @ git+https://github.com/huggingface/diffusers.git@6256aa7666cedd47443
 transformers==5.17.0
 bitsandbytes==0.50.2
 comfy-kitchen==0.2.31
-accelerate==1.15.0
+./vendor/accelerate
 Pillow==12.3.0
 safetensors==0.8.0
 gguf==0.19.0
+
+pip==26.2.1
+setuptools==83.0.0
+torch==2.13.0+cu130
+torchvision==0.28.0+cu130

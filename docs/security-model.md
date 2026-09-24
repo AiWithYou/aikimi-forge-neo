@@ -109,7 +109,21 @@ remote modeでは、これらを含むAPI routeが認証境界を通ります。
 
 redactionは最後の防御です。利用者は、共有前に[SECURITY.md](../SECURITY.md)の確認項目を目視してください。
 
-## 依存関係監査の期限付き例外
+## 2026年9月24日の依存関係修正
+
+本体・SenseNova・QwenのCUDA環境をPyTorch 2.13.0、torchvision 0.28.0へ更新し、setuptools 83.0.0と両立させました。SenseNovaはTransformers 5.10.4へ移行し、専用の互換処理でRoPE設定、入力ID、明示的なキャッシュ位置を保持します。Transformers本体のAPIは変更しません。
+
+Accelerateは上流1.15.0を基にした`1.15.0+aikimi.1`を同梱します。チェックポイント索引の各shardを読み込み前に検査し、ディレクトリ外への相対パス、絶対パス、Windowsドライブ指定、代替データストリーム、通常ファイルでない参照を拒否します。通常の読み込みAPI、サブディレクトリ、Hugging Faceのsnapshotからblobへのリンクは維持します。上流版へのバージョン変更だけを修正とは扱いません。由来・ライセンス・変更範囲は[vendor/accelerate/AIKIMI-PATCH.md](../vendor/accelerate/AIKIMI-PATCH.md)に記録しています。
+
+ForgeのメタデータキャッシュはSQLiteとJSONへ移行しました。Pythonオブジェクトを復元するdiskcacheへの依存を除去しています。旧キャッシュを読み込まず、元ファイルから再計算して別名のDBに保存します。既存のモデル・設定・出力や旧キャッシュは削除しません。
+
+期限付き例外と除外IDは撤去しました。CIはOSVの厳格監査を使い、固定Git版DiffusersとCUDA版PyTorchも監査対象に含めます。パッケージを照合できない場合も失敗します。Accelerateの修正は、監査データベースとは別に、実際の読み込みAPIを使う攻撃入力・正常入力の回帰テストで検証します。
+
+既存環境では通常の依存準備で本体の旧既定CUDA版を更新します。`TORCH_COMMAND`または`TORCH_INDEX_URL`を指定している環境は、その指定を維持します。SenseNovaは`download_sensenova_u15_int8.ps1 -RuntimeOnly`、Qwenは専用セットアップで更新してください。旧環境に残るdiskcacheはForgeから使いません。外部拡張の依存関係を確認してからアンインストールできます。
+
+以下の2026年9月3日・22日の記録は、修正前の履歴です。現在の依存定義・監査方針はこの節を参照してください。
+
+## 依存関係監査の期限付き例外（修正前の記録）
 
 2026年9月3日に、Diffusersを0.38.0、GitPythonを3.1.61、Transformersを5.10.4、huggingface-hubを1.5.0、PEFTを0.20.0へ更新しました。Diffusers 0.38.0は、`trust_remote_code`を回避する3件の脆弱性に対する公式修正版です。GitPython 3.1.61は、3.1.59未満に影響する`PYSEC-2026-3785`、`PYSEC-2026-3786`、`PYSEC-2026-3787`、`PYSEC-2026-3788`を修正済みです。Transformers 5.10.0はCVE-2026-9856の修正境界ですが、PyPIでyankされているため、同じ系列の非yank版である5.10.4を固定しています。PEFT 0.20.0は、Transformers 5で削除された`HybridCache`をPEFT 0.17.1が読み込んでDiffusersの起動を妨げる問題を避けるための固定です。
 
