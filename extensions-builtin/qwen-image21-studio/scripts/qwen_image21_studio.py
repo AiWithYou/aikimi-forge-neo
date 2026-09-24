@@ -187,6 +187,7 @@ def start(
     control_image=None,
     control_strength=1.0,
     control_inpaint=False,
+    fun_acc=False,
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
@@ -235,6 +236,7 @@ def start(
             control_image=control_image or "",
             control_strength=control_strength,
             control_inpaint=control_inpaint,
+            fun_acc=fun_acc,
         )
         identifier = STUDIO.start(generation, owner(request))
         return (
@@ -346,10 +348,11 @@ def use_result(identifier, gallery, request: gr.Request, variant="preferred"):
 
 
 def check_runtime():
+    from modules_forge.qwen_image21.fun_acc_lora import status as fun_acc_status
     from modules_forge.qwen_image21.fun_controlnet import status as controlnet_status
     from modules_forge.qwen_image21.prompt_rewriter import rewriter_status
 
-    return "\n".join((runtime_status(RUNTIME), controlnet_status(RUNTIME), rewriter_status(RUNTIME), rewriter_status(RUNTIME, editing=True)))
+    return "\n".join((runtime_status(RUNTIME), fun_acc_status(RUNTIME), controlnet_status(RUNTIME), rewriter_status(RUNTIME), rewriter_status(RUNTIME, editing=True)))
 
 
 def save_quantized(precision, request: gr.Request):
@@ -403,7 +406,9 @@ def model_save_status(precision, identifier, request: gr.Request):
     return saved_status(RUNTIME, precision), gr.update(interactive=precision in {"int8", "w4a8"})
 
 
-def profile_settings(precision, previous_precision):
+def profile_settings(precision, previous_precision, fun_acc=False):
+    if fun_acc:
+        return gr.update(value=4, interactive=False), gr.update(value="off", interactive=False), precision
     turbo = precision in {"turbo_bf16", "turbo_q4_k_m"}
     if turbo:
         return gr.update(value=4, interactive=False), gr.update(value="off", interactive=False), precision
@@ -415,6 +420,26 @@ def profile_settings(precision, previous_precision):
     if precision == "base_q4_k_m":
         return steps, gr.update(value="off", interactive=False), precision
     return steps, gr.update(interactive=True), precision
+
+
+def fun_acc_settings(enabled):
+    if enabled:
+        return (
+            gr.update(value="int8", interactive=False),
+            gr.update(value=4, interactive=False),
+            gr.update(value="off", interactive=False),
+            gr.update(value="off", interactive=False),
+            gr.update(interactive=False),
+            gr.update(value=False, interactive=False),
+        )
+    return (
+        gr.update(interactive=True),
+        gr.update(value=40, interactive=True),
+        gr.update(interactive=True),
+        gr.update(interactive=True),
+        gr.update(interactive=True),
+        gr.update(interactive=True),
+    )
 
 
 def default_precision():
@@ -528,6 +553,7 @@ def start_canvas(
     control_image=None,
     control_strength=1.0,
     control_inpaint=False,
+    fun_acc=False,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
@@ -599,6 +625,7 @@ def start_canvas(
                 control_image,
                 control_strength,
                 control_inpaint,
+                fun_acc,
             )
     except Exception as exc:
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
@@ -863,6 +890,13 @@ def on_ui_tabs():
                     label="モデル・精度",
                     elem_id="qwen21-precision",
                 )
+                fun_acc = gr.Checkbox(
+                    value=False,
+                    label="Fun Acc · 4 steps（通常版INT8）",
+                    info="4回の推論で生成・編集します。小さな文字や細部は通常版より崩れる場合があります。",
+                    elem_id="qwen21-fun-acc",
+                )
+                steps = gr.Slider(1, 100, value=40, step=1, label="Steps", elem_id="qwen21-steps")
                 gr.Markdown(
                     "通常版: [Unsloth Q4_K_M](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF)"
                     " · Turbo: [Viggle BF16](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo)"
@@ -896,7 +930,6 @@ def on_ui_tabs():
                         label="モデルの配置",
                     )
                     seed = gr.Textbox(value="-1", label="Seed（-1: 毎回ランダム）")
-                    steps = gr.Slider(1, 100, value=40, step=1, label="Steps")
                     from modules_forge.jev_sparse.qwen21_integration import launch_defaults
 
                     sparse_defaults = launch_defaults()
@@ -949,8 +982,9 @@ def on_ui_tabs():
                     gr.Markdown("書き換えを追加: `aikimi-qwen-image21-setup.bat --prompt-rewriter-only`")
                     gr.Markdown("編集用の書き換えを追加: `aikimi-qwen-image21-setup.bat --edit-prompt-rewriter-only`")
                     gr.Markdown("Fun ControlNet INT8: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_controlnet.py --download`")
+                    gr.Markdown("Fun Acc 4-step LoRA: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_acc_lora.py --download`")
                     check = gr.Button("導入状態を確認", size="sm")
-                    environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=5)
+                    environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=8)
         job, selected, annotation_target = gr.State(""), gr.State(-1), gr.State("")
         mask_target, variant_job = gr.State(""), gr.State("")
         back, forward = gr.State(-1), gr.State(1)
@@ -975,7 +1009,13 @@ def on_ui_tabs():
         stop_save.click(cancel, inputs=save_job, outputs=[save_status, stop_save], queue=False, **PRIVATE)
         precision.change(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
         precision.change(
-            profile_settings, inputs=[precision, profile_state], outputs=[steps, sparse_mode, profile_state], **PRIVATE
+            profile_settings, inputs=[precision, profile_state, fun_acc], outputs=[steps, sparse_mode, profile_state], **PRIVATE
+        )
+        fun_acc.change(
+            fun_acc_settings,
+            inputs=fun_acc,
+            outputs=[precision, steps, sparse_mode, control_kind, control_image, control_inpaint],
+            **PRIVATE,
         )
         tab.load(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
         workspace_view.change(switch_workspace, inputs=workspace_view, outputs=[edit_view, result_view], **PRIVATE)
@@ -1013,6 +1053,7 @@ def on_ui_tabs():
                 control_image,
                 control_strength,
                 control_inpaint,
+                fun_acc,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,
