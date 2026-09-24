@@ -393,8 +393,23 @@ def test_h3_cadence_roundtrip_and_workflow():
     option = H3Acceleration(jev_cadence="interval", jev_interval=2)
     assert H3Acceleration.from_values(option.values()) == option
     assert H3Acceleration.from_dict(option.to_dict()) == option
-    assert H3Acceleration.from_values(option.values()[:-4]).jev_cadence == "once"
-    assert H3Acceleration.from_values(option.values()[:-2]).jev_cadence == "interval"
+    # Historical layouts are fixed prefixes, independent of new UI fields.
+    legacy = (
+        "base",
+        "fp16",
+        "standard",
+        4,
+        "dense",
+        1.3,
+        10.0,
+        0.2,
+        *option.negpip.values(),
+        "off",
+        *option.hybrid.values(),
+    )
+    assert H3Acceleration.from_values(legacy).jev_cadence == "once"
+    assert H3Acceleration.from_values((*legacy, "interval", 2)) == option
+    assert H3Acceleration.from_values((*legacy, "interval", 2, 0, 0.0)) == option
     workflow = graph()
     integration.patch_workflow(workflow, "jev", "/sdk/python", cadence="interval", interval=2)
     inputs = workflow["aikimi_h3_sparse"]["inputs"]

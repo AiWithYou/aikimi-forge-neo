@@ -162,7 +162,7 @@ def validate_remote_url(url: str) -> ValidatedTarget:
         raise SafeFetchError("The remote image URL is invalid.")
     try:
         host = _normalize_host(parsed.hostname)
-        port = parsed.port or (443 if scheme == "https" else 80)
+        port = parsed.port if parsed.port is not None else (443 if scheme == "https" else 80)
     except SafeFetchError:
         raise
     except (UnicodeError, ValueError) as exc:
@@ -214,9 +214,11 @@ def _request_once(
     connection = _connection_for(target, policy.connect_timeout_seconds)
     try:
         connection.request("GET", target.request_target, headers=headers)
-        response = connection.getresponse()
+        # getresponse() transfers the socket to a closing response and clears
+        # connection.sock. Set the read timeout before headers or body are read.
         if connection.sock is not None:
             connection.sock.settimeout(policy.read_timeout_seconds)
+        response = connection.getresponse()
         return connection, response
     except (
         OSError,
@@ -230,6 +232,7 @@ def _request_once(
 
 
 def _read_bounded(response: ResponseLike, policy: FetchPolicy) -> bytes:
+    expected = None
     content_length = response.getheader("Content-Length")
     if content_length:
         try:
@@ -238,6 +241,9 @@ def _read_bounded(response: ResponseLike, policy: FetchPolicy) -> bytes:
             raise SafeFetchError("The remote server returned an invalid response.") from exc
         if expected < 0 or expected > policy.max_response_bytes:
             raise SafeFetchError("The remote image exceeds the download size limit.")
+    # HTTPResponse uses chunk framing instead of Content-Length in this case.
+    if (response.getheader("Transfer-Encoding") or "").lower() == "chunked":
+        expected = None
 
     payload = bytearray()
     while True:
@@ -250,6 +256,9 @@ def _read_bounded(response: ResponseLike, policy: FetchPolicy) -> bytes:
         payload.extend(chunk)
         if len(payload) > policy.max_response_bytes:
             raise SafeFetchError("The remote image exceeds the download size limit.")
+    # HTTPResponse.read(amount) can return EOF without raising IncompleteRead.
+    if expected is not None and len(payload) != expected:
+        raise SafeFetchError("The remote image download was interrupted.")
     return bytes(payload)
 
 

@@ -1,6 +1,7 @@
 GitPython==3.1.61
 Pillow==12.3.0
 accelerate==1.14.0
+anyio==4.14.2
 audioop-lts==0.2.2;python_version>="3.13"
 av==17.1.0
 comfy-kitchen==0.2.33

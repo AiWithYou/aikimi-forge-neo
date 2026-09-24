@@ -1,3 +1,4 @@
+import http.client
 import os
 import socket
 import unittest
@@ -167,6 +168,62 @@ class SafeImageFetchTests(unittest.TestCase):
                     target = url_fetch.validate_remote_url(value)
                 self.assertEqual(target.connect_ip, address)
                 self.assertEqual(target.port, expected_port)
+
+    def test_port_zero_is_rejected_before_dns(self):
+        with (
+            mock.patch.object(url_fetch.socket, "getaddrinfo") as resolver,
+            self.assertRaisesRegex(url_fetch.SafeFetchError, "invalid port"),
+        ):
+            url_fetch.validate_remote_url("https://public.example:0/a.png")
+        resolver.assert_not_called()
+
+    def test_read_timeout_is_set_before_response_takes_socket_ownership(self):
+        for connection_header in (b"close", b"keep-alive"):
+            with self.subTest(connection=connection_header):
+                wire = BytesIO(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\nConnection: " + connection_header + b"\r\n\r\nx"
+                )
+                transport = mock.Mock()
+
+                def makefile(*_args, transport=transport, wire=wire):
+                    transport.settimeout.assert_called_once_with(15.0)
+                    return wire
+
+                transport.makefile.side_effect = makefile
+                target = url_fetch.ValidatedTarget(
+                    "http://origin.example/a.png", "http", "origin.example", 80, "/a.png", PUBLIC_V4
+                )
+                with mock.patch.object(url_fetch.socket, "create_connection", return_value=transport):
+                    connection, response = url_fetch._request_once(target, {}, url_fetch.DEFAULT_POLICY)
+                try:
+                    if connection_header == b"close":
+                        self.assertIsNone(connection.sock)
+                    self.assertEqual(response.read(), b"x")
+                finally:
+                    response.close()
+                    connection.close()
+
+    def test_real_http_response_rejects_premature_eof(self):
+        transport = mock.Mock()
+        transport.makefile.return_value = BytesIO(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nabc")
+        with http.client.HTTPResponse(transport) as response:
+            response.begin()
+            with self.assertRaisesRegex(url_fetch.SafeFetchError, "interrupted"):
+                url_fetch._read_bounded(response, url_fetch.DEFAULT_POLICY)
+
+    def test_real_http_response_accepts_chunked_and_close_delimited_body(self):
+        messages = (
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n",
+            b"HTTP/1.0 200 OK\r\n\r\nabc",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc",
+        )
+        for message in messages:
+            with self.subTest(message=message):
+                transport = mock.Mock()
+                transport.makefile.return_value = BytesIO(message)
+                with http.client.HTTPResponse(transport) as response:
+                    response.begin()
+                    self.assertEqual(url_fetch._read_bounded(response, url_fetch.DEFAULT_POLICY), b"abc")
 
     def test_connection_is_pinned_to_validated_ip_and_ignores_proxy_environment(self):
         target = url_fetch.ValidatedTarget(
