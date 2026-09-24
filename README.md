@@ -1,6 +1,6 @@
 # Aikimi Forge Neo
 
-**v1.5.0** · [変更履歴](CHANGELOG.md)
+**v1.5.1** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -44,7 +44,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 
 モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
 
-**v1.5.0では、H3のComfyUIワークフロー引き継ぎ、Union 2.0／VAE更新、Qwen Image 2.1の通常版GGUFとTurboをまとめ、H3の実GPU比較と回帰確認を追加しました。** 実測条件と結果は[H3の比較記録](docs/minimax-h3-union2-vae-benchmark.md)、導入条件は各機能のガイドを参照してください。
+**v1.5.1では、H3のVRAM空き容量の確保、Qwenの2K画像のVAE分割処理、容量を超えるBF16 GPU常駐設定の事前拒否を追加しました。** RTX 3090での動画・画像の実生成結果と検証範囲は[VRAM監査記録](docs/audits/2026-09-24-h3-qwen-vram.md)、URL画像取得と依存関係の修正は[システム監査記録](docs/audits/2026-09-24-system-audit.md)を参照してください。
 
 **v1.4.1では、全モデル共通の「モデルを解放」を画面上部から使えます。** 保持・5分後に自動解放・毎回解放を選べます。ちびあいきみはForge系（Krea2・Animaなど）、SenseNova、H3動画・画像、Qwen、YuE2の環境・実行状況を表示します。Qwenは「変換モデルを保存」でINT8・W4A8を準備し、次回から自動再利用できます。PE-I2Iとマスク外固定編集の結果は[元画像との比較](docs/assets/qwen-image21-v1.4.0/README.md)で確認できます。
 

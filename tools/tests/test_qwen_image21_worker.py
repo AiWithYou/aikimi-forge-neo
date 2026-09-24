@@ -41,6 +41,7 @@ def fake_torch():
             is_available=lambda: True,
             is_bf16_supported=lambda: True,
             is_initialized=lambda: False,
+            get_device_properties=lambda _: types.SimpleNamespace(total_memory=24 * 2**30),
             empty_cache=mock.Mock(),
         ),
     )
@@ -51,6 +52,9 @@ class FakePipe:
         self.calls = []
         self.before_callback = None
         self.fail = False
+        self.vae = mock.Mock(use_tiling=False)
+        self.vae.enable_tiling.side_effect = lambda **_: setattr(self.vae, "use_tiling", True)
+        self.vae.disable_tiling.side_effect = lambda: setattr(self.vae, "use_tiling", False)
 
     def __call__(self, **kwargs):
         self.calls.append(kwargs)
@@ -156,6 +160,87 @@ class WorkerJobTests(unittest.TestCase):
         self.assertEqual(self.pipe.calls[0]["prompt"], "a glass bird")
         self.assertIsNone(self.pipe.calls[0]["image"])
         self.assertEqual(result["metadata"]["output_mode"], "RGBA")
+
+    def test_large_output_tiles_vae_and_reuse_restores_small_output(self):
+        self.request.update(width=2048, height=2048)
+        self.write_request()
+        large, _ = self.run_job()
+        self.assertTrue(large["metadata"]["vae_tiling"])
+        self.pipe.vae.enable_tiling.assert_called_once_with(
+            tile_sample_min_height=512,
+            tile_sample_min_width=512,
+            tile_sample_stride_height=256,
+            tile_sample_stride_width=256,
+        )
+        self.assertEqual(large["metadata"]["vae_tiling_config"], {"tile_size": 512, "stride": 256})
+        self.assertTrue(self.pipe.vae.use_tiling)
+
+        self.request.update(width=1024, height=1024)
+        self.write_request()
+        small, _ = self.run_job()
+        self.assertFalse(small["metadata"]["vae_tiling"])
+        self.assertIsNone(small["metadata"]["vae_tiling_config"])
+        self.pipe.vae.disable_tiling.assert_called_once_with()
+        self.assertFalse(self.pipe.vae.use_tiling)
+
+    def test_bf16_residency_over_capacity_is_rejected_before_loading(self):
+        for folder, name, size in (
+            ("transformer", "diffusion_pytorch_model.safetensors.index.json", 14_230_249_472),
+            ("text_encoder", "model.safetensors.index.json", 17_534_247_392),
+        ):
+            target = self.model / folder / name
+            target.parent.mkdir()
+            target.write_text(json.dumps({"metadata": {"total_size": size}}), encoding="utf-8")
+        self.fake_torch.cuda.get_device_properties = lambda _: types.SimpleNamespace(total_memory=24 * 2**30)
+        self.payload.update(precision="bf16", memory_mode="gpu")
+        with mock.patch.object(worker, "_load_runtime") as loader:
+            with self.assertRaisesRegex(RuntimeError, "29.6 GiB"):
+                worker.run_request(self.payload)
+            loader.assert_not_called()
+        # Model-level offload only needs one component resident at a time.
+        self.payload["memory_mode"] = "offload"
+        self.run_job()
+        # A larger device must not be rejected by this weights-only check.
+        self.fake_torch.cuda.get_device_properties = lambda _: types.SimpleNamespace(total_memory=48 * 2**30)
+        self.payload["memory_mode"] = "gpu"
+        self.run_job()
+
+    def test_turbo_single_file_bf16_is_rejected_before_loading(self):
+        encoder = self.model / "text_encoder" / "model.safetensors.index.json"
+        encoder.parent.mkdir()
+        encoder.write_text(json.dumps({"metadata": {"total_size": 17_534_247_392}}), encoding="utf-8")
+        transformer = self.model.parent / "turbo" / "bf16" / "transformer" / "diffusion_pytorch_model.safetensors"
+        transformer.parent.mkdir(parents=True)
+        # Header-only fixture: preflight must never read the multi-GB payload.
+        header = json.dumps(
+            {"weight": {"dtype": "BF16", "shape": [7_115_124_736], "data_offsets": [0, 14_230_249_472]}}
+        ).encode()
+        transformer.write_bytes(len(header).to_bytes(8, "little") + header)
+        self.payload.update(precision="turbo_bf16", memory_mode="gpu")
+        self.request["steps"] = 4
+        self.write_request()
+        with (
+            mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+            mock.patch.object(worker, "_load_runtime") as loader,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "29.6 GiB"):
+                worker.run_request(self.payload)
+            loader.assert_not_called()
+
+    def test_single_file_size_accounts_for_bf16_conversion(self):
+        checkpoint = self.root / "weights.safetensors"
+        header = json.dumps(
+            {
+                "__metadata__": {"format": "pt"},
+                "weight": {"dtype": "F32", "shape": [2, 3], "data_offsets": [0, 24]},
+                "counter": {"dtype": "I64", "shape": [1], "data_offsets": [24, 32]},
+            }
+        ).encode()
+        checkpoint.write_bytes(len(header).to_bytes(8, "little") + header + bytes(32))
+        self.assertEqual(worker._bf16_safetensors_bytes(checkpoint), 20)
+        checkpoint.write_bytes((2**40).to_bytes(8, "little"))
+        with self.assertRaisesRegex(ValueError, "header size"):
+            worker._bf16_safetensors_bytes(checkpoint)
 
     def test_rewrite_off_does_not_load_optional_model(self):
         with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt") as rewrite:

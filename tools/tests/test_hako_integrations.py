@@ -230,6 +230,8 @@ class NegPiPRuntimeTests(unittest.TestCase):
                 "none",
                 "--async-offload",
                 "2",
+                "--vram-headroom",
+                "2",
                 "--whitelist-custom-nodes",
                 HANDOFF_PACK,
             ],

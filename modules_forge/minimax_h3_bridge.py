@@ -648,7 +648,10 @@ def runtime_profile_from_args(
     headroom_value = _cli_option_value(arguments, "--vram-headroom")
     try:
         reserve_matches = float(_cli_option_value(arguments, "--reserve-vram") or "nan") == 2.0
-        headroom_matches = headroom_value is None or float(headroom_value) == 0.0
+        if _cli_option_values(arguments, "--disable-dynamic-vram"):
+            headroom_matches = headroom_value is None or float(headroom_value) == 0.0
+        else:
+            headroom_matches = headroom_value is not None and float(headroom_value) == 2.0
         port_matches = (
             expected_port is None
             or int(_cli_option_value(arguments, "--port") or "-1") == expected_port
@@ -1117,6 +1120,10 @@ def _runtime_command(
         command.extend(["--async-offload", "2"])
     else:
         command.extend(["--cache-none", "--disable-async-offload", "--disable-pinned-memory"])
+    if runtime_profile != RUNTIME_PROFILE_RAM:
+        # DynamicVRAM keeps this space free across all GPU processes. The
+        # reserve-vram option above instead controls its model-loading budget.
+        command.extend(["--vram-headroom", "2"])
     if acceleration.decode_mode == "fp16_accumulation":
         command.extend(["--fast", "fp16_accumulation"])
     if acceleration.compiler_mode == "off":

@@ -511,12 +511,13 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
                 "none",
                 "--async-offload",
                 "2",
+                "--vram-headroom",
+                "2",
                 "--whitelist-custom-nodes",
                 "Aikimi-H3-WorkflowBridge",
             ],
         )
         for harmful_flag in (
-            "--vram-headroom",
             "--fast-disk",
             "--disable-pinned-memory",
             "--disable-async-offload",
@@ -540,6 +541,13 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         low_ram = _runtime_command(Path("python.exe"), 8188, RUNTIME_PROFILE_LOW_RAM)[1:]
         self.assertEqual(runtime_profile_from_args(fast, 8188), RUNTIME_PROFILE_FAST)
         self.assertEqual(runtime_profile_from_args(low_ram, 8188), RUNTIME_PROFILE_LOW_RAM)
+        old_fast = list(fast)
+        headroom_index = old_fast.index("--vram-headroom")
+        del old_fast[headroom_index:headroom_index + 2]
+        self.assertIsNone(runtime_profile_from_args(old_fast, 8188))
+        wrong_headroom = list(fast)
+        wrong_headroom[headroom_index + 1] = "0"
+        self.assertIsNone(runtime_profile_from_args(wrong_headroom, 8188))
         self.assertEqual(
             runtime_profile_from_args([*fast, "--auto-launch"], 8188),
             RUNTIME_PROFILE_FAST,

@@ -10,6 +10,7 @@ import argparse
 import gc
 import importlib.metadata
 import json
+import math
 import os
 import sys
 import time
@@ -494,6 +495,65 @@ def _idle_cuda_memory(torch, memory_mode: str) -> dict:
     }
 
 
+def _bf16_safetensors_bytes(path: Path) -> int:
+    """Read tensor sizes from a single-file checkpoint without loading weights."""
+    with path.open("rb") as source:
+        prefix = source.read(8)
+        length = int.from_bytes(prefix, "little")
+        if len(prefix) != 8 or not 0 < length <= 64 * 1024**2:
+            raise ValueError("Invalid safetensors header size.")
+        header = json.loads(source.read(length))
+    total = 0
+    for name, tensor in header.items():
+        if name == "__metadata__":
+            continue
+        dtype = tensor["dtype"]
+        if dtype == "BF16" or dtype.startswith("F"):
+            # from_pretrained(torch_dtype=bfloat16) casts floating weights;
+            # checkpoint file size is not the resident size for FP32 files.
+            total += math.prod(tensor["shape"]) * 2
+        else:
+            start, end = tensor["data_offsets"]
+            total += end - start
+    return total
+
+
+def _check_bf16_gpu_capacity(model_path: Path, request: dict[str, Any], torch) -> None:
+    """Reject provably impossible residency before loading multi-GB weights.
+
+    This is a weights-only lower bound, not a promise that activations fit.
+    Use total capacity so a resident pipeline's own allocation is not counted
+    against it again when processing the next request.
+    """
+    if request["memory_mode"] != "gpu" or request["precision"] not in {"bf16", "turbo_bf16"}:
+        return
+    transformer = model_path / "transformer"
+    if request["precision"] == "turbo_bf16":
+        transformer = model_path.parent / "turbo" / "bf16" / "transformer"
+    indexes = (
+        transformer / "diffusion_pytorch_model.safetensors.index.json",
+        model_path / "text_encoder" / "model.safetensors.index.json",
+    )
+    weight_bytes = 0
+    for index in indexes:
+        if index.is_file():
+            metadata = json.loads(index.read_text(encoding="utf-8")).get("metadata", {})
+            size = metadata.get("total_size", 0)
+            if isinstance(size, int) and size > 0:
+                weight_bytes += size
+        else:
+            single_file = index.with_name(index.name.removesuffix(".index.json"))
+            if single_file.is_file():
+                weight_bytes += _bf16_safetensors_bytes(single_file)
+    capacity = torch.cuda.get_device_properties(0).total_memory
+    if weight_bytes > capacity:
+        raise RuntimeError(
+            f"BF16 GPU常駐には重みだけで {weight_bytes / 2**30:.1f} GiB 以上が必要です。"
+            f"GPU容量 {capacity / 2**30:.1f} GiB を超えるため読み込みを中止しました。"
+            "CPUオフロード (offload) または量子化モデルを選んでください。"
+        )
+
+
 def run_request(payload: dict[str, Any]) -> dict[str, Any]:
     started = time.monotonic()
     job = Path(payload["job_dir"]).resolve()
@@ -520,11 +580,27 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             return result
         import torch
 
+        _check_bf16_gpu_capacity(model_path, request, torch)
         if torch.cuda.is_initialized():
             torch.cuda.reset_peak_memory_stats()
         rewrite = _rewrite_for_request(model_path, request, job)
         runtime, reused = _runtime_for_request(model_path, request, job)
         _check_cancel(job)
+
+        # Qwen's VAE otherwise decodes the entire 2K latent in one CUDA pass.
+        # Tiling is supported by the pinned Qwen VAE and reduces decode peaks.
+        vae_tiling = request["width"] * request["height"] > 1280 * 1024
+        if vae_tiling:
+            # The VAE's 256/192 defaults leave visible grid artifacts in 2K
+            # images. Larger tiles with 50% overlap passed same-latent QA.
+            runtime["pipe"].vae.enable_tiling(
+                tile_sample_min_height=512,
+                tile_sample_min_width=512,
+                tile_sample_stride_height=256,
+                tile_sample_stride_width=256,
+            )
+        elif getattr(getattr(runtime["pipe"], "vae", None), "use_tiling", False):
+            runtime["pipe"].vae.disable_tiling()
 
         images = _load_images(request["input_images"])
         prompt = rewrite["rewritten_prompt"] if rewrite["applied"] else request["prompt"].strip()
@@ -618,6 +694,8 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "versions": runtime["versions"],
             "reused_model": reused,
             "memory": memory,
+            "vae_tiling": vae_tiling,
+            "vae_tiling_config": {"tile_size": 512, "stride": 256} if vae_tiling else None,
             "timings": {
                 "load_seconds": 0.0 if reused else round(runtime["load_seconds"], 3),
                 "sampling_seconds": round(sampling_seconds, 3),
