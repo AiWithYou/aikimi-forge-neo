@@ -57,6 +57,29 @@ RING_INPAINT_PROMPT = (
     "through the ring, the right lighthouse, islands, boat, sky, sunset lighting, "
     "and water in their original positions. Photorealistic 3D architectural render."
 )
+ANIME_V221_PROMPT = (
+    "Use Image 1 as the character identity and outfit reference: the same young adult "
+    "woman with long champagne-blonde hair, bubblegum-pink hair underneath and at the "
+    "tips, luminous pink eyes, tiny pink and turquoise cheek doodles, and an oversized "
+    "white hoodie covered in vivid cyan, pink, yellow and lime paint splashes. Create "
+    "a NEW, crisp full-body 2D anime illustration of her roller-skating down a steep "
+    "diagonal glass ramp high over a blue modern city. One skate reaches toward the "
+    "viewer; her other knee bends up behind; her left hand reaches toward a floating "
+    "paper star at upper left, and her right hand touches the metal rail at lower right. "
+    "Visible glass panels, long converging metal rails and distant buildings. "
+    "Preserve the recognizable face, hair and colorful hoodie from Image 1. "
+    "Sharp expressive eyes, precise ink outlines, clear hands and skates, vivid clean "
+    "cel shading and fine clothing details."
+)
+ANIME_V221_INPAINT_PROMPT = (
+    "Use Image 1 as the character identity and outfit reference. Use the supplied "
+    "existing roller-skating picture as the inpainting source. Redraw only the white "
+    "edit-mask region on the front of her hoodie: replace the paint splashes there "
+    "with one large clean hot-pink heart patch edged in cyan, sewn onto the white "
+    "fabric. Preserve her recognizable face, champagne-blonde and pink hair, eyes, "
+    "cheek doodles, pose, hands, roller skates, glass ramp and blue city composition. "
+    "Crisp 2D anime ink lines and cel shading."
+)
 
 # The two unconditioned baselines run first to avoid unnecessary model reloads.
 CASES = {
@@ -109,14 +132,43 @@ CASES = {
         "kind": "canny", "control": "ring-inpaint-canny.png", "strength": 0.8,
         "inpaint_source": "ring-3d-control.png", "inpaint_mask": "ring-inpaint-mask.png",
     },
+    "anime-v221-reference-only": {
+        "prompt": ANIME_V221_PROMPT, "size": (1152, 1536),
+        "references": ("anime-v221-reference.png",),
+    },
+    **{
+        f"anime-v221-{kind}": {
+            "prompt": ANIME_V221_PROMPT,
+            "size": (1152, 1536),
+            "references": ("anime-v221-reference.png",),
+            "kind": kind,
+            "control": f"anime-v221-{kind}.png",
+            "output": f"anime-v221-result-{kind}.png",
+            "strength": 1.0,
+        }
+        for kind in ("canny", "depth", "gray", "hed", "lineart", "mlsd", "pose", "scribble")
+    },
+    "anime-v221-inpaint": {
+        "prompt": ANIME_V221_INPAINT_PROMPT,
+        "size": (1152, 1536),
+        "references": ("anime-v221-reference.png",),
+        "kind": "pose", "control": "anime-v221-pose.png", "strength": 1.0,
+        "inpaint_source": "anime-v221-result-canny.png",
+        "inpaint_mask": "anime-v221-inpaint-mask.png",
+        "output": "anime-v221-result-inpaint.png",
+    },
 }
+V221_CASES = tuple(name for name in CASES if name.startswith("anime-v221-"))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("names", nargs="*", choices=list(CASES), help="Default: all examples")
+    parser.add_argument("names", nargs="*", choices=list(CASES), help="Default: v2.2.1 anime examples")
+    parser.add_argument("--all", action="store_true", help="Regenerate the older 2D and 3D gallery too")
     args = parser.parse_args()
-    names = args.names or list(CASES)
+    if args.all and args.names:
+        parser.error("--all cannot be combined with case names")
+    names = tuple(CASES) if args.all else (args.names or V221_CASES)
     runtime = ROOT / "models/Qwen-Image-2.1"
     runtime_manifest(runtime, "int8")
     if any(CASES[name].get("control") for name in names):
@@ -162,7 +214,7 @@ def main() -> None:
                     "model_path": str((runtime / "model").resolve()),
                     "precision": "int8", "memory_mode": "offload",
                 })
-                published = ASSETS / f"{name}.png"
+                published = ASSETS / case.get("output", f"{name}.png")
                 shutil.copy2(result["output_path"], published)
                 with published.open("rb") as stream:
                     image_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
@@ -170,6 +222,10 @@ def main() -> None:
                 records[name] = {
                     "name": name, "control_kind": case.get("kind", "off"),
                     "control_source": control,
+                    "control_sha256": (
+                        hashlib.sha256((ASSETS / control).read_bytes()).hexdigest()
+                        if control else None
+                    ),
                     "control_inpaint": bool(case.get("inpaint_mask")),
                     "inpaint_source": case.get("inpaint_source"),
                     "inpaint_mask": case.get("inpaint_mask"),
@@ -181,7 +237,16 @@ def main() -> None:
                     "sampling_seconds": meta["timings"]["sampling_seconds"],
                     "peak_allocated_mib": meta["memory"].get("peak_allocated_mib"),
                     "reused_model": meta["reused_model"],
+                    "output": published.name,
                     "image_sha256": image_sha256,
+                    "scheduler": meta.get("scheduler"),
+                    "scheduler_config_sha256": hashlib.sha256(
+                        (runtime / "model/scheduler/scheduler_config.json").read_bytes()
+                    ).hexdigest(),
+                    "use_kv_cache": meta.get("use_kv_cache"),
+                    "vae_tiling": meta.get("vae_tiling"),
+                    "precision": "int8",
+                    "memory_mode": "offload",
                 }
                 record_path.write_text(
                     json.dumps(

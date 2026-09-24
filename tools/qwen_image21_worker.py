@@ -777,6 +777,8 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "memory_mode": request["memory_mode"],
             "compute_dtype": "bfloat16",
             "true_cfg_scale": 1.0,
+            "scheduler": runtime["pipe"].scheduler.__class__.__name__,
+            "scheduler_config": dict(runtime["pipe"].scheduler.config),
             "use_kv_cache": controlnet is None,
             "input_resolution": 1024,
             "input_image_count": len(images),

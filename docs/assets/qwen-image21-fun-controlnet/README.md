@@ -2,7 +2,63 @@
 
 文章だけでは位置関係を指定しにくい2D人物と3D建築を、RTX 3090で実生成しました。[公式Unionモデル](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)が挙げるCanny、Depth、Gray、HED、Lineart、MLSD、Pose、Scribbleの8種類と、**Inpainting＋Control**を扱います。条件画像と参照画像はユーザー提供の人物画像と新規作成したオリジナル素材から用意し、公式作例画像は配布していません。出力画像は生成されたPNGの全体です。
 
-## 2D · 人物参照と別ポーズの組み合わせ
+## v2.2.1 · 同じ人物参照で8方式を比較
+
+新たに提供されたカラフルなアニメ人物を**全方式の参照画像（Image 1）**に使います。ImageGenで別ポーズのガラス通路を描き、その新しい構図から8種類の条件画像を作りました。構図用原画そのものはQwenの参照画像には入れず、人物の特徴は左の提供画像から、配置や輪郭は方式別の条件画像から渡します。
+
+| 人物の参照画像 · ユーザー提供 | 新しい構図の原画 · ImageGen | 参照だけ · ControlNetなし |
+|---|---|---|
+| [原寸](anime-v221-reference.png)<br><img src="anime-v221-reference.png" width="200" alt="金髪とピンクの髪、絵の具の付いた白いパーカーの人物参照"> | [原寸](anime-v221-layout-source.png)<br><img src="anime-v221-layout-source.png" width="200" alt="ガラス通路をローラースケートで進む新しい構図"> | [PNG](anime-v221-reference-only.png)<br><img src="anime-v221-reference-only.png" width="200" alt="新しい人物参照のみを使った比較画像"> |
+
+| 方式 | 制御画像が渡す情報 | 前処理済みの制御画像 | 人物参照＋ControlNetの出力 |
+|---|---|---|---|
+| Canny | 細い輪郭とガラス通路 | [PNG](anime-v221-canny.png)<br><img src="anime-v221-canny.png" width="160" alt="Canny輪郭"> | [PNG](anime-v221-result-canny.png)<br><img src="anime-v221-result-canny.png" width="160" alt="Canny条件の出力"> |
+| Depth | 人物と通路の相対的な奥行き | [PNG](anime-v221-depth.png)<br><img src="anime-v221-depth.png" width="160" alt="相対深度"> | [PNG](anime-v221-result-depth.png)<br><img src="anime-v221-result-depth.png" width="160" alt="Depth条件の出力"> |
+| Gray | 明暗の塊 | [PNG](anime-v221-gray.png)<br><img src="anime-v221-gray.png" width="160" alt="グレースケール"> | [PNG](anime-v221-result-gray.png)<br><img src="anime-v221-result-gray.png" width="160" alt="Gray条件の出力"> |
+| HED | 柔らかい輪郭 | [PNG](anime-v221-hed.png)<br><img src="anime-v221-hed.png" width="160" alt="HED輪郭"> | [PNG](anime-v221-result-hed.png)<br><img src="anime-v221-result-hed.png" width="160" alt="HED条件の出力"> |
+| Lineart | 髪・服・手すりの線 | [PNG](anime-v221-lineart.png)<br><img src="anime-v221-lineart.png" width="160" alt="アニメ線画"> | [PNG](anime-v221-result-lineart.png)<br><img src="anime-v221-result-lineart.png" width="160" alt="Lineart条件の出力"> |
+| MLSD | 通路やビルの直線 | [PNG](anime-v221-mlsd.png)<br><img src="anime-v221-mlsd.png" width="160" alt="MLSD直線検出"> | [PNG](anime-v221-result-mlsd.png)<br><img src="anime-v221-result-mlsd.png" width="160" alt="MLSD条件の出力"> |
+| Pose | 手足と胴体の大まかな骨格 | [PNG](anime-v221-pose.png)<br><img src="anime-v221-pose.png" width="160" alt="手でトレースした骨格"> | [PNG](anime-v221-result-pose.png)<br><img src="anime-v221-result-pose.png" width="160" alt="Pose条件の出力"> |
+| Scribble | 人物・星・斜め通路の長い輪郭線 | [PNG](anime-v221-scribble.png)<br><img src="anime-v221-scribble.png" width="160" alt="長い輪郭線を残したラフ画"> | [PNG](anime-v221-result-scribble.png)<br><img src="anime-v221-result-scribble.png" width="160" alt="Scribble条件の出力"> |
+
+上表の8行は**同じ人物参照・プロンプト・Seed 43・40 steps・1152×1536・制御強度1.0**で生成します。MLSDには人物の輪郭がほとんど入らず、Poseには通路の線が入りません。方式名の選択だけで異なる重みを読み込む仕組みではなく、実際の制約は渡した画像の情報に依存します。
+
+実画像では、Grayが人物だけでなく遠景の建物とガラス面も比較的細かく残しました。Lineartは人物の輪郭が明瞭な一方、街の背景を暗い屋内通路のように描き替えています。MLSDでは斜めの手すりが残っても腕の高さがずれ、Poseでは手足の方向が残っても星の大きさと背景が変わりました。**各方式1枚の観察**であり、品質の順位を示す比較ではありません。
+
+Scribbleは最初の極端に疎い手描き案では人物が崩れたため、Canny画像から短い線を落とし、人物の外形・スケート・通路が読める長い線を残して再生成しました。修正版は全身と通路を描きましたが、条件画像中の小さな星は最終画像から消えています。
+
+公式作例の条件は[Alibaba PAIのモデルカード](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)の**40 steps・control_context_scale 1.0・Seed 43**です。[公式実行スクリプト](https://github.com/aigc-apps/VideoX-Fun/blob/main/examples/qwenimage21_fun/predict_t2i_control.py)は`FlowMatchEulerDiscreteScheduler`をQwen本体の`scheduler`ディレクトリから読み込みます。ローカルの`scheduler_config.json`は[Qwen本体の公式設定](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/scheduler/scheduler_config.json)とSHA-256 `5895f3a167c14a967fe9ac70c64924ae5acc79799e0679fd12907e594a713cd1`で一致しました。以前の作例は同じ40 stepsでも制御強度0.65〜0.8、人物出力768×1024でした。今回の画質評価では設定に加え、別の参照素材・プロンプト・構図も変わるため、改善要因を単独で特定した比較ではありません。
+
+### v2.2.1 · Inpainting＋Pose
+
+Canny結果を編集元にし、同じユーザー提供人物を再び参照画像へ渡します。白いマスクはパーカーの胸元だけを指定し、Pose条件は手足の大まかな位置を渡します。胸の柄をピンクのハートのワッペンへ変更する指示です。生成後の「マスク範囲外を元画像に固定」はOFFにし、モデルの生出力を掲載します。
+
+| 編集元 · Canny結果 | マスク · 白が編集 | Pose条件 | Inpainting＋Pose結果 |
+|---|---|---|---|
+| [PNG](anime-v221-result-canny.png)<br><img src="anime-v221-result-canny.png" width="190" alt="編集元のCanny結果"> | [PNG](anime-v221-inpaint-mask.png)<br><img src="anime-v221-inpaint-mask.png" width="190" alt="パーカーの胸元を白くした編集マスク"> | [PNG](anime-v221-pose.png)<br><img src="anime-v221-pose.png" width="190" alt="大まかな骨格条件"> | [PNG](anime-v221-result-inpaint.png)<br><img src="anime-v221-result-inpaint.png" width="190" alt="InpaintingとPoseを併用した出力"> |
+
+胸元には水色のハートとピンクの縁が入りました。指示した「ピンクの本体・水色の縁」と色の役割は逆です。マスク外も画素単位では固定されず、編集元とのRGB平均絶対差は`1.94/255`、少なくとも1チャンネルが異なる画素は`97.62%`でした。マスク内の平均絶対差は`35.40/255`、白い編集範囲は画面の`2.15%`です。厳密な範囲外保持には別機能の「マスク範囲外を元画像に固定」を使います。
+
+### v2.2.1 · 実測
+
+全例1152×1536・40 steps・Seed 43・INT8＋CPU退避です。制御ありは強度1.0、参照画像は全例同じ1枚。時間は秒、GPU割当はPyTorchのピークであり、GPU全体の使用量ではありません。
+
+| 出力 | モデル読込 | 生成処理 | PyTorch GPU割当ピーク |
+|---|---:|---:|---:|
+| 参照のみ | 331.2 | 106.7 | 11,942 MiB |
+| Canny | 279.8 | 306.6 | 14,788 MiB |
+| Depth | 再利用 | 207.2 | 14,783 MiB |
+| Gray | 再利用 | 207.7 | 14,783 MiB |
+| HED | 再利用 | 207.3 | 14,784 MiB |
+| Lineart | 再利用 | 207.6 | 14,783 MiB |
+| MLSD | 再利用 | 207.0 | 14,783 MiB |
+| Pose | 再利用 | 207.4 | 14,783 MiB |
+| Scribble · 再生成 | 368.9 | 304.6 | 14,786 MiB |
+| Inpainting＋Pose | 再利用 | 205.2 | 14,764 MiB |
+
+CannyとScribbleは別プロセスで制御モデルを初回使用したため、生成処理にもウォームアップが含まれます。速度を方式の差として比較しないでください。全プロンプト・参照・制御画像SHA・出力SHA・スケジューラ設定SHAは[測定JSON](measurements.json)に記録しています。
+
+## v2.2.0の人物作例 · 青系人物と別ポーズ
 
 | 人物の参照画像（Image 1） | 新しい構図のLineart条件 |
 |---|---|
@@ -58,7 +114,7 @@ MLSDは直線を抽出するため、曲面の大きな輪は条件画像にほ�
 
 輪には銅色と青緑の古色が入りました。小ドームはほぼ元の材質のままで、指定が完全には反映されていません。マスク外は見た目には近いものの、元画像とのRGB平均絶対差は`3.46/255`で、画素の`99.98%`に何らかの差があります。マスク内の平均絶対差は`17.89/255`です。これは一例の画像比較であり、黒い範囲の画素を厳密に保つには別スイッチの**マスク範囲外を元画像に固定**を併用します。
 
-## 実測
+## v2.2.0 · 実測
 
 | 出力 | サイズ | 制御強度 | モデル読込 | 生成処理 | PyTorch GPU割当ピーク |
 |---|---:|---:|---:|---:|---:|
@@ -85,11 +141,10 @@ ControlNetの初回推論には各プロセスのウォームアップが含ま�
 - Windows 11、RTX 3090 24GB、Qwen Image 2.1通常版INT8、CPU退避、Sparse OFF、プロンプト書き換えOFF。制御重みはKijaiのINT8 ConvRot（SHA-256 `07aa961570ac0e03d4ca936aecd76854d077a33cde69b5092399afba01b3715d`）。
 - プロンプト、サイズ、強度、所要時間、PyTorchのGPU割当ピーク、出力PNGのSHA-256は[測定JSON](measurements.json)に記録しています。数値は各条件1回の測定で、平均や画質保証ではありません。PyTorch割当量はデスクトップやCUDAコンテキストを含むGPU全体の使用量ではありません。
 - 条件画像はあらかじめ作成します。Qwenタブ内では条件画像の自動抽出を行いません。条件画像は出力の縦横比へ中央切り抜き・リサイズして使用します。[前処理スクリプト](../../../tools/prepare_qwen21_fun_example_controls.py)はHED・MLSD・Depth Anything V2 Smallの重みを指定revisionから取得しますが、重みはGitへ追加しません。
-- 導入とUI操作は[Qwenガイド](../../../extensions-builtin/qwen-image21-studio/README.md#fun-controlnet-union--int8)を参照。2Dは人物参照を「参照画像」へ、人物LineartまたはPoseを「前処理済みの制御画像」へ入れます。Inpaintingは編集元を参照に追加し、マスク欄とCanny条件を指定します。全作例の再生成コマンド：
+- 導入とUI操作は[Qwenガイド](../../../extensions-builtin/qwen-image21-studio/README.md#fun-controlnet-union--int8)を参照。2Dは人物参照を「参照画像」へ、制御マップを「前処理済みの制御画像」へ入れます。Inpaintingでは編集元、白黒マスク、制御画像を追加します。下のコマンドはv2.2.1の人物作例を再生成します。以前の人物・3D作例も再生成する場合は、旧[制御画像の前処理](../../../tools/prepare_qwen21_fun_example_controls.py)と[手描きScribbleの準備](../../../tools/prepare_qwen21_fun_example_scribble.py)を実行してから、生成コマンドに`--all`を付けます。
 
 ```powershell
-.\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_fun_example_scribble.py
-.\venv\Scripts\python.exe tools\prepare_qwen21_fun_example_controls.py
+.\venv\Scripts\python.exe tools\prepare_qwen21_fun_anime_controls.py
 .\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\generate_qwen21_fun_examples.py
 ```
 

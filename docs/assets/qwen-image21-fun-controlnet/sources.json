@@ -65,5 +65,60 @@
     "file": "ring-inpaint-canny.png",
     "origin": "OpenCV Canny(80,160) of the original Qwen render ring-3d-control.png after bilateral smoothing",
     "sha256": "e39495b13545ccb52c440b627e755155d9a2363e00006f2916f98e6424114963"
+  },
+  {
+    "file": "anime-v221-reference.png",
+    "origin": "User-provided original character image, 2026-09-24",
+    "sha256": "c658efed3bfe0a9456ca4afd8ec01e73e491246208234fb43d825b1523a781ec"
+  },
+  {
+    "file": "anime-v221-layout-source.png",
+    "origin": "Original ImageGen edit of anime-v221-reference.png: new glass-ramp roller-skating composition, 2026-09-24",
+    "sha256": "345c1954d499be5465ae9b40f1d2e5266f2723ab707dd7715cb56f2faf3a7e80"
+  },
+  {
+    "file": "anime-v221-canny.png",
+    "origin": "OpenCV Canny(80,160) from anime-v221-layout-source.png after bilateral smoothing",
+    "sha256": "583a0fe99b465d60a21ed9c36f352f46fe669ec7f169ae2a517447bb569df4ed"
+  },
+  {
+    "file": "anime-v221-gray.png",
+    "origin": "OpenCV grayscale of anime-v221-layout-source.png",
+    "sha256": "bf94109e7d9c7f4d72315fca100851d2bdb0c644b7daa6b95cc75f313e19a5ed"
+  },
+  {
+    "file": "anime-v221-scribble.png",
+    "origin": "Long sparse Canny contours of anime-v221-layout-source.png retained at half resolution; revised after an overly sparse sketch failed",
+    "sha256": "da61998076e1dcc2038ce84835ac97212ba3e98e8e3e72ae9332bab7617757cf"
+  },
+  {
+    "file": "anime-v221-lineart.png",
+    "origin": "Adaptive threshold black-ink extraction of anime-v221-layout-source.png",
+    "sha256": "65a441b2df59501baaa5d7e54164b75a95bd830b1c80d127ffa56519d6f73b17"
+  },
+  {
+    "file": "anime-v221-pose.png",
+    "origin": "Hand-traced sparse body joints of anime-v221-layout-source.png",
+    "sha256": "b727aa0ab3393a2256a17bdfb175bc73777c9756a06ab14aa610aa6ca04a1e9d"
+  },
+  {
+    "file": "anime-v221-hed.png",
+    "origin": "Legacy ControlNet HED annotator applied to anime-v221-layout-source.png",
+    "sha256": "58dda4007a9591656eed0f792851f3916369c09adc86d7cc8873a1b4c40789b1"
+  },
+  {
+    "file": "anime-v221-mlsd.png",
+    "origin": "Legacy ControlNet MLSD annotator applied to anime-v221-layout-source.png",
+    "sha256": "2a50330ac4cb5d19cf823af8286d8c0af7262131a90bec3dbb896980ac040e4b"
+  },
+  {
+    "file": "anime-v221-depth.png",
+    "origin": "Depth Anything V2 Small relative depth of anime-v221-layout-source.png",
+    "sha256": "978c98bfda7db340a682439d2cc4e2471481ffeb03de6df3b40acce3de19f961"
+  },
+  {
+    "file": "anime-v221-inpaint-mask.png",
+    "origin": "Hand-drawn white edit region on the Canny result hoodie; black preserves the other regions",
+    "sha256": "c732dc69e458c0082b5827a0a928c5cda4e759d3162b66680731d8abb540435c"
   }
 ]

@@ -30,13 +30,13 @@ GGUFは画像生成本体だけです。共通のテキストエンコーダー�
 .\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_fun_controlnet.py --verify
 ```
 
-3. Qwenタブで**通常 · INT8**、**CPUへ退避**を選び、**Fun ControlNet · INT8**欄の種類、前処理済み画像、制御の強さを指定して生成します。人物や外見も参照する場合は、別途上の**参照画像**へ元画像を追加し、プロンプトに「Image 1の人物」などと書きます。公式の作例と同じ強さは`1.0`です。制御画像は出力と同じ縦横比に中央切り抜きしてリサイズし、ジョブの`control.png`へ保存します。結果のダウンロード欄にも含まれます。
+3. Qwenタブで**通常 · INT8**、**CPUへ退避**を選び、**Fun ControlNet · INT8**欄の種類、前処理済み画像、制御の強さを指定して生成します。人物や外見も参照する場合は、別途上の**参照画像**へ元画像を追加し、プロンプトに「Image 1の人物」などと書きます。[公式の作例](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)と同じ条件は**40 steps・制御の強さ`1.0`・通常版Qwen 2.1のFlowMatch Eulerスケジューラ**です。スケジューラはQwen本体から自動で読み込みます。制御画像は出力と同じ縦横比に中央切り抜きしてリサイズし、ジョブの`control.png`へ保存します。結果のダウンロード欄にも含まれます。
 
 **Inpainting＋Control**も使えます。参照画像に編集元を追加して**選択画像を開く・囲む**を押し、Fun ControlNet欄のInpaintingをONにします。編集範囲はマスク欄で塗るか、編集元と同じサイズの白黒マスクをアップロードしてください。白は再生成、黒は保持の指示です。出力サイズは**編集元と同じサイズ**にし、前処理済み制御画像と種類も指定します。モデルには制御画像64チャンネル、保持マスク1チャンネル、マスクで隠した編集元64チャンネルを渡します。通常の画像参照も同時に指定できます。
 
 ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所へ制御を加えます。重みはINT8 ConvRotのまま読み込み、未量子化の入力層や正規化層はBF16です。モデル本体のINT8は既存のbitsandbytes形式で、両者の量子化方式は異なります。ControlNet使用時はKVキャッシュを無効にし、Sparse AttentionもOFFにします。通常版INT8以外の精度やTurboとの組み合わせは受け付けません。制御画像と通常の参照画像は別入力です。**マスク範囲外を元画像に固定**は独立した生成後の合成で、Inpaintingと併用すると範囲外の画素を厳密に固定できます。マスク境界のぼかし設定はこの合成だけに使い、モデルへ渡すマスクは白黒で判定します。
 
-[8種類とInpainting＋Controlのアニメ調・3D調実生成例、条件画像、実測記録](../../docs/assets/qwen-image21-fun-controlnet/README.md)を掲載しています。モデル重みはGitに含めません。公式重みと派生版には[非商用のQwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/blob/8a4702014d4dabb5f896fcba917e2ee0a961465f/LICENSE)が適用されます。商用利用には提供元の別途許諾が必要です。
+[同じ人物参照による全8方式とInpainting＋Control、3D建築の実生成例、条件画像、実測記録](../../docs/assets/qwen-image21-fun-controlnet/README.md)を掲載しています。モデル重みはGitに含めません。公式重みと派生版には[非商用のQwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/blob/8a4702014d4dabb5f896fcba917e2ee0a961465f/LICENSE)が適用されます。商用利用には提供元の別途許諾が必要です。
 
 ## Viggle Turbo（BF16 / Q4_K_M）
 
