@@ -1,6 +1,6 @@
 # 変更履歴
 
-## 未リリース — 2026-09-24
+## v2.0.0 — 2026-09-24
 
 - 本体・SenseNova・Qwenの既定環境をPyTorch 2.13.0／torchvision 0.28.0へ更新し、setuptools 83.0.0を導入できるようにしました。SenseNovaはTransformers 5.10.4へ移行しています。
 - Accelerateのチェックポイント索引でディレクトリ外のファイルを参照できる問題を修正した保守版を同梱しました。本体のメタデータキャッシュをSQLite／JSONへ移行し、diskcacheへの依存を除去しました。
