@@ -57,6 +57,21 @@ ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所
 
 2026年9月25日にRTX 3090で、通常版INT8・CPU退避・1024×1024・4 steps・固定Seedの直接worker実行を確認しました。新規生成した白いティーポットを参照画像にして青へ変える編集も行い、どちらもRGBA PNG・専用PDDスケジューラ・KVキャッシュOFFを記録し、画像を確認しています。初回のモデル読み込みは約382秒、生成部分は約20秒でした。編集は再起動したworkerで読み込み約149秒、生成部分は約26秒です。この確認に40 stepsとの同条件の速度・画質比較は含めていません。
 
+### T2I・I2IのLoRA ON/OFF作例
+
+別途、ユーザー提供のアニメCGを題材に、T2IとI2Iを**通常版INT8・40 steps**と**Fun Acc・4 steps**でそれぞれ生成しました。各ペアは同じSeedと、公式PE-T2I／PE-I2Iによる同じ強化後プロンプトを使用。両方とも960×1280・CPU退避で、通常版はモデル付属のFlowMatch Euler、Fun Accは専用PDDスケジューラです。
+
+[4枚の原寸画像・元画像・プロンプト全文・測定条件](../../docs/assets/qwen-image21-fun-acc/README.md)
+
+![上段はT2I、下段は元画像の黒い服を緑にするI2I。各行の左は通常版40 steps、右はFun Acc 4 steps](../../docs/assets/qwen-image21-fun-acc/comparison.png)
+
+| 用途 | 通常版40 steps | Fun Acc 4 steps | 生成処理の速度比 |
+| --- | ---: | ---: | ---: |
+| T2I | 71.6秒 | 17.9秒 | 4.01倍 |
+| I2I | 89.7秒 | 24.6秒 | 3.64倍 |
+
+時間は生成処理のみで、書き換えとモデル読込は含みません。I2Iは両方とも衣装を緑にしましたが、保持を指示した襟元のリボンまで緑になりました。画質と保持率は各条件1枚の観察です。
+
 ## Viggle Turbo（BF16 / Q4_K_M）
 
 画面の**モデル・精度**で `Viggle Turbo · BF16` または `Viggle Turbo · Q4_K_M` を選びます。選択時にStepsは4へ変わり固定され、Sparse AttentionはOFFになります。通常版へ戻すと40 stepsに戻ります。両Turboモデルはテキストからの生成と参照画像編集に使えます。CFGは1.0、negative promptは使わず、Viggle配布の`shift_terminal=null`スケジューラーを読み込みます。
