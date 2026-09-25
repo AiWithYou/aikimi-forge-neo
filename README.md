@@ -2,7 +2,7 @@
 
 **v2.3.0** · [変更履歴](CHANGELOG.md)
 
-**v2.3.0（2026-09-25）：** Qwen Image 2.1に[Alibaba PAIのFun Acc 4-step LoRA](extensions-builtin/qwen-image21-studio/README.md#fun-acc-4-step-lora--int8)を追加しました。通常版INT8の生成・参照画像編集で専用PDDスケジューラを使います。重みは追加導入し、画面のチェックで切り替えます。
+**v2.3.0（2026-09-25）：** Qwen Image 2.1に[Alibaba PAIのFun Acc 4-step LoRA](extensions-builtin/qwen-image21-studio/README.md#fun-acc-4-step-lora--int8)を追加しました。通常版INT8の生成・参照画像編集で専用PDDスケジューラを使います。重みは追加導入し、画面のチェックで切り替えます。[T2I・I2IのLoRA ON/OFF比較](docs/assets/qwen-image21-fun-acc/README.md)も掲載しています。
 
 **v2.2.1（2026-09-25）：** ユーザー提供の同じアニメ人物を参照し、Qwen Image 2.1 Fun ControlNet Unionの全8方式とInpainting＋Controlを試しました。公式の40 steps・FlowMatch Eulerスケジューラ・制御強度1.0を確認し、1152×1536の人物作例と生成条件を[作例ページ](docs/assets/qwen-image21-fun-controlnet/README.md)に掲載しています。
 
@@ -96,6 +96,7 @@ Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLi
 
 - [Krea2の高解像度処理](docs/krea2_local_supersample_detail_ja.md)
 - [Qwen Image 2.1：画像生成・編集・透過PNG・INT8・Fun ControlNet](extensions-builtin/qwen-image21-studio/README.md)
+- [Qwen Image 2.1 Fun Acc：T2I・I2IのLoRA ON/OFF画像と実測比較](docs/assets/qwen-image21-fun-acc/README.md)
 - [Qwen Image 2.1 Fun ControlNet：全8種類とInpaintingのアニメ調・3D調作例](docs/assets/qwen-image21-fun-controlnet/README.md)
 - [Anima 3.8B](extensions-builtin/anima-3-8b/README.md)
 - [SenseNova U1.5 Studio](extensions-builtin/sensenova-u15-studio/README.md)

@@ -1,0 +1,49 @@
+{
+  "t2i": {
+    "original": "青空の下の学校の屋上。長く淡い銀白色の髪と薄紫の瞳を持つ少女が、風に髪をなびかせながらこちらへ片手を差し出している。白いフリル付きブラウス、黒いベスト、長い黒いエプロンスカート。もう一方の手には透明なガラス瓶を載せた金属トレー。背後にフェンスと屋上の出入口。柔らかい逆光、繊細なアニメゲームCG、縦構図。文字やロゴは入れない。",
+    "rewritten_prompt": "A vertical anime-style illustration shows a young woman on a sunlit school rooftop beneath a vivid blue sky. The composition is framed from a low, slightly tilted angle, making the girl feel close and inviting as she leans forward toward the viewer. Her outstretched left arm reaches into the foreground with an open palm, creating strong depth and perspective. She has very long, flowing pale silver-white hair with faint lavender undertones, blown by wind across her shoulders, back, and the surrounding air. Her visible eye is pale purple, large and expressive, with delicate lashes and a soft, slightly melancholic expression. Her face is shown in partial side profile with fair skin, a small nose, subtle rosy lips, and gentle anime-style shading. She wears a white blouse with lace-trimmed frills and voluminous sleeves, a fitted black vest, and a long black skirt with layered ruffled fabric and ornate white trim. In her other hand, positioned near the lower-right foreground, she carries a shallow metallic tray holding a clear glass bottle. The bottle has a narrow neck, transparent reflections, and visible liquid inside, catching bright highlights from the sunlight. Behind her, a rooftop fence runs horizontally across the scene, with a doorway or entrance structure visible in the background. The rooftop surface is warm-toned and sunlit, with soft shadows cast by the railing and architectural elements. The sky fills the upper background with saturated blue color and scattered white clouds, giving the image an airy, open atmosphere. The lighting is soft backlight, creating luminous hair edges, glowing fabric highlights, and a romantic fantasy mood. The image has no visible written text, logos, labels, or interface elements.",
+    "wh_ratio": "3:4",
+    "enabled": true,
+    "applied": true,
+    "model": "Qwen/Qwen-Image-2.1-PE-T2I",
+    "revision": "f3ed7985c788ad75b3ab7223e0c4c51e2a43545b",
+    "quantization": "nf4-double",
+    "linear4bit_layers": 249,
+    "thinking": false,
+    "requested_ratio": "3:4",
+    "size_changed": false,
+    "generated_tokens": 356,
+    "stop_token_id": 248046,
+    "eos_token_ids": [
+      248046,
+      248044
+    ],
+    "load_seconds": 159.188,
+    "generation_seconds": 45.731,
+    "elapsed_seconds": 204.919
+  },
+  "i2i": {
+    "original": "画像1の少女の顔、表情、銀白色の長い髪、手を差し出すポーズ、トレーとガラス瓶、屋上と空、光、画風、構図をできるだけそのまま保つ。黒いベストと黒いエプロンスカートだけを深いエメラルドグリーンに変える。白いブラウスとフリル、金属のチェーンは変えない。人物や物、文字を追加しない。",
+    "rewritten_prompt": "<image1>: 将输入图片中少女所穿的黑色背心式女仆裙与黑色围裙裙部分的颜色改为深邃的翡翠绿色，呈现为浓郁饱和、带有柔和高光与褶皱阴影的翡翠绿布料质感，同时完整保留背心裙原有的纽扣、胸前黑色蝴蝶结领饰、腰间黑色蝴蝶结缎带、垂坠的金属链条以及白色衬衫、衣袖与袖口白色褶皱花边的款式与结构全部不变；在此基础上，完整保留少女的面部特征与五官比例、平静淡漠的表情与视线方向、银白色长直发的发型与发丝飘动形态、头部角度，保留她向前伸出的右手姿态以及左手托盘的姿势与手部结构不变，托盘上的玻璃瓶与玻璃壶等器物保持原样，屋上的水泥墙面、深色门、铁丝网栏杆、远处的城市天际线与天空中的白云、阳光照射的方向与整体通透柔和的光影氛围、清透的日系动漫插画画风，以及人物在画面中的大小、位置与构图均与输入图完全一致；本次编辑仅为裙身与围裙裙区域的局部改色，其余所有像素保持原位不变，不添加任何人物、物件或文字。\n\nOriginal editing instruction and preservation constraints (authoritative):\n画像1の少女の顔、表情、銀白色の長い髪、手を差し出すポーズ、トレーとガラス瓶、屋上と空、光、画風、構図をできるだけそのまま保つ。黒いベストと黒いエプロンスカートだけを深いエメラルドグリーンに変える。白いブラウスとフリル、金属のチェーンは変えない。人物や物、文字を追加しない。",
+    "wh_ratio": "",
+    "ratio_follow": "<image1>",
+    "enabled": true,
+    "applied": true,
+    "model": "Qwen/Qwen-Image-2.1-PE-I2I",
+    "revision": "72927bc08afc99b7888ceb7d7d51a12db3700bbd",
+    "quantization": "nf4-double",
+    "linear4bit_layers": 249,
+    "thinking": false,
+    "requested_ratio": "3:4",
+    "size_changed": false,
+    "generated_tokens": 261,
+    "stop_token_id": 248046,
+    "eos_token_ids": [
+      248046,
+      248044
+    ],
+    "load_seconds": 179.184,
+    "generation_seconds": 34.234,
+    "elapsed_seconds": 213.418
+  }
+}

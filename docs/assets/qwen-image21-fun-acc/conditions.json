@@ -1,0 +1,66 @@
+{
+  "source": {
+    "file": "source.png",
+    "sha256": "da41703c6ef8ee047750b2d84c8a5803c5e4dca26168a83c9fd5c957361d5738"
+  },
+  "width": 960,
+  "height": 1280,
+  "precision": "int8",
+  "memory_mode": "offload",
+  "sparse_mode": "off",
+  "control_kind": "off",
+  "base_model_revision": "b3179ad355be050328e483a9dfdd9e60cd62adfa",
+  "fun_acc_revision": "f7545234760e1847cd8e89e52bd951cb0b7e327f",
+  "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+  "prompts_file": "prompts.json",
+  "outputs": {
+    "t2i-base": {
+      "file": "t2i-base.png",
+      "sha256": "028a16bf1d0bcc4ce3f1cd9e876c689004d062e224d9202560d2c0e4a5a9a136",
+      "seed": 20260527,
+      "steps": 40,
+      "scheduler": "FlowMatchEulerDiscreteScheduler",
+      "load_seconds": 489.159,
+      "sampling_seconds": 71.62,
+      "elapsed_seconds": 570.632,
+      "peak_pytorch_allocated_mib": 9917.1,
+      "reused_model": false
+    },
+    "t2i-fun-acc": {
+      "file": "t2i-fun-acc.png",
+      "sha256": "5b26b2e95b2f652199acc3b6a1771224f2e148ee6a619bfc0b88d486dd8800c8",
+      "seed": 20260527,
+      "steps": 4,
+      "scheduler": "QwenImage21PDDScheduler",
+      "load_seconds": 276.881,
+      "sampling_seconds": 17.879,
+      "elapsed_seconds": 295.347,
+      "peak_pytorch_allocated_mib": 9917.3,
+      "reused_model": false
+    },
+    "i2i-base": {
+      "file": "i2i-base.png",
+      "sha256": "55471b9f2d8a389c05b66e8a320f8d85b02dc6a33326cbdbaa7bef454b92207b",
+      "seed": 20260528,
+      "steps": 40,
+      "scheduler": "FlowMatchEulerDiscreteScheduler",
+      "load_seconds": 0.0,
+      "sampling_seconds": 89.729,
+      "elapsed_seconds": 90.077,
+      "peak_pytorch_allocated_mib": 12407.6,
+      "reused_model": true
+    },
+    "i2i-fun-acc": {
+      "file": "i2i-fun-acc.png",
+      "sha256": "ec82aecdf5b66be4fb1c28c1bc7df3c37a729707bb196a6b14af3a6d6337ddde",
+      "seed": 20260528,
+      "steps": 4,
+      "scheduler": "QwenImage21PDDScheduler",
+      "load_seconds": 0.0,
+      "sampling_seconds": 24.641,
+      "elapsed_seconds": 24.964,
+      "peak_pytorch_allocated_mib": 12408.9,
+      "reused_model": true
+    }
+  }
+}
