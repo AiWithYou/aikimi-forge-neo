@@ -96,6 +96,9 @@ class RewritePipToUvTests(unittest.TestCase):
 class PatchedRunTests(unittest.TestCase):
     def setUp(self):
         self._real_run = subprocess.run
+        uv_check = mock.patch("modules_forge.uv_hook._pre_check")
+        uv_check.start()
+        self.addCleanup(uv_check.stop)
 
     def tearDown(self):
         subprocess.run = self._real_run
