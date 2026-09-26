@@ -1,0 +1,17 @@
+{
+  "model": "well9472/Nanosaur2-670M",
+  "model_revision": "dcd61cd6c3f9e2cc62619da620bd86219191c3ed",
+  "prompt": "newest, masterpiece, an explorer with a red scarf and silver goggles beside a tiny robot dinosaur, sunlit mossy forest, detailed illustration",
+  "negative_prompt": "oldest, low quality, blurry, watermark, text",
+  "width": 512,
+  "height": 512,
+  "steps": 50,
+  "cfg": 4.0,
+  "seed": 20260926,
+  "guidance": "alternate",
+  "sampler": "euler",
+  "scheduler": "simple",
+  "prompt_id": "bf51a12b-6f85-4985-9753-734ab3901aab",
+  "comfyui_version": "0.37.0",
+  "comfyui_revision": "912fca4f39b875a0360f2c5170568176ea813ded"
+}

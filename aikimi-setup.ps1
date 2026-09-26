@@ -1,6 +1,6 @@
 #requires -Version 7.0
 param(
-    [ValidateSet('krea2', 'anima38', 'sensenova', 'h3')]
+    [ValidateSet('krea2', 'anima38', 'sensenova', 'h3', 'nanosaur2')]
     [string]$Model,
     [switch]$DryRun,
     [switch]$KeepSource,
@@ -23,7 +23,8 @@ function Assert-SetupIdle {
     $prefixes = @(
         (Join-Path $RepositoryRoot 'venv\'),
         (Join-Path $RepositoryRoot 'models\SenseNova-U1\worker-env\'),
-        (Join-Path $RepositoryRoot 'repositories\minimax-h3\')
+        (Join-Path $RepositoryRoot 'repositories\minimax-h3\'),
+        (Join-Path $RepositoryRoot 'repositories\nanosaur2\')
     )
     foreach ($process in Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'") {
         if (-not $process.ExecutablePath) { continue }
@@ -38,7 +39,7 @@ function Assert-SetupIdle {
 function Invoke-AikimiModelSetup {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
-        [Parameter(Mandatory)][ValidateSet('krea2', 'anima38', 'sensenova', 'h3')][string]$SelectedModel,
+        [Parameter(Mandatory)][ValidateSet('krea2', 'anima38', 'sensenova', 'h3', 'nanosaur2')][string]$SelectedModel,
         [switch]$PlanOnly,
         [switch]$PreserveSource
     )
@@ -62,12 +63,12 @@ function Invoke-AikimiModelSetup {
     $bootstrap = @(Get-Content -LiteralPath $requirements | Where-Object { $_ -match '^starlette==[^\s]+$' })
     if ($bootstrap.Count -ne 1) { throw 'requirements.txtのStarlette固定版を確認できません。' }
 
-    $modelScript = if ($SelectedModel -eq 'h3') { 'tools\setup_minimax_h3.py' } else { 'tools\aikimi_setup.py' }
+    $modelScript = if ($SelectedModel -eq 'h3') { 'tools\setup_minimax_h3.py' } elseif ($SelectedModel -eq 'nanosaur2') { 'tools\setup_nanosaur2.py' } else { 'tools\aikimi_setup.py' }
     if (-not (Test-Path -LiteralPath (Join-Path $RepositoryRoot $modelScript))) { throw "導入処理がありません: $modelScript" }
     if ($SelectedModel -eq 'sensenova' -and -not (Test-Path -LiteralPath (Join-Path $RepositoryRoot 'download_sensenova_u15_int8.ps1'))) {
         throw 'SenseNovaの環境準備処理がありません。'
     }
-    $modelArguments = if ($SelectedModel -eq 'h3') {
+    $modelArguments = if ($SelectedModel -in @('h3', 'nanosaur2')) {
         @('-B', (Join-Path $RepositoryRoot $modelScript))
     } else {
         @('-B', (Join-Path $RepositoryRoot $modelScript), 'install', $SelectedModel)
@@ -83,6 +84,7 @@ function Invoke-AikimiModelSetup {
         if ($SelectedModel -eq 'anima38') { Write-Host '   BF16版からINT8 ConvRotへ自動変換し、検証します。' }
         if ($SelectedModel -eq 'sensenova') { Write-Host '4. SenseNova専用Pythonと固定版ライブラリを準備' }
         if ($SelectedModel -eq 'h3') { Write-Host '   ComfyUI・専用Python・標準INT8モデルをNeo内に準備します。' }
+        if ($SelectedModel -eq 'nanosaur2') { Write-Host '   固定版ComfyUI・専用Python・Nanosaur2の3モデルをNeo内に準備します。' }
         return
     }
 
@@ -123,16 +125,17 @@ if ($MyInvocation.InvocationName -ne '.') {
     try {
         [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
         if (-not $Model) {
-            if ($NoPause) { throw '-Modelにkrea2 / anima38 / sensenova / h3を指定してください。' }
+            if ($NoPause) { throw '-Modelにkrea2 / anima38 / sensenova / h3 / nanosaur2を指定してください。' }
             Write-Host 'Aikimi Forge Neo モデルセットアップ'
             Write-Host '1  Krea2                    INT8配布版を取得'
             Write-Host '2  Anima 3.8B v1.1          BF16取得・INT8自動変換'
             Write-Host '3  SenseNova U1.5           INT8モデル・専用環境'
             Write-Host '4  MiniMax H3              INT8モデル・専用ComfyUI'
+            Write-Host '5  Nanosaur2               イラスト生成・専用ComfyUI'
             $selection = Read-Host '番号を選択（Enterで終了）'
             if (-not $selection) { exit 0 }
-            $choices = @{ '1'='krea2'; '2'='anima38'; '3'='sensenova'; '4'='h3' }
-            if (-not $choices.ContainsKey($selection)) { throw '1〜4の番号を選択してください。' }
+            $choices = @{ '1'='krea2'; '2'='anima38'; '3'='sensenova'; '4'='h3'; '5'='nanosaur2' }
+            if (-not $choices.ContainsKey($selection)) { throw '1〜5の番号を選択してください。' }
             $Model = $choices[$selection]
         }
         Invoke-AikimiModelSetup -RepositoryRoot $PSScriptRoot -SelectedModel $Model -PlanOnly:$DryRun -PreserveSource:$KeepSource

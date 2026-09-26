@@ -1,0 +1,17 @@
+{
+  "model": "well9472/Nanosaur2-670M",
+  "model_revision": "dcd61cd6c3f9e2cc62619da620bd86219191c3ed",
+  "prompt": "newest, masterpiece, anime illustration, 2d, 1girl, solo, short indigo hair, amber eyes, navy cloak embroidered with tiny stars, holding a brass telescope on a moonlit rooftop observatory, crisp line art, cel shading, deep blue sky, warm lantern light",
+  "negative_prompt": "oldest, low quality, blurry, photorealistic, 3d render, watermark, signature, text, bad anatomy, extra fingers",
+  "width": 768,
+  "height": 1024,
+  "steps": 50,
+  "cfg": 4.0,
+  "seed": 424242,
+  "guidance": "alternate",
+  "sampler": "euler",
+  "scheduler": "simple",
+  "prompt_id": "79ba869f-463f-4f28-b32d-8d235c78f40b",
+  "comfyui_version": "0.37.0",
+  "comfyui_revision": "912fca4f39b875a0360f2c5170568176ea813ded"
+}

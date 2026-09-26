@@ -1,6 +1,8 @@
 # Aikimi Forge Neo
 
-**v2.3.0** · [変更履歴](CHANGELOG.md)
+**v2.4.0** · [変更履歴](CHANGELOG.md)
+
+**v2.4.0（2026-09-26）：** [Nanosaur2-670M](https://huggingface.co/well9472/Nanosaur2-670M)のイラスト生成に対応しました。`Nanosaur2`タブから専用環境と3つのモデルを準備し、PNGと生成条件を保存できます。[導入・作例・検証範囲](extensions-builtin/nanosaur2-studio/README.md)
 
 **v2.3.0（2026-09-25）：** Qwen Image 2.1に[Alibaba PAIのFun Acc 4-step LoRA](extensions-builtin/qwen-image21-studio/README.md#fun-acc-4-step-lora--int8)を追加しました。通常版INT8の生成・参照画像編集で専用PDDスケジューラを使います。重みは追加導入し、画面のチェックで切り替えます。[T2I・I2IのLoRA ON/OFF比較](docs/assets/qwen-image21-fun-acc/README.md)も掲載しています。
 
@@ -16,7 +18,7 @@
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
-**Qwen Image 2.1・Krea2・Anima・SenseNovaの画像生成・編集、MiniMax H3の音声付き動画、YuE2の作曲を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
+**Qwen Image 2.1・Krea2・Anima・SenseNovaの画像生成・編集、Nanosaur2のイラスト生成、MiniMax H3の音声付き動画、YuE2の作曲を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
 
 [Stable Diffusion WebUI Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo)を基盤にしています。主な対象はWindows 11・Python 3.13・NVIDIA GPUで、通常起動では自分のPC内だけで利用し、LANやインターネットへ自動公開しません。
 
@@ -28,7 +30,7 @@
 
 | 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
-| **モデル対応** | Qwen Image 2.1のINT8・W4A8、Fun Acc 4-step LoRA、任意の4bitプロンプト書き換え、Anima 3.8B v1.1、SenseNova、MiniMax H3の専用Studio、YuE2 Musicの作曲・楽譜編集。 |
+| **モデル対応** | Qwen Image 2.1のINT8・W4A8、Fun Acc 4-step LoRA、任意の4bitプロンプト書き換え、Anima 3.8B v1.1、SenseNova、Nanosaur2、MiniMax H3の専用Studio、YuE2 Musicの作曲・楽譜編集。 |
 | **導入** | 画像・動画モデルを選ぶセットアップBATと、Qwen Image 2.1・YuE2の専用BAT。モデルの取得・変換と、必要な専用環境の準備。 |
 | **仕上げ** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
 | **操作** | 全モデル共通の保持設定・手動解放、ちびあいきみによる環境・実行状態の表示、追加機能へのショートカット、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
@@ -50,6 +52,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
+| **Nanosaur2**（統合） | 670Mのイラスト向けモデル。専用タブからテキスト画像を生成し、PNGと確定Seed・生成条件を保存します。独立した固定版ComfyUI・Python環境と3つの重みを導入します。[導入・作例](extensions-builtin/nanosaur2-studio/README.md) |
 | **MiniMax H3 Studio**（統合） | 音声付き動画を生成。専用ComfyUI・Python・標準INT8モデルのセットアップと既存モデルの共有に対応。任意でW4A8モデル、Fun ControlNet Union 2.0、更新版VAEを追加できます。現在の設定や保存済み動画の実行グラフを、編集可能なComfyUIワークフローとして開けます。[導入・検証範囲](extensions-builtin/minimax-h3-studio/README.md#comfyuiで続きを編集) |
 | **YuE2 Music**（統合） | 歌詞と曲調から作曲。ABC楽譜の生成・編集、別アレンジの生成、複数候補のA/B試聴、Seed・生成条件の保存と復元に対応。公式Python版と任意のaudio.cpp／GGUF版を専用環境で実行します。 |
 | **MiniMax H3 Image**（統合・実験） | `H3 Image`タブで静止画生成と参照画像による編集。PNGと生成条件を保存します。実モデルでのGPU画像生成・画質・速度は未検証です。 |
@@ -100,6 +103,7 @@ Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLi
 - [Qwen Image 2.1 Fun ControlNet：全8種類とInpaintingのアニメ調・3D調作例](docs/assets/qwen-image21-fun-controlnet/README.md)
 - [Anima 3.8B](extensions-builtin/anima-3-8b/README.md)
 - [SenseNova U1.5 Studio](extensions-builtin/sensenova-u15-studio/README.md)
+- [Nanosaur2：画像生成・実画像の作例](extensions-builtin/nanosaur2-studio/README.md)
 - [YuE2 Music：作曲・楽譜編集・GGUF](extensions-builtin/yue2-studio/README.md)
 - [MiniMax H3 Studio：動画生成](extensions-builtin/minimax-h3-studio/README.md)
 - [MiniMax H3 Image：実験的な静止画生成](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)
@@ -220,7 +224,7 @@ txt2img・img2imgのプロンプト欄で入力すると、候補と件数が横
 
 ### モデルの導入
 
-Krea2・Anima・SenseNova・H3は`aikimi-setup.bat`のメニューから選びます。Qwen Image 2.1とYuE2 Musicは専用BATを使います。モデルを追加するときは、いったんNeoを終了してください。
+Krea2・Anima・SenseNova・H3・Nanosaur2は`aikimi-setup.bat`のメニューから選びます。Qwen Image 2.1とYuE2 Musicは専用BATを使います。モデルを追加するときは、いったんNeoを終了してください。
 
 | モデル | 導入方法 | 自動で準備する内容 |
 |---|---|---|
@@ -229,6 +233,7 @@ Krea2・Anima・SenseNova・H3は`aikimi-setup.bat`のメニューから選び�
 | Anima 3.8B v1.1 | `aikimi-setup.bat` → `2` | BF16取得・INT8 ConvRot変換・エンコーダー・VAE |
 | SenseNova U1.5 | `aikimi-setup.bat` → `3` | INT8 ConvRot配布版・8-Step LoRA・専用Python環境 |
 | MiniMax H3 | `aikimi-setup.bat` → `4` | 標準INT8モデル一式・専用ComfyUI・Python環境 |
+| Nanosaur2 | `aikimi-setup.bat` → `5` | [670Mモデル](https://huggingface.co/well9472/Nanosaur2-670M)の3ファイル（約2.13GB）・専用ComfyUI・Python環境 |
 | YuE2 Music | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → `1：公式Python` | YuE2-3B・音声復号モデル・専用Python 3.12環境 |
 
 Qwenの公式フルモデルを使うINT8 / W4A8 / BF16は `aikimi-qwen-image21-setup.bat --official-full` で追加します。導入済み環境にW4A8用ライブラリだけを追加する場合は `--runtime-only`、任意のプロンプト書き換えは `--prompt-rewriter-only` を使います。書き換えは導入時に約19GBの元重みを取得し、検証後は約6.13GBのNF4版を保持します。通常の画像生成には書き換えモデルは不要です。[詳細](extensions-builtin/qwen-image21-studio/README.md)
@@ -247,6 +252,7 @@ H3の追加W4A8モデルは [`download_minimax_h3_w4a8_models.bat`](download_min
 .\aikimi-setup.bat -Model anima38
 .\aikimi-setup.bat -Model sensenova
 .\aikimi-setup.bat -Model h3
+.\aikimi-setup.bat -Model nanosaur2
 ```
 
 `-DryRun -NoPause`を付けると、変更せずに実行予定を確認できます。AnimaのBF16変換元を残す場合は`-KeepSource`を付けてください。

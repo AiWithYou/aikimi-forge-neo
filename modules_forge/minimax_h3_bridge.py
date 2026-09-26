@@ -1095,6 +1095,7 @@ def _runtime_command(
     port: int,
     runtime_profile: str = RUNTIME_PROFILE_FAST,
     acceleration: H3Acceleration | None = None,
+    trusted_custom_nodes: tuple[str, ...] = (),
 ) -> list[str]:
     acceleration = acceleration or H3Acceleration()
     acceleration.validate()
@@ -1128,7 +1129,7 @@ def _runtime_command(
         command.extend(["--fast", "fp16_accumulation"])
     if acceleration.compiler_mode == "off":
         command.append("--disable-comfy-compiler")
-    if packs := acceleration.runtime_packs():
+    if packs := tuple(dict.fromkeys((*acceleration.runtime_packs(), *trusted_custom_nodes))):
         command.extend(["--whitelist-custom-nodes", *packs])
     return command
 
@@ -1141,6 +1142,7 @@ def start_runtime(
     wait_seconds: float = 120.0,
     initial_readiness: RuntimeReadiness | None = None,
     acceleration: H3Acceleration | None = None,
+    log_prefix: str = "minimax-h3",
 ) -> RuntimeReadiness:
     if _RUNTIME_SETUP_ACTIVE:
         raise H3BridgeError("H3のセットアップが完了するまでお待ちください。")
@@ -1154,6 +1156,7 @@ def start_runtime(
         with setup_lock(runtime_root):
             return _start_runtime_locked(
                 runtime_root, server_url, log_directory, runtime_profile, wait_seconds, initial_readiness, acceleration,
+                log_prefix,
             )
     except ValueError as exc:
         raise H3BridgeError(str(exc)) from exc
@@ -1167,6 +1170,7 @@ def _start_runtime_locked(
     wait_seconds: float = 120.0,
     initial_readiness: RuntimeReadiness | None = None,
     acceleration: H3Acceleration | None = None,
+    log_prefix: str = "minimax-h3",
 ) -> RuntimeReadiness:
     global _MANAGED_PROCESS, _MANAGED_PROCESS_IDENTITY
     acceleration = acceleration or H3Acceleration()
@@ -1217,11 +1221,17 @@ def _start_runtime_locked(
         raise H3BridgeError(current.error)
 
     python = _python_for_runtime(runtime_root)
+    if not re.fullmatch(r"[a-z0-9-]+", log_prefix):
+        raise H3BridgeError("実行ログの名前が不正です。")
     log_directory.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    stdout_path = log_directory / f"minimax-h3-{stamp}.stdout.log"
-    stderr_path = log_directory / f"minimax-h3-{stamp}.stderr.log"
-    command = _runtime_command(python, port, runtime_profile, acceleration=acceleration)
+    stdout_path = log_directory / f"{log_prefix}-{stamp}.stdout.log"
+    stderr_path = log_directory / f"{log_prefix}-{stamp}.stderr.log"
+    from modules_forge.nanosaur2_studio import NODE_NAME, source_ready
+
+    extra_nodes = (NODE_NAME,) if source_ready(runtime_root) else ()
+    command = _runtime_command(python, port, runtime_profile, acceleration=acceleration,
+                               trusted_custom_nodes=extra_nodes)
 
     with _PROCESS_LOCK:
         if _MANAGED_PROCESS is not None and _MANAGED_PROCESS.poll() is None:
@@ -1377,8 +1387,10 @@ def _restart_runtime_locked(
     runtime_profile: str = RUNTIME_PROFILE_FAST,
     wait_seconds: float = 120.0,
     acceleration: H3Acceleration | None = None,
+    log_prefix: str = "minimax-h3",
 ) -> RuntimeReadiness:
     runtime_root = resolve_runtime_root(runtime_root)
+    log_options = {"log_prefix": log_prefix} if log_prefix != "minimax-h3" else {}
     normalized_url = normalize_loopback_url(server_url)
     active_generations = _active_generation_count()
     if active_generations:
@@ -1394,6 +1406,7 @@ def _restart_runtime_locked(
             runtime_profile=runtime_profile,
             wait_seconds=wait_seconds,
             acceleration=acceleration,
+            **log_options,
         )
     if not _same_local_path(listening_root, runtime_root):
         raise H3BridgeError(
@@ -1416,6 +1429,7 @@ def _restart_runtime_locked(
             runtime_profile=runtime_profile,
             wait_seconds=wait_seconds,
             acceleration=acceleration,
+            **log_options,
         )
     identity = (runtime_root, normalized_url)
     if not _owns_runtime_process(process, identity):
@@ -1446,6 +1460,7 @@ def _restart_runtime_locked(
         runtime_profile=runtime_profile,
         wait_seconds=wait_seconds,
         acceleration=acceleration,
+        **log_options,
     )
 
 
