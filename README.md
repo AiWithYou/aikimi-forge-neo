@@ -1,20 +1,10 @@
 # Aikimi Forge Neo
 
-**v2.4.0** · [変更履歴](CHANGELOG.md)
+**v3.0.0** · [変更履歴](CHANGELOG.md)
 
-**v2.4.0（2026-09-26）：** [Nanosaur2-670M](https://huggingface.co/well9472/Nanosaur2-670M)のイラスト生成に対応しました。`Nanosaur2`タブから専用環境と3つのモデルを準備し、PNGと生成条件を保存できます。[導入・作例・検証範囲](extensions-builtin/nanosaur2-studio/README.md)
+**v3.0.0（2026-09-27）：** 追加Studioの操作を見直しました。Qwen・SenseNova・H3動画に自由な幅／高さ指定を追加し、H3 Image・Nanosaur2も含めて縦横を入れ替えられます。Qwenのモデル選択は省メモリと拡張対応を区別。Outpaintは広げる範囲のプレビュー、方向選択、PNG保存を追加しました。**Outpaintの画像生成には別途ComfyUIが必要です。** [Outpaintの使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) · [変更と検証範囲](docs/audits/2026-09-27-v3-ui-ux.md)
 
-**v2.3.0（2026-09-25）：** Qwen Image 2.1に[Alibaba PAIのFun Acc 4-step LoRA](extensions-builtin/qwen-image21-studio/README.md#fun-acc-4-step-lora--int8)を追加しました。通常版INT8の生成・参照画像編集で専用PDDスケジューラを使います。重みは追加導入し、画面のチェックで切り替えます。[T2I・I2IのLoRA ON/OFF比較](docs/assets/qwen-image21-fun-acc/README.md)も掲載しています。
-
-**v2.2.1（2026-09-25）：** ユーザー提供の同じアニメ人物を参照し、Qwen Image 2.1 Fun ControlNet Unionの全8方式とInpainting＋Controlを試しました。公式の40 steps・FlowMatch Eulerスケジューラ・制御強度1.0を確認し、1152×1536の人物作例と生成条件を[作例ページ](docs/assets/qwen-image21-fun-controlnet/README.md)に掲載しています。
-
-**v2.2.0（2026-09-24）：** Qwen Image 2.1 Fun ControlNet Unionの8種類すべてと**Inpainting＋Control**に対応しました。編集元・白黒マスク・制御画像をモデルへ渡して部分編集できます。ユーザー提供の2D人物参照とオリジナルの3D建築を使い、全方式の条件画像と実生成結果を[作例ページ](docs/assets/qwen-image21-fun-controlnet/README.md)に掲載しました。
-
-**v2.1.1（2026-09-24）：** Qwen Image 2.1 Fun ControlNet Unionの作例を、ユーザー提供の人物参照画像と新規生成したLineart・Scribble条件画像へ更新しました。画像参照とControlNetを併用した2Dアニメ、複雑な橋の構図を指定した3D絵を、制御なしとの比較で示します。[導入・使い方](extensions-builtin/qwen-image21-studio/README.md#fun-controlnet-union--int8)と[作例・再現条件](docs/assets/qwen-image21-fun-controlnet/README.md)を掲載しています。
-
-**v2.1.0（2026-09-24）：** Qwen Image 2.1の通常版INT8にFun ControlNet UnionのINT8 ConvRotパッチを追加しました。Pose・Gray・Scribbleなどの前処理済み画像で構図を制御できます。
-
-**v2.0.0（2026-09-24）：** 本体・SenseNova・Qwenの依存関係を修正し、監査の期限付き除外を撤去しました。導入済みのSenseNova・Qwenは[更新方法](#更新方法)に沿って専用環境も更新してください。[修正・検証記録](docs/audits/2026-09-24-dependency-remediation.md)
+以前の主な更新：**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -48,6 +38,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
+| **Qwen Outpaint 補助**（追加） | 広げる方向と余白をプレビューし、外部ComfyUIに渡す参照PNGを準備。生成画像を戻して元画像を合成し、完成PNGを保存します。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) |
 | **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun Acc 4-step LoRAと、Fun ControlNet Unionの8種類の前処理済み制御画像・Inpainting＋Controlを個別に使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
@@ -59,11 +50,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 
 モデル本体はリポジトリに含みません。[セットアップ方法](#セットアップ方法)で導入するモデルを選んでください。
 
-**v1.5.1では、H3のVRAM空き容量の確保、Qwenの2K画像のVAE分割処理、容量を超えるBF16 GPU常駐設定の事前拒否を追加しました。** RTX 3090での動画・画像の実生成結果と検証範囲は[VRAM監査記録](docs/audits/2026-09-24-h3-qwen-vram.md)、URL画像取得と依存関係の修正は[システム監査記録](docs/audits/2026-09-24-system-audit.md)を参照してください。
-
-**v1.4.1では、全モデル共通の「モデルを解放」を画面上部から使えます。** 保持・5分後に自動解放・毎回解放を選べます。ちびあいきみはForge系（Krea2・Animaなど）、SenseNova、H3動画・画像、Qwen、YuE2の環境・実行状況を表示します。Qwenは「変換モデルを保存」でINT8・W4A8を準備し、次回から自動再利用できます。PE-I2Iとマスク外固定編集の結果は[元画像との比較](docs/assets/qwen-image21-v1.4.0/README.md)で確認できます。
-
-Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLiteとタイル生成の連携は [v1.4.0の検証記録](docs/optimization-persistence-2026-09-22.md) にまとめています。複数題材・seed・保持率で比較する場合は [Sparseベンチマーク](docs/sparse-benchmark-suite.md) を参照してください。
+過去の検証記録：[VRAM管理](docs/audits/2026-09-24-h3-qwen-vram.md) · [システム監査](docs/audits/2026-09-24-system-audit.md) · [画像編集の比較](docs/assets/qwen-image21-v1.4.0/README.md) · [最適化と設定保持](docs/optimization-persistence-2026-09-22.md) · [Sparseベンチマーク](docs/sparse-benchmark-suite.md)
 
 ### 画像生成と全体の操作
 
@@ -132,7 +119,7 @@ Sparse処理の集約、Jevの問い合わせ上限・判定再生、ControlLLLi
 
 **初回のみ／指定間隔／毎step** を選べます。指定間隔のスライダーを **2** にすると2stepごと、**3** にすると3stepごとに再判定します（1〜100）。既定は初回のみです。最初の判定には直前の計算で集めた統計を使います。H3は4step動画のstep単位、画像モデルはモデル評価単位です。[回数・対応範囲・H3ノード更新](docs/jev-sparse.md#再判定頻度)
 
-v1.4.0では、これとは別に **生成全体のAPI回数上限／API待ち時間上限** を指定できます。この2つの設定は0で上限なしです。Krea2では層判定とタイル判定で同じ予算を共有し、タイルごとにはリセットしません。判定の再生はAPIを呼ばず、元の入力・条件・順序が合う記録だけを使います。[上限と判定再生](docs/jev-sparse.md#生成全体の上限と判定再生)
+これとは別に **生成全体のAPI回数上限／API待ち時間上限** を指定できます。この2つの設定は0で上限なしです。Krea2では層判定とタイル判定で同じ予算を共有し、タイルごとにはリセットしません。判定の再生はAPIを呼ばず、元の入力・条件・順序が合う記録だけを使います。[上限と判定再生](docs/jev-sparse.md#生成全体の上限と判定再生)
 
 ### Krea2の高速化を使う
 

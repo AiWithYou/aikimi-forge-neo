@@ -740,6 +740,38 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         self.assertIn("省RAM · Async無効", rendered)
         self.assertNotIn("省RAM · Async 2", rendered)
 
+    def test_offline_ready_install_keeps_probe_error_in_closed_details(self):
+        readiness = replace(
+            self.ready_runtime(), connected=False, connection_unavailable=True,
+            error="ComfyUI に接続できません: timed out",
+        )
+        rendered = readiness_html(readiness)
+        summary, details = rendered.split('<details class="h3-runtime-details">', 1)
+        self.assertIn("生成時にH3を起動します", summary)
+        self.assertIn('data-tone="idle"', summary)
+        self.assertNotIn("timed out", summary)
+        self.assertIn("timed out", details)
+
+    def test_incompatible_runtime_is_not_reported_as_normal_auto_start(self):
+        readiness = replace(
+            self.ready_runtime(), connected=False, error="別のComfyUIがこのportを使用中です。",
+        )
+        rendered = readiness_html(readiness)
+        summary = rendered.split('<details class="h3-runtime-details">', 1)[0]
+        self.assertIn("別のComfyUI", summary)
+        self.assertNotIn("生成時にH3を起動します", summary)
+
+    @mock.patch("modules_forge.minimax_h3_bridge.ComfyH3Client")
+    def test_initial_connection_timeout_is_distinguished_from_runtime_validation(self, client_class):
+        error = H3BridgeError("ComfyUI に接続できません: timed out")
+        error.__cause__ = h3_bridge.httpx.ConnectTimeout("timed out")
+        client_class.return_value.system_stats.side_effect = error
+        with mock.patch.object(h3_bridge, "model_file_status", return_value={}):
+            readiness = inspect_readiness(Path("runtime"))
+        self.assertTrue(readiness.connection_unavailable)
+        client_class.return_value.close.assert_called_once()
+        self.assertNotIn("生成時にH3を起動します", readiness_html(readiness))
+
     def test_native_fifteen_second_request_is_blocked_when_ram_headroom_is_too_low(self):
         readiness = replace(self.ready_runtime(), ram_free_gib=7.0)
         request = H3Request(
@@ -879,6 +911,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             readiness = inspect_readiness(selected, "http://127.0.0.1:8188")
             self.assertFalse(readiness.connected)
             self.assertIn("別のComfyUI", readiness.error or "")
+            self.assertFalse(readiness.connection_unavailable)
 
     @mock.patch("modules_forge.minimax_h3_bridge.cleanup_prepared_media")
     @mock.patch("modules_forge.minimax_h3_bridge._schedule_deferred_cleanup")

@@ -302,6 +302,7 @@ class RuntimeReadiness:
     server_model_files: dict[str, bool] = field(default_factory=dict)
     missing_nodes: tuple[str, ...] = ()
     error: str | None = None
+    connection_unavailable: bool = False
     acceleration: H3Acceleration = field(default_factory=H3Acceleration)
     node_schemas: dict[str, Any] = field(default_factory=dict)
 
@@ -357,6 +358,13 @@ def snap_h3_frames(seconds: float) -> int:
 
 
 def dimensions_for(aspect: str, quality: str) -> tuple[int, int]:
+    if isinstance(quality, str) and quality.startswith("custom:"):
+        from modules_forge.studio_dimensions import custom_dimensions
+        try:
+            width, height = quality.removeprefix("custom:").split("x")
+            return custom_dimensions(width, height, maximum=2048, max_pixels=2048 * 2048)
+        except ValueError as exc:
+            raise H3BridgeError(f"カスタム解像度: {exc}") from exc
     if quality not in QUALITY_DIMENSIONS:
         raise H3BridgeError(f"未対応の品質プリセットです: {quality}")
     try:
@@ -1002,9 +1010,11 @@ def inspect_readiness(
     required_nodes = REQUIRED_NODE_TYPES | acceleration.extra_nodes()
     files = model_file_status(runtime_root, acceleration=acceleration)
     client: ComfyH3Client | None = None
+    api_responded = False
     try:
         client = ComfyH3Client(server_url, timeout=2.0)
         stats = client.system_stats()
+        api_responded = True
         connected_root = server_runtime_root(client.server_url)
         if connected_root is None:
             raise H3BridgeError("ComfyUI APIは応答しましたが、対応するloopback processを確認できません。")
@@ -1068,6 +1078,10 @@ def inspect_readiness(
             connected=False,
             model_files=files,
             error=str(exc),
+            connection_unavailable=(
+                not api_responded
+                and isinstance(exc.__cause__, (httpx.TimeoutException, httpx.RequestError))
+            ),
             acceleration=acceleration,
         )
     finally:
@@ -2960,12 +2974,19 @@ def readiness_html(
         and not memory_low
         and not validation_error
     )
+    auto_start_pending = (
+        not readiness.connected
+        and readiness.connection_unavailable
+        and readiness.runtime_root is not None
+        and total_files > 0
+        and files_ready == total_files
+    )
     if runtime_ready:
         summary_title = "生成できます"
         summary_tone = "ready"
-    elif not readiness.connected and files_ready == total_files:
+    elif auto_start_pending:
         summary_title = "生成時にH3を起動します"
-        summary_tone = "warn"
+        summary_tone = "idle"
     else:
         summary_title = "準備を確認してください"
         summary_tone = "error" if readiness.error else "warn"
@@ -2975,8 +2996,10 @@ def readiness_html(
         '<div class="h3-runtime-summary">'
         f'<span class="h3-runtime-primary" data-tone="{summary_tone}" data-mobile="primary">'
         f'<i aria-hidden="true"></i><strong>{html.escape(summary_title)}</strong></span>'
-        f'<p>{html.escape(details)}</p>'
+        f'<p>{html.escape("モデルは導入済みです。そのまま生成するか、実行環境の「接続 / 起動」を押してください。" if auto_start_pending else details)}</p>'
         '</div><details class="h3-runtime-details"><summary>詳細を開く</summary>'
+        + (f'<p>{html.escape(details)}</p>' if auto_start_pending else '')
+        +
         '<div class="h3-runtime-badges">'
         f'<span data-tone="{connected_tone}" data-mobile="primary"><i></i>{html.escape(connected_text)}</span>'
         f'<span title="{html.escape(gpu_detail, quote=True)}"><i></i>{html.escape(gpu)}</span>'
@@ -3086,6 +3109,8 @@ def settings_summary_html(
             note = "重い設定です。RTX 3090では生成時間が大きく伸びます。"
         elif workload < 0.75:
             note = "高速な動作確認向けです。解像度は低くなります。"
+        elif quality.startswith("custom:"):
+            note = "指定した幅・高さで生成します。32px刻み・各辺256〜2048px。"
         elif official_preview:
             note = "公式Fast Preview相当の標準設定です。"
         else:

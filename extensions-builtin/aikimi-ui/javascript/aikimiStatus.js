@@ -63,6 +63,7 @@
     let portraitRequestUrl = null;
     let snapshot = null;
     let toggleButton = null;
+    let outpaintPetSlot = null;
     let resultButton = null;
     let lastResultId = null;
     let drag = null;
@@ -103,12 +104,44 @@
 
     function positionPet() {
         if (!panel) return;
-        const size = { small: 80, medium: 104, large: 128 }[selectedSize];
+        const outpaint = gradioApp().querySelector("#qwen21-outpaint");
+        const dockInHeader = window.innerWidth <= 700 && outpaint?.getClientRects().length &&
+            !Number.isFinite(petPreferences.x) && !Number.isFinite(petPreferences.y) &&
+            opts.aikimi_assistant_enabled !== false && !petPreferences.hidden && toggleButton?.parentElement;
+        if (dockInHeader) {
+            if (!outpaintPetSlot) {
+                outpaintPetSlot = document.createElement("span");
+                outpaintPetSlot.id = "aikimi-outpaint-pet-slot";
+                outpaintPetSlot.setAttribute("aria-hidden", "true");
+                outpaintPetSlot.style.cssText = "flex:0 0 44px;width:44px;height:44px";
+            }
+            if (!outpaintPetSlot.isConnected) toggleButton.after(outpaintPetSlot);
+        } else {
+            outpaintPetSlot?.remove();
+        }
+        const headerDock = dockInHeader ? outpaintPetSlot.getBoundingClientRect() : null;
+        const runDock = gradioApp().querySelector("#qwen21-run-dock");
+        const dock = runDock?.getClientRects().length ? runDock.getBoundingClientRect() : null;
+        const compactDock = dock && dock.width > window.innerWidth / 2;
+        const size = compactDock || headerDock ? 44 : { small: 80, medium: 104, large: 128 }[selectedSize];
+        panel.style.setProperty("--aikimi-character-size", `${size}px`);
         const x = Number.isFinite(petPreferences.x) ? petPreferences.x :
             opts.aikimi_assistant_position === "bottom-left" ? 16 : window.innerWidth - size - 16;
         const y = Number.isFinite(petPreferences.y) ? petPreferences.y : window.innerHeight - size - 18;
-        const left = Math.max(8, Math.min(window.innerWidth - size - 8, x));
-        const top = Math.max(8, Math.min(window.innerHeight - size - 8, y));
+        let left = Math.max(8, Math.min(window.innerWidth - size - 8, x));
+        let top = Math.max(8, Math.min(window.innerHeight - size - 8, y));
+        if (headerDock) {
+            left = headerDock.left;
+            top = headerDock.top;
+        } else if (compactDock) {
+            // The full-width mobile bar reserves a small, interactive status corner.
+            left = dock.right - size - 2;
+            top = dock.bottom - size - 4;
+        } else if (dock && left < dock.right && left + size > dock.left && top < dock.bottom && top + size > dock.top) {
+            // Avoid the primary action without changing the user's saved position.
+            if (dock.left > size + 32) left = 16;
+            else top = Math.max(8, dock.top - size - 12);
+        }
         panel.style.left = `${left}px`;
         panel.style.top = `${top}px`;
         panel.dataset.side = left < window.innerWidth / 2 ? "left" : "right";
@@ -299,6 +332,7 @@
             qwen_image21: "Qwen Image 2.1",
             minimax_h3_image: "MiniMax H3 Image",
             yue2: "YuE2 Music",
+            nanosaur2: "Nanosaur2",
             forge: "Forge",
         }[feature] || "Aikimi";
     }
@@ -673,7 +707,7 @@
         const progressPercent = Number.isFinite(progress) ? Math.round(Math.min(Math.max(progress, 0), 1) * 100) : null;
         const stateMessage = candidate.message || stateConfig.message || STATUS_LABELS[state] || state;
         const portraitDescriptor = resolvePortrait(state);
-        const nativeFeature = ["qwen_image21", "sensenova", "minimax_h3", "minimax_h3_image", "yue2"].includes(activeFeature);
+        const nativeFeature = ["qwen_image21", "sensenova", "minimax_h3", "minimax_h3_image", "nanosaur2", "yue2"].includes(activeFeature);
         const modelName = candidate.modelName || (nativeFeature ? featureLabel(activeFeature) : model.loaded_name || model.selected_name) || "未選択";
         const modelLabel =
             !candidate.modelName && !nativeFeature && model.loaded_name && model.reload_pending && model.selected_name
@@ -1000,6 +1034,7 @@
             });
             schedulePoll();
         } else {
+            outpaintPetSlot?.remove();
             if (panel) {
                 panel.hidden = true;
                 setAttribute(panel, "aria-hidden", "true");
@@ -1082,6 +1117,9 @@
         document.addEventListener("visibilitychange", handleVisibilityChange);
         document.addEventListener("aikimi:feature-tab-change", syncFeatureContext);
         window.addEventListener("resize", positionPet);
+        window.addEventListener("scroll", () => {
+            if (outpaintPetSlot?.isConnected) positionPet();
+        }, { passive: true });
         document.addEventListener("pointerdown", event => {
             if (details?.open && !panel.contains(event.target)) details.open = false;
         });
@@ -1140,4 +1178,5 @@
     onOptionsAvailable(handleOptionsAvailable);
     onOptionsChanged(handleOptionsAvailable);
     onAfterUiUpdate(handleUiUpdate);
+    document.addEventListener("aikimi:layout-change", positionPet);
 })();

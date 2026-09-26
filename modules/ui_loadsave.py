@@ -114,7 +114,9 @@ class UiLoadsave:
             def check_dropdown(val):
                 choices = radio_choices(x)
                 if getattr(x, "multiselect", False):
-                    return all(value in choices for value in val)
+                    # Textboxes and dropdowns can share a legacy settings key (XYZ grid).
+                    # An empty string passes all(), but is not a valid multiselect payload.
+                    return isinstance(val, list) and all(value in choices for value in val)
                 else:
                     return val in choices
 

@@ -26,6 +26,7 @@ from modules_forge.minimax_h3_bridge import (
     append_prompt_section,
     cache_history_video,
     cancel_generation,
+    dimensions_for,
     ensure_ready,
     generation_preset_values,
     history_choices,
@@ -80,6 +81,36 @@ PRESET_STATE_LABELS = {
     "final": "高品質",
     "custom": "カスタム",
 }
+
+
+def _custom_canvas(width, height):
+    # Keep incomplete/invalid input visible; validation is surfaced in the summary.
+    values = []
+    for value in (width, height):
+        values.append(str(int(value)) if isinstance(value, (int, float)) and math.isfinite(value) and value == int(value) else str(value))
+    custom = "custom:" + "x".join(values)
+    return gr.update(choices=[(label, key) for key, label in QUALITY_LABELS.items()] + [("カスタム", custom)], value=custom)
+
+
+def _canvas_values(aspect, quality):
+    if str(quality).startswith("custom:"):
+        # Manual input already owns the numbers. An older callback must not
+        # overwrite a more recent edit to the other dimension.
+        return gr.update(), gr.update()
+    return _restored_canvas_values(aspect, quality)
+
+
+def _restored_canvas_values(aspect, quality):
+    try:
+        width, height = dimensions_for(aspect, quality)
+        return gr.update(value=width), gr.update(value=height)
+    except (H3BridgeError, ValueError, TypeError):
+        return gr.update(), gr.update()
+
+
+def _canvas_ratio_state(quality):
+    custom = str(quality).startswith("custom:")
+    return gr.update(interactive=not custom)
 
 
 def _initial_runtime() -> Path | None:
@@ -651,7 +682,8 @@ def _restore_history_settings(selected: str, runtime_value: str, include_acceler
         mode_updates[2],
         reference_guide_html(None, None, None),
         gr.update(value=restored_request.aspect),
-        gr.update(value=restored_request.quality),
+        (_custom_canvas(*restored_request.dimensions) if restored_request.quality.startswith("custom:")
+         else gr.update(value=restored_request.quality)),
         gr.update(value=restored_request.duration_seconds),
         gr.update(value=restored_request.steps),
         gr.update(value=restored_request.seed),
@@ -1105,6 +1137,17 @@ def _build_ui():
                             elem_id="h3-prompt-meta",
                         )
                         input_validation = gr.HTML(value="", elem_id="h3-input-validation")
+                        with gr.Accordion(
+                            "プロンプト補助",
+                            open=False,
+                            elem_id="h3-prompt-assists",
+                        ):
+                            with gr.Row(elem_classes=["h3-prompt-chips"]):
+                                camera_button = gr.Button("＋ カメラ", size="sm")
+                                dialogue_button = gr.Button("＋ 台詞", size="sm")
+                                sfx_button = gr.Button("＋ 効果音", size="sm")
+                                music_button = gr.Button("＋ 音楽", size="sm")
+
 
                     with gr.Group(visible="hidden", elem_id="h3-keyframes", elem_classes=["h3-media-panel"]) as keyframe_group:
                         gr.Markdown("### キーフレーム\n片方だけでも使えます。両方指定すると、その間の動きを補間します。")
@@ -1192,10 +1235,16 @@ def _build_ui():
                             quality = gr.Dropdown(
                                 choices=[(label, value) for value, label in QUALITY_LABELS.items()],
                                 value=initial_quality,
-                                label="解像度・速度",
+                                label="解像度プリセット",
+                                allow_custom_value=True,
+                                filterable=False,
                                 interactive=False,
                                 elem_id="h3-quality",
                             )
+                        with gr.Row(elem_id="h3-dimensions"):
+                            width = gr.Number(value=864, precision=0, minimum=256, maximum=2048, step=32, label="幅 px", min_width=100, elem_id="h3-width")
+                            swap_size = gr.Button("縦横入替", size="sm", scale=0, min_width=70, elem_id="h3-swap-size")
+                            height = gr.Number(value=480, precision=0, minimum=256, maximum=2048, step=32, label="高さ px", min_width=100, elem_id="h3-height")
                         duration = gr.Slider(
                             minimum=5,
                             maximum=15,
@@ -1205,22 +1254,11 @@ def _build_ui():
                             interactive=False,
                             elem_id="h3-duration",
                         )
-                        acceleration_controls, acceleration_buttons = create_acceleration_controls(duration)
-                        with gr.Accordion("Fun ControlNet · Union 1 / 2.0", open=False, elem_id="h3-fun-control"):
-                            control_mode = gr.Dropdown(
-                                choices=CONTROL_CHOICES,
-                                value="off", label="制御動画の使い方", interactive=False, elem_id="h3-control-mode",
-                            )
-                            control_video = gr.File(
-                                label="制御動画", file_count="single", file_types=["video"], type="filepath",
-                                interactive=False, elem_id="h3-control-video",
-                            )
-                            control_strength = gr.Slider(
-                                0.05, 2.0, value=1.0, step=0.05, label="ControlNetの強さ",
-                                interactive=False, elem_id="h3-control-strength",
-                            )
-                            gr.Markdown("Union 1は既存INT8、Union 2.0は専用の変換済み重みを使います。Canny・Grayは元動画から作成し、Depth・Pose・HED・MLSD・Scribble・Layoutは前処理済み動画を指定します。tools/prepare_minimax_h3_union2.pyで導入できます。24fps・中央切り抜き・短い動画の末尾補完は従来通りです。元の音声は参照しません。")
-                        fun_control_controls = [control_mode, control_video, control_strength]
+                        settings_summary = gr.HTML(
+                            value=initial_settings_summary,
+                            elem_id="h3-settings-summary",
+                        )
+
                         with gr.Row(elem_classes=["h3-generate-row"]):
                             generate_button = gr.Button(
                                 "映像＋音声を生成",
@@ -1237,21 +1275,22 @@ def _build_ui():
                                 elem_id="h3-cancel",
                                 elem_classes=["h3-cancel-button"],
                             )
-                        with gr.Accordion(
-                            "プロンプト補助",
-                            open=False,
-                            elem_id="h3-prompt-assists",
-                        ):
-                            with gr.Row(elem_classes=["h3-prompt-chips"]):
-                                camera_button = gr.Button("＋ カメラ", size="sm")
-                                dialogue_button = gr.Button("＋ 台詞", size="sm")
-                                sfx_button = gr.Button("＋ 効果音", size="sm")
-                                music_button = gr.Button("＋ 音楽", size="sm")
-                        settings_summary = gr.HTML(
-                            value=initial_settings_summary,
-                            elem_id="h3-settings-summary",
-                        )
-
+                        acceleration_controls, acceleration_buttons = create_acceleration_controls(duration)
+                        with gr.Accordion("Fun ControlNet · Union 1 / 2.0", open=False, elem_id="h3-fun-control"):
+                            control_mode = gr.Dropdown(
+                                choices=CONTROL_CHOICES,
+                                value="off", label="制御動画の使い方", interactive=False, elem_id="h3-control-mode",
+                            )
+                            control_video = gr.File(
+                                label="制御動画", file_count="single", file_types=["video"], type="filepath",
+                                interactive=False, elem_id="h3-control-video",
+                            )
+                            control_strength = gr.Slider(
+                                0.05, 2.0, value=1.0, step=0.05, label="ControlNetの強さ",
+                                interactive=False, elem_id="h3-control-strength",
+                            )
+                            gr.Markdown("Union 1は既存INT8、Union 2.0は専用の変換済み重みを使います。Canny・Grayは元動画から作成し、Depth・Pose・HED・MLSD・Scribble・Layoutは前処理済み動画を指定します。tools/prepare_minimax_h3_union2.pyで導入できます。24fps・中央切り抜き・短い動画の末尾補完は従来通りです。元の音声は参照しません。")
+                        fun_control_controls = [control_mode, control_video, control_strength]
                         with gr.Accordion("詳細設定", open=False, elem_id="h3-advanced"):
                             with gr.Row():
                                 steps = gr.Slider(
@@ -1496,6 +1535,12 @@ def _build_ui():
             concurrency_id="h3-runtime-control",
         )
 
+        for dimension in (width, height):
+            dimension.input(_custom_canvas, inputs=[width, height], outputs=quality, queue=False, show_progress="hidden")
+        swap_size.click(lambda w, h: (h, w, _custom_canvas(h, w)), inputs=[width, height], outputs=[width, height, quality], queue=False, show_progress="hidden")
+        for control in (aspect, quality):
+            control.change(_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden")
+        quality.change(_canvas_ratio_state, inputs=quality, outputs=aspect, queue=False, show_progress="hidden")
         summary_inputs = [aspect, quality, duration, steps, scheduler, ref_image_size]
         acceleration_controls[-7].change(
             lambda enabled: (gr.update(visible=not enabled), gr.update(label="各区間の終了構図" if enabled else "終了フレーム")),
@@ -1591,7 +1636,7 @@ def _build_ui():
             api_name="h3_apply_final_preset",
         )
         for component in [quality, scheduler, ref_image_size]:
-            component.input(
+            component.change(
                 fn=_custom_settings_updates,
                 inputs=[*setting_inputs, input_validation],
                 outputs=[settings_summary, preset_state, input_validation],
@@ -1707,7 +1752,7 @@ def _build_ui():
             ],
             queue=False,
             show_progress="hidden",
-        )
+        ).then(_restored_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden")
 
         for control in acceleration_controls:
             control.change(

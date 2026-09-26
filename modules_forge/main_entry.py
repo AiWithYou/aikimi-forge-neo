@@ -20,7 +20,7 @@ from modules import (
     shared_items,
     ui_common,
 )
-from modules_forge.presets import PresetArch, is_video, use_distill, use_shift
+from modules_forge.presets import DEFAULT_CHECKPOINTS, PresetArch, is_video, use_distill, use_shift
 
 logger = logging.getLogger("ui_models")
 setup_logger(logger)
@@ -401,6 +401,28 @@ def _register_configured_module_choices() -> None:
         module_values_to_ui_selectors(shared.opts.data.get(option_name, []))
 
 
+def preset_checkpoint_selection(preset: str, *, warn: bool = False) -> dict:
+    """Resolve saved aliases to dropdown values; only recover to a known preset default."""
+    use_short = shared.opts.sd_checkpoint_dropdown_use_short
+    choices = sorted(sd_models.checkpoint_tiles(use_short))
+    saved = getattr(shared.opts, f"forge_checkpoint_{preset}", None) or shared.opts.sd_model_checkpoint
+    info = sd_models.get_closet_checkpoint_match(saved)
+    if info is None:
+        default = next((value for arch, value in DEFAULT_CHECKPOINTS.items() if arch.name == preset), None)
+        info = sd_models.get_closet_checkpoint_match(default)
+        if info is not None and warn:
+            gr.Warning(f"Saved checkpoint is unavailable: {saved}. Using {info.name} for {preset}.")
+    if info is not None:
+        value = info.short_title if use_short else info.name
+    else:
+        # Keep the missing selection readable and let the validated loader report it.
+        # An unrelated installed model must never be substituted for a saved preset.
+        value = saved or None
+        if value is not None:
+            choices.append((f"Unavailable: {value}", value))
+    return {"choices": choices, "value": value}
+
+
 def make_checkpoint_manager_ui():
     global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype
 
@@ -410,9 +432,9 @@ def make_checkpoint_manager_ui():
         if len(sd_models.checkpoints_list) > 0:
             shared.opts.set("sd_model_checkpoint", next(iter(sd_models.checkpoints_list.values())).name)
 
-    ckpt_list, vae_list = refresh_models()
+    _, vae_list = refresh_models()
     current_preset = shared.opts.forge_preset
-    checkpoint_value = getattr(shared.opts, f"forge_checkpoint_{current_preset}", None) or shared.opts.sd_model_checkpoint
+    checkpoint_selection = preset_checkpoint_selection(current_preset)
     module_value = module_values_to_ui_selectors(
         getattr(
             shared.opts,
@@ -423,12 +445,12 @@ def make_checkpoint_manager_ui():
 
     ui_forge_preset = gr.Dropdown(label="UI Preset", value=shared.opts.forge_preset, choices=PresetArch.choices(), elem_id="forge_ui_preset")
 
-    ui_checkpoint = gr.Dropdown(label="Checkpoint", value=checkpoint_value, choices=ckpt_list, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"])
+    ui_checkpoint = gr.Dropdown(label="Checkpoint", **checkpoint_selection, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"])
 
     ui_vae = gr.Dropdown(label="VAE / Text Encoder", value=module_value, choices=vae_list, multiselect=True, elem_id="setting_sd_modules", elem_classes=["model_selection"])
 
     def refresh_model_list():
-        ckpt_list, vae_list = refresh_models()
+        _, vae_list = refresh_models()
         current_preset = shared.opts.forge_preset
         module_value = module_values_to_ui_selectors(
             getattr(
@@ -438,7 +460,7 @@ def make_checkpoint_manager_ui():
             )
         )
         return [
-            gr.update(choices=ckpt_list),
+            gr.update(**preset_checkpoint_selection(current_preset)),
             gr.update(choices=vae_list, value=module_value),
         ]
 
@@ -497,19 +519,26 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
 
 
 def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> bool:
-    """`ckpt_name` accepts valid aliases; returns `True` if checkpoint changed"""
+    """Accept aliases and save the preset even when the active checkpoint is unchanged."""
     new_ckpt_info = sd_models.get_closet_checkpoint_match(ckpt_name)
+    if new_ckpt_info is None:
+        raise ValueError(f"The selected checkpoint is not available: {ckpt_name}")
     current_ckpt_info = sd_models.get_closet_checkpoint_match(getattr(shared.opts, "sd_model_checkpoint", ""))
-    if new_ckpt_info == current_ckpt_info:
+    active_changed = new_ckpt_info != current_ckpt_info
+    preset_name = f"forge_checkpoint_{preset}" if preset is not None else None
+    preset_changed = preset_name is not None and ckpt_name != getattr(shared.opts, preset_name, None)
+    if not active_changed and not preset_changed:
         return False
 
-    shared.opts.set("sd_model_checkpoint", ckpt_name)
-    if preset is not None:
-        shared.opts.set(f"forge_checkpoint_{preset}", ckpt_name)
+    if active_changed:
+        shared.opts.set("sd_model_checkpoint", ckpt_name)
+    if preset_changed:
+        shared.opts.set(preset_name, ckpt_name)
 
     if save:
         shared.opts.save(shared.config_filename)
-    refresh_model_loading_parameters(refresh=refresh)
+    if active_changed:
+        refresh_model_loading_parameters(refresh=refresh)
     return True
 
 
@@ -673,7 +702,7 @@ def on_preset_change(preset: str):
 
     return [
         # ui_checkpoint, ui_vae, ui_forge_unet_dtype
-        gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", None) or shared.opts.sd_model_checkpoint),
+        gr.update(**preset_checkpoint_selection(preset, warn=True)),
         gr.update(
             value=module_values_to_ui_selectors(
                 getattr(shared.opts, f"forge_additional_modules_{preset}", [])

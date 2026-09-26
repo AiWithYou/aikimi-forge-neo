@@ -472,7 +472,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 5
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 8
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -844,7 +844,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
         self.assertEqual(result["animaCount"], 1)
         self.assertEqual(
             result["featureLabels"],
-            ["Krea2", "Anima", "SenseNova", "MiniMax H3", "Qwen Image 2.1"],
+            ["Krea2", "Anima", "SenseNova", "Qwen Image 2.1", "H3 Image", "Nanosaur2", "MiniMax H3", "YuE2 Music"],
         )
         self.assertTrue(result["externalRowBeforeTabs"])
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])
@@ -1022,7 +1022,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
         self.assertEqual(result["animaCount"], 1)
         self.assertEqual(
             result["featureLabels"],
-            ["Krea2", "Anima", "SenseNova", "MiniMax H3", "Qwen Image 2.1"],
+            ["Krea2", "Anima", "SenseNova", "Qwen Image 2.1", "H3 Image", "Nanosaur2", "MiniMax H3", "YuE2 Music"],
         )
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])
         self.assertTrue(result["nativeOrderUnchanged"])

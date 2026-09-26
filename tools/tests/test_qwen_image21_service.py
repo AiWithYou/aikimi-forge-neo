@@ -331,9 +331,7 @@ class QwenServiceTests(unittest.TestCase):
         control = self.root / "pose.png"
         Image.new("RGB", (32, 32), "white").save(control)
         with patch.object(fun_controlnet, "installed", return_value={"path": str(control)}):
-            identifier = self.studio.start(
-                self.request(control_kind="pose", control_image=str(control)), "owner"
-            )
+            identifier = self.studio.start(self.request(control_kind="pose", control_image=str(control)), "owner")
         self.assertEqual(self.wait_done(identifier)["state"], "complete")
         snapshot = core.read_json(self.studio.outputs / identifier / "request.json")
         control.unlink()
@@ -514,7 +512,7 @@ class QwenUiTests(unittest.TestCase):
         self.assertFalse(props["qwen21-rewrite-prompt"]["value"])
         self.assertEqual(
             [value for _, value in props["qwen21-precision"]["choices"]],
-            ["base_q4_k_m", "int8", "w4a8", "bf16", "turbo_bf16", "turbo_q4_k_m"],
+            ["base_q4_k_m", "w4a8", "int8", "bf16", "turbo_q4_k_m", "turbo_bf16"],
         )
         self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8")[0]["value"], 4)
         self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8")[1]["value"], "off")

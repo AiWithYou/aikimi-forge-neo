@@ -182,8 +182,9 @@ def on_ui_tabs():
                     choices=[*PRESETS, "カスタム"], value="正方形 · 768×768", label="解像度プリセット",
                 )
                 with gr.Row():
-                    width = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=32, label="幅")
-                    height = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=32, label="高さ")
+                    width = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=32, label="幅 px", min_width=95, elem_id="h3-image-width")
+                    swap_size = gr.Button("縦横入替", size="sm", scale=0, min_width=70, elem_id="h3-image-swap-size")
+                    height = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=32, label="高さ px", min_width=95, elem_id="h3-image-height")
                 with gr.Accordion("詳細設定", open=False):
                     gr.Markdown("32の倍数で指定します。約1MPを超える直接生成は実験的で、負荷が増えます。")
                     steps = gr.Slider(1, 100, value=20, step=1, label="Steps（標準20）")
@@ -212,6 +213,7 @@ def on_ui_tabs():
         mode.change(_mode, inputs=mode, outputs=reference_group, queue=False, **private)
         references.change(_reference_tags, inputs=references, outputs=tags, queue=False, **private)
         preset.change(_preset, inputs=preset, outputs=[width, height], queue=False, **private)
+        swap_size.click(lambda w, h: (h, w, "カスタム"), inputs=[width, height], outputs=[width, height, preset], queue=False, **private)
         for control in (width, height):
             control.input(lambda: "カスタム", outputs=preset, queue=False, **private)
         for button, callback in ((connect, _runtime_action), (restart, _restart)):

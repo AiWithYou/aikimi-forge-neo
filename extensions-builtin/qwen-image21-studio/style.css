@@ -1,71 +1,120 @@
-/* Keep references completely visible instead of scrolling inside a large thumbnail. */
-/* Qwen owns its model and precision; the Forge checkpoint selector does not apply. */
-body:has(#aikimi-feature-nav[data-active-feature="qwen_image21"]) #quicksettings {
+#qwen21-workspace {
+    gap: 20px;
+    align-items: flex-start;
+    --qwen-dock-height: calc(100dvh - 210px);
+}
+/* CPU outpaint helper: keep each action beside the input it acts on. */
+body:has(#tabs button[aria-controls="tab_qwen_image21_outpaint"][aria-selected="true"]) #quicksettings {
     display: none !important;
 }
-
-#qwen21-references .grid-container {
-    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)) !important;
-    grid-auto-rows: 96px !important;
+#qwen21-outpaint { gap: 20px; }
+#qwen21-outpaint .qwen21-outpaint-stage { align-items: flex-start; gap: 20px; }
+#qwen21-outpaint .qwen21-outpaint-stage > * { min-width: 0 !important; }
+#qwen21-outpaint-margins { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+#qwen21-outpaint-margins > * { min-width: 0 !important; }
+#qwen21-outpaint-margins > .form { display: contents !important; }
+#qwen21-outpaint h3 { margin: 0 0 4px; }
+#qwen21-outpaint-summary p, #qwen21-outpaint-validation p, #qwen21-outpaint-preview-caption p { margin: 0; }
+#qwen21-outpaint-preview-caption { font-size: var(--text-sm); }
+#qwen21-outpaint-preview img { object-fit: contain; }
+#qwen21-outpaint-direction .wrap { gap: 6px; }
+#qwen21-outpaint-steps ol { margin: 0; padding-left: 1.4em; }
+#qwen21-outpaint-steps li { margin: 0 0 4px; }
+#qwen21-outpaint-reference-download, #qwen21-outpaint-final-download { width: 100%; }
+#qwen21-outpaint a { color: var(--link-text-color, #ff9147); text-decoration: underline; text-underline-offset: 3px; }
+#qwen21-outpaint a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+#qwen21-outpaint button:disabled { cursor: not-allowed; }
+#aikimi-feature-nav:has(#aikimi-outpaint-pet-slot) #aikimi-tab-yue2 { margin-left: 0; }
+#qwen21-outpaint-source, #qwen21-outpaint-handoff, #qwen21-outpaint-restore { scroll-margin-top: 16px; }
+#qwen21-outpaint-handoff, #qwen21-outpaint-restore { border-top: 1px solid var(--block-border-color); padding-top: 16px; }
+@media (max-width: 700px) {
+    #qwen21-outpaint .qwen21-outpaint-stage { flex-direction: column; }
+    #qwen21-outpaint .qwen21-outpaint-stage > * { width: 100%; }
+    #qwen21-outpaint-margins { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #qwen21-outpaint-source, #qwen21-outpaint-preview, #qwen21-outpaint-padded, #qwen21-outpaint-generated, #qwen21-outpaint-restored { height: 200px !important; }
 }
-
-#qwen21-references .gallery-item {
-    height: 96px;
-    min-width: 0;
-}
-
-#qwen21-references .thumbnail-item {
-    height: 100%;
-    width: 100%;
-    min-height: 0;
-    aspect-ratio: auto;
-}
-
-#qwen21-annotation-panel,
-#qwen21-mask-panel {
-    min-width: 0;
-}
-
-body:not(:has(#qwen21-preserve-unmasked input:checked, #qwen21-control-inpaint input:checked)) #qwen21-mask-panel,
-#qwen21-mask-panel:has(#qwen21-mask-source input[value="paint"]:checked) #qwen21-mask-upload,
-#qwen21-mask-panel:has(#qwen21-mask-source input[value="upload"]:checked) #qwen21-mask-paint {
-    display: none !important;
-}
-
-#qwen21-reference-controls button {
-    min-width: 64px;
-}
-
+#qwen21-visual { min-width: 0 !important; flex: 1 1 560px !important; }
 #qwen21-controls {
-    position: sticky;
-    top: 12px;
-    align-self: flex-start;
+    flex: 0 0 372px !important;
+    min-width: 0 !important;
+    position: relative;
+    height: auto;
+    box-sizing: border-box;
+    padding-bottom: calc(var(--qwen-actions-height, 116px) + 12px);
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 12px;
 }
-
-#qwen21-annotation-editor .forge-toolbar,
-#qwen21-mask-editor .forge-toolbar {
-    opacity: 1 !important;
+#qwen21-composer, #qwen21-run-dock { flex: 0 0 auto; gap: 6px; }
+#qwen21-settings { flex: 0 0 auto; flex-wrap: nowrap; min-height: 0; gap: 12px; }
+#qwen21-composer h3 { margin: 0 0 8px; font-size: 15px; }
+#qwen21-prompt textarea { max-height: 160px; }
+#qwen21-rewrite-options { gap: 8px; }
+#qwen21-rewrite-options > * { min-width: 130px !important; }
+#qwen21-rewrite-options label { font-size: 12px; }
+#qwen21-basics { gap: 8px; }
+#qwen21-model-guidance p { margin: 0; font-size: 12px; color: var(--body-text-color-subdued); }
+#qwen21-dimensions { flex-wrap: nowrap; align-items: end; gap: 6px; }
+#qwen21-dimensions > .form { min-width: 0 !important; flex: 1; }
+#qwen21-workspace input, #qwen21-workspace textarea { scroll-margin-bottom: calc(var(--qwen-actions-height, 124px) + 20px); }
+#qwen21-swap-size { border: 1px solid var(--border-color-primary); min-height: 40px; }
+#qwen21-control-kind .wrap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+#qwen21-control-kind label { min-width: 0; font-size: 12px; }
+#qwen21-run-dock { position: fixed; z-index: 30; bottom: 12px; left: var(--qwen-dock-left); width: var(--qwen-dock-width, 372px); border-top: 1px solid var(--border-color-primary); padding-top: 8px; background: var(--body-background-fill); }
+#qwen21-settings-summary p { margin: 0 0 6px; font-size: 12px; color: var(--body-text-color-subdued); }
+#qwen21-actions { flex-wrap: nowrap; gap: 8px; }
+#qwen21-generate { flex: 1 1 auto; min-width: 0 !important; min-height: 44px; }
+#qwen21-stop { flex: 0 0 64px; min-width: 64px !important; }
+#qwen21-status textarea { font-size: 12px; min-height: 32px; padding: 6px 8px; }
+#qwen21-references { border-radius: var(--block-radius); }
+#qwen21-references .grid-container {
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)) !important;
+    grid-auto-rows: 80px !important;
 }
-
-#qwen21-annotation-editor [id^="removeButton_"],
-#qwen21-mask-editor [id^="removeButton_"] {
-    display: none;
+#qwen21-references .gallery-item { height: 80px; min-width: 0; }
+#qwen21-references .thumbnail-item { height: 100%; width: 100%; min-height: 0; aspect-ratio: auto; }
+#qwen21-references:not(:has(.thumbnail-item)) { height: 260px !important; }
+#qwen21-references:has(.thumbnail-item) { height: 108px !important; scrollbar-width: thin; }
+#qwen21-reference-controls { gap: 6px; }
+#qwen21-reference-controls button { min-width: 54px; }
+#qwen21-editor-toolbar { gap: 8px; align-items: center; }
+#qwen21-layer-view { min-width: 220px !important; }
+#qwen21-annotation-title p { margin: 0; font-size: 12px; color: var(--body-text-color-subdued); }
+#qwen21-mask-application { gap: 8px; }
+#qwen21-mask-application > * { min-width: 240px !important; }
+#qwen21-mask-application label { font-size: 12px; }
+#qwen21-annotation-panel, #qwen21-mask-panel, #qwen21-guide-panel { min-width: 0; }
+#qwen21-canvas-stack { position: relative; }
+#qwen21-annotation-panel:has(#qwen21-layer-view input[value="guide"]:checked) #qwen21-mask-panel,
+#qwen21-annotation-panel:has(#qwen21-layer-view input[value="mask"]:checked) #qwen21-guide-panel {
+    position: absolute;
+    inset: 0;
+    visibility: hidden;
+    pointer-events: none;
 }
+#qwen21-mask-panel:has(#qwen21-mask-source input[value="paint"]:checked) #qwen21-mask-upload,
+#qwen21-mask-panel:has(#qwen21-mask-source input[value="upload"]:checked) #qwen21-mask-paint { display: none !important; }
+#qwen21-guide-help p { font-size: 12px; }
+#qwen21-annotation-editor .forge-container:not(.forge-maximized),
+#qwen21-mask-editor .forge-container:not(.forge-maximized) { height: clamp(320px, calc(100dvh - 350px), 640px) !important; }
+#qwen21-annotation-editor .forge-toolbar, #qwen21-mask-editor .forge-toolbar { opacity: 1 !important; }
+#qwen21-annotation-editor [id^="removeButton_"], #qwen21-mask-editor [id^="removeButton_"] { display: none; }
 
-@media (max-width: 800px) {
-    #qwen21-controls {
-        position: static;
-    }
-
+@media (max-width: 1099px), (max-height: 559px) {
+    #qwen21-workspace { display: flex; flex-direction: column; padding-bottom: calc(var(--qwen-actions-height, 124px) + 20px); }
+    #qwen21-controls { display: contents; position: static; height: auto; }
+    #qwen21-composer { order: 0; width: 100%; }
+    #qwen21-visual { order: 1; width: 100%; flex: 0 0 auto !important; }
+    #qwen21-settings { order: 2; width: 100%; flex: 0 0 auto; height: auto; overflow: visible; padding-right: 0; }
+    #qwen21-run-dock { position: fixed; z-index: 30; bottom: 0; left: 16px; right: 16px; width: auto; max-width: calc(100% - 32px); padding: 8px 0 max(8px, env(safe-area-inset-bottom)); }
+    #qwen21-status textarea { min-height: 48px; padding-right: 60px; }
+    #qwen21-references:not(:has(.thumbnail-item)) { height: 260px !important; }
     #qwen21-annotation-editor .forge-container:not(.forge-maximized),
-    #qwen21-mask-editor .forge-container:not(.forge-maximized) {
-        height: 62vh !important;
-        min-height: 360px;
-    }
+    #qwen21-mask-editor .forge-container:not(.forge-maximized) { height: clamp(280px, 60dvh, 520px) !important; }
 }
-
 @media (max-width: 600px) {
-    #qwen21-references .grid-container {
-        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    }
+    #qwen21-references .grid-container { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    #qwen21-editor-toolbar { flex-wrap: wrap; }
+    #qwen21-layer-view { width: 100%; }
 }

@@ -39,7 +39,7 @@ class AikimiTabsTests(unittest.TestCase):
         positions = [self.javascript.index(value) for value in expected]
         self.assertEqual(positions, sorted(positions))
         self.assertIn(
-            '"krea2",\n        "anima38",\n        "sensenova",\n        "minimax_h3",\n        "qwen_image21"',
+            '"krea2",\n        "anima38",\n        "sensenova",\n        "qwen_image21",\n        "minimax_h3_image",\n        "nanosaur2",\n        "minimax_h3",\n        "yue2"',
             self.javascript,
         )
 

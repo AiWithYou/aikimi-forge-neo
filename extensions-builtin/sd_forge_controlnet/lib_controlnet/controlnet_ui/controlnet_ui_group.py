@@ -437,7 +437,7 @@ class ControlNetUiGroup:
             self.processor_res = gr.Slider(
                 label="Preprocessor resolution",
                 value=self.default_unit.processor_res,
-                minimum=64,
+                minimum=-1,
                 maximum=2048,
                 visible=gradio_compat.keep_hidden_component_mounted(False),
                 interactive=True,
@@ -446,7 +446,7 @@ class ControlNetUiGroup:
             self.threshold_a = gr.Slider(
                 label="Threshold A",
                 value=self.default_unit.threshold_a,
-                minimum=64,
+                minimum=-1,
                 maximum=1024,
                 visible=gradio_compat.keep_hidden_component_mounted(False),
                 interactive=True,
@@ -455,12 +455,17 @@ class ControlNetUiGroup:
             self.threshold_b = gr.Slider(
                 label="Threshold B",
                 value=self.default_unit.threshold_b,
-                minimum=64,
+                minimum=-1,
                 maximum=1024,
                 visible=gradio_compat.keep_hidden_component_mounted(False),
                 interactive=True,
                 elem_id=f"{elem_id_tabname}_{tabname}_controlnet_threshold_B_slider",
             )
+            # -1 is the unit's automatic/default sentinel before a preprocessor is selected.
+            # Its real bounds are supplied by build_sliders; shared legacy label keys
+            # must not restore a different preprocessor's bounds onto these inputs.
+            for slider in (self.processor_res, self.threshold_a, self.threshold_b):
+                slider.do_not_save_to_config = True
 
         self.control_mode = gr.Radio(
             choices=[e.value for e in external_code.ControlMode],

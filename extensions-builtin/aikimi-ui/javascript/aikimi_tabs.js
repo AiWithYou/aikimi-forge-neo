@@ -1,7 +1,7 @@
 (function () {
     "use strict";
 
-    const API_VERSION = 4;
+    const API_VERSION = 5;
     const FEATURE_EVENT = "aikimi:feature-tab-change";
     const FEATURE_NAV_ID = "aikimi-feature-nav";
     const SETUP_RETRY_LIMIT = 80;
@@ -43,13 +43,34 @@
             label: "Qwen Image 2.1",
             kind: "native",
         }),
+        minimax_h3_image: Object.freeze({
+            buttonId: "aikimi-tab-h3-image",
+            containerId: "tab_minimax_h3_image_studio",
+            label: "H3 Image",
+            kind: "native",
+        }),
+        nanosaur2: Object.freeze({
+            buttonId: "aikimi-tab-nanosaur2",
+            containerId: "tab_nanosaur2_studio",
+            label: "Nanosaur2",
+            kind: "native",
+        }),
+        yue2: Object.freeze({
+            buttonId: "aikimi-tab-yue2",
+            containerId: "tab_aikimi_yue2_studio",
+            label: "YuE2 Music",
+            kind: "native",
+        }),
     });
     const FEATURE_ORDER = Object.freeze([
         "krea2",
         "anima38",
         "sensenova",
-        "minimax_h3",
         "qwen_image21",
+        "minimax_h3_image",
+        "nanosaur2",
+        "minimax_h3",
+        "yue2",
     ]);
 
     if (window.AikimiTabs?.apiVersion === API_VERSION) {

@@ -34,6 +34,7 @@ from modules_forge.sensenova_u15_bridge import (
     runtime_status_html,
     validate_request,
 )
+from modules_forge.studio_dimensions import custom_dimensions
 
 OUTPUT_DIRECTORY = Path(data_path) / "outputs" / "sensenova_u15"
 CACHE_DIRECTORY = Path(data_path) / "cache" / "sensenova_u15"
@@ -211,11 +212,29 @@ def _reuse_result(result: str | None, gallery: Any):
     return _reference_update(values, 0), reference_order_html(values, 0), 0, MODE_EDIT
 
 
+def _resolution_updates(resolution, mode):
+    if resolution == "custom":
+        return gr.update(interactive=True), gr.update(interactive=True), gr.update(interactive=True)
+    width, height = parse_resolution(resolution, mode)
+    automatic = width is None
+    return (
+        gr.update(interactive=not automatic, **({"value": width} if not automatic else {})),
+        gr.update(interactive=not automatic, **({"value": height} if not automatic else {})),
+        gr.update(interactive=not automatic),
+    )
+
+
+def _prompt_placeholder(mode: str) -> str:
+    if mode == MODE_EDIT:
+        return "例: Image-1の人物を保ち、Image-2の衣装を着せる。顔・髪型・背景の構図は変えない。"
+    return "例: 海沿いに建つ白い天文台。朝の柔らかな光、青い海、広角の構図、精細な建築写真。"
+
+
 def _mode_updates(mode: str, current_resolution: str, fast_available: bool):
-    choices = resolution_choices(mode)
+    choices = resolution_choices(mode) + [("カスタム", "custom")]
     values = {value for _, value in choices}
     if mode == MODE_EDIT:
-        selected = "auto"
+        selected = "custom" if current_resolution == "custom" else "auto"
     else:
         selected = (
             current_resolution
@@ -262,6 +281,7 @@ def _mode_updates(mode: str, current_resolution: str, fast_available: bool):
             value=3.0,
             interactive=mode != MODE_TEXT or not fast_available,
         ),
+        gr.update(placeholder=_prompt_placeholder(mode)),
     )
 
 
@@ -289,6 +309,7 @@ def _refresh_runtime(source_path: str, checkpoint_path: str, mode: str, current_
         steps, cfg, shift = gr.update(), gr.update(), gr.update()
         if profile != current_profile:
             profile_update = gr.update(value=profile)
+        if profile != current_profile or profile == PROFILE_OFFICIAL_8STEP:
             steps, cfg, shift = _profile_updates(profile)
         return (
             runtime_status_html(status),
@@ -331,10 +352,15 @@ def _request_from_ui(
     vram_mode: str,
     attn_backend: str,
     dtype: str,
+    custom_width=2048,
+    custom_height=2048,
     *,
     should_validate: bool = True,
 ) -> SenseNovaRequest:
-    width, height = parse_resolution(resolution, mode)
+    width, height = (
+        custom_dimensions(custom_width, custom_height, minimum=512)
+        if resolution == "custom" else parse_resolution(resolution, mode)
+    )
     images = normalize_gallery_images(gallery) if mode == MODE_EDIT else ()
     request = SenseNovaRequest(
         mode=mode,
@@ -382,6 +408,8 @@ def _summary_from_ui(
     vram_mode,
     attn_backend,
     dtype,
+    custom_width=2048,
+    custom_height=2048,
 ):
     try:
         request = _request_from_ui(
@@ -403,13 +431,17 @@ def _summary_from_ui(
             vram_mode,
             attn_backend,
             dtype,
+            custom_width,
+            custom_height,
             should_validate=False,
         )
         try:
             validate_request(request)
             message = ""
         except (SenseNovaBridgeError, ValueError, TypeError, OverflowError) as exc:
-            message = (
+            # An untouched prompt is an empty draft, not a failed operation.
+            # Submission still uses the full validator and reports this error.
+            message = "" if not request.prompt.strip() and str(exc) == "プロンプトを入力してください。" else (
                 f'<p class="sn-inline-error" role="alert">{html.escape(str(exc))}</p>'
             )
         return request_summary_html(request), message
@@ -439,6 +471,8 @@ def _generate(
     vram_mode,
     attn_backend,
     dtype,
+    custom_width=2048,
+    custom_height=2048,
 ):
     yield (
         progress_html("prepare", "生成条件を確認しています", 0.01),
@@ -471,6 +505,8 @@ def _generate(
             vram_mode,
             attn_backend,
             dtype,
+            custom_width,
+            custom_height,
         )
         for update in run_generation(
             request,
@@ -598,7 +634,7 @@ def _build_ui():
                             show_label=False,
                             lines=6,
                             max_lines=18,
-                            placeholder="例: Image-1の人物を保ち、Image-2の衣装を着せる。顔・髪型・背景の構図は変えない。",
+                            placeholder=_prompt_placeholder(MODE_TEXT),
                             elem_id="sn-prompt",
                         )
                         gr.HTML(
@@ -695,11 +731,16 @@ def _build_ui():
                             label="生成プロファイル",
                         )
                         resolution = gr.Dropdown(
-                            choices=resolution_choices(MODE_TEXT),
+                            choices=resolution_choices(MODE_TEXT) + [("カスタム", "custom")],
                             value="2048x2048",
-                            label="出力解像度",
+                            label="解像度プリセット",
+                            filterable=False,
                             elem_id="sn-resolution",
                         )
+                        with gr.Row(elem_id="sn-dimensions"):
+                            width = gr.Number(value=2048, precision=0, minimum=512, maximum=4096, step=32, label="幅 px", min_width=100, elem_id="sn-width")
+                            swap_size = gr.Button("縦横入替", size="sm", scale=0, min_width=70, elem_id="sn-swap-size")
+                            height = gr.Number(value=2048, precision=0, minimum=512, maximum=4096, step=32, label="高さ px", min_width=100, elem_id="sn-height")
                         input_max_pixels = gr.Dropdown(
                             choices=[
                                 ("省メモリ · 各約0.26MP · 比率保護", str(512 * 512)),
@@ -955,6 +996,10 @@ def _build_ui():
             queue=False,
         )
 
+        resolution.change(_resolution_updates, inputs=[resolution, mode], outputs=[width, height, swap_size], queue=False, show_progress="hidden")
+        for dimension in (width, height):
+            dimension.input(lambda: "custom", outputs=resolution, queue=False, show_progress="hidden")
+        swap_size.click(lambda w, h: (h, w, "custom"), inputs=[width, height], outputs=[width, height, resolution], queue=False, show_progress="hidden")
         mode.change(
             _mode_updates,
             inputs=[mode, resolution, lora_ready],
@@ -968,6 +1013,7 @@ def _build_ui():
                 steps,
                 cfg_scale,
                 timestep_shift,
+                prompt,
             ],
             queue=False,
         )
@@ -1010,8 +1056,12 @@ def _build_ui():
             vram_mode,
             attn_backend,
             dtype,
+            width,
+            height,
         ]
         for component in [
+            width,
+            height,
             mode,
             reference_gallery,
             checkpoint_path,
