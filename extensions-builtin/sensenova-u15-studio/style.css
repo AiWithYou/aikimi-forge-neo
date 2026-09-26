@@ -432,7 +432,7 @@
 }
 
 #sensenova-u15-studio .sn-actions {
-    position: sticky;
+    position: relative;
     z-index: 6;
     bottom: 8px;
     display: flex;
@@ -740,3 +740,7 @@
         forced-color-adjust: auto;
     }
 }
+
+#sensenova-u15-studio #sn-dimensions { align-items: end; flex-wrap: nowrap; }
+#sensenova-u15-studio #sn-dimensions > .form { min-width: 0 !important; flex: 1; }
+#sensenova-u15-studio #sn-swap-size { border: 1px solid var(--sn-line-strong); border-radius: 6px; min-height: 44px; padding: 4px 8px; white-space: nowrap; }

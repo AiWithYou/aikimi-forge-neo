@@ -203,8 +203,11 @@ class EditMaskTests(unittest.TestCase):
     def test_service_snapshots_inpainting_mask_without_post_composite(self):
         studio = self.studio(FakeResident())
         request = self.request(
-            preserve_unmasked=False, control_inpaint=True,
-            control_kind="canny", control_image=str(self.original), precision="int8",
+            preserve_unmasked=False,
+            control_inpaint=True,
+            control_kind="canny",
+            control_image=str(self.original),
+            precision="int8",
         )
         with patch("modules_forge.qwen_image21.fun_controlnet.installed", return_value={}):
             identifier = studio.start(request, "owner")
@@ -281,12 +284,21 @@ class EditMaskTests(unittest.TestCase):
 
         with patch.object(ui.STUDIO, "start", side_effect=submit):
             result = ui.start_canvas(
-                "Turn the circle into copper", [str(self.original)], "reference",
-                False, "int8", "offload", "1", 2,
+                "Turn the circle into copper",
+                [str(self.original)],
+                "reference",
+                False,
+                "int8",
+                "offload",
+                "1",
+                2,
                 gr.Request(session_hash="owner"),
-                preserve_unmasked=False, control_inpaint=True,
-                mask_target=str(self.original), mask_source="upload",
-                mask_upload=str(self.mask), control_kind="canny",
+                preserve_unmasked=False,
+                control_inpaint=True,
+                mask_target=str(self.original),
+                mask_source="upload",
+                mask_upload=str(self.mask),
+                control_kind="canny",
                 control_image=str(self.original),
             )
         self.assertEqual(result[0], "accepted", result)
@@ -305,7 +317,47 @@ class EditMaskTests(unittest.TestCase):
         self.assertTrue(first[0]["visible"])
         self.assertNotIn("value", following[0])
 
-    def test_mask_surface_is_cleared_on_source_change_or_disable(self):
+    def test_guide_and_mask_can_be_submitted_with_both_mask_applications(self):
+        ui = load_ui()
+        background = annotations.annotation_preview(str(self.original))
+        guide = Image.new("RGBA", background.size, (0, 0, 0, 0))
+        ImageDraw.Draw(guide).ellipse((30, 30, 80, 80), outline="red", width=3)
+        accepted = []
+
+        def submit(request, owner):
+            accepted.append(request.resolved())
+            return "accepted"
+
+        with patch.object(ui.STUDIO, "start", side_effect=submit):
+            result = ui.start_canvas(
+                "Change the circled area",
+                [str(self.original)],
+                "reference",
+                False,
+                "int8",
+                "offload",
+                "1",
+                2,
+                gr.Request(session_hash="owner"),
+                annotation_target=str(self.original),
+                background=background,
+                foreground=guide,
+                preserve_unmasked=True,
+                control_inpaint=True,
+                mask_target=str(self.original),
+                mask_source="upload",
+                mask_upload=str(self.mask),
+                control_kind="canny",
+                control_image=str(self.original),
+            )
+        self.assertEqual(result[0], "accepted", result)
+        request = accepted[0]
+        self.assertTrue(request.preserve_unmasked and request.control_inpaint)
+        self.assertEqual(request.annotation_reference, 0)
+        self.assertEqual(len(request.annotation_layers), 1)
+        self.assertEqual(request.edit_mask_reference, 0)
+
+    def test_mask_surface_is_cleared_on_source_change_but_kept_when_not_applied(self):
         ui = load_ui()
         other = self.root / "other.png"
         Image.new("RGBA", (256, 256), "blue").save(other)
@@ -316,7 +368,11 @@ class EditMaskTests(unittest.TestCase):
         self.assertEqual(changed[0], str(other))
         self.assertIsNone(changed[2])
         self.assertIsNone(changed[3])
-        self.assertEqual(ui.refresh_mask(paths, str(other), str(other), False), ("", None, None, None))
+        disabled = ui.refresh_mask(paths, str(other), str(other), False)
+        self.assertEqual(disabled[0], str(other))
+        self.assertNotIn("value", disabled[2])
+        self.assertNotIn("value", disabled[3])
+        self.assertEqual(ui.refresh_mask(paths, "", str(other), False), ("", None, None, None))
 
     def test_uploaded_mask_uses_selected_reference_and_rejects_stale_paint_background(self):
         ui = load_ui()

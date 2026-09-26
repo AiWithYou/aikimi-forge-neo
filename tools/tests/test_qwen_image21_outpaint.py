@@ -7,6 +7,7 @@ import io
 import json
 import math
 import sys
+import tempfile
 import types
 import unittest
 from dataclasses import replace
@@ -15,7 +16,15 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from modules_forge.qwen_image21.outpaint import MAX_CANVAS_PIXELS, PROMPT, Plan, normalize_image, prepare, recipe, stitch
+from modules_forge.qwen_image21.outpaint import (
+    MAX_CANVAS_PIXELS,
+    PROMPT,
+    Plan,
+    normalize_image,
+    prepare,
+    recipe,
+    stitch,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -242,40 +251,240 @@ class UIContractTests(unittest.TestCase):
         with patch.dict(sys.modules, {"modules": fake_modules}):
             spec.loader.exec_module(cls.ui)
 
+    def setUp(self):
+        # Download buttons write named PNGs; keep them out of the real temp dir.
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        patcher = patch.object(self.ui, "_EXPORT_DIRECTORY", temporary)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_prepare_restore_callback_roundtrip(self):
-        state, padded, prompt, settings, summary, cleared, old_generated = self.ui.prepare_canvas(
-            Image.new("RGB", (256, 256), (91, 33, 202)), 32, 0, 0, 0, "v2", "room",
+        state, padded, prompt, settings, summary = self.ui.prepare_canvas(
+            Image.new("RGB", (256, 256), (91, 33, 202)),
+            32,
+            0,
+            0,
+            0,
+            "v2",
+            "room",
         )
-        self.assertIsNone(cleared)
-        self.assertIsNone(old_generated)
         self.assertIn("288 × 256", summary)
         self.assertEqual(prompt, settings["prompt"])
-        result = self.ui.restore_original(state, padded, 0)
-        self.assertEqual(result.crop(state[1].box).tobytes(), state[0].tobytes())
+        binding, _, button = self.ui.generated_status(state, padded, False)
+        self.assertTrue(button["interactive"])
+        result = self.ui.restore_original(state, padded, 0, binding, False)
+        self.assertEqual(result.crop(state.plan.box).tobytes(), state.original.tobytes())
 
     def test_real_gradio_tab_build_and_private_callbacks(self):
         tabs = self.ui.on_ui_tabs()
         self.assertEqual(tabs[0][2], "qwen_image21_outpaint")
         config = tabs[0][0].get_config_file()
-        self.assertEqual(len(config["dependencies"]), 11)
+        self.assertEqual(len(config["dependencies"]), 17)
         for dependency in config["dependencies"]:
             self.assertEqual(dependency["api_visibility"], "private")
-        self.assertIn("画像生成を行いません", str(config))
+        text = str(config)
+        self.assertIn("画像生成を行いません", text)
+        self.assertIn("完成画像を作成", text)
+        self.assertNotIn("復元", text)  # The final output is named 完成画像, not an ambiguous restore.
+        ids = {component["props"].get("elem_id"): component for component in config["components"]}
+        for elem_id in (
+            "qwen21-outpaint-source",
+            "qwen21-outpaint-prepare",
+            "qwen21-outpaint-stitch",
+            "qwen21-outpaint-restored",
+            "qwen21-outpaint-reference-download",
+            "qwen21-outpaint-final-download",
+        ):
+            self.assertIn(elem_id, ids)
+        self.assertFalse(ids["qwen21-outpaint-preview-column"]["props"]["visible"])
         tabs[0][0].close()
 
-    def test_changes_invalidate_prepared_state_and_result(self):
-        state, preview, prompt, settings, summary, result, generated = self.ui.clear_prepared()
-        self.assertIsNone(state)
+    def test_preview_marks_extension_and_keeps_original_visible(self):
+        source = Image.new("RGB", (256, 256), (10, 200, 30))
+        column, preview, caption, direction = self.ui.preview_canvas(source, 128, 0, 0, 0)
+        image = preview["value"]
+        self.assertTrue(column["visible"])
+        self.assertLessEqual(max(image.size), self.ui.PREVIEW_SIDE)
+        self.assertEqual(image.size[0] * 256, image.size[1] * 384)  # Same aspect as the 384 × 256 canvas.
+        self.assertEqual(image.getpixel((image.width - 10, image.height // 2)), (10, 200, 30))
+        stripes = {image.getpixel((x, y)) for x in range(0, 40) for y in range(0, 40)}
+        self.assertEqual(stripes, {(128, 128, 128), (158, 158, 158)})
+        self.assertIn("384 × 256", caption)
+        self.assertEqual(direction["value"], "左")
+
+    def test_preview_reports_alignment_and_errors_inline(self):
+        _, _, caption, _ = self.ui.preview_canvas(Image.new("RGB", (256, 256)), 1, 0, 0, 0)
+        self.assertIn("32 px単位", caption)
+        column, preview, caption, _ = self.ui.preview_canvas(Image.new("RGB", (1536, 1024)), 128, 128, 128, 128)
+        self.assertTrue(column["visible"])
+        self.assertFalse(preview["visible"])
+        self.assertIn("2 MP", caption)
+        column, preview, caption, _ = self.ui.preview_canvas(None, 128, 128, 128, 128)
+        self.assertFalse(column["visible"])
         self.assertIsNone(preview)
-        self.assertEqual(prompt, "")
-        self.assertIsNone(settings)
-        self.assertIsNone(result)
-        self.assertIsNone(generated)
-        self.assertIsNone(self.ui.clear_result())
+
+    def test_preview_transparent_source_matches_gray_reference(self):
+        _, preview, _, _ = self.ui.preview_canvas(Image.new("RGBA", (256, 256), (255, 0, 0, 0)), 128, 0, 0, 0)
+        image = preview["value"]
+        inner = {image.getpixel((x, y)) for x in range(image.width - 40, image.width - 4) for y in range(4, 40)}
+        self.assertEqual(inner, {(128, 128, 128)})
+
+    def test_direction_shortcuts_keep_manual_amounts(self):
+        values = lambda updates: tuple(update["value"] for update in updates)  # noqa: E731
+        self.assertEqual(values(self.ui.apply_direction("左右", 200, 0, 0, 0)), (200, 0, 200, 0))
+        self.assertEqual(values(self.ui.apply_direction("左", 64, 128, 256, 128)), (64, 0, 0, 0))
+        self.assertEqual(values(self.ui.apply_direction("四方", 0, 0, None, 0)), (128, 128, 128, 128))
+        self.assertEqual(values(self.ui.apply_direction("上下", 96.0, 0, 0, 0)), (0, 96, 0, 96))
+        self.assertTrue(all("value" not in update for update in self.ui.apply_direction(None, 1, 2, 3, 4)))
+        self.assertEqual(self.ui.direction_of(0, 32, 0, 64), "上下")
+        self.assertIsNone(self.ui.direction_of(32, 32, 0, 0))
+
+    def test_prepare_offers_named_reference_and_concrete_handoff(self):
+        outputs = self.ui.prepare_for_ui(Image.new("RGB", (256, 256), "blue"), 32, 0, 0, 0, "v1", "", None)
+        download, steps, final = outputs[13], outputs[14], outputs[15]
+        self.assertTrue(download["interactive"])
+        self.assertTrue(download["value"].endswith("qwen-outpaint-reference-288x256.png"))
+        with Image.open(download["value"]) as saved:
+            self.assertEqual(saved.tobytes(), outputs[1]["value"].tobytes())
+        self.assertIn("qwen-image-2.1-outpaint.safetensors", steps)
+        self.assertIn("288 × 256", steps)
+        self.assertIn("25 steps · CFG 1 · euler / simple · denoise 1", steps)
+        self.assertFalse(final["interactive"])
+        self.assertIsNone(final["value"])
+
+    def test_finish_saves_final_image_and_changes_clear_it(self):
+        state, padded, *_ = self.ui.prepare_canvas(Image.new("RGB", (256, 256), "red"), 32, 0, 0, 0, "v2", "")
+        result, download = self.ui.finish_for_ui(state, padded, 0, state.token, False)
+        self.assertTrue(download["value"].endswith("qwen-outpaint-288x256.png"))
+        with Image.open(download["value"]) as saved:
+            self.assertEqual(saved.tobytes(), result.tobytes())
+        for restored, cleared in (self.ui.feather_changed(), self.ui.uploaded(state, padded, False)[3:]):
+            self.assertIsNone(restored["value"])
+            self.assertIsNone(cleared["value"])
+            self.assertFalse(cleared["interactive"])
+
+    def test_draft_change_keeps_snapshot_but_blocks_stale_restore(self):
+        source = Image.new("RGB", (256, 256), "red")
+        state, padded, *_ = self.ui.prepare_canvas(source, 32, 0, 0, 0, "v2", "")
+        dirty, message, prepare_button, restore_button, result, validation, reference, prompt, *downloads = (
+            self.ui.draft_changed(
+                source,
+                33,
+                0,
+                0,
+                0,
+                "v2",
+                "",
+                state,
+                state.token,
+                padded,
+            )
+        )
+        for download in downloads:
+            self.assertIn("前回", download["label"])
+            self.assertNotIn("value", download)  # Previous files remain downloadable.
+        self.assertTrue(dirty)
+        self.assertTrue(prepare_button["interactive"])
+        self.assertFalse(restore_button["interactive"])
+        self.assertIn("未反映", message)
+        self.assertIn("未反映", validation)
+        self.assertIn("未反映", reference["label"])
+        self.assertNotIn("value", reference)
+        self.assertNotIn("value", prompt)
+        self.assertNotIn("value", result)  # Preserve the previous result for download.
+        self.assertEqual(state.original.tobytes(), source.tobytes())
+        with self.assertRaisesRegex(ValueError, "未反映"):
+            self.ui.restore_original(state, padded, 0, state.token, dirty)
+
+    def test_new_preparation_rejects_old_binding_even_at_same_dimensions(self):
+        source = Image.new("RGB", (256, 256))
+        first, padded, *_ = self.ui.prepare_canvas(source, 32, 0, 0, 0, "v2", "")
+        second, *_ = self.ui.prepare_canvas(source, 32, 0, 0, 0, "v1", "different scene")
+        with self.assertRaisesRegex(ValueError, "選び直して"):
+            self.ui.restore_original(second, padded, 0, first.token, False)
+
+    def test_wrong_size_is_explained_before_restore(self):
+        state, *_ = self.ui.prepare_canvas(Image.new("RGB", (256, 256)), 32, 0, 0, 0, "v2", "")
+        binding, message, button = self.ui.generated_status(state, Image.new("RGB", (256, 256)), False)
+        self.assertIsNone(binding)
+        self.assertFalse(button["interactive"])
+        self.assertIn("288 × 256", message)
+        self.assertIn("256 × 256", message)
+
+    def test_upload_during_dirty_draft_cannot_reenable_restore(self):
+        state, padded, *_ = self.ui.prepare_canvas(Image.new("RGB", (256, 256)), 32, 0, 0, 0, "v2", "")
+        binding, _, button = self.ui.generated_status(state, padded, True)
+        self.assertIsNone(binding)
+        self.assertFalse(button["interactive"])
+
+    def test_small_source_has_valid_default_feather(self):
+        outputs = self.ui.prepare_for_ui(Image.new("RGB", (32, 32)), 128, 128, 128, 128, "v2", "", None)
+        state, padded = outputs[0], outputs[1]["value"]
+        feather = outputs[9]
+        self.assertEqual(feather["maximum"], 15)
+        result = self.ui.restore_original(state, padded, feather["value"], state.token, False)
+        self.assertEqual(result.size, padded.size)
+
+    def test_repreparation_keeps_generated_input_unbound(self):
+        image = Image.new("RGB", (512, 512))
+        outputs = self.ui.prepare_for_ui(Image.new("RGB", (256, 256)), 128, 128, 128, 128, "v2", "", image)
+        self.assertIsNone(outputs[6])
+        self.assertIn("選び直して", outputs[10])
+        self.assertFalse(outputs[11]["interactive"])
+
+    def test_missing_source_disables_prepare(self):
+        self.assertFalse(self.ui.draft_changed(None, 128, 128, 128, 128, "v2", "", None, None, None)[2]["interactive"])
+        chosen = self.ui.draft_changed(Image.new("RGB", (256, 256)), 128, 128, 128, 128, "v2", "", None, None, None)
+        self.assertTrue(chosen[2]["interactive"])
+        self.assertEqual(chosen[1], self.ui.READY)  # Says what the prepare click produces.
+
+    def test_returning_to_prepared_input_resumes_without_reupload(self):
+        source = Image.new("RGB", (256, 256))
+        state, padded, *_ = self.ui.prepare_canvas(source, 32, 0, 0, 0, "v2", "forest")
+        changed = self.ui.draft_changed(source, 33, 0, 0, 0, "v2", "forest", state, state.token, padded)
+        self.assertTrue(changed[0])
+        reverted = self.ui.draft_changed(source, 32, 0, 0, 0, "v2", "forest", state, state.token, padded)
+        self.assertFalse(reverted[0])
+        self.assertTrue(reverted[3]["interactive"])
+
+    def test_same_preparation_keeps_binding_and_feather_choice(self):
+        source = Image.new("RGB", (256, 256))
+        state, padded, *_ = self.ui.prepare_canvas(source, 32, 0, 0, 0, "v2", "forest")
+        result = self.ui.prepare_for_ui(source.copy(), 32.0, 0, 0, 0, "v2", " forest ", padded, state, state.token)
+        self.assertEqual(result[0].token, state.token)
+        self.assertEqual(result[6], state.token)
+        self.assertNotIn("value", result[9])
+        self.assertTrue(result[11]["interactive"])
+
+    def test_prompt_and_pixels_are_part_of_generation_identity(self):
+        source = Image.new("RGBA", (256, 256), (1, 2, 3, 0))
+        state, padded, *_ = self.ui.prepare_canvas(source, 32, 0, 0, 0, "v2", "forest")
+        changed_prompt, *_ = self.ui.prepare_canvas(source, 32, 0, 0, 0, "v2", "desert")
+        source.putpixel((0, 0), (4, 5, 6, 0))
+        changed_pixels, *_ = self.ui.prepare_canvas(source, 32, 0, 0, 0, "v2", "forest")
+        self.assertNotEqual(state.token, changed_prompt.token)
+        self.assertNotEqual(state.token, changed_pixels.token)
+        for new_state in (changed_prompt, changed_pixels):
+            with self.assertRaisesRegex(ValueError, "選び直して"):
+                self.ui.restore_original(new_state, padded, 0, state.token, False)
+
+    def test_binding_does_not_override_wrong_image_dimensions(self):
+        source = Image.new("RGB", (256, 256))
+        state, *_ = self.ui.prepare_canvas(source, 32, 0, 0, 0, "v2", "")
+        result = self.ui.prepare_for_ui(source, 32, 0, 0, 0, "v2", "", source, state, state.token)
+        self.assertFalse(result[11]["interactive"])
+        draft = self.ui.draft_changed(source, 32, 0, 0, 0, "v2", "", state, state.token, source)
+        self.assertFalse(draft[3]["interactive"])
+
+    def test_changed_feather_removes_stale_download(self):
+        restored, download = self.ui.feather_changed()
+        self.assertIsNone(restored["value"])
+        self.assertIsNone(download["value"])
 
     def test_missing_snapshot_is_actionable(self):
         with self.assertRaises(ValueError):
-            self.ui.restore_original(None, Image.new("RGB", (256, 256)), 0)
+            self.ui.restore_original(None, Image.new("RGB", (256, 256)), 0, None, False)
 
 
 if __name__ == "__main__":

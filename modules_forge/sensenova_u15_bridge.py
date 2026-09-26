@@ -1080,6 +1080,6 @@ def request_summary_html(request: SenseNovaRequest) -> str:
         f"<span><small>WEIGHTS</small>{html.escape(quantization)}</span>"
         f"<span><small>OUTPUT</small>{html.escape(size)}</span>"
         f"<span><small>REFERENCES</small>{len(request.input_images)}枚</span>"
-        f"<span><small>SAMPLING</small>{html.escape(profile)} · {html.escape(vram_label)} · {request.steps} steps · CFG {request.cfg_scale:g}</span>"
+        f"<span><small>SAMPLING</small>{html.escape(profile)} · {request.steps} steps · CFG {request.cfg_scale:g} · メモリ設定: {html.escape(vram_label)}</span>"
         "</div>"
     )

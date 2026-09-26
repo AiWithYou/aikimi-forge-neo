@@ -7,6 +7,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -83,7 +84,7 @@ class Nanosaur2Contracts(unittest.TestCase):
         with self.assertRaisesRegex(studio.Nanosaur2Error, "vae"):
             studio.check_nodes(client)
 
-    def test_ui_tab_can_render_without_starting_backend(self):
+    def load_ui(self):
         if importlib.util.find_spec("gradio") is None:
             self.skipTest("Gradio unavailable")
         callbacks = SimpleNamespace(on_ui_tabs=Mock())
@@ -100,6 +101,10 @@ class Nanosaur2Contracts(unittest.TestCase):
             sys.modules, {"modules": modules, "modules.aikimi_status": status, "modules.script_callbacks": callbacks}
         ):
             spec.loader.exec_module(ui)
+        return ui
+
+    def test_ui_tab_can_render_without_starting_backend(self):
+        ui = self.load_ui()
         with patch.object(studio, "ensure_runtime") as backend:
             tabs = ui.on_ui_tabs()
             backend.assert_not_called()
@@ -109,6 +114,36 @@ class Nanosaur2Contracts(unittest.TestCase):
         self.assertTrue(
             all(item["api_visibility"] == "private" for item in config["dependencies"] if item.get("backend_fn"))
         )
+
+    def test_setup_state_checks_missing_and_present_files_without_starting_or_hashing_models(self):
+        ui = self.load_ui()
+        with (
+            TemporaryDirectory() as temporary,
+            patch.object(studio, "runtime_root", return_value=Path(temporary)),
+            patch.object(setup_nanosaur2, "runtime_ready", return_value=False) as runtime,
+            patch.object(studio, "source_ready", return_value=True),
+            patch.object(studio, "_entries", return_value=[{"path": "model.safetensors", "size": 4}]),
+            patch.object(studio, "ensure_runtime") as backend,
+            patch.object(studio, "model_ready") as full_hash,
+        ):
+            self.assertIn("未導入", ui._setup_state())
+            runtime.return_value = True
+            self.assertIn("不足分", ui._setup_state())
+            models = Path(temporary) / "models"
+            models.mkdir()
+            (models / "model.safetensors").write_bytes(b"test")
+            self.assertIn("生成時にモデルを検証", ui._setup_state())
+            backend.assert_not_called()
+            full_hash.assert_not_called()
+
+    def test_connect_reports_progress_before_starting_and_keeps_failure_visible(self):
+        ui = self.load_ui()
+        with patch.object(studio, "ensure_runtime", side_effect=studio.Nanosaur2Error("test failure")) as backend:
+            updates = ui._connect()
+            self.assertIn("接続・起動しています", next(updates))
+            backend.assert_not_called()
+            self.assertIn("起動に失敗しました", next(updates))
+            backend.assert_called_once_with(restart=False)
 
 
 if __name__ == "__main__":

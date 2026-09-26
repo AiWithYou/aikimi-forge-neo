@@ -51,6 +51,16 @@ def load_studio_module():
 
 
 class SenseNovaStudioSourceTests(unittest.TestCase):
+    def test_ready_fast_profile_reasserts_locked_settings_after_old_ui_restore(self):
+        status = RuntimeStatus(
+            ready=True, source_ready=True, dependencies_ready=True, checkpoint_ready=True,
+            source_path=ROOT, checkpoint_path=ROOT / "fixture.safetensors", messages=(), lora_ready=True,
+        )
+        with mock.patch.object(self.studio, "inspect_runtime", return_value=status):
+            updates = self.studio._refresh_runtime("runtime", "checkpoint", self.studio.MODE_TEXT, self.studio.PROFILE_OFFICIAL_8STEP)
+        self.assertEqual([update["value"] for update in updates[3:]], [8, 1.0, 3.0])
+        self.assertTrue(all(update["interactive"] is False for update in updates[3:]))
+
     @classmethod
     def setUpClass(cls):
         cls.script = SCRIPT.read_text(encoding="utf-8")

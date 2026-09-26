@@ -7,7 +7,6 @@ from unittest import mock
 
 from modules_forge.minimax_h3_bridge import RuntimeReadiness
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 STUDIO_PATH = (
     REPOSITORY_ROOT
@@ -42,6 +41,12 @@ def load_studio_module():
 
 
 class MiniMaxH3StudioCallbackTests(unittest.TestCase):
+    def test_custom_dimension_updates_do_not_overwrite_newer_manual_input(self):
+        updates = self.studio._canvas_values("16:9", "custom:736x512")
+        self.assertTrue(all("value" not in update for update in updates))
+        restored = self.studio._restored_canvas_values("16:9", "custom:736x1120")
+        self.assertEqual([update["value"] for update in restored], [736, 1120])
+
     @classmethod
     def setUpClass(cls):
         cls.studio = load_studio_module()
@@ -493,12 +498,12 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
         self.assertIn("h3-initialize-trigger", component_ids)
         self.assertIn("h3-prompt-assists", component_ids)
         self.assertLess(
-            element_ids.index("h3-generate"),
             element_ids.index("h3-settings-summary"),
+            element_ids.index("h3-generate"),
         )
         self.assertLess(
-            element_ids.index("h3-generate"),
             element_ids.index("h3-prompt-assists"),
+            element_ids.index("h3-settings-summary"),
         )
         self.assertLess(
             element_ids.index("h3-runtime-setup"),
@@ -572,7 +577,8 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
         quality_input = next(
             dependency
             for dependency in dependencies
-            if any(target[0] == quality_id and target[1] == "input" for target in dependency["targets"])
+            if any(target[0] == quality_id and target[1] == "change" for target in dependency["targets"])
+            and len(dependency["inputs"]) == 8
         )
         self.assertEqual(len(quality_input["inputs"]), 8)
         self.assertEqual(len(quality_input["outputs"]), 3)

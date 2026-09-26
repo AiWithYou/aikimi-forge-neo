@@ -86,7 +86,12 @@ def load_main_entry():
     shared.config_filename = "config.json"
     module_stubs["modules.paths"].models_path = "models"
     module_stubs["modules.sd_models"].get_closet_checkpoint_match = lambda value: (
-        value if value in {"model.safetensors", "other.safetensors"} else None
+        SimpleNamespace(name=value, short_title=value.removesuffix(".safetensors"))
+        if value in {"model.safetensors", "other.safetensors"}
+        else None
+    )
+    module_stubs["modules.sd_models"].checkpoint_tiles = lambda short=False: (
+        ["model", "other"] if short else ["model.safetensors", "other.safetensors"]
     )
 
     presets = ModuleType("modules_forge.presets")
@@ -99,6 +104,7 @@ def load_main_entry():
             return ["sd", "krea"]
 
     presets.PresetArch = PresetArch
+    presets.DEFAULT_CHECKPOINTS = {}
     presets.is_video = lambda _preset: 0
     presets.use_distill = lambda _preset: False
     presets.use_shift = lambda _preset: False
@@ -179,6 +185,7 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
         self.opts.save_calls.clear()
         self.opts.sd_model_checkpoint = "model.safetensors"
         self.opts.forge_preset = "sd"
+        self.opts.sd_checkpoint_dropdown_use_short = False
         self.main_entry.module_list.clear()
         self.main_entry._module_path_to_selector.clear()
         self.main_entry._module_selector_to_kind.clear()
@@ -524,11 +531,70 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
         updates = self.main_entry.on_preset_change("krea")
 
         self.assertEqual(updates[0]["value"], "model.safetensors")
-        source = MAIN_ENTRY.read_text(encoding="utf-8")
-        self.assertEqual(
-            source.count(") or shared.opts.sd_model_checkpoint"),
-            2,
-        )
+
+    def test_preset_checkpoint_alias_uses_the_displayed_dropdown_value(self):
+        self.opts.data["forge_checkpoint_krea"] = "model.safetensors"
+        self.opts.sd_checkpoint_dropdown_use_short = True
+        update = self.main_entry.on_preset_change("krea")[0]
+        self.assertEqual(update["value"], "model")
+        self.assertIn(update["value"], update["choices"])
+        self.assertEqual(self.opts.set_calls, [])
+
+    def test_missing_checkpoint_recovers_only_to_the_installed_preset_default(self):
+        self.opts.data["forge_checkpoint_krea"] = "deleted.safetensors"
+        from enum import Enum
+
+        arch = Enum("Arch", ["krea"])
+        with (
+            mock.patch.object(self.main_entry, "DEFAULT_CHECKPOINTS", {arch.krea: "other.safetensors"}),
+            mock.patch.object(self.main_entry.gr, "Warning") as warning,
+        ):
+            update = self.main_entry.on_preset_change("krea")[0]
+        self.assertEqual(update["value"], "other.safetensors")
+        self.assertEqual(self.opts.set_calls, [])
+        warning.assert_called_once()
+
+    def test_available_saved_checkpoint_is_not_replaced_by_the_preset_default(self):
+        self.opts.data["forge_checkpoint_krea"] = "model.safetensors"
+        from enum import Enum
+
+        arch = Enum("Arch", ["krea"])
+        with (
+            mock.patch.object(self.main_entry, "DEFAULT_CHECKPOINTS", {arch.krea: "other.safetensors"}),
+            mock.patch.object(self.main_entry.gr, "Warning") as warning,
+        ):
+            update = self.main_entry.on_preset_change("krea")[0]
+        self.assertEqual(update["value"], "model.safetensors")
+        warning.assert_not_called()
+
+    def test_missing_checkpoint_never_substitutes_an_unrelated_current_model(self):
+        self.opts.data["forge_checkpoint_krea"] = "deleted.safetensors"
+        update = self.main_entry.on_preset_change("krea")[0]
+        self.assertEqual(update["value"], "deleted.safetensors")
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", message=".*value.*not in the list of choices.*")
+            dropdown = self.main_entry.gr.Dropdown(choices=update["choices"], value=update["value"])
+        self.assertEqual(dropdown.preprocess(update["value"]), "deleted.safetensors")
+        before = dict(self.opts.data)
+        with self.assertRaisesRegex(ValueError, "checkpoint is not available"):
+            self.main_entry._load_presets(update["value"], [], "Automatic", "krea")
+        self.assertEqual(self.opts.data, before)
+
+    def test_checkpoint_selection_saves_the_preset_when_active_model_is_unchanged(self):
+        self.opts.data["forge_checkpoint_krea"] = "deleted.safetensors"
+        with mock.patch.object(self.main_entry, "refresh_model_loading_parameters") as refresh:
+            changed = self.main_entry.checkpoint_change("model.safetensors", "krea")
+        self.assertTrue(changed)
+        self.assertEqual(self.opts.data["forge_checkpoint_krea"], "model.safetensors")
+        self.assertEqual(self.opts.save_calls, ["config.json"])
+        refresh.assert_not_called()
+
+    def test_invalid_checkpoint_selection_does_not_mutate_settings(self):
+        before = dict(self.opts.data)
+        with self.assertRaisesRegex(ValueError, "checkpoint is not available"):
+            self.main_entry.checkpoint_change("deleted.safetensors", "krea")
+        self.assertEqual(self.opts.data, before)
+        self.assertEqual(self.opts.save_calls, [])
 
     def test_failed_preset_load_recovers_the_committed_preset_ui(self):
         self.opts.forge_preset = "anima"

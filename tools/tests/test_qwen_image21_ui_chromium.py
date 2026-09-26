@@ -90,6 +90,10 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             with gr.Tabs():
                 with gr.Tab("Home"):
                     gr.Markdown("Other workspace")
+                    # Forge's initial tab has form controls. Gradio 6.17 loads
+                    # their frontend module from that initial visible tab;
+                    # a Markdown-only stub omits it from nested accordions.
+                    gr.Textbox(label="Main workspace prompt", elem_id="main-workspace-prompt")
                 with gr.Tab("Qwen editing"):
                     studio.render()
         # Give only the isolated test instance a selector; production visibility
@@ -118,9 +122,25 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
     def test_fun_controlnet_inputs_render_in_qwen_tab(self):
         with cdp_page(self.chromium, self.url) as page:
             self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 25000), timeout=30))
-            page.evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()")
+            self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
+            page.evaluate(
+                "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
+            )
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-generate", "true")))
-            self.assertTrue(page.evaluate(_wait_expression("#qwen21-control-kind", "true", 8000), timeout=10), page.exceptions)
+            # Scroll into view before opening, matching the user's interaction.
+            page.evaluate("document.querySelector('#qwen21-control-section').scrollIntoView({block: 'center'})")
+            page.evaluate("document.querySelector('#qwen21-control-section .label-wrap').click()")
+            self.assertTrue(
+                page.evaluate(_wait_expression("#qwen21-control-kind", "true", 8000), timeout=10), page.exceptions
+            )
+            page.evaluate("document.querySelector('#qwen21-control-kind input[value=canny]').click()")
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression("#qwen21-control-image", "element.getBoundingClientRect().height > 0", 8000),
+                    timeout=10,
+                ),
+                page.exceptions,
+            )
             visible = page.evaluate("""(() => {
                 const ids=['qwen21-control-kind','qwen21-control-image'];
                 return ids.every(id => {
@@ -135,19 +155,32 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
     def test_fun_acc_switch_sets_int8_and_four_steps(self):
         with cdp_page(self.chromium, self.url) as page:
             self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 45000), timeout=50))
-            page.evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()")
+            self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
+            page.evaluate(
+                "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
+            )
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-fun-acc input", "true", 15000)))
             page.evaluate("document.querySelector('#qwen21-fun-acc input').click()")
-            self.assertTrue(page.evaluate(_wait_expression(
-                "#qwen21-precision",
-                "element.querySelector('input[type=radio]:checked')?.value === 'int8'",
-                10000,
-            )), page.exceptions)
-            self.assertTrue(page.evaluate(_wait_expression(
-                "#qwen21-steps",
-                "Array.from(element.querySelectorAll('input')).some(input => input.value === '4')",
-                10000,
-            )), str(page.exceptions) + str(page.evaluate("document.querySelector('#qwen21-steps')?.outerHTML")))
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression(
+                        "#qwen21-precision",
+                        "element.querySelector('input[role=listbox]')?.value === '通常 · INT8 · 拡張対応' && element.querySelector('input[role=listbox]')?.disabled",
+                        10000,
+                    )
+                ),
+                page.exceptions,
+            )
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression(
+                        "#qwen21-steps",
+                        "Array.from(element.querySelectorAll('input')).some(input => input.value === '4')",
+                        10000,
+                    )
+                ),
+                str(page.exceptions) + str(page.evaluate("document.querySelector('#qwen21-steps')?.outerHTML")),
+            )
             self.assertFalse(page.exceptions)
 
     def test_completed_result_has_png_and_json_downloads_after_each_generation(self):
@@ -157,6 +190,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             # Leave transport headroom after the DOM deadline, including cold
             # browser startup while the full offline suite is running.
             self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 25000), timeout=30))
+            self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
             page.evaluate(
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
@@ -215,6 +249,12 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                         ),
                         page.evaluate("document.body.innerText"),
                     )
+                    page.evaluate("""(() => {
+                        const button = Array.from(document.querySelectorAll('.label-wrap'))
+                            .find(b => b.innerText.includes('使用したプロンプト'));
+                        button.scrollIntoView({block: 'center'});
+                        if (!button.classList.contains('open')) button.click();
+                    })()""")
                     self.assertTrue(
                         page.evaluate(
                             _wait_expression(
@@ -336,6 +376,9 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                         })()""")
                         self.assertFalse(any(stale_marks), "Undo restored markings from the previous editing source")
                     if generation == 0:
+                        page.evaluate(
+                            "document.querySelector('#qwen21-annotation-editor .forge-drawing-canvas').scrollIntoView({block: 'center'})"
+                        )
                         rectangle = page.evaluate(
                             "document.querySelector('#qwen21-annotation-editor .forge-drawing-canvas').getBoundingClientRect().toJSON()"
                         )

@@ -62,16 +62,38 @@ def _setup():
         yield "**セットアップに失敗しました:** " + html.escape(str(exc))
 
 
+def _setup_state():
+    """Check installation without starting ComfyUI or hashing gigabytes on page load."""
+    from tools.setup_nanosaur2 import runtime_ready
+
+    try:
+        root = studio.runtime_root()
+        if not runtime_ready() or not studio.source_ready(root):
+            return "未導入、または準備が未完了です。「環境とモデルを準備」を押してください。"
+        for entry in studio._entries("models"):
+            path = root / "models" / entry["path"]
+            if not path.is_file() or path.stat().st_size != entry["size"]:
+                return "モデルの準備が未完了です。「環境とモデルを準備」で不足分を用意してください。"
+        return "導入済みです。生成時にモデルを検証し、接続・起動します。そのままプロンプトを入力できます。"
+    except (OSError, ValueError) as exc:
+        return "**準備状態を確認できません:** " + html.escape(str(exc))
+
+
 def _connect(restart=False):
+    yield "再起動しています…" if restart else "接続・起動しています… 初回は少し時間がかかります。"
     try:
         readiness = studio.ensure_runtime(restart=restart)
-        return (
+        yield (
             "Nanosaur2の接続準備ができています。 "
             f"ComfyUI: {html.escape(readiness.comfy_version or '不明')} / "
             f"GPU: {html.escape(readiness.gpu_name or '不明')}"
         )
     except Exception as exc:
-        return "**確認が必要です:** " + html.escape(str(exc))
+        yield "**起動に失敗しました:** " + html.escape(str(exc))
+
+
+def _restart():
+    yield from _connect(True)
 
 
 def _generate(prompt, negative, width, height, steps, cfg, seed, guidance):
@@ -147,7 +169,7 @@ def on_ui_tabs():
                 setup = gr.Button("環境とモデルを準備")
                 connect = gr.Button("接続・起動")
                 restart = gr.Button("ComfyUIを再起動")
-            setup_status = gr.Markdown("未確認。")
+            setup_status = gr.Markdown("準備状態を確認しています…")
         with gr.Row():
             with gr.Column(scale=1, min_width=320):
                 prompt = gr.Textbox(
@@ -156,10 +178,11 @@ def on_ui_tabs():
                     placeholder="newest, masterpiece, 青い目のキツネ耳の旅人、朝の森、柔らかな日光",
                 )
                 negative = gr.Textbox(label="ネガティブプロンプト", value="oldest, low quality", lines=2)
-                preset = gr.Dropdown(choices=[*PRESETS, "カスタム"], value="正方形 · 768×768", label="解像度")
+                preset = gr.Dropdown(choices=[*PRESETS, "カスタム"], value="正方形 · 768×768", label="解像度プリセット", filterable=False)
                 with gr.Row():
-                    width = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=16, label="幅")
-                    height = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=16, label="高さ")
+                    width = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=16, label="幅 px", min_width=95, elem_id="nanosaur2-width")
+                    swap_size = gr.Button("縦横入替", size="sm", scale=0, min_width=70, elem_id="nanosaur2-swap-size")
+                    height = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=16, label="高さ px", min_width=95, elem_id="nanosaur2-height")
                 with gr.Accordion("詳細設定", open=False):
                     steps = gr.Slider(1, 100, value=50, step=1, label="Steps")
                     cfg = gr.Slider(1, 12, value=4, step=0.1, label="CFG")
@@ -182,6 +205,7 @@ def on_ui_tabs():
                     metadata = gr.JSON(label="生成条件")
         job = gr.State({})
         private = {"api_visibility": "private", "show_progress": "hidden"}
+        tab.load(_setup_state, outputs=setup_status, **private)
         preset.change(
             lambda value: PRESETS.get(value, (gr.update(), gr.update())),
             inputs=preset,
@@ -189,6 +213,7 @@ def on_ui_tabs():
             queue=False,
             **private,
         )
+        swap_size.click(lambda w, h: (h, w, "カスタム"), inputs=[width, height], outputs=[width, height, preset], queue=False, **private)
         for control in (width, height):
             control.input(lambda: "カスタム", outputs=preset, queue=False, **private)
         setup.click(
@@ -208,7 +233,7 @@ def on_ui_tabs():
             **private,
         )
         restart.click(
-            lambda: _connect(True),
+            _restart,
             outputs=setup_status,
             concurrency_limit=1,
             concurrency_id="h3-runtime-control",

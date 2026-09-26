@@ -12,6 +12,7 @@ from modules import gradio_compat, script_callbacks
 from modules.paths import data_path, script_path
 from modules_forge.qwen_image21.annotations import annotation_preview, reference_index, resolve_annotation
 from modules_forge.qwen_image21.core import (
+    MAX_OUTPUT_PIXELS,
     MAX_REFERENCE_IMAGES,
     QwenImage21Error,
     Request,
@@ -21,6 +22,7 @@ from modules_forge.qwen_image21.core import (
 )
 from modules_forge.qwen_image21.quantized_cache import saved_status
 from modules_forge.qwen_image21.service import JobNotFound, Studio
+from modules_forge.studio_dimensions import custom_dimensions
 
 RUNTIME = Path(script_path) / "models" / "Qwen-Image-2.1"
 STUDIO = Studio(RUNTIME, Path(data_path) / "outputs" / "qwen-image-2.1")
@@ -37,6 +39,7 @@ RESOLUTIONS = [
     ("2752 × 1536 · 16:9 · 2K", "2752x1536"),
     ("1536 × 2752 · 9:16 · 2K", "1536x2752"),
     ("編集元と同じサイズ", "reference"),
+    ("カスタム", "custom"),
 ]
 
 
@@ -106,7 +109,7 @@ def open_annotation(gallery, selected):
     background = annotation_preview(path)
     return (
         path,
-        gr.update(value=background, label=f"Image {selected + 1} · 変更したい場所を囲む"),
+        gr.update(value=background, label=f"Image {selected + 1} · 編集する画像"),
         gr.update(visible=True),
     )
 
@@ -124,7 +127,7 @@ def refresh_references(gallery, annotation_target):
             return (
                 reference_controls_visibility(paths),
                 paths[index],
-                gr.update(label=f"Image {index + 1} · 変更したい場所を囲む"),
+                gr.update(label=f"Image {index + 1} · 編集する画像"),
                 gr.update(visible=True),
             )
         except QwenImage21Error:
@@ -188,6 +191,8 @@ def start(
     control_strength=1.0,
     control_inpaint=False,
     fun_acc=False,
+    custom_width=1024,
+    custom_height=1024,
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
@@ -206,6 +211,8 @@ def start(
                 raise QwenImage21Error("編集元の参照画像を選択してください。")
             with annotation_preview(paths[index]) as image:
                 width, height = image.size
+        elif resolution == "custom":
+            width, height = custom_dimensions(custom_width, custom_height, max_pixels=MAX_OUTPUT_PIXELS)
         else:
             width, height = (int(value) for value in resolution.split("x"))
         generation = Request(
@@ -352,7 +359,15 @@ def check_runtime():
     from modules_forge.qwen_image21.fun_controlnet import status as controlnet_status
     from modules_forge.qwen_image21.prompt_rewriter import rewriter_status
 
-    return "\n".join((runtime_status(RUNTIME), fun_acc_status(RUNTIME), controlnet_status(RUNTIME), rewriter_status(RUNTIME), rewriter_status(RUNTIME, editing=True)))
+    return "\n".join(
+        (
+            runtime_status(RUNTIME),
+            fun_acc_status(RUNTIME),
+            controlnet_status(RUNTIME),
+            rewriter_status(RUNTIME),
+            rewriter_status(RUNTIME, editing=True),
+        )
+    )
 
 
 def save_quantized(precision, request: gr.Request):
@@ -554,6 +569,8 @@ def start_canvas(
     control_strength=1.0,
     control_inpaint=False,
     fun_acc=False,
+    custom_width=1024,
+    custom_height=1024,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
@@ -626,6 +643,8 @@ def start_canvas(
                 control_strength,
                 control_inpaint,
                 fun_acc,
+                custom_width,
+                custom_height,
             )
     except Exception as exc:
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
@@ -639,8 +658,9 @@ def switch_workspace(view):
 
 
 def refresh_mask(gallery, annotation_target, current_target, preserve_unmasked=True, control_inpaint=False):
+    """Keep the mask layer when its application is off; clear it for a new source."""
     paths = reference_paths(gallery)
-    if not (preserve_unmasked or control_inpaint) or not annotation_target:
+    if not annotation_target:
         return "", None, None, None
     try:
         index = reference_index(paths, annotation_target)
@@ -678,6 +698,47 @@ def select_result_variant(identifier, variant, request: gr.Request):
         else "生成結果"
     )
     return gr.update(value=str(path), label=label)
+
+
+def resolution_settings(resolution):
+    enabled = resolution != "reference"
+    values = resolution.split("x") if resolution not in {"custom", "reference"} else ()
+    return (
+        gr.update(interactive=enabled, **({"value": int(values[0])} if values else {})),
+        gr.update(interactive=enabled, **({"value": int(values[1])} if values else {})),
+        gr.update(interactive=enabled),
+    )
+
+
+def model_guidance(precision):
+    return {
+        "base_q4_k_m": "4bit GGUF · 小さい重みで始める標準。Fun Acc / ControlNetはINT8を選択。",
+        "w4a8": "重み4bit・演算8bit · INT8より重みを省メモリ化。速さは環境と設定によります。",
+        "int8": "8bit · W4A8より重みは大きめ。Fun Acc / ControlNetに対応。",
+        "bf16": "16bit · 量子化なし。通常版で最も多くメモリを使います。",
+        "turbo_q4_k_m": "4bit GGUF · 4 steps固定の高速モデル。通常版とは画質・編集特性が異なります。",
+        "turbo_bf16": "16bit · 4 steps固定の高速モデル。Turbo Q4より重みは大きめ。",
+    }.get(precision, "")
+
+
+def generation_summary(precision, steps, resolution, width=1024, height=1024):
+    models = {
+        "base_q4_k_m": "Q4_K_M",
+        "int8": "INT8",
+        "w4a8": "W4A8",
+        "bf16": "BF16",
+        "turbo_bf16": "Turbo BF16",
+        "turbo_q4_k_m": "Turbo Q4_K_M",
+    }
+    if resolution == "custom":
+        try:
+            w, h = custom_dimensions(width, height, max_pixels=MAX_OUTPUT_PIXELS)
+            size = f"{w}×{h}"
+        except ValueError as exc:
+            return str(exc)
+    else:
+        size = "編集元と同じサイズ" if resolution == "reference" else resolution.replace("x", "×")
+    return f"{models.get(precision, precision)} · {int(steps)} steps · {size}"
 
 
 def on_ui_tabs():
@@ -719,72 +780,90 @@ def on_ui_tabs():
                         visible=gradio_compat.keep_hidden_component_mounted(False),
                         elem_id="qwen21-annotation-panel",
                     ) as annotation_panel:
-                        annotation_title = gr.Markdown("編集する画像")
-                        gr.Markdown("**Fで拡大・縮小 / Shiftで消しゴム / Ctrl+Zで取り消し**")
-                        annotation_canvas = ForgeCanvas(
-                            no_upload=True,
-                            height=640,
-                            scribble_color="#ef4444",
-                            scribble_width=3,
-                            scribble_alpha=100,
-                            scribble_alpha_fixed=True,
-                            scribble_softness_fixed=True,
-                            numpy=False,
-                            elem_id="qwen21-annotation-editor",
-                            file_background=True,
-                        )
-                        close_editor = gr.Button("囲みを使わず閉じる", size="sm")
-                        gr.Markdown("元画像は保持します。囲みは目印のため、範囲外も変わる場合があります。")
-                        preserve_unmasked = gr.Checkbox(
-                            value=False,
-                            label="マスク範囲外を元画像に固定",
-                            info="塗った部分だけ生成結果を反映します。編集元と同じ出力サイズが必要です。",
-                            elem_id="qwen21-preserve-unmasked",
-                        )
-                        # Keep the Canvas HTML lifecycle mounted. CSS follows
-                        # the checkbox/source radio without remounting its JS.
-                        with gr.Group(elem_id="qwen21-mask-panel"):
-                            mask_source = gr.Radio(
-                                [("塗って指定", "paint"), ("マスク画像", "upload")],
-                                value="paint",
-                                label="編集範囲",
-                                elem_id="qwen21-mask-source",
+                        with gr.Row(elem_id="qwen21-editor-toolbar"):
+                            layer_view = gr.Radio(
+                                [("囲みで指示", "guide"), ("マスクを描く", "mask")],
+                                value="guide",
+                                label="描画レイヤー",
+                                show_label=False,
+                                elem_id="qwen21-layer-view",
                             )
-                            with gr.Group(elem_id="qwen21-mask-paint"):
-                                gr.Markdown("**変更する部分を塗る / Shiftで消す / Ctrl+Zで取り消し**")
-                                mask_canvas = ForgeCanvas(
+                            close_editor = gr.Button("描き込みを閉じる", size="sm", min_width=120, scale=0)
+                        annotation_title = gr.Markdown("編集する画像", elem_id="qwen21-annotation-title")
+                        with gr.Row(elem_id="qwen21-mask-application"):
+                            preserve_unmasked = gr.Checkbox(
+                                value=False,
+                                label="マスク範囲外を元画像に固定",
+                                elem_id="qwen21-preserve-unmasked",
+                            )
+                            control_inpaint = gr.Checkbox(
+                                value=False,
+                                label="ControlNetにもマスクを渡す",
+                                elem_id="qwen21-control-inpaint",
+                            )
+                        with gr.Column(min_width=0, elem_id="qwen21-canvas-stack"):
+                            with gr.Column(min_width=0, elem_id="qwen21-guide-panel"):
+                                annotation_canvas = ForgeCanvas(
                                     no_upload=True,
-                                    height=460,
-                                    scribble_color="#38bdf8",
-                                    scribble_color_fixed=True,
-                                    scribble_width=36,
+                                    height=480,
+                                    scribble_color="#ef4444",
+                                    scribble_width=3,
                                     scribble_alpha=100,
                                     scribble_alpha_fixed=True,
                                     scribble_softness_fixed=True,
                                     numpy=False,
-                                    elem_id="qwen21-mask-editor",
+                                    elem_id="qwen21-annotation-editor",
                                     file_background=True,
                                 )
-                                # Gradio deduplicates head scripts by URL. A
-                                # second HTML component can run before the
-                                # first component's shared script has loaded.
-                                mask_canvas.block.js_on_load = (
-                                    "const initializeMask = () => {"
-                                    "if (!element.isConnected) return;"
-                                    "if (typeof ForgeCanvas !== 'function') { setTimeout(initializeMask, 50); return; }"
-                                    + mask_canvas.block.js_on_load
-                                    + "}; initializeMask();"
+                                gr.Markdown(
+                                    "囲みは目印です。範囲外も変わる場合があります。Fで拡大 / Shiftで消す / Ctrl+Zで戻す",
+                                    elem_id="qwen21-guide-help",
                                 )
-                            mask_upload = gr.Image(
-                                label="白＝編集・黒＝保持（編集元と同じサイズ）",
-                                type="filepath",
-                                image_mode=None,
-                                format="png",
-                                sources=["upload", "clipboard"],
-                                interactive=True,
-                                elem_id="qwen21-mask-upload",
-                            )
-                            mask_feather = gr.Slider(0, 64, value=0, step=1, label="境界を内側へぼかす px")
+                            # Keep the Canvas HTML lifecycle mounted. CSS follows
+                            # the checkbox/source radio without remounting its JS.
+                            with gr.Column(min_width=0, elem_id="qwen21-mask-panel"):
+                                mask_source = gr.Radio(
+                                    [("塗って指定", "paint"), ("マスク画像", "upload")],
+                                    value="paint",
+                                    label="編集範囲",
+                                    show_label=False,
+                                    elem_id="qwen21-mask-source",
+                                )
+                                with gr.Group(elem_id="qwen21-mask-paint"):
+                                    gr.Markdown("**変更する部分を塗る / Shiftで消す / Ctrl+Zで取り消し**")
+                                    mask_canvas = ForgeCanvas(
+                                        no_upload=True,
+                                        height=480,
+                                        scribble_color="#38bdf8",
+                                        scribble_color_fixed=True,
+                                        scribble_width=36,
+                                        scribble_alpha=100,
+                                        scribble_alpha_fixed=True,
+                                        scribble_softness_fixed=True,
+                                        numpy=False,
+                                        elem_id="qwen21-mask-editor",
+                                        file_background=True,
+                                    )
+                                    # Gradio deduplicates head scripts by URL. A
+                                    # second HTML component can run before the
+                                    # first component's shared script has loaded.
+                                    mask_canvas.block.js_on_load = (
+                                        "const initializeMask = () => {"
+                                        "if (!element.isConnected) return;"
+                                        "if (typeof ForgeCanvas !== 'function') { setTimeout(initializeMask, 50); return; }"
+                                        + mask_canvas.block.js_on_load
+                                        + "}; initializeMask();"
+                                    )
+                                mask_upload = gr.Image(
+                                    label="白＝編集・黒＝保持（編集元と同じサイズ）",
+                                    type="filepath",
+                                    image_mode=None,
+                                    format="png",
+                                    sources=["upload", "clipboard"],
+                                    interactive=True,
+                                    elem_id="qwen21-mask-upload",
+                                )
+                                mask_feather = gr.Slider(0, 64, value=0, step=1, label="境界を内側へぼかす px")
                 with gr.Group(visible="hidden", elem_id="qwen21-result-tab") as result_view:
                     result_variant = gr.Radio(
                         [("範囲外固定", "preferred"), ("生成そのまま", "original")],
@@ -798,7 +877,7 @@ def on_ui_tabs():
                         type="filepath",
                         image_mode=None,
                         format="png",
-                        height=680,
+                        height=560,
                         interactive=False,
                         buttons=["download", "fullscreen"],
                         elem_id="qwen21-output",
@@ -818,173 +897,264 @@ def on_ui_tabs():
                         visible=gradio_compat.keep_hidden_component_mounted(False),
                     )
                     gr.Markdown("保存先: `outputs/qwen-image-2.1/`")
-                    effective_prompt = gr.Textbox(
-                        label="使用したプロンプト",
+                    with gr.Accordion("使用したプロンプト", open=False):
+                        effective_prompt = gr.Textbox(
+                            label="使用したプロンプト",
+                            lines=4,
+                            max_lines=8,
+                            interactive=False,
+                            buttons=["copy"],
+                            elem_id="qwen21-effective-prompt",
+                        )
+            with gr.Column(scale=0, min_width=340, elem_id="qwen21-controls"):
+                with gr.Column(scale=0, min_width=0, elem_id="qwen21-composer"):
+                    gr.Markdown("### Qwen Image 2.1")
+                    prompt = gr.Textbox(
+                        label="プロンプト・編集指示",
                         lines=4,
-                        max_lines=8,
-                        interactive=False,
-                        buttons=["copy"],
-                        elem_id="qwen21-effective-prompt",
+                        max_lines=6,
+                        placeholder="作りたい画像、または参照画像への変更を入力…",
+                        elem_id="qwen21-prompt",
                     )
-            with gr.Column(scale=3, min_width=280, elem_id="qwen21-controls"):
-                gr.Markdown("### Qwen Image 2.1")
-                prompt = gr.Textbox(
-                    label="プロンプト・編集指示",
-                    lines=4,
-                    max_lines=8,
-                    placeholder="例：赤い囲みの中を消して、背景になじませて。参照なしなら新規生成。",
-                    elem_id="qwen21-prompt",
-                )
-                rewrite_prompt = gr.Checkbox(
-                    value=False,
-                    label="プロンプトを書き換える（4bit）",
-                    info="新規生成用。参照画像がある編集では自動で省略します。",
-                    elem_id="qwen21-rewrite-prompt",
-                )
-                rewrite_edit_prompt = gr.Checkbox(
-                    value=False,
-                    label="編集指示を書き換える（4bit）",
-                    info="参照画像を使う編集用。画像と編集指示から使用するプロンプトを整えます。",
-                    elem_id="qwen21-rewrite-edit-prompt",
-                )
-                with gr.Group():
-                    gr.Markdown("**Fun ControlNet · INT8**")
-                    with gr.Row():
-                        control_kind = gr.Dropdown(
-                            [("OFF", "off"), ("Canny", "canny"), ("Depth", "depth"),
-                             ("Gray", "gray"), ("HED", "hed"), ("Lineart", "lineart"),
-                             ("MLSD", "mlsd"), ("Pose", "pose"), ("Scribble", "scribble")],
-                            value="off", label="制御画像の種類（記録用）",
-                            info="種類に応じた画像を用意してください。自動抽出は行いません。",
+                    with gr.Row(elem_id="qwen21-rewrite-options"):
+                        rewrite_prompt = gr.Checkbox(
+                            value=False,
+                            label="新規生成の書き換え",
+                            elem_id="qwen21-rewrite-prompt",
+                        )
+                        rewrite_edit_prompt = gr.Checkbox(
+                            value=False,
+                            label="編集指示の書き換え",
+                            elem_id="qwen21-rewrite-edit-prompt",
+                        )
+                    with gr.Column(min_width=0, elem_id="qwen21-basics"):
+                        precision = gr.Dropdown(
+                            [
+                                ("通常 · Q4_K_M · 4bit GGUF", "base_q4_k_m"),
+                                ("通常 · W4A8 · 省メモリ", "w4a8"),
+                                ("通常 · INT8 · 拡張対応", "int8"),
+                                ("通常 · BF16 · メモリ大", "bf16"),
+                                ("Turbo · Q4_K_M · 4 steps", "turbo_q4_k_m"),
+                                ("Turbo · BF16 · 4 steps", "turbo_bf16"),
+                            ],
+                            value=selected_precision,
+                            label="モデル・精度",
+                            elem_id="qwen21-precision",
+                            min_width=160,
+                            filterable=False,
+                        )
+                        precision_help = gr.Markdown(
+                            model_guidance(selected_precision), elem_id="qwen21-model-guidance"
+                        )
+                        resolution = gr.Dropdown(
+                            RESOLUTIONS,
+                            value="1024x1024",
+                            label="解像度プリセット",
+                            elem_id="qwen21-resolution",
+                            min_width=160,
+                            filterable=False,
+                        )
+                        with gr.Row(elem_id="qwen21-dimensions"):
+                            width = gr.Number(
+                                value=1024,
+                                precision=0,
+                                minimum=256,
+                                maximum=4096,
+                                step=32,
+                                label="幅 px",
+                                min_width=90,
+                                elem_id="qwen21-width",
+                            )
+                            swap_size = gr.Button(
+                                "縦横入替", size="sm", min_width=70, scale=0, elem_id="qwen21-swap-size"
+                            )
+                            height = gr.Number(
+                                value=1024,
+                                precision=0,
+                                minimum=256,
+                                maximum=4096,
+                                step=32,
+                                label="高さ px",
+                                min_width=90,
+                                elem_id="qwen21-height",
+                            )
+                with gr.Column(min_width=0, elem_id="qwen21-settings"):
+                    fun_acc = gr.Checkbox(
+                        value=False,
+                        label="Fun Acc · 4 steps（通常版INT8）",
+                        info="4 stepsで高速生成。細部の再現性は下がる場合があります。",
+                        elem_id="qwen21-fun-acc",
+                    )
+                    steps = gr.Slider(1, 100, value=40, step=1, label="Steps", elem_id="qwen21-steps")
+                    transparent = gr.Checkbox(value=False, label="透過背景を指示（RGBA PNG）")
+                    with gr.Accordion(
+                        "ControlNet · OFF", open=False, elem_id="qwen21-control-section"
+                    ) as control_section:
+                        control_kind = gr.Radio(
+                            [
+                                ("OFF", "off"),
+                                ("Canny", "canny"),
+                                ("Depth", "depth"),
+                                ("Gray", "gray"),
+                                ("HED", "hed"),
+                                ("Lineart", "lineart"),
+                                ("MLSD", "mlsd"),
+                                ("Pose", "pose"),
+                                ("Scribble", "scribble"),
+                            ],
+                            value="off",
+                            label="ControlNet · 通常版INT8",
                             elem_id="qwen21-control-kind",
                         )
-                        control_strength = gr.Slider(0, 2, value=1, step=0.05, label="制御の強さ")
-                    control_image = gr.Image(
-                        label="前処理済みの制御画像", type="filepath", image_mode="RGB",
-                        sources=["upload", "clipboard"], interactive=True, height=180,
-                        elem_id="qwen21-control-image",
+                        with gr.Group(visible="hidden", elem_id="qwen21-control-options") as control_options:
+                            control_strength = gr.Slider(0, 2, value=1, step=0.05, label="制御の強さ")
+                            control_image = gr.Image(
+                                label="前処理済みの制御画像",
+                                type="filepath",
+                                image_mode="RGB",
+                                sources=["upload", "clipboard"],
+                                interactive=True,
+                                height=180,
+                                elem_id="qwen21-control-image",
+                            )
+                            gr.Markdown("種類に応じた制御画像を用意してください。自動抽出は行いません。")
+                    with gr.Accordion("生成設定", open=False, elem_id="qwen21-advanced"):
+                        memory_mode = gr.Radio(
+                            [("CPUへ退避 · VRAM節約", "offload"), ("GPUに配置", "gpu")],
+                            value="offload",
+                            label="モデルの配置",
+                        )
+                        seed = gr.Textbox(value="-1", label="Seed（-1: 毎回ランダム）")
+                        from modules_forge.jev_sparse.qwen21_integration import launch_defaults
+
+                        sparse_defaults = launch_defaults()
+                        sparse_mode = gr.Dropdown(
+                            [
+                                ("OFF · 通常生成", "off"),
+                                ("Dense · 速度計測", "dense"),
+                                ("固定Sparse · 通信なし", "fixed"),
+                                ("数値ルール · 通信なし", "rules"),
+                                ("Jev速度優先 · 集約統計を外部送信", "jev"),
+                            ],
+                            value="off" if selected_precision == "base_q4_k_m" else sparse_defaults.mode,
+                            interactive=selected_precision != "base_q4_k_m",
+                            label="Sparse Attention",
+                            elem_id="qwen21-sparse-mode",
+                            info="Jevは保存済みのキーを使用します。画像・プロンプトは送信しません。方式の変更は次の生成から適用します。",
+                        )
+                        sparse_keep = gr.Slider(
+                            1,
+                            100,
+                            value=sparse_defaults.keep_percent,
+                            step=1,
+                            label="固定Sparseの保持率 %",
+                            visible=selected_precision != "base_q4_k_m" and sparse_defaults.mode == "fixed",
+                        )
+                        sparse_mode.change(
+                            lambda mode: gr.update(visible=mode == "fixed"),
+                            inputs=sparse_mode,
+                            outputs=sparse_keep,
+                            **PRIVATE,
+                        )
+                        from modules_forge.jev_sparse.ui import budget_controls, decision_controls
+
+                        sparse_cadence, sparse_interval = decision_controls("qwen21", sparse_mode)
+                        sparse_max_calls, sparse_max_wait = budget_controls(
+                            "qwen21", sparse_mode, steps=steps, cadence=sparse_cadence, interval=sparse_interval
+                        )
+                        gr.Markdown(
+                            "Jevのstepはモデル評価単位です。最初の判定に必要な統計を集めた後、指定した頻度で更新します。"
+                        )
+                        gr.Markdown("2K・複数参照・BF16は必要メモリが増えます。最初は1024px程度で確認してください。")
+                    with gr.Accordion("実行環境・初回準備", open=False, elem_id="qwen21-environment"):
+                        gr.Markdown(
+                            "通常版: [Unsloth Q4_K_M](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF)"
+                            " · Turbo: [Viggle BF16](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo)"
+                            " · [Q4_K_M GGUF](https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF)"
+                        )
+                        with gr.Row():
+                            save_model = gr.Button(
+                                "変換モデルを保存",
+                                size="sm",
+                                interactive=selected_precision in {"int8", "w4a8"},
+                                elem_id="qwen21-save-model",
+                            )
+                            stop_save = gr.Button("保存を停止", size="sm", visible=False, elem_id="qwen21-stop-save")
+                        save_status = gr.Textbox(
+                            value=saved_status(RUNTIME, selected_precision),
+                            label="モデルの保存状態",
+                            show_label=False,
+                            interactive=False,
+                            lines=2,
+                            elem_id="qwen21-save-status",
+                        )
+                        from modules_forge.jev_sparse.ui import credential_controls
+
+                        credential_controls("qwen21")
+                        gr.Markdown("初回は `aikimi-qwen-image21-setup.bat` で専用環境とモデルを準備します。")
+                        gr.Markdown("公式フル版 (INT8 / W4A8 / BF16): `aikimi-qwen-image21-setup.bat --official-full`")
+                        gr.Markdown("Turbo BF16: `aikimi-qwen-image21-setup.bat --turbo-bf16-only`")
+                        gr.Markdown("Turbo Q4_K_M: `aikimi-qwen-image21-setup.bat --turbo-q4-only`")
+                        gr.Markdown("書き換えを追加: `aikimi-qwen-image21-setup.bat --prompt-rewriter-only`")
+                        gr.Markdown(
+                            "編集用の書き換えを追加: `aikimi-qwen-image21-setup.bat --edit-prompt-rewriter-only`"
+                        )
+                        gr.Markdown(
+                            "Fun ControlNet INT8: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_controlnet.py --download`"
+                        )
+                        gr.Markdown(
+                            "Fun Acc 4-step LoRA: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_acc_lora.py --download`"
+                        )
+                        check = gr.Button("導入状態を確認", size="sm")
+                        environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=8)
+                with gr.Column(scale=0, min_width=0, elem_id="qwen21-run-dock"):
+                    settings_summary = gr.Markdown(
+                        generation_summary(selected_precision, 40, "1024x1024"), elem_id="qwen21-settings-summary"
                     )
-                    control_inpaint = gr.Checkbox(
-                        value=False,
-                        label="Inpainting＋Control（マスクをモデルへ渡す）",
-                        info="参照画像を開き、編集範囲をマスクで指定します。白い部分を再生成します。",
-                        elem_id="qwen21-control-inpaint",
+                    with gr.Row(elem_id="qwen21-actions"):
+                        generate = gr.Button("生成・編集", variant="primary", elem_id="qwen21-generate")
+                        stop = gr.Button("停止", interactive=False, elem_id="qwen21-stop", min_width=64, scale=0)
+                    status = gr.Textbox(
+                        value="未実行",
+                        label="進行状況",
+                        show_label=False,
+                        lines=1,
+                        max_lines=3,
+                        interactive=False,
+                        elem_id="qwen21-status",
                     )
-                    gr.Markdown("通常版INT8で利用。導入: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_controlnet.py --download`")
-                with gr.Row():
-                    generate = gr.Button("生成・編集", variant="primary", elem_id="qwen21-generate")
-                    stop = gr.Button("停止", interactive=False, elem_id="qwen21-stop")
-                status = gr.Textbox(
-                    value="未実行", label="進行状況", lines=2, interactive=False, elem_id="qwen21-status"
-                )
-                precision = gr.Radio(
-                    [
-                        ("通常 · Q4_K_M (Unsloth)", "base_q4_k_m"),
-                        ("通常 · INT8", "int8"),
-                        ("通常 · W4A8", "w4a8"),
-                        ("通常 · BF16", "bf16"),
-                        ("Viggle Turbo · BF16", "turbo_bf16"),
-                        ("Viggle Turbo · Q4_K_M", "turbo_q4_k_m"),
-                    ],
-                    value=selected_precision,
-                    label="モデル・精度",
-                    elem_id="qwen21-precision",
-                )
-                fun_acc = gr.Checkbox(
-                    value=False,
-                    label="Fun Acc · 4 steps（通常版INT8）",
-                    info="4回の推論で生成・編集します。小さな文字や細部は通常版より崩れる場合があります。",
-                    elem_id="qwen21-fun-acc",
-                )
-                steps = gr.Slider(1, 100, value=40, step=1, label="Steps", elem_id="qwen21-steps")
-                gr.Markdown(
-                    "通常版: [Unsloth Q4_K_M](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF)"
-                    " · Turbo: [Viggle BF16](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo)"
-                    " · [Q4_K_M GGUF](https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF)"
-                )
-                with gr.Row():
-                    save_model = gr.Button(
-                        "変換モデルを保存",
-                        size="sm",
-                        interactive=selected_precision in {"int8", "w4a8"},
-                        elem_id="qwen21-save-model",
-                    )
-                    stop_save = gr.Button("保存を停止", size="sm", visible=False, elem_id="qwen21-stop-save")
-                save_status = gr.Textbox(
-                    value=saved_status(RUNTIME, selected_precision),
-                    label="モデルの保存状態",
-                    show_label=False,
-                    interactive=False,
-                    lines=2,
-                    elem_id="qwen21-save-status",
-                )
                 assistant = gr.HTML(visible="hidden", elem_id="qwen21-assistant-state")
-                resolution = gr.Dropdown(
-                    RESOLUTIONS, value="1024x1024", label="出力サイズ", elem_id="qwen21-resolution"
-                )
-                transparent = gr.Checkbox(value=False, label="透過背景を指示（RGBA PNG）")
-                with gr.Accordion("生成設定", open=False):
-                    memory_mode = gr.Radio(
-                        [("CPUへ退避 · VRAM節約", "offload"), ("GPUに配置", "gpu")],
-                        value="offload",
-                        label="モデルの配置",
-                    )
-                    seed = gr.Textbox(value="-1", label="Seed（-1: 毎回ランダム）")
-                    from modules_forge.jev_sparse.qwen21_integration import launch_defaults
-
-                    sparse_defaults = launch_defaults()
-                    sparse_mode = gr.Dropdown(
-                        [
-                            ("OFF · 通常生成", "off"),
-                            ("Dense · 速度計測", "dense"),
-                            ("固定Sparse · 通信なし", "fixed"),
-                            ("数値ルール · 通信なし", "rules"),
-                            ("Jev速度優先 · 集約統計を外部送信", "jev"),
-                        ],
-                        value="off" if selected_precision == "base_q4_k_m" else sparse_defaults.mode,
-                        interactive=selected_precision != "base_q4_k_m",
-                        label="Sparse Attention",
-                        elem_id="qwen21-sparse-mode",
-                        info="Jevは保存済みのキーを使用します。画像・プロンプトは送信しません。方式の変更は次の生成から適用します。",
-                    )
-                    sparse_keep = gr.Slider(
-                        1,
-                        100,
-                        value=sparse_defaults.keep_percent,
-                        step=1,
-                        label="固定Sparseの保持率 %",
-                        visible=selected_precision != "base_q4_k_m" and sparse_defaults.mode == "fixed",
-                    )
-                    sparse_mode.change(
-                        lambda mode: gr.update(visible=mode == "fixed"),
-                        inputs=sparse_mode,
-                        outputs=sparse_keep,
-                        **PRIVATE,
-                    )
-                    from modules_forge.jev_sparse.ui import budget_controls, decision_controls
-
-                    sparse_cadence, sparse_interval = decision_controls("qwen21", sparse_mode)
-                    sparse_max_calls, sparse_max_wait = budget_controls(
-                        "qwen21", sparse_mode, steps=steps, cadence=sparse_cadence, interval=sparse_interval
-                    )
-                    gr.Markdown(
-                        "Jevのstepはモデル評価単位です。最初の判定に必要な統計を集めた後、指定した頻度で更新します。"
-                    )
-                    gr.Markdown("2K・複数参照・BF16は必要メモリが増えます。最初は1024px程度で確認してください。")
-                with gr.Accordion("実行環境", open=False):
-                    from modules_forge.jev_sparse.ui import credential_controls
-
-                    credential_controls("qwen21")
-                    gr.Markdown("初回は `aikimi-qwen-image21-setup.bat` で専用環境とモデルを準備します。")
-                    gr.Markdown("公式フル版 (INT8 / W4A8 / BF16): `aikimi-qwen-image21-setup.bat --official-full`")
-                    gr.Markdown("Turbo BF16: `aikimi-qwen-image21-setup.bat --turbo-bf16-only`")
-                    gr.Markdown("Turbo Q4_K_M: `aikimi-qwen-image21-setup.bat --turbo-q4-only`")
-                    gr.Markdown("書き換えを追加: `aikimi-qwen-image21-setup.bat --prompt-rewriter-only`")
-                    gr.Markdown("編集用の書き換えを追加: `aikimi-qwen-image21-setup.bat --edit-prompt-rewriter-only`")
-                    gr.Markdown("Fun ControlNet INT8: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_controlnet.py --download`")
-                    gr.Markdown("Fun Acc 4-step LoRA: `models\\Qwen-Image-2.1\\worker-env\\Scripts\\python.exe tools\\prepare_qwen21_fun_acc_lora.py --download`")
-                    check = gr.Button("導入状態を確認", size="sm")
-                    environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=8)
+        control_kind.change(
+            lambda kind: (
+                gr.update(visible=True if kind != "off" else "hidden"),
+                gr.update(label=f"ControlNet · {kind.upper()}"),
+            ),
+            inputs=control_kind,
+            outputs=[control_options, control_section],
+            **PRIVATE,
+        )
+        precision.change(model_guidance, inputs=precision, outputs=precision_help, **PRIVATE)
+        resolution.change(resolution_settings, inputs=resolution, outputs=[width, height, swap_size], **PRIVATE)
+        for component in (width, height):
+            component.input(lambda: "custom", outputs=resolution, **PRIVATE)
+        swap_size.click(
+            lambda w, h: (h, w, "custom"), inputs=[width, height], outputs=[width, height, resolution], **PRIVATE
+        )
+        for component in (precision, steps, resolution, width, height):
+            component.change(
+                generation_summary,
+                inputs=[precision, steps, resolution, width, height],
+                outputs=settings_summary,
+                **PRIVATE,
+            )
+        for component in (preserve_unmasked, control_inpaint):
+            component.input(
+                lambda preserve, inpaint: "mask" if preserve or inpaint else "guide",
+                inputs=[preserve_unmasked, control_inpaint],
+                outputs=layer_view,
+                queue=False,
+                **PRIVATE,
+            )
         job, selected, annotation_target = gr.State(""), gr.State(-1), gr.State("")
         mask_target, variant_job = gr.State(""), gr.State("")
         back, forward = gr.State(-1), gr.State(1)
@@ -1009,7 +1179,10 @@ def on_ui_tabs():
         stop_save.click(cancel, inputs=save_job, outputs=[save_status, stop_save], queue=False, **PRIVATE)
         precision.change(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
         precision.change(
-            profile_settings, inputs=[precision, profile_state, fun_acc], outputs=[steps, sparse_mode, profile_state], **PRIVATE
+            profile_settings,
+            inputs=[precision, profile_state, fun_acc],
+            outputs=[steps, sparse_mode, profile_state],
+            **PRIVATE,
         )
         fun_acc.change(
             fun_acc_settings,
@@ -1054,6 +1227,8 @@ def on_ui_tabs():
                 control_strength,
                 control_inpaint,
                 fun_acc,
+                width,
+                height,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,

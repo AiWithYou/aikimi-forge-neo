@@ -390,6 +390,7 @@ class UITests(unittest.TestCase):
     def test_real_gradio_component_graph_without_starting_backend(self):
         if importlib.util.find_spec("gradio") is None:
             self.skipTest("Gradio is not installed in this CPU test environment.")
+        import modules.aikimi_status  # Real lightweight status helper, before replacing the modules package.
         callbacks = SimpleNamespace(on_ui_tabs=Mock())
         modules = types.ModuleType("modules")
         modules.script_callbacks = callbacks

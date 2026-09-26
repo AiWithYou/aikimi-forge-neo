@@ -1,5 +1,7 @@
 # SenseNova U1.5 Studio
 
+**v3.0.0の寸法指定：** 解像度プリセットに加えて幅・高さを直接入力でき、縦横入替も使えます。各辺512〜4096 px・32の倍数です。選択したVRAMモードの画素数制限も適用されます。編集時の自動解像度を選ぶと、数値欄は無効になり入力画像の比率から決めます。
+
 SenseNova U1.5 Studioは、正式版の[sensenova/SenseNova-U1.5-8B-MoT](https://huggingface.co/sensenova/SenseNova-U1.5-8B-MoT)をAikimi Forge Neoから実行する専用GUIです。テキスト生成と、単一または複数の参照画像を使った画像編集に対応します。
 
 既定のweightは、正式版を基にしたコミュニティ配布のINT8 ConvRotです。SenseNova固有の画像token化、画像decoder、三分岐guidance、生成ループを保つため、Forgeの通常checkpointやKSamplerには接続しません。Forgeは入力検証、画面、保存、キャンセルを担当し、生成は隔離workerが専用ランタイムを使って実行します。

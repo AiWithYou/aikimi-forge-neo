@@ -31,10 +31,15 @@ class PresetArch(Enum):
 
 
 DEFAULT_CHECKPOINTS = {
+    PresetArch.anima: "Anima-3.8B-v1.1-int8-convrot.safetensors",
     PresetArch.krea: "krea2_turbo_int8_convrot.safetensors",
 }
 
 DEFAULT_ADDITIONAL_MODULES = {
+    PresetArch.anima: (
+        "qwen_image_vae.safetensors",
+        "qwen_3_06b_base.safetensors",
+    ),
     PresetArch.krea: (
         "qwen_image_vae.safetensors",
         "qwen3vl_4b_fp8_scaled.safetensors",
