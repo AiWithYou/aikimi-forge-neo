@@ -1,5 +1,11 @@
 # 変更履歴
 
+## v2.4.0 — 2026-09-26
+
+- [well9472/Nanosaur2-670M](https://huggingface.co/well9472/Nanosaur2-670M)を専用タブで利用可能にしました。作者のComfyUIノード・3つの重みを固定リビジョンとSHA-256で導入し、Euler/simple・alternate CFG/PDGのテキスト画像生成をPNGと条件JSONへ保存します。
+- Nanosaur2専用のComfyUI・Python環境を準備するセットアップを追加し、H3環境やH3モデルへの依存を避けました。RTX 3090で実際の画像生成を確認し、[作例と条件](extensions-builtin/nanosaur2-studio/README.md)を掲載しました。
+- `--uv`で依存関係を導入する際、`python -m pip`の実行元Pythonを維持し、PATH上の別環境が選ばれる問題を修正しました。
+
 ## v2.3.0 — 2026-09-25
 
 - Qwen Image 2.1の通常版INT8にAlibaba PAIのFun Acc 4-step PDD LoRAを追加。生成・参照画像編集で専用スケジューラとstepコールバックを使い、画面のチェックで通常版と切り替えます。
