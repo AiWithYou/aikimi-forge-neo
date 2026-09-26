@@ -103,14 +103,18 @@ class Studio:
             try:
                 installed(self.runtime)
             except (OSError, ValueError) as exc:
-                raise QwenImage21Error("Fun Acc 4-step LoRAが未導入か不完全です。導入コマンドを実行してください。") from exc
+                raise QwenImage21Error(
+                    "Fun Acc 4-step LoRAが未導入か不完全です。導入コマンドを実行してください。"
+                ) from exc
         if request.control_kind != "off":
             from .fun_controlnet import installed
 
             try:
                 installed(self.runtime)
             except (OSError, ValueError) as exc:
-                raise QwenImage21Error("Fun ControlNet INT8が未導入か不完全です。導入コマンドを実行してください。") from exc
+                raise QwenImage21Error(
+                    "Fun ControlNet INT8が未導入か不完全です。導入コマンドを実行してください。"
+                ) from exc
         if request.rewrite_prompt and not request.input_images:
             rewriter_manifest(self.runtime)
         if request.rewrite_edit_prompt and request.input_images:

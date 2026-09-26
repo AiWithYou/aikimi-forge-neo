@@ -10,14 +10,20 @@ import torch
 import torch.nn.functional as F
 from diffusers import FlowMatchEulerDiscreteScheduler
 from diffusers.models.transformers.transformer_qwenimage21 import (
-    QwenImage21AttnProcessor, _qwenimage21_prepare_qkv,
+    QwenImage21AttnProcessor,
+    _qwenimage21_prepare_qkv,
 )
 from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import calculate_shift
 from safetensors.torch import load_file
 
 from .lora_utils_pdd import (
-    PDDParallelHead, add_pdd_lora, load_pdd_config, pdd_sampling_plan,
-    pdd_state_dict, pdd_training_plan, resolve_pdd_lora_path,
+    PDDParallelHead,
+    add_pdd_lora,
+    load_pdd_config,
+    pdd_sampling_plan,
+    pdd_state_dict,
+    pdd_training_plan,
+    resolve_pdd_lora_path,
 )
 
 
@@ -40,25 +46,51 @@ PDD_DEFAULT_CONFIG = {
 class QwenImage21FlashAttnProcessor(QwenImage21AttnProcessor):
     """Local FA4 for unpadded T2I; reuse the native processor for other layouts.
 
-Text attends causally to text; target image queries attend to all keys. Keeping
-these two calls separate preserves the native block-causal attention exactly.
-No torch.compile, flex mask compilation, or downloaded kernel is needed.
-"""
+    Text attends causally to text; target image queries attend to all keys. Keeping
+    these two calls separate preserves the native block-causal attention exactly.
+    No torch.compile, flex mask compilation, or downloaded kernel is needed.
+    """
 
-    def __call__(self, attn, hidden_states, attention_mask=None, rotary_emb=None,
-                 layer_cache=None, kv_cache_mode=None, cache_write_slice=None,
-                 segments=None, key_valid=None):
-        if (hidden_states.device.type != "cuda" or attention_mask is not None or key_valid is not None
-                or (segments is not None and (len(segments) != 1 or segments[0][0] != 0 or not segments[0][2]))):
+    def __call__(
+        self,
+        attn,
+        hidden_states,
+        attention_mask=None,
+        rotary_emb=None,
+        layer_cache=None,
+        kv_cache_mode=None,
+        cache_write_slice=None,
+        segments=None,
+        key_valid=None,
+    ):
+        if (
+            hidden_states.device.type != "cuda"
+            or attention_mask is not None
+            or key_valid is not None
+            or (segments is not None and (len(segments) != 1 or segments[0][0] != 0 or not segments[0][2]))
+        ):
             return super().__call__(
-                attn, hidden_states, attention_mask, rotary_emb, layer_cache,
-                kv_cache_mode, cache_write_slice, segments, key_valid,
+                attn,
+                hidden_states,
+                attention_mask,
+                rotary_emb,
+                layer_cache,
+                kv_cache_mode,
+                cache_write_slice,
+                segments,
+                key_valid,
             )
         from flash_attn.cute import flash_attn_func
 
         query, key, value, seq_len = _qwenimage21_prepare_qkv(
-            attn, hidden_states, rotary_emb, layer_cache, kv_cache_mode, cache_write_slice,
+            attn,
+            hidden_states,
+            rotary_emb,
+            layer_cache,
+            kv_cache_mode,
+            cache_write_slice,
         )
+
         def attend(q, k, v, causal=False):
             result = flash_attn_func(q, k, v, causal=causal)
             return result[0] if isinstance(result, tuple) else result
@@ -87,9 +119,9 @@ def attach_parallel_decoder(transformer, num_steps):
 def pdd_block_loss(student, teacher, latents, conditioning, sigmas, start, block_size, target, solver):
     """One on-policy block; detach teacher states and the next block (paper Eq. 11).
 
-The caller backpropagates loss / number_of_blocks, and updates only after whole
-independent trajectories have accumulated. No optimizer state lives here.
-"""
+    The caller backpropagates loss / number_of_blocks, and updates only after whole
+    independent trajectories have accumulated. No optimizer state lives here.
+    """
     head = getattr(student, "module", student).proj_out
     step_sizes = sigmas.diff()
     head.set_plan(pdd_training_plan(step_sizes, start, [target], block_size))
@@ -98,7 +130,7 @@ independent trajectories have accumulated. No optimizer state lives here.
     def predict(model, state, sigma):
         timestep = (sigma * 1000).expand(state.shape[0]).to(dtype) / 1000
         return model(hidden_states=state.to(dtype), timestep=timestep, **conditioning, return_dict=False)[0][
-            :, -state.shape[1]:
+            :, -state.shape[1] :
         ]
 
     output = predict(student, latents, sigmas[start]).unflatten(-1, (3, latents.shape[-1])).float()
@@ -108,7 +140,9 @@ independent trajectories have accumulated. No optimizer state lives here.
         if solver == "midpoint":
             half_step = 0.5 * step_sizes[target]
             target_velocity = predict(
-                teacher, target_state + half_step * target_velocity, sigmas[target] + half_step,
+                teacher,
+                target_state + half_step * target_velocity,
+                sigmas[target] + half_step,
             ).float()
         next_latents = latents.float() + output[:, :, 2].detach()
     loss = F.mse_loss(output[:, :, 1], target_velocity)
@@ -120,13 +154,21 @@ def pdd_time_grid(scheduler, num_steps, image_seq_len, device="cpu"):
     config = scheduler.config
     if config.get("pdd_sigmas") is not None:
         grid = torch.as_tensor(config.pdd_sigmas, dtype=torch.float32, device=device)
-        if (grid.shape != (num_steps + 1,) or not torch.isfinite(grid).all()
-                or grid[0] != 1 or grid[-1] != 0 or not (grid.diff() < 0).all()):
+        if (
+            grid.shape != (num_steps + 1,)
+            or not torch.isfinite(grid).all()
+            or grid[0] != 1
+            or grid[-1] != 0
+            or not (grid.diff() < 0).all()
+        ):
             raise ValueError("Invalid stored PDD sigma grid.")
         return grid
     mu = calculate_shift(
-        image_seq_len, config.get("base_image_seq_len", 256), config.get("max_image_seq_len", 4096),
-        config.get("base_shift", 0.5), config.get("max_shift", 1.15),
+        image_seq_len,
+        config.get("base_image_seq_len", 256),
+        config.get("max_image_seq_len", 4096),
+        config.get("base_shift", 0.5),
+        config.get("max_shift", 1.15),
     )
     scheduler.set_timesteps(sigmas=np.linspace(1.0, 1.0 / num_steps, num_steps), mu=mu, device=device)
     return scheduler.sigmas.clone()
@@ -135,10 +177,10 @@ def pdd_time_grid(scheduler, num_steps, image_seq_len, device="cpu"):
 class QwenImage21PDDScheduler(FlowMatchEulerDiscreteScheduler):
     """Euler on the exact block boundaries of the native N-step grid.
 
-Register pdd_num_steps and pdd_block_size in the config before use. The native
-pipeline supplies its resolution-dependent mu. Building an ordinary 4-step
-schedule, or shifting already-shifted sigmas again, would use a different grid.
-"""
+    Register pdd_num_steps and pdd_block_size in the config before use. The native
+    pipeline supplies its resolution-dependent mu. Building an ordinary 4-step
+    schedule, or shifting already-shifted sigmas again, would use a different grid.
+    """
 
     def set_timesteps(self, num_inference_steps=None, device=None, sigmas=None, mu=None, timesteps=None):
         num_steps, block = self.config.pdd_num_steps, self.config.pdd_block_size
@@ -187,8 +229,11 @@ def load_pdd_lora(transformer, path):
     converted = config["pdd_export_format"] == "qwenimage21_extracted_prefused_v1"
     if config["pdd_export_format"] is not None and not converted:
         raise ValueError("Unknown PDD export format.")
-    if converted and (not config["pdd_inference_only"] or config["pdd_block_size"] != 1
-                      or config["pdd_sampling_precision"] != "native_time_fp32_state"):
+    if converted and (
+        not config["pdd_inference_only"]
+        or config["pdd_block_size"] != 1
+        or config["pdd_sampling_precision"] != "native_time_fp32_state"
+    ):
         raise ValueError("A converted bundle requires inference-only, single-interval fused heads.")
     if isinstance(transformer.proj_out, PDDParallelHead):
         raise ValueError("Load PDD on an unmodified base transformer.")

@@ -71,7 +71,9 @@ def clear_runtime() -> None:
         torch.cuda.empty_cache()
 
 
-def _cache_key(model_path: Path, precision: str, memory_mode: str, control: bool = False, fun_acc: bool = False) -> tuple:
+def _cache_key(
+    model_path: Path, precision: str, memory_mode: str, control: bool = False, fun_acc: bool = False
+) -> tuple:
     # Include weight shards as well as configs: overwriting files in the same
     # directory must not silently reuse an older resident checkpoint.
     metadata = tuple(
@@ -108,8 +110,11 @@ def _cache_key(model_path: Path, precision: str, memory_mode: str, control: bool
         path = Path(info["path"])
         config_path = adapter_dir(model_path.parent) / CONFIG
         adapter = (
-            str(path), path.stat().st_size, path.stat().st_mtime_ns,
-            config_path.stat().st_size, config_path.stat().st_mtime_ns,
+            str(path),
+            path.stat().st_size,
+            path.stat().st_mtime_ns,
+            config_path.stat().st_size,
+            config_path.stat().st_mtime_ns,
         )
     return str(model_path), precision, memory_mode, metadata, manifests, turbo, regular, patch, adapter
 
@@ -207,14 +212,23 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     if control_image:
         if fun_acc:
             raise ValueError("Fun Acc cannot be combined with Fun ControlNet.")
-        if not isinstance(control_image, str) or not Path(control_image).is_absolute() or not Path(control_image).is_file():
+        if (
+            not isinstance(control_image, str)
+            or not Path(control_image).is_absolute()
+            or not Path(control_image).is_file()
+        ):
             raise ValueError("ControlNet requires an existing absolute local image path.")
         if request["precision"] != "int8":
             raise ValueError("Fun ControlNet INT8 requires the regular Qwen INT8 base model.")
         if request.get("sparse_mode", "off") != "off":
             raise ValueError("Fun ControlNet requires Sparse Attention to be off.")
     strength = request.get("control_strength", 1.0)
-    if isinstance(strength, bool) or not isinstance(strength, (int, float)) or not math.isfinite(strength) or not 0 <= strength <= 2:
+    if (
+        isinstance(strength, bool)
+        or not isinstance(strength, (int, float))
+        or not math.isfinite(strength)
+        or not 0 <= strength <= 2
+    ):
         raise ValueError("control_strength must be between 0 and 2.")
     request["control_image"] = control_image
     request["control_strength"] = float(strength)
@@ -504,8 +518,11 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
 def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -> tuple[dict[str, Any], bool]:
     global _RESIDENT_RUNTIME, _RESIDENT_KEY
     key = _cache_key(
-        model_path, request["precision"], request["memory_mode"],
-        bool(request.get("control_image")), request.get("fun_acc", False),
+        model_path,
+        request["precision"],
+        request["memory_mode"],
+        bool(request.get("control_image")),
+        request.get("fun_acc", False),
     )
     if _RESIDENT_RUNTIME is not None and key == _RESIDENT_KEY:
         _progress(job, "loaded", "読み込み済みモデルを再利用", 0.30)
@@ -714,15 +731,17 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                     oriented = ImageOps.exif_transpose(source)
                     inpaint_mask = oriented.convert("L")
                     if "A" in oriented.getbands() or "transparency" in oriented.info:
-                        inpaint_mask = ImageChops.multiply(
-                            inpaint_mask, oriented.convert("RGBA").getchannel("A")
-                        )
+                        inpaint_mask = ImageChops.multiply(inpaint_mask, oriented.convert("RGBA").getchannel("A"))
                 inpaint_source.save(job / "inpaint-source.png")
                 inpaint_mask.save(job / "inpaint-mask.png")
             control_generator = torch.Generator(device="cpu").manual_seed(request["seed"])
             controlnet.set_control(
-                runtime["pipe"], control, request["control_strength"], control_generator,
-                inpaint_image=inpaint_source, mask_image=inpaint_mask,
+                runtime["pipe"],
+                control,
+                request["control_strength"],
+                control_generator,
+                inpaint_image=inpaint_source,
+                mask_image=inpaint_mask,
             )
             control_info = {
                 **installed(model_path.parent),
@@ -730,8 +749,11 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 "strength": request["control_strength"],
                 "image": "control.png",
                 "inpaint": request["control_inpaint"],
-                **({"inpaint_source": "inpaint-source.png", "inpaint_mask": "inpaint-mask.png"}
-                   if request["control_inpaint"] else {}),
+                **(
+                    {"inpaint_source": "inpaint-source.png", "inpaint_mask": "inpaint-mask.png"}
+                    if request["control_inpaint"]
+                    else {}
+                ),
             }
             _check_cancel(job)
         prompt = rewrite["rewritten_prompt"] if rewrite["applied"] else request["prompt"].strip()

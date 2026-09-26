@@ -38,7 +38,10 @@ def _config(runtime: Path) -> dict:
         or config.get("pdd_sampling_precision") != "native_time_fp32_state"
         or not isinstance(sigmas, list)
         or len(sigmas) != 5
-        or any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) for value in sigmas)
+        or any(
+            isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+            for value in sigmas
+        )
         or sigmas[0] != 1
         or sigmas[-1] != 0
         or any(left <= right for left, right in zip(sigmas, sigmas[1:], strict=False))
@@ -64,9 +67,12 @@ def installed(runtime: Path) -> dict:
         raise ValueError("Fun Acc 4-step LoRAが未導入か不完全です。導入コマンドを実行してください。")
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     if not isinstance(receipt, dict) or any(
-        receipt.get(key) != expected for key, expected in (
-            ("repository", REPOSITORY), ("revision", REVISION),
-            ("weights_sha256", WEIGHTS_SHA256), ("config_sha256", CONFIG_SHA256),
+        receipt.get(key) != expected
+        for key, expected in (
+            ("repository", REPOSITORY),
+            ("revision", REVISION),
+            ("weights_sha256", WEIGHTS_SHA256),
+            ("config_sha256", CONFIG_SHA256),
         )
     ):
         raise ValueError("Fun Accの導入記録が配布版と一致しません。導入コマンドを再実行してください。")

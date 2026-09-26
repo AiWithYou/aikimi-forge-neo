@@ -179,7 +179,12 @@ class Request:
         kinds = {"off", "canny", "depth", "gray", "hed", "lineart", "mlsd", "pose", "scribble"}
         if not isinstance(self.control_kind, str) or self.control_kind not in kinds:
             raise QwenImage21Error("Fun ControlNetの条件の種類が不正です。")
-        if isinstance(self.control_strength, bool) or not isinstance(self.control_strength, (int, float)) or not math.isfinite(self.control_strength) or not 0 <= self.control_strength <= 2:
+        if (
+            isinstance(self.control_strength, bool)
+            or not isinstance(self.control_strength, (int, float))
+            or not math.isfinite(self.control_strength)
+            or not 0 <= self.control_strength <= 2
+        ):
             raise QwenImage21Error("Fun ControlNetの強さは0〜2で指定してください。")
         if not isinstance(self.control_inpaint, bool):
             raise QwenImage21Error("Fun ControlNetのInpainting指定が不正です。")

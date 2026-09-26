@@ -48,7 +48,9 @@ def normalize_image(image: Image.Image) -> Image.Image:
     if getattr(image, "n_frames", 1) != 1:
         raise ValueError("アニメーションではなく静止画像を指定してください。")
     if image.mode not in {"1", "L", "LA", "P", "PA", "RGB", "RGBA"}:
-        raise ValueError("入力は8-bitのRGB／RGBA・グレースケール・パレット画像にしてください。16-bit・HDR・CMYKは変換せず拒否します。")
+        raise ValueError(
+            "入力は8-bitのRGB／RGBA・グレースケール・パレット画像にしてください。16-bit・HDR・CMYKは変換せず拒否します。"
+        )
     try:
         result = ImageOps.exif_transpose(image)
         alpha = "A" in result.getbands() or "transparency" in result.info
@@ -120,9 +122,14 @@ def prepare(
     Transparent source pixels are shown over gray *only* in the model reference.
     The untouched RGBA snapshot is used again when stitching.
     """
-    pads = [_integer(value, name, 0, MAX_SIDE) for name, value in zip(
-        ("左", "上", "右", "下"), (left, top, right, bottom), strict=True,
-    )]
+    pads = [
+        _integer(value, name, 0, MAX_SIDE)
+        for name, value in zip(
+            ("左", "上", "右", "下"),
+            (left, top, right, bottom),
+            strict=True,
+        )
+    ]
     source = normalize_image(source)
     left, top, right, bottom = pads
     left, right = _align_axis(source.width, left, right, "幅")
@@ -182,11 +189,17 @@ def _feather_mask(plan: Plan, feather: int) -> Image.Image:
         return Image.new("L", (width, height), 255)
 
     def ramp(length: int, before: bool, after: bool) -> list[int]:
-        return [round(255 * min(
-            1.0,
-            i / feather if before else 1.0,
-            (length - 1 - i) / feather if after else 1.0,
-        )) for i in range(length)]
+        return [
+            round(
+                255
+                * min(
+                    1.0,
+                    i / feather if before else 1.0,
+                    (length - 1 - i) / feather if after else 1.0,
+                )
+            )
+            for i in range(length)
+        ]
 
     horizontal = Image.new("L", (width, 1))
     horizontal.putdata(ramp(width, bool(plan.left), bool(plan.right)))
