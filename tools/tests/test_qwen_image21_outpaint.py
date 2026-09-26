@@ -65,6 +65,7 @@ class GeometryTests(unittest.TestCase):
     def test_integral_gradio_floats_normalized(self):
         _, _, plan = prepare(self.source, 32.0, 0.0, 0.0, 0.0)
         self.assertIs(type(plan.left), int)
+        self.assertIsInstance(plan, Plan)
 
     def test_large_canvas_rejected_before_allocation(self):
         with self.assertRaisesRegex(ValueError, "2 MP"):
