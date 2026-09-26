@@ -285,9 +285,7 @@ def merge_pdd_lora(module: nn.Module) -> int:
         base = adapter.base
         with torch.no_grad():
             weight = base.weight
-            delta = adapter.scaling * (
-                adapter.lora_up.to(weight.device) @ adapter.lora_down.to(weight.device)
-            )
+            delta = adapter.scaling * (adapter.lora_up.to(weight.device) @ adapter.lora_down.to(weight.device))
             weight.data = (weight.data.to(delta.dtype) + delta).to(weight.dtype)
         setattr(parent, attribute, base)
     return len(adapters)

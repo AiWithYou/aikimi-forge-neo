@@ -27,11 +27,7 @@ def validate_header(header: dict) -> dict:
         raise ValueError("Qwen 2.1用の129ch制御入力がありません。")
     if header.get("control_img_in.weight", {}).get("dtype") != "BF16":
         raise ValueError("制御入力の精度が一致しません。")
-    indices = {
-        int(match.group(1))
-        for key in header
-        if (match := re.match(r"control_blocks\.(\d+)\.", key))
-    }
+    indices = {int(match.group(1)) for key in header if (match := re.match(r"control_blocks\.(\d+)\.", key))}
     if indices != set(range(16)):
         raise ValueError("16個のControlNetブロックが必要です。")
     quantized = 0
