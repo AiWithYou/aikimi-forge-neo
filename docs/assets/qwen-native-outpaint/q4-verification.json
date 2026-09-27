@@ -1,0 +1,21 @@
+{
+  "job": "648ffe5afef3453ab9f6a6bf4029e583",
+  "precision": "base_q4_k_m",
+  "size": [
+    992,
+    512
+  ],
+  "steps": 25,
+  "seed": 2872163182818360273,
+  "feather": 32,
+  "source_interior_exact_rgba": true,
+  "feather_composition_exact": true,
+  "browser_download_exact": true,
+  "previous_download_retained_after_cancel": true,
+  "cancel_has_no_success_marker": true,
+  "resident_model_reused_before_cancel": true,
+  "output_sha256": "78c5e13350e82784c7860172520d7b9645a59662236a3b069cbf7d1d7b4453e4",
+  "load_seconds": 230.652,
+  "sampling_seconds": 42.153,
+  "elapsed_seconds": 285.524
+}

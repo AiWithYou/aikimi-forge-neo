@@ -1,0 +1,24 @@
+{
+  "job": "2717e056ffb74070bf67f5b0bbcc1e0c",
+  "size": [
+    992,
+    512
+  ],
+  "source_region_exact_rgba": true,
+  "browser_download_exact": true,
+  "output_sha256": "3b3da8850931a4f4bccaa89eb326f7e38bb96f3bd24d1208cef1339932cbc948",
+  "source_tensors": 384,
+  "mapped_layers": 224,
+  "fused_split_max_error": 0.0,
+  "linear_delta_exact": true,
+  "base_weights_unchanged": true,
+  "reference_dimensions_verified": true,
+  "precision": "int8",
+  "steps": 25,
+  "seed": 3754468591355491302,
+  "feather": 0,
+  "adapter_revision": "449336db42ff074aee970ba0facc0ac0feb77863",
+  "load_seconds": 495.17,
+  "sampling_seconds": 35.056,
+  "elapsed_seconds": 549.702
+}

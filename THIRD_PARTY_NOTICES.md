@@ -70,3 +70,11 @@ See [integration guide](docs/cd-tuner-negpip.md) for limitations and verificatio
 ## ComfyUI MiniMax H3 compiler patch
 
 The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comfy-Org/ComfyUI) revisions `efa6c8f804bff78b46a0fd458ebd2e47bba07a30` and `912fca4f39b875a0360f2c5170568176ea813ded`, distributed under GPL-3.0. They adjust the H3 compiler recording boundary and include regression tests. The separately installed official comfy-aimdo CI wheel is identified by source revision and SHA-256 in `runtime-provenance.json`; no wheel or model weights are bundled.
+
+
+## ausboss Qwen Image 2.1 Outpaint LoRA
+
+- Source: [ausboss/Qwen-Image-2.1-Outpaint-LoRA](https://huggingface.co/ausboss/Qwen-Image-2.1-Outpaint-LoRA/tree/449336db42ff074aee970ba0facc0ac0feb77863), revision `449336db42ff074aee970ba0facc0ac0feb77863`.
+- Optional v1/v2 weights are downloaded separately and verified by SHA-256; model weights are not committed to this repository.
+- The author's [model card and license statement](https://huggingface.co/ausboss/Qwen-Image-2.1-Outpaint-LoRA/blob/449336db42ff074aee970ba0facc0ac0feb77863/README.md#license) apply the Qwen Research License to use with the Qwen base model.
+- The Forge integration maps the adapter's fused gate/up rows to native Diffusers projections and adds low-rank residuals without modifying the quantized base weights. It uses the existing Qwen worker and does not require ComfyUI.

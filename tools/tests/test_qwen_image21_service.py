@@ -318,6 +318,25 @@ class QwenServiceTests(unittest.TestCase):
         self.assertTrue(self.worker.closed.is_set())
         core.runtime_lock(self.runtime).close()
 
+    def test_outpaint_snapshots_are_owned_by_the_same_service(self):
+        source = self.root / "outpaint-upload.png"
+        Image.new("RGB", (224, 256), (14, 28, 42)).save(source)
+        with patch("modules_forge.qwen_image21.outpaint_lora.installed", return_value={}):
+            identifier = self.studio.start(
+                self.request(input_images=(str(source),), outpaint_version="v2", outpaint_margins=(16, 0, 16, 0)),
+                "owner",
+            )
+        source.unlink()
+        self.assertEqual(self.wait_done(identifier)["state"], "complete")
+        payload = core.read_json(self.root / "outputs" / identifier / "request.json")
+        from modules_forge.qwen_image21.outpaint_native import validate_snapshot
+
+        validate_snapshot(payload, self.root / "outputs" / identifier)
+        self.assertEqual(len(payload["input_images"]), 1)
+        self.assertEqual(Path(payload["input_images"][0]).name, "outpaint-reference.png")
+        with self.assertRaises(service.JobNotFound):
+            self.studio.artifact(identifier, "another-browser")
+
     def test_validation_happens_before_gpu_acquisition(self):
         with self.assertRaises(core.QwenImage21Error):
             self.studio.start(self.request(input_images=(str(self.root / "missing.png"),)), "owner")

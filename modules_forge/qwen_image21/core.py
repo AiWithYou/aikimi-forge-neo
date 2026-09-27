@@ -138,6 +138,9 @@ class Request:
     control_inpaint: bool = False
     fun_acc: bool = False
     operation: str = "generate"
+    outpaint_version: str = ""
+    outpaint_margins: tuple[int, int, int, int] = (0, 0, 0, 0)
+    outpaint_feather: int = 32
 
     def resolved(self) -> Request:
         if self.operation not in {"generate", "prepare"}:
@@ -213,6 +216,15 @@ class Request:
         except ValueError as exc:
             raise QwenImage21Error(str(exc)) from None
         inputs = validate_images(self.input_images)
+        from .outpaint_native import source_plan, validate_options
+
+        outpaint_values = {**self.to_dict(), "width": width, "height": height, "input_images": inputs}
+        try:
+            validate_options(outpaint_values)
+            if self.outpaint_version:
+                source_plan(inputs[0], outpaint_values)
+        except (OSError, ValueError) as exc:
+            raise QwenImage21Error(str(exc)) from exc
         reference = integer(self.annotation_reference, "描画対象", -1, MAX_REFERENCE_IMAGES - 1)
         if not isinstance(self.annotation_layers, (list, tuple)):
             raise QwenImage21Error("描画レイヤーの形式が不正です。")

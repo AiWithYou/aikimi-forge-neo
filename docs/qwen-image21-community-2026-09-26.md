@@ -1,5 +1,7 @@
 # Qwen Image 2.1: community features and Outpaint helper
 
+> **2026-09-27追記:** 以下は導入前の調査・手動補助方式の記録です。その後、既存QwenのworkerにOutpaint LoRAの読み込み・生成・合成を実装しました。現在の操作と実生成は[ネイティブOutpaintの検証記録](audits/2026-09-27-native-qwen-outpaint.md)を参照してください。以下の「外部ComfyUIが必要」「推論未実装」は当時の状態です。
+
 調査日: **2026-09-26**。実装比較の基準: `neo` の `7211f19e7add9085374102d7c9870f2693e97945`。
 
 ## 今回の変更と境界

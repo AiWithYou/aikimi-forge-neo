@@ -1,0 +1,7 @@
+{
+  "version": "v1",
+  "sha256": "201ab351b54c3e5d208c91a129011e7e490efdd13e40d89befc4c1f0ca7eb177",
+  "source_tensors": 384,
+  "mapped_layers": 224,
+  "gpu_generation_tested": false
+}
