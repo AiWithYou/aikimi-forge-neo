@@ -31,6 +31,18 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKER = ROOT / "tools" / "qwen_image21_worker.py"
 ENGINE = "qwen_image21"
 MAX_FINISHED_JOBS = 64
+_SHARED_STUDIOS = {}
+_SHARED_GUARD = threading.Lock()
+
+
+def get_studio(runtime: Path, outputs: Path):
+    """Qwen generation and Outpaint tabs share one queue and resident worker."""
+    key = (Path(runtime).resolve(), Path(outputs).resolve())
+    with _SHARED_GUARD:
+        studio = _SHARED_STUDIOS.get(key)
+        if studio is None or studio._closed:
+            studio = _SHARED_STUDIOS[key] = Studio(*key)
+        return studio
 
 
 class JobNotFound(QwenImage21Error):
@@ -97,6 +109,10 @@ class Studio:
         if not isinstance(owner, str) or not owner:
             raise QwenImage21Error("ブラウザーのQwen Image 2.1タブから操作してください。")
         runtime_manifest(self.runtime, request.precision)
+        if request.outpaint_version:
+            from .outpaint_lora import installed
+
+            installed(self.runtime, request.outpaint_version)
         if request.fun_acc:
             from .fun_acc_lora import installed
 
@@ -174,6 +190,10 @@ class Studio:
                     else {}
                 )
                 payload["edit_mask_path"] = payload["edit_mask"].get("mask_path", "")
+                if request.outpaint_version:
+                    from .outpaint_native import snapshot
+
+                    snapshot(payload, directory)
                 atomic_json(directory / "request.json", payload)
                 atomic_json(directory / "status.json", {"state": "running", "message": job.message})
                 self._jobs = dict(list(self._jobs.items())[-MAX_FINISHED_JOBS:])
@@ -343,6 +363,10 @@ class Studio:
                 if request.rewrite_prompt and request.input_images and not request.rewrite_edit_prompt:
                     rewrite_message = " · 編集のため書き換え省略"
                 preservation_message = " · 範囲外固定" if request.preserve_unmasked else ""
+                if request.outpaint_version:
+                    preservation_message = (
+                        f" · Outpaint {request.outpaint_version} · 境界 {request.outpaint_feather} px"
+                    )
                 final = {
                     "state": "complete",
                     "message": f"完了 · Seed {request.seed} · {request.width}×{request.height} · {precision_label(request.precision)}{rewrite_message}{preservation_message}",

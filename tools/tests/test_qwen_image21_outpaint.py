@@ -280,11 +280,11 @@ class UIContractTests(unittest.TestCase):
         tabs = self.ui.on_ui_tabs()
         self.assertEqual(tabs[0][2], "qwen_image21_outpaint")
         config = tabs[0][0].get_config_file()
-        self.assertEqual(len(config["dependencies"]), 17)
         for dependency in config["dependencies"]:
             self.assertEqual(dependency["api_visibility"], "private")
         text = str(config)
-        self.assertIn("画像生成を行いません", text)
+        self.assertNotIn("画像生成を行いません", text)
+        self.assertIn("いつものQwen 2.1で余白を描き足し", text)
         self.assertIn("完成画像を作成", text)
         self.assertNotIn("復元", text)  # The final output is named 完成画像, not an ambiguous restore.
         ids = {component["props"].get("elem_id"): component for component in config["components"]}
@@ -295,10 +295,68 @@ class UIContractTests(unittest.TestCase):
             "qwen21-outpaint-restored",
             "qwen21-outpaint-reference-download",
             "qwen21-outpaint-final-download",
+            "qwen21-outpaint-generate",
+            "qwen21-outpaint-cancel",
+            "qwen21-outpaint-result",
+            "qwen21-outpaint-download",
         ):
             self.assertIn(elem_id, ids)
         self.assertFalse(ids["qwen21-outpaint-preview-column"]["props"]["visible"])
         tabs[0][0].close()
+
+    def test_native_start_snapshots_inputs_and_passes_owner_and_selected_model(self):
+        studio = types.SimpleNamespace(
+            start=lambda generation, owner: captured.update(request=generation, owner=owner) or "job-1"
+        )
+        captured = {}
+        browser = types.SimpleNamespace(session_hash="session", username="user")
+        with patch.object(self.ui, "native_studio", return_value=studio):
+            values = self.ui.start_native(
+                Image.new("RGB", (256, 256), "blue"),
+                32,
+                0,
+                32,
+                0,
+                "v2",
+                "forest",
+                0,
+                25,
+                42,
+                "base_q4_k_m",
+                None,
+                browser,
+            )
+        self.assertEqual(values[0], "job-1")
+        self.assertEqual(captured["owner"], "user:session")
+        request = captured["request"].resolved()
+        self.assertEqual((request.width, request.height), (320, 256))
+        self.assertEqual(request.precision, "base_q4_k_m")
+        self.assertEqual(request.outpaint_feather, 0)
+        self.assertFalse(values[2]["interactive"])
+        self.assertTrue(values[3]["interactive"])
+        self.assertTrue(values[4]["active"])
+
+    def test_native_invalid_start_preserves_job_and_previous_result(self):
+        browser = types.SimpleNamespace(session_hash="session", username=None)
+        with patch.object(self.ui, "native_studio") as studio:
+            result = self.ui.start_native(None, 32, 0, 32, 0, "v2", "", 0, 25, 42, "int8", "previous.png", browser)
+        studio.assert_not_called()
+        self.assertNotIn("value", result[0])
+        self.assertNotIn("value", result[5])
+        self.assertNotIn("value", result[6])
+
+    def test_native_failed_poll_keeps_previous_download(self):
+        studio = types.SimpleNamespace(
+            status=lambda job, owner: {"done": True, "state": "failed", "message": "stopped", "elapsed": 1}
+        )
+        browser = types.SimpleNamespace(session_hash="session", username=None)
+        with patch.object(self.ui, "native_studio", return_value=studio):
+            result = self.ui.poll_native("job-1", browser)
+        self.assertTrue(result[1]["interactive"])
+        self.assertFalse(result[2]["interactive"])
+        self.assertFalse(result[3]["active"])
+        self.assertNotIn("value", result[4])
+        self.assertNotIn("value", result[5])
 
     def test_preview_marks_extension_and_keeps_original_visible(self):
         source = Image.new("RGB", (256, 256), (10, 200, 30))

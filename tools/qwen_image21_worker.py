@@ -72,7 +72,12 @@ def clear_runtime() -> None:
 
 
 def _cache_key(
-    model_path: Path, precision: str, memory_mode: str, control: bool = False, fun_acc: bool = False
+    model_path: Path,
+    precision: str,
+    memory_mode: str,
+    control: bool = False,
+    fun_acc: bool = False,
+    outpaint_version: str = "",
 ) -> tuple:
     # Include weight shards as well as configs: overwriting files in the same
     # directory must not silently reuse an older resident checkpoint.
@@ -116,7 +121,14 @@ def _cache_key(
             config_path.stat().st_size,
             config_path.stat().st_mtime_ns,
         )
-    return str(model_path), precision, memory_mode, metadata, manifests, turbo, regular, patch, adapter
+    outpaint = None
+    if outpaint_version:
+        from modules_forge.qwen_image21.outpaint_lora import installed
+
+        info = installed(model_path.parent, outpaint_version)
+        path = Path(info["path"])
+        outpaint = (info["version"], info["sha256"], path.stat().st_size, path.stat().st_mtime_ns)
+    return str(model_path), precision, memory_mode, metadata, manifests, turbo, regular, patch, adapter, outpaint
 
 
 def _model_revision(model_path: Path) -> str | None:
@@ -203,6 +215,16 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         if not isinstance(path, str) or not Path(path).is_absolute() or not Path(path).is_file():
             raise ValueError("Each input image must be an existing absolute local file path.")
     request["input_images"] = images
+    from modules_forge.qwen_image21.outpaint_native import validate_options, validate_snapshot
+
+    validate_options(request)
+    if request.get("outpaint_version"):
+        validate_snapshot(request, job)
+        from modules_forge.qwen_image21.outpaint_lora import installed
+
+        installed(model_path.parent, request["outpaint_version"])
+    elif request.get("outpaint"):
+        raise ValueError("Outpaintの設定と保存情報が一致しません。")
     control_image = request.get("control_image", "")
     control_inpaint = request.get("control_inpaint", False)
     if not isinstance(control_inpaint, bool):
@@ -463,6 +485,15 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     )
     fun_acc_info = None
     fun_acc_config = None
+    outpaint_info = None
+    if request.get("outpaint_version"):
+        from modules_forge.qwen_image21.outpaint_lora import installed
+        from modules_forge.qwen_image21.outpaint_runtime import load_adapter
+
+        outpaint_info = installed(model_path.parent, request["outpaint_version"], verify=True)
+        _progress(job, "loading", "Outpaint LoRAを読み込み中", 0.28)
+        outpaint_info.update(load_adapter(pipe.transformer, outpaint_info["path"]))
+        pipe.transformer.eval()
     if request.get("fun_acc", False):
         from modules_forge.qwen_image21.fun_acc_lora import installed
         from modules_forge.qwen_image21.pdd_vendor.qwenimage21_pdd import QwenImage21PDDScheduler, load_pdd_lora
@@ -507,6 +538,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         "controlnet": controlnet,
         "fun_acc": fun_acc_info,
         "fun_acc_config": fun_acc_config,
+        "outpaint": outpaint_info,
         "int8_layers": counts,
         "w4a8": w4a8_stats,
         "disk_cache": disk_cache,
@@ -523,6 +555,7 @@ def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -
         request["memory_mode"],
         bool(request.get("control_image")),
         request.get("fun_acc", False),
+        request.get("outpaint_version", ""),
     )
     if _RESIDENT_RUNTIME is not None and key == _RESIDENT_KEY:
         _progress(job, "loaded", "読み込み済みモデルを再利用", 0.30)
@@ -800,7 +833,11 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 num_inference_steps=request["steps"],
                 true_cfg_scale=1.0,
                 use_kv_cache=controlnet is None and pdd_callback is None,
-                output_resolution=1024,
+                # Match the reference's area exactly. The native pipeline's
+                # round-to-32 calculation then preserves the padded geometry.
+                output_resolution=math.sqrt(request["width"] * request["height"])
+                if request.get("outpaint_version")
+                else 1024,
                 generator=generator,
                 num_images_per_prompt=1,
                 output_type="pil",
@@ -820,6 +857,12 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             )
         if image.mode != "RGBA":
             raise RuntimeError(f"Qwen-Image 2.1 must return native RGBA output, received {image.mode}.")
+        if request.get("outpaint_version"):
+            from modules_forge.qwen_image21.outpaint_native import finish
+
+            image.save(job / "output-generated.png", format="PNG")
+            image = finish(image, request)
+            _check_cancel(job)
         _progress(job, "saving", "RGBA PNG を保存中", 0.96)
         output_path = job / "output.png"
         partial = output_path.with_name(output_path.name + ".part")
@@ -843,6 +886,9 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "prompt_rewrite": rewrite,
             "fun_controlnet": control_info,
             "fun_acc": runtime.get("fun_acc"),
+            "outpaint": {**request.get("outpaint", {}), "adapter": runtime.get("outpaint")}
+            if request.get("outpaint_version")
+            else None,
             "preservation": preservation.get("preservation", {}),
             "width": image.width,
             "height": image.height,
@@ -857,7 +903,9 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "scheduler": runtime["pipe"].scheduler.__class__.__name__,
             "scheduler_config": dict(runtime["pipe"].scheduler.config),
             "use_kv_cache": controlnet is None and pdd_callback is None,
-            "input_resolution": 1024,
+            "input_resolution": math.sqrt(request["width"] * request["height"])
+            if request.get("outpaint_version")
+            else 1024,
             "input_image_count": len(images),
             "input_image_names": [Path(path).name for path in request["input_images"]],
             "int8_layers": runtime["int8_layers"],

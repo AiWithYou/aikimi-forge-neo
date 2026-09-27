@@ -21,11 +21,11 @@ from modules_forge.qwen_image21.core import (
     runtime_status,
 )
 from modules_forge.qwen_image21.quantized_cache import saved_status
-from modules_forge.qwen_image21.service import JobNotFound, Studio
+from modules_forge.qwen_image21.service import JobNotFound, get_studio
 from modules_forge.studio_dimensions import custom_dimensions
 
 RUNTIME = Path(script_path) / "models" / "Qwen-Image-2.1"
-STUDIO = Studio(RUNTIME, Path(data_path) / "outputs" / "qwen-image-2.1")
+STUDIO = get_studio(RUNTIME, Path(data_path) / "outputs" / "qwen-image-2.1")
 PRIVATE = {"api_visibility": "private", "show_progress": "hidden"}
 RESOLUTIONS = [
     ("1024 × 1024 · 1:1", "1024x1024"),

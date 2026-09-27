@@ -162,6 +162,48 @@ class WorkerJobTests(unittest.TestCase):
         self.assertIsNone(self.pipe.calls[0]["image"])
         self.assertEqual(result["metadata"]["output_mode"], "RGBA")
 
+    def test_outpaint_keeps_reference_geometry_and_saves_stitched_canonical_png(self):
+        from modules_forge.qwen_image21.outpaint_native import snapshot
+
+        source = self.job / "reference-01.png"
+        Image.new("RGBA", (256, 256), (12, 37, 91, 17)).save(source)
+        self.request.update(
+            transparent=False,
+            width=320,
+            height=256,
+            input_images=[str(source)],
+            clean_input_images=[str(source)],
+            outpaint_version="v2",
+            outpaint_margins=[32, 0, 32, 0],
+            outpaint_feather=0,
+        )
+        snapshot(self.request, self.job)
+        self.write_request()
+        fake_info = {"version": "v2", "sha256": "verified", "path": str(source)}
+        with mock.patch("modules_forge.qwen_image21.outpaint_lora.installed", return_value=fake_info):
+            result, _ = self.run_job()
+        call = self.pipe.calls[0]
+        self.assertAlmostEqual(call["output_resolution"] ** 2, 320 * 256)
+        self.assertEqual(call["image"][0].size, (320, 256))
+        with Image.open(result["output_path"]) as output:
+            self.assertEqual(output.getpixel((32, 0)), (12, 37, 91, 17))
+            self.assertEqual(output.getpixel((0, 0)), (1, 2, 3, 47))
+        with Image.open(self.job / "output-generated.png") as raw:
+            self.assertEqual(raw.getpixel((32, 0)), (1, 2, 3, 47))
+        self.assertEqual(result["metadata"]["outpaint"]["feather"], 0)
+        with mock.patch("modules_forge.qwen_image21.outpaint_lora.installed", return_value=fake_info):
+            self.assertNotEqual(
+                worker._cache_key(self.model, "int8", "offload"),
+                worker._cache_key(self.model, "int8", "offload", outpaint_version="v2"),
+            )
+
+    def test_outpaint_mismatch_fails_before_model_load(self):
+        self.request.update(transparent=False, outpaint_version="v2")
+        self.write_request()
+        with mock.patch.object(worker, "_load_runtime") as loader, self.assertRaises(ValueError):
+            worker.resident_run(self.payload)
+        loader.assert_not_called()
+
     def test_large_output_tiles_vae_and_reuse_restores_small_output(self):
         self.request.update(width=2048, height=2048)
         self.write_request()
