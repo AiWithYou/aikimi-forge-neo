@@ -38,7 +38,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
-| **Qwen Outpaint**（追加） | 広げる方向と余白をプレビューし、既存QwenのQ4_K_M／INT8で描き足します。元画像の合成と完成PNGの保存まで同じ画面で行えます。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) |
+| **Qwen Outpaint**（追加） | 大きなプレビューを見ながら上下左右を指定し、既存QwenのQ4_K_M／INT8で描き足します。完成PNGの保存・結果からの再拡張・最初の元画像への戻しまで同じ画面で行えます。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) |
 | **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun Acc 4-step LoRAと、Fun ControlNet Unionの8種類の前処理済み制御画像・Inpainting＋Controlを個別に使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
