@@ -284,7 +284,7 @@ class UIContractTests(unittest.TestCase):
             self.assertEqual(dependency["api_visibility"], "private")
         text = str(config)
         self.assertNotIn("画像生成を行いません", text)
-        self.assertIn("いつものQwen 2.1で余白を描き足し", text)
+        self.assertIn("いつものQwen 2.1で描き足し", text)
         self.assertIn("完成画像を作成", text)
         self.assertNotIn("復元", text)  # The final output is named 完成画像, not an ambiguous restore.
         ids = {component["props"].get("elem_id"): component for component in config["components"]}
@@ -299,6 +299,8 @@ class UIContractTests(unittest.TestCase):
             "qwen21-outpaint-cancel",
             "qwen21-outpaint-result",
             "qwen21-outpaint-download",
+            "qwen21-outpaint-reuse",
+            "qwen21-outpaint-reset-source",
         ):
             self.assertIn(elem_id, ids)
         self.assertFalse(ids["qwen21-outpaint-preview-column"]["props"]["visible"])
@@ -351,7 +353,7 @@ class UIContractTests(unittest.TestCase):
         )
         browser = types.SimpleNamespace(session_hash="session", username=None)
         with patch.object(self.ui, "native_studio", return_value=studio):
-            result = self.ui.poll_native("job-1", browser)
+            result = self.ui.poll_native("job-1", "previous-job", True, browser)
         self.assertTrue(result[1]["interactive"])
         self.assertFalse(result[2]["interactive"])
         self.assertFalse(result[3]["active"])
@@ -360,7 +362,7 @@ class UIContractTests(unittest.TestCase):
 
     def test_preview_marks_extension_and_keeps_original_visible(self):
         source = Image.new("RGB", (256, 256), (10, 200, 30))
-        column, preview, caption, direction = self.ui.preview_canvas(source, 128, 0, 0, 0)
+        column, preview, caption = self.ui.preview_canvas(source, 128, 0, 0, 0)
         image = preview["value"]
         self.assertTrue(column["visible"])
         self.assertLessEqual(max(image.size), self.ui.PREVIEW_SIDE)
@@ -369,24 +371,90 @@ class UIContractTests(unittest.TestCase):
         stripes = {image.getpixel((x, y)) for x in range(0, 40) for y in range(0, 40)}
         self.assertEqual(stripes, {(128, 128, 128), (158, 158, 158)})
         self.assertIn("384 × 256", caption)
-        self.assertEqual(direction["value"], "左")
 
     def test_preview_reports_alignment_and_errors_inline(self):
-        _, _, caption, _ = self.ui.preview_canvas(Image.new("RGB", (256, 256)), 1, 0, 0, 0)
+        _, _, caption = self.ui.preview_canvas(Image.new("RGB", (256, 256)), 1, 0, 0, 0)
         self.assertIn("32 px単位", caption)
-        column, preview, caption, _ = self.ui.preview_canvas(Image.new("RGB", (1536, 1024)), 128, 128, 128, 128)
+        self.assertIn("左 +31 px", caption)
+        column, preview, caption = self.ui.preview_canvas(Image.new("RGB", (1536, 1024)), 128, 128, 128, 128)
         self.assertTrue(column["visible"])
         self.assertFalse(preview["visible"])
         self.assertIn("2 MP", caption)
-        column, preview, caption, _ = self.ui.preview_canvas(None, 128, 128, 128, 128)
+        column, preview, caption = self.ui.preview_canvas(None, 128, 128, 128, 128)
         self.assertFalse(column["visible"])
         self.assertIsNone(preview)
 
     def test_preview_transparent_source_matches_gray_reference(self):
-        _, preview, _, _ = self.ui.preview_canvas(Image.new("RGBA", (256, 256), (255, 0, 0, 0)), 128, 0, 0, 0)
+        _, preview, _ = self.ui.preview_canvas(Image.new("RGBA", (256, 256), (255, 0, 0, 0)), 128, 0, 0, 0)
         image = preview["value"]
         inner = {image.getpixel((x, y)) for x in range(image.width - 40, image.width - 4) for y in range(4, 40)}
         self.assertEqual(inner, {(128, 128, 128)})
+
+    def test_completed_result_reuse_reads_owned_artifact_without_changing_alpha(self):
+        original = Image.new("RGBA", (256, 256), (9, 80, 70, 0))
+        path = self.ui.save_png(original, "server-output")
+        calls = []
+        studio = types.SimpleNamespace(
+            status=lambda job, owner: {"done": True},
+            artifact=lambda job, owner: calls.append((job, owner)) or path,
+        )
+        browser = types.SimpleNamespace(session_hash="session", username="user")
+        with patch.object(self.ui, "native_studio", return_value=studio):
+            source, stage, reset, _ = self.ui.source_from_result("last-success", "failed-new-job", browser)
+        self.assertEqual(calls, [("last-success", "user:session")])
+        self.assertEqual(source.mode, "RGBA")
+        self.assertEqual(source.tobytes(), original.tobytes())
+        self.assertEqual(stage["selected"], "range")
+        self.assertTrue(reset["interactive"])
+
+    def test_reuse_cannot_change_source_while_a_job_is_running(self):
+        studio = types.SimpleNamespace(status=lambda job, owner: {"done": False})
+        browser = types.SimpleNamespace(session_hash="session", username=None)
+        with (
+            patch.object(self.ui, "native_studio", return_value=studio),
+            self.assertRaisesRegex(ValueError, "生成が終わって"),
+        ):
+            self.ui.source_from_result("last-success", "running", browser)
+
+    def test_first_source_is_restored_losslessly_and_new_upload_replaces_baseline(self):
+        first = Image.new("RGBA", (256, 256), (90, 80, 70, 0))
+        baseline, *_ = self.ui.remember_original(first)
+        recovered, stage, reset, _ = self.ui.original_source(baseline)
+        self.assertEqual(recovered.tobytes(), first.tobytes())
+        self.assertEqual(stage["selected"], "range")
+        self.assertFalse(reset["interactive"])
+        replacement, *_ = self.ui.remember_original(Image.new("RGB", (320, 256), "blue"))
+        self.assertNotEqual(replacement, baseline)
+        self.assertIsNone(self.ui.remember_original(None)[0])
+
+    def test_completion_selects_result_but_does_not_enable_generation_for_invalid_draft(self):
+        original = Image.new("RGBA", (320, 256), (1, 2, 3, 4))
+        path = self.ui.save_png(original, "server-output")
+        studio = types.SimpleNamespace(
+            status=lambda job, owner: {"done": True, "state": "complete", "message": "完了 Seed 42", "elapsed": 3},
+            artifact=lambda job, owner: path,
+        )
+        browser = types.SimpleNamespace(session_hash="session", username=None)
+        with patch.object(self.ui, "native_studio", return_value=studio):
+            result = self.ui.poll_native("job-123456789", "old", False, browser)
+        self.assertFalse(result[1]["interactive"])
+        self.assertEqual(result[6], "job-123456789")
+        self.assertEqual(result[7]["selected"], "result")
+        self.assertTrue(result[8]["interactive"])
+        self.assertIn("Seed 42", result[9])
+        self.assertNotIn("Seed", result[4]["label"])
+        self.assertIn("job-1234", result[5]["value"])
+        with Image.open(result[5]["value"]) as saved:
+            self.assertEqual(saved.tobytes(), original.tobytes())
+
+    def test_invalid_padding_and_active_job_keep_generate_disabled(self):
+        browser = types.SimpleNamespace(session_hash="session", username=None)
+        image = Image.new("RGB", (256, 256))
+        self.assertFalse(self.ui.native_readiness(image, 0, 0, 0, 0, "", browser)[0]["interactive"])
+        self.assertTrue(self.ui.native_readiness(image, 128, 0, 128, 0, "", browser)[0]["interactive"])
+        studio = types.SimpleNamespace(status=lambda job, owner: {"done": False})
+        with patch.object(self.ui, "native_studio", return_value=studio):
+            self.assertFalse(self.ui.native_readiness(image, 128, 0, 128, 0, "running", browser)[0]["interactive"])
 
     def test_direction_shortcuts_keep_manual_amounts(self):
         values = lambda updates: tuple(update["value"] for update in updates)  # noqa: E731

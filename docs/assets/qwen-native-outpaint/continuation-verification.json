@@ -1,0 +1,40 @@
+{
+  "first": {
+    "job": "7f0048e70caf48f9a1e049dfb6c75dff",
+    "output_size": [
+      992,
+      512
+    ],
+    "source_size": [
+      736,
+      512
+    ],
+    "steps": 25,
+    "seed": 968964357960779605,
+    "feather": 0,
+    "precision": "base_q4_k_m",
+    "download_pixels_exact": true,
+    "source_all_rgba_pixels_exact": true,
+    "output_sha256": "8238e1d09deea9a8c91691bdd2bc24112b27e43677f9c3a91c72c141d9f2b8a6"
+  },
+  "continued": {
+    "job": "d02859c50b5f4de488612da904404fff",
+    "output_size": [
+      1376,
+      512
+    ],
+    "source_size": [
+      992,
+      512
+    ],
+    "steps": 25,
+    "seed": 4672770431161423834,
+    "feather": 0,
+    "precision": "base_q4_k_m",
+    "download_pixels_exact": true,
+    "source_all_rgba_pixels_exact": true,
+    "output_sha256": "6bbcd0bdfcdf40e6c20a7cbf3c57db77b1e27ee38fc787ce184d80be21dd41f3"
+  },
+  "continued_source_equals_first_output": true,
+  "cancel_keeps_last_completed_download": true
+}

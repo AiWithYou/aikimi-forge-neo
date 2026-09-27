@@ -1,0 +1,15 @@
+{
+  "job": "18c067d7e4e44945aa008f2d8adc3502",
+  "output_size": [
+    992,
+    512
+  ],
+  "seed": 1752484268149316753,
+  "precision": "base_q4_k_m",
+  "steps": 25,
+  "feather": 32,
+  "download_pixels_exact": true,
+  "canonical_composite_exact": true,
+  "generation_kept_starting_dimensions_after_draft_edit": true,
+  "output_sha256": "b900f31c16832ae79e7fd9bd36a0d4cc5c32509d6383ed7b3f10ffbc6e2d343a"
+}

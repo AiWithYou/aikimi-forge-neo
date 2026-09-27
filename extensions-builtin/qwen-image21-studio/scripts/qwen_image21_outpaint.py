@@ -18,7 +18,7 @@ from modules_forge.qwen_image21.outpaint import Plan, normalize_image, prepare, 
 PRIVATE = {"api_visibility": "private", "show_progress": "hidden", "queue": False}
 EMPTY = "元画像を選び、広げたい方向の余白を指定してください。"
 READY = "作成すると、保存用の参照PNGとComfyUIへの指示が下に表示されます。"
-PREVIEW_SIDE = 360
+PREVIEW_SIDE = 1024
 FRAME = (255, 145, 71)
 _EXPORT_DIRECTORY = None
 _EXPORT_LOCK = threading.Lock()
@@ -113,26 +113,78 @@ def preview_image(original, plan):
 
 
 def preview_canvas(source, left, top, right, bottom):
-    direction = gr.update(value=direction_of(left, top, right, bottom))
     if source is None:
-        return gr.update(visible=False), None, "", direction
+        return gr.update(visible=False), None, ""
     try:
         original, _, plan = prepare(source, left, top, right, bottom)
     except (OSError, ValueError) as exc:
         return (
             gr.update(visible=True),
             gr.update(value=None, visible=False),
-            f"**このままでは作成できません。** {exc}",
-            direction,
+            f"**余白を調整してください。** {exc}",
         )
     width, height = plan.size
     caption = (
-        f"**完成サイズ {width} × {height} px** · 斜線部（左 {plan.left} / 上 {plan.top} / 右 {plan.right} / 下 {plan.bottom} px）"
-        "をQwenで生成します。橙枠が元画像の範囲です。"
+        f"元画像 {original.width} × {original.height} → **完成 {width} × {height} px**  \n斜線に描き足す / 橙枠が元画像"
     )
-    if (plan.left, plan.top, plan.right, plan.bottom) != tuple(margin(value) for value in (left, top, right, bottom)):
-        caption += "  \n32 px単位に合わせて余白を調整しています。"
-    return gr.update(visible=True), gr.update(value=preview_image(original, plan), visible=True), caption, direction
+    adjustments = [
+        f"{side} +{actual - margin(entered)} px"
+        for side, actual, entered in zip(
+            ("左", "上", "右", "下"),
+            (plan.left, plan.top, plan.right, plan.bottom),
+            (left, top, right, bottom),
+            strict=True,
+        )
+        if actual != margin(entered)
+    ]
+    if adjustments:
+        caption += "  \n32 px単位に合わせて調整: " + " / ".join(adjustments)
+    return gr.update(visible=True), gr.update(value=preview_image(original, plan), visible=True), caption
+
+
+def source_panel(source, previous):
+    if source is None:
+        return gr.update(label="元画像を選ぶ", open=True), gr.update(visible=bool(previous)), "元画像"
+    try:
+        original = normalize_image(source)
+        return (
+            gr.update(label=f"元画像 {original.width} × {original.height} px · 変更", open=False),
+            gr.update(visible=True),
+            f'<span aria-hidden="true">{original.width} × {original.height}</span>',
+        )
+    except (OSError, ValueError):
+        return gr.update(open=True), gr.update(visible=True), "元画像"
+
+
+def remember_original(source):
+    """User uploads/pastes reset the baseline; programmatic continuation does not."""
+    original = save_png(normalize_image(source), "outpaint-original") if source is not None else None
+    return original, gr.update(interactive=False), "アップロードした元画像" if original else ""
+
+
+def source_from_result(completed, current, request: gr.Request):
+    studio, owner = native_studio(), native_owner(request)
+    if current and not studio.status(current, owner)["done"]:
+        raise gr.Error("生成が終わってから、結果を元画像にしてください。")
+    if not completed:
+        raise gr.Error("先に画像を生成してください。")
+    with Image.open(studio.artifact(completed, owner)) as image:
+        source = normalize_image(image)
+    return source, gr.update(selected="range"), gr.update(interactive=True), "生成結果を元画像にしています。"
+
+
+def original_source(original):
+    if not original:
+        raise gr.Error("元画像を選び直してください。")
+    with Image.open(original) as image:
+        source = normalize_image(image)
+    return source, gr.update(selected="range"), gr.update(interactive=False), "アップロードした元画像"
+
+
+def preview_for_native(source, left, top, right, bottom):
+    column, preview, caption = preview_canvas(source, left, top, right, bottom)
+    valid = isinstance(preview, dict) and bool(preview.get("visible"))
+    return column, preview, caption, valid, gr.update(selected="range")
 
 
 def handoff_steps(settings):
@@ -330,11 +382,11 @@ def adapter_status(version):
         installed(runtime, version)
     except (OSError, ValueError):
         return f"Outpaint {version} · 初回のみ追加LoRA（約160 MB）の準備が必要です。Qwen本体は共用します。"
-    return f"Outpaint {version} · 準備済み · 既存のQwen 2.1を使用"
+    return ""
 
 
 def setup_visibility(version):
-    return gr.update(visible="準備済み" not in adapter_status(version))
+    return gr.update(visible=bool(adapter_status(version)))
 
 
 # Gradio discovers and injects its progress tracker through this default.
@@ -377,34 +429,47 @@ def start_native(
             gr.update(interactive=False),
             gr.update(interactive=True),
             gr.update(active=True),
-            gr.update(label="前回の完成画像（新しい画像を生成中）" if previous else "完成画像"),
-            gr.update(label="前回の完成PNGを保存"),
+            gr.update(label="前回の結果 · 新しい画像を生成中" if previous else "生成結果"),
+            gr.update(label="結果のPNGを保存"),
+            gr.update(interactive=False),
         )
     except Exception as exc:
-        return gr.update(), str(exc), *[gr.update() for _ in range(5)]
+        return gr.update(), str(exc), *[gr.update() for _ in range(6)]
 
 
-def poll_native(identifier, request: gr.Request):
+def poll_native(identifier, completed, valid, request: gr.Request):
     if not identifier:
-        return [gr.update()] * 6
+        return [gr.update()] * 11
     try:
         studio = native_studio()
         state = studio.status(identifier, native_owner(request))
         done = state["done"]
         result, download = gr.update(), gr.update()
+        completed_update, stage, details = gr.update(), gr.update(), gr.update()
+        message = f"{state['message']} · 経過 {state['elapsed']:.0f} 秒"
+        can_continue = bool(completed) and done
         if done and state["state"] == "complete":
             path = studio.artifact(identifier, native_owner(request))
             with Image.open(path) as image:
-                export = save_png(image, f"qwen-outpaint-{image.width}x{image.height}")
-            result = gr.update(value=str(path), visible=True, label="完成画像（開始時の設定） · " + state["message"])
-            download = gr.update(value=export, visible=True, interactive=True, label="完成PNGを保存")
+                size = f"{image.width} × {image.height} px"
+                export = save_png(image, f"qwen-outpaint-{image.width}x{image.height}-{identifier[:8]}")
+            result = gr.update(value=str(path), visible=True, label=f"生成結果 · {size} · 開始時の設定")
+            download = gr.update(value=export, visible=True, interactive=True, label="結果のPNGを保存")
+            details = state["message"] + f" · 経過 {state['elapsed']:.0f} 秒"
+            message = f"完了 · {size} · [結果を見る](#qwen21-outpaint-view)"
+            completed_update, stage, can_continue = identifier, gr.update(selected="result"), True
         return (
-            f"{state['message']} · 経過 {state['elapsed']:.0f} 秒",
-            gr.update(interactive=done),
+            message,
+            gr.update(interactive=done and valid),
             gr.update(interactive=not done),
             gr.update(active=not done),
             result,
             download,
+            completed_update,
+            stage,
+            gr.update(interactive=can_continue),
+            details,
+            gr.update(visible=True) if can_continue else gr.update(),
         )
     except Exception as exc:
         from modules_forge.qwen_image21.service import JobNotFound
@@ -412,9 +477,14 @@ def poll_native(identifier, request: gr.Request):
         terminal = isinstance(exc, JobNotFound) or locals().get("done", False)
         return (
             str(exc),
-            gr.update(interactive=True) if terminal else gr.update(),
+            gr.update(interactive=valid) if terminal else gr.update(),
             gr.update(interactive=False) if terminal else gr.update(),
             gr.update(active=False) if terminal else gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(interactive=bool(completed)) if terminal else gr.update(),
             gr.update(),
             gr.update(),
         )
@@ -429,7 +499,19 @@ def cancel_native(identifier, request: gr.Request):
 def mark_native_draft(previous):
     if not previous:
         return gr.update(), gr.update()
-    return gr.update(label="前回の完成画像（入力の変更は次の生成に反映）"), gr.update(label="前回の完成PNGを保存")
+    return gr.update(label="前回の結果 · 設定の変更は次の生成に反映"), gr.update(label="結果のPNGを保存")
+
+
+def native_readiness(source, left, top, right, bottom, identifier, request: gr.Request):
+    if identifier and not native_studio().status(identifier, native_owner(request))["done"]:
+        return gr.update(interactive=False), gr.update()
+    try:
+        prepare(source, left, top, right, bottom)
+    except (OSError, ValueError):
+        return gr.update(
+            interactive=False
+        ), "元画像を選ぶと生成できます。" if source is None else "広げる範囲を調整してください。"
+    return gr.update(interactive=True), gr.update() if identifier else ""
 
 
 def on_ui_tabs():
@@ -438,63 +520,121 @@ def on_ui_tabs():
         dirty = gr.State(False)
         binding = gr.State(None)
         with gr.Column(elem_id="qwen21-outpaint"):
-            gr.Markdown(
-                "## Qwen Outpaint\n"
-                "元画像と広げる範囲を指定して生成。いつものQwen 2.1で余白を描き足し、元画像を合成して仕上げます。"
-            )
-            with gr.Row(elem_classes="qwen21-outpaint-stage"):
-                with gr.Column(min_width=260):
-                    source = gr.Image(
-                        label="元画像",
-                        type="pil",
-                        image_mode=None,
-                        format="png",
-                        height=260,
-                        sources=["upload", "clipboard"],
-                        elem_id="qwen21-outpaint-source",
-                    )
-                with gr.Column(
-                    min_width=260, visible=False, elem_id="qwen21-outpaint-preview-column"
-                ) as preview_column:
-                    preview = gr.Image(
-                        label="仕上がりの範囲",
-                        type="pil",
-                        format="png",
-                        interactive=False,
-                        height=260,
-                        buttons=[],
-                        elem_id="qwen21-outpaint-preview",
-                    )
-                    preview_caption = gr.Markdown(elem_id="qwen21-outpaint-preview-caption")
-                with gr.Column(min_width=260):
-                    direction = gr.Radio(
-                        choices=list(DIRECTIONS),
-                        value="四方",
-                        label="広げる方向",
-                        elem_id="qwen21-outpaint-direction",
-                    )
-                    with gr.Row(elem_id="qwen21-outpaint-margins"):
-                        left = gr.Number(value=128, minimum=0, maximum=2048, step=1, label="左の余白 px", min_width=70)
-                        right = gr.Number(value=128, minimum=0, maximum=2048, step=1, label="右の余白 px", min_width=70)
-                        top = gr.Number(value=128, minimum=0, maximum=2048, step=1, label="上の余白 px", min_width=70)
-                        bottom = gr.Number(
-                            value=128, minimum=0, maximum=2048, step=1, label="下の余白 px", min_width=70
+            gr.Markdown("## Qwen Outpaint\n元画像の外側を、いつものQwen 2.1で描き足します。")
+            with gr.Row(elem_id="qwen21-outpaint-workspace"):
+                with gr.Column(scale=2, min_width=320, elem_id="qwen21-outpaint-visual"):
+                    with gr.Accordion(
+                        "元画像を選ぶ", open=True, elem_id="qwen21-outpaint-source-panel"
+                    ) as source_accordion:
+                        source = gr.Image(
+                            label="元画像",
+                            type="pil",
+                            image_mode=None,
+                            format="png",
+                            height=320,
+                            sources=["upload", "clipboard"],
+                            elem_id="qwen21-outpaint-source",
                         )
-                    version = gr.Radio(
-                        choices=[("v1 · 目安 約1 MP", "v1"), ("v2 · 目安 1〜2 MP", "v2")],
-                        value="v2",
-                        label="Outpaint LoRA",
-                        elem_id="qwen21-outpaint-version",
-                    )
+                    with gr.Row(elem_id="qwen21-outpaint-source-actions"):
+                        source_note = gr.Markdown("")
+                        reset_source = gr.Button(
+                            "最初の元画像に戻す", size="sm", interactive=False, elem_id="qwen21-outpaint-reset-source"
+                        )
+                    with gr.Tabs(selected="range", visible=False, elem_id="qwen21-outpaint-view") as stage:
+                        with gr.Tab("広げる範囲", id="range", elem_id="qwen21-outpaint-range-tab"):
+                            with gr.Column(visible=False, elem_id="qwen21-outpaint-preview-column") as preview_column:
+                                preview = gr.Image(
+                                    label="広げる範囲",
+                                    type="pil",
+                                    format="png",
+                                    interactive=False,
+                                    height=440,
+                                    buttons=["fullscreen"],
+                                    elem_id="qwen21-outpaint-preview",
+                                )
+                                preview_caption = gr.Markdown(elem_id="qwen21-outpaint-preview-caption")
+                        with gr.Tab("生成結果", id="result", elem_id="qwen21-outpaint-result-tab"):
+                            native_result = gr.Image(
+                                label="生成結果",
+                                type="filepath",
+                                image_mode=None,
+                                format="png",
+                                interactive=False,
+                                height=440,
+                                buttons=["fullscreen"],
+                                elem_id="qwen21-outpaint-result",
+                            )
+                            with gr.Accordion("この結果の生成情報", open=False):
+                                native_details = gr.Markdown("")
+                    with gr.Row(visible=False, elem_id="qwen21-outpaint-result-actions") as result_actions:
+                        native_download = gr.DownloadButton(
+                            "結果のPNGを保存", interactive=False, elem_id="qwen21-outpaint-download"
+                        )
+                        reuse_result = gr.Button(
+                            "生成結果をさらに広げる", interactive=False, elem_id="qwen21-outpaint-reuse"
+                        )
+                with gr.Column(scale=1, min_width=280, elem_id="qwen21-outpaint-controls"):
+                    gr.Markdown("### 広げる量（px）", elem_id="qwen21-outpaint-margin-heading")
+                    with gr.Row(elem_id="qwen21-outpaint-margins"):
+                        top = gr.Number(
+                            value=128,
+                            minimum=0,
+                            maximum=4096,
+                            step=1,
+                            label="上",
+                            min_width=70,
+                            elem_id="qwen21-outpaint-top",
+                        )
+                        left = gr.Number(
+                            value=128,
+                            minimum=0,
+                            maximum=4096,
+                            step=1,
+                            label="左",
+                            min_width=70,
+                            elem_id="qwen21-outpaint-left",
+                        )
+                        source_dimensions = gr.HTML(
+                            '<span aria-hidden="true">元画像</span>', elem_id="qwen21-outpaint-center"
+                        )
+                        right = gr.Number(
+                            value=128,
+                            minimum=0,
+                            maximum=4096,
+                            step=1,
+                            label="右",
+                            min_width=70,
+                            elem_id="qwen21-outpaint-right",
+                        )
+                        bottom = gr.Number(
+                            value=128,
+                            minimum=0,
+                            maximum=4096,
+                            step=1,
+                            label="下",
+                            min_width=70,
+                            elem_id="qwen21-outpaint-bottom",
+                        )
+                    with gr.Row(elem_id="qwen21-outpaint-shortcuts"):
+                        horizontal = gr.Button("左右128", size="sm")
+                        vertical = gr.Button("上下128", size="sm")
+                        all_sides = gr.Button("四方128", size="sm")
+                        clear_sides = gr.Button("余白を0に", size="sm")
                     scene = gr.Textbox(
-                        label="広げる場面の説明（任意）",
+                        label="描き足す内容（任意）",
                         lines=2,
                         max_lines=4,
                         max_length=10000,
-                        placeholder="例: Extend the forest path into the distance.",
+                        placeholder="空欄でも生成できます。例: 海岸線と青空",
                         elem_id="qwen21-outpaint-scene",
                     )
                     with gr.Accordion("生成設定", open=False):
+                        version = gr.Dropdown(
+                            choices=[("v2 · 標準（1〜2 MPで学習）", "v2"), ("v1 · 約1 MPで学習", "v1")],
+                            value="v2",
+                            label="Outpaint LoRA",
+                            elem_id="qwen21-outpaint-version",
+                        )
                         native_precision = gr.Dropdown(
                             choices=[("Q4_K_M · 省メモリ", "base_q4_k_m"), ("INT8 · 通常版", "int8")],
                             value="base_q4_k_m",
@@ -507,7 +647,7 @@ def on_ui_tabs():
                             value=32,
                             step=1,
                             label="境界をなじませる幅 px",
-                            info="0なら元画像の全画素を保持。32なら外周32 pxを生成画像となじませます。",
+                            info="元画像の内側も、広げた辺からこの幅だけ変化します。0なら元画像の全画素を保持します。",
                             elem_id="qwen21-outpaint-native-feather",
                         )
                         native_steps = gr.Slider(1, 100, value=25, step=1, label="Steps")
@@ -518,24 +658,19 @@ def on_ui_tabs():
                         visible=setup_visibility("v2")["visible"],
                         elem_id="qwen21-outpaint-setup",
                     )
-                    with gr.Row():
-                        native_generate = gr.Button("生成", variant="primary", elem_id="qwen21-outpaint-generate")
-                        native_cancel = gr.Button("停止", interactive=False, elem_id="qwen21-outpaint-cancel")
-                    native_status = gr.Markdown(EMPTY, elem_id="qwen21-outpaint-native-status")
-            native_result = gr.Image(
-                label="完成画像",
-                type="filepath",
-                format="png",
-                interactive=False,
-                visible=False,
-                height=440,
-                buttons=["fullscreen"],
-                elem_id="qwen21-outpaint-result",
-            )
-            native_download = gr.DownloadButton(
-                "完成PNGを保存", interactive=False, visible=False, elem_id="qwen21-outpaint-download"
-            )
+                    with gr.Column(elem_id="qwen21-outpaint-run-dock"):
+                        with gr.Row(elem_id="qwen21-outpaint-actions"):
+                            native_generate = gr.Button(
+                                "生成", variant="primary", interactive=False, elem_id="qwen21-outpaint-generate"
+                            )
+                            native_cancel = gr.Button("停止", interactive=False, elem_id="qwen21-outpaint-cancel")
+                        native_status = gr.Markdown(
+                            "元画像を選ぶと生成できます。", elem_id="qwen21-outpaint-native-status"
+                        )
             native_job = gr.State("")
+            completed_job = gr.State("")
+            first_source = gr.State(None)
+            valid_canvas = gr.State(False)
             native_timer = gr.Timer(1, active=False)
             with gr.Accordion("参照PNGの書き出し・外部画像の合成", open=False):
                 prepare_button = gr.Button("参照PNGを作成", interactive=False, elem_id="qwen21-outpaint-prepare")
@@ -627,13 +762,45 @@ def on_ui_tabs():
                 native_timer,
                 native_result,
                 native_download,
+                reuse_result,
             ],
             **PRIVATE,
         )
         native_timer.tick(
             poll_native,
-            inputs=[native_job],
-            outputs=[native_status, native_generate, native_cancel, native_timer, native_result, native_download],
+            inputs=[native_job, completed_job, valid_canvas],
+            outputs=[
+                native_status,
+                native_generate,
+                native_cancel,
+                native_timer,
+                native_result,
+                native_download,
+                completed_job,
+                stage,
+                reuse_result,
+                native_details,
+                result_actions,
+            ],
+            **PRIVATE,
+        )
+        reuse_result.click(
+            source_from_result,
+            inputs=[completed_job, native_job],
+            outputs=[source, stage, reset_source, source_note],
+            **PRIVATE,
+        )
+        reset_source.click(
+            original_source,
+            inputs=[first_source],
+            outputs=[source, stage, reset_source, source_note],
+            **PRIVATE,
+        )
+        source.input(remember_original, inputs=[source], outputs=[first_source, reset_source, source_note], **PRIVATE)
+        source.change(
+            source_panel,
+            inputs=[source, native_result],
+            outputs=[source_accordion, stage, source_dimensions],
             **PRIVATE,
         )
         native_cancel.click(cancel_native, inputs=[native_job], outputs=[native_status, native_cancel], **PRIVATE)
@@ -702,14 +869,23 @@ def on_ui_tabs():
         # those wrappers. Bind through each component's supported event method.
         for component in (source, left, top, right, bottom):
             component.change(
-                preview_canvas,
+                preview_for_native,
                 inputs=[source, left, top, right, bottom],
-                outputs=[preview_column, preview, preview_caption, direction],
+                outputs=[preview_column, preview, preview_caption, valid_canvas, stage],
+                **PRIVATE,
+            ).then(
+                native_readiness,
+                inputs=[source, left, top, right, bottom, native_job],
+                outputs=[native_generate, native_status],
                 **PRIVATE,
             )
-        direction.input(
-            apply_direction, inputs=[direction, left, top, right, bottom], outputs=[left, top, right, bottom], **PRIVATE
-        )
+        for button, pads in (
+            (horizontal, (128, 0, 128, 0)),
+            (vertical, (0, 128, 0, 128)),
+            (all_sides, (128, 128, 128, 128)),
+            (clear_sides, (0, 0, 0, 0)),
+        ):
+            button.click(lambda values=pads: values, inputs=[], outputs=[left, top, right, bottom], **PRIVATE)
         generated.change(
             uploaded,
             inputs=[state, generated, dirty],
