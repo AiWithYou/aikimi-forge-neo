@@ -95,7 +95,7 @@ body:has(#tabs button[aria-controls="tab_qwen_image21_outpaint"][aria-selected="
 #qwen21-swap-size { border: 1px solid var(--border-color-primary); min-height: 40px; }
 #qwen21-control-kind .wrap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
 #qwen21-control-kind label { min-width: 0; font-size: 12px; }
-#qwen21-run-dock { position: fixed; z-index: 30; bottom: 12px; left: var(--qwen-dock-left); width: var(--qwen-dock-width, 372px); border-top: 1px solid var(--border-color-primary); padding-top: 8px; background: var(--body-background-fill); }
+#qwen21-run-dock { position: fixed; z-index: 60; bottom: 12px; left: var(--qwen-dock-left); width: var(--qwen-dock-width, 372px); border-top: 1px solid var(--border-color-primary); padding-top: 8px; background: var(--body-background-fill); }
 #qwen21-settings-summary p { margin: 0 0 6px; font-size: 12px; color: var(--body-text-color-subdued); }
 #qwen21-actions { flex-wrap: nowrap; gap: 8px; }
 #qwen21-generate { flex: 1 1 auto; min-width: 0 !important; min-height: 44px; }
@@ -141,7 +141,7 @@ body:has(#tabs button[aria-controls="tab_qwen_image21_outpaint"][aria-selected="
     #qwen21-composer { order: 0; width: 100%; }
     #qwen21-visual { order: 1; width: 100%; flex: 0 0 auto !important; }
     #qwen21-settings { order: 2; width: 100%; flex: 0 0 auto; height: auto; overflow: visible; padding-right: 0; }
-    #qwen21-run-dock { position: fixed; z-index: 30; bottom: 0; left: 16px; right: 16px; width: auto; max-width: calc(100% - 32px); padding: 8px 0 max(8px, env(safe-area-inset-bottom)); }
+    #qwen21-run-dock { position: fixed; z-index: 60; bottom: 0; left: 16px; right: 16px; width: auto; max-width: calc(100% - 32px); padding: 8px 0 max(8px, env(safe-area-inset-bottom)); }
     #qwen21-status textarea { min-height: 48px; padding-right: 60px; }
     #qwen21-references:not(:has(.thumbnail-item)) { height: 260px !important; }
     #qwen21-annotation-editor .forge-container:not(.forge-maximized),

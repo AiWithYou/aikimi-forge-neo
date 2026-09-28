@@ -1,10 +1,10 @@
 # Aikimi Forge Neo
 
-**v3.0.0** · [変更履歴](CHANGELOG.md)
+**v3.1.0** · [変更履歴](CHANGELOG.md)
 
-**v3.0.0（2026-09-27）：** 追加Studioの操作を見直しました。Qwen・SenseNova・H3動画に自由な幅／高さ指定を追加し、H3 Image・Nanosaur2も含めて縦横を入れ替えられます。Qwenのモデル選択は省メモリと拡張対応を区別。Outpaintは元画像と余白を指定して、既存Qwenで生成・元画像の合成・PNG保存まで完結します。初回だけ追加LoRA（約160 MB）を準備します。 [Outpaintの使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助)
+**v3.1.0（2026-09-28）：** Qwen Image 2.1に、手動でダウンロードしたLoRAの複数読み込みを追加しました。フォルダーに置いて一覧を更新し、使うLoRAを選んで各強度を調整できます。[保存先と使い方](#手動でダウンロードしたloraを使う) · [対応形式と制限](extensions-builtin/qwen-image21-studio/README.md#追加lora)
 
-以前の主な更新：**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
+以前の主な更新：**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -12,7 +12,7 @@
 
 [Stable Diffusion WebUI Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo)を基盤にしています。主な対象はWindows 11・Python 3.13・NVIDIA GPUで、通常起動では自分のPC内だけで利用し、LANやインターネットへ自動公開しません。
 
-[Forge Neoとの違い](#forge-neoとの違い) · [主な機能](#主な機能) · [セットアップ方法](#セットアップ方法) · [その他](#その他)
+[Forge Neoとの違い](#forge-neoとの違い) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [セットアップ方法](#セットアップ方法) · [その他](#その他)
 
 ## Forge Neoとの違い
 
@@ -20,7 +20,7 @@
 
 | 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
-| **モデル対応** | Qwen Image 2.1のINT8・W4A8、Fun Acc 4-step LoRA、任意の4bitプロンプト書き換え、Anima 3.8B v1.1、SenseNova、Nanosaur2、MiniMax H3の専用Studio、YuE2 Musicの作曲・楽譜編集。 |
+| **モデル対応** | Qwen Image 2.1のINT8・W4A8、手元のLoRAの複数読み込み、Fun Acc 4-step LoRA、任意の4bitプロンプト書き換え、Anima 3.8B v1.1、SenseNova、Nanosaur2、MiniMax H3の専用Studio、YuE2 Musicの作曲・楽譜編集。 |
 | **導入** | 画像・動画モデルを選ぶセットアップBATと、Qwen Image 2.1・YuE2の専用BAT。モデルの取得・変換と、必要な専用環境の準備。 |
 | **仕上げ** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
 | **操作** | 全モデル共通の保持設定・手動解放、ちびあいきみによる環境・実行状態の表示、追加機能へのショートカット、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
@@ -64,6 +64,21 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | **保存・ジョブ復旧**（追加） | 設定や動画の保存中に失敗した場合の既存ファイル保護、H3ジョブの送信記録と再起動後の照合、Forge・SenseNova・H3・YuE2・Qwen Image 2.1間のGPU使用調整。 |
 | **起動設定**（追加） | 通常のローカル起動、低VRAM向け設定、API専用起動、認証付きLAN利用を選択。 |
 | **Diagnostics**（追加） | SettingsからPython・GPU・モデルの準備状況を確認。APIからも診断結果を取得できます。 |
+
+<a id="手動でダウンロードしたloraを使う"></a>
+
+### 手動でダウンロードしたLoRAを使う
+
+使うモデルに対応したLoRAをダウンロードし、次の場所に置きます。どちらもサブフォルダーと複数同時適用に対応します。
+
+| 使う画面 | 既定の保存先（本体フォルダー内） | 適用方法 |
+|---|---|---|
+| Forgeの`txt2img`／`img2img`（従来機能） | `models/Lora/` | **Lora**一覧を更新してカードを選択。プロンプトの`<lora:名前:0.8>`で強度を指定し、複数並べて使えます。 |
+| **Qwen Image 2.1**（v3.1.0で追加） | `models/Qwen-Image-2.1/loras/` | 対応する`.safetensors`を置き、**LoRA → 一覧更新 → 複数選択**。表で各強度を−2〜2に設定します。初期値は1、0は読み込みを省略します。 |
+
+Forge側の保存先は起動引数`--lora-dir`／`--lora-dirs`でも指定できます。Qwen側はQwen Image 2.1向けの線形LoRAに対応し、別モデル用やすべての独自形式を読み込める機能ではありません。他の専用Studioへの任意LoRA読み込みは今回の追加対象に含みません。
+
+追加するLoRAの重みは同梱しません。Qwenの対応形式、併用できる設定、実生成を確認した範囲は[追加LoRAガイド](extensions-builtin/qwen-image21-studio/README.md#追加lora)を参照してください。
 
 ### 拡張・仕上げと詳細設定
 

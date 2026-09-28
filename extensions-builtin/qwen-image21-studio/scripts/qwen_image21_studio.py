@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -10,6 +11,7 @@ import gradio as gr
 
 from modules import gradio_compat, script_callbacks
 from modules.paths import data_path, script_path
+from modules_forge.qwen_image21 import style_lora as lora_library
 from modules_forge.qwen_image21.annotations import annotation_preview, reference_index, resolve_annotation
 from modules_forge.qwen_image21.core import (
     MAX_OUTPUT_PIXELS,
@@ -29,6 +31,7 @@ STUDIO = get_studio(RUNTIME, Path(data_path) / "outputs" / "qwen-image-2.1")
 PRIVATE = {"api_visibility": "private", "show_progress": "hidden"}
 RESOLUTIONS = [
     ("1024 × 1024 · 1:1", "1024x1024"),
+    ("960 × 1280 · 3:4 · 縦長", "960x1280"),
     ("1024 × 1280 · 4:5", "1024x1280"),
     ("1280 × 1024 · 5:4", "1280x1024"),
     ("2048 × 2048 · 1:1 · 2K", "2048x2048"),
@@ -193,6 +196,9 @@ def start(
     fun_acc=False,
     custom_width=1024,
     custom_height=1024,
+    style_loras=None,
+    lora_strengths=None,
+    allow_lora_base_mismatch=False,
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
@@ -244,6 +250,8 @@ def start(
             control_strength=control_strength,
             control_inpaint=control_inpaint,
             fun_acc=fun_acc,
+            style_loras=lora_settings(style_loras, lora_strengths),
+            allow_lora_base_mismatch=allow_lora_base_mismatch,
         )
         identifier = STUDIO.start(generation, owner(request))
         return (
@@ -571,6 +579,9 @@ def start_canvas(
     fun_acc=False,
     custom_width=1024,
     custom_height=1024,
+    style_loras=None,
+    lora_strengths=None,
+    allow_lora_base_mismatch=False,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
@@ -645,6 +656,9 @@ def start_canvas(
                 fun_acc,
                 custom_width,
                 custom_height,
+                style_loras,
+                lora_strengths,
+                allow_lora_base_mismatch,
             )
     except Exception as exc:
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
@@ -739,6 +753,101 @@ def generation_summary(precision, steps, resolution, width=1024, height=1024):
     else:
         size = "編集元と同じサイズ" if resolution == "reference" else resolution.replace("x", "×")
     return f"{models.get(precision, precision)} · {int(steps)} steps · {size}"
+
+
+def lora_choices():
+    return [(lora_display_name(name), name) for name in lora_library.inventory(RUNTIME)]
+
+
+def lora_display_name(name):
+    path = Path(name)
+    step = re.search(r"step_([0-9]+)$", path.stem)
+    if step:
+        return f"step {step[1]} · {path.parent.as_posix()} / {path.stem.split('_step_')[0]}"
+    return name
+
+
+def lora_settings(names, rows):
+    strengths = {row[0]: row[1] for row in (rows or []) if len(row) == 2}
+    settings = []
+    for name in names or []:
+        if name not in strengths:
+            raise ValueError("LoRA一覧の更新を待ってから、強度を確認してください。")
+        strength = strengths[name]
+        # Gradio's numeric cells emit strings after manual edits.
+        if isinstance(strength, str):
+            try:
+                strength = float(strength)
+            except ValueError as exc:
+                raise ValueError(f"{name}: 強度は−2〜2の数値で指定してください。") from exc
+        settings.append({"name": name, "strength": strength})
+    lora_library.validate_options({"style_loras": settings})
+    return tuple(settings)
+
+
+def refresh_loras(current):
+    choices = lora_choices()
+    names = {value for _, value in choices}
+    missing = [name for name in (current or []) if name not in names]
+    if missing:
+        gr.Warning("見つからないLoRAを選択から外しました: " + ", ".join(missing))
+    return gr.update(choices=choices, value=[name for name in (current or []) if name in names])
+
+
+def lora_selection(names, rows):
+    names = names or []
+    previous = {row[0]: row[1] for row in (rows or []) if len(row) == 2}
+    table = gr.update(
+        value=[[name, previous.get(name, 1.0)] for name in names], visible=bool(names), row_count=len(names)
+    )
+    mismatched, errors = [], []
+    for name in names:
+        try:
+            if lora_library.inspect(RUNTIME, name)["base_mismatch"]:
+                mismatched.append(name)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            errors.append(f"{name}: {exc}")
+    message = "\n\n".join(errors)
+    if mismatched:
+        message += (
+            ("\n\n" if message else "")
+            + "学習時はConvRot INT8: "
+            + ", ".join(lora_display_name(name).split(" / ")[0] for name in mismatched)
+        )
+    return table, message, gr.update(visible=bool(mismatched), value=False)
+
+
+def lora_readiness(names, rows, allow_mismatch, identifier, request: gr.Request):
+    running = False
+    if identifier:
+        try:
+            running = not STUDIO.status(identifier, owner(request)).get("done")
+        except JobNotFound:
+            pass
+    heading, message, valid = "LoRA · なし", "", True
+    if names:
+        heading = f"LoRA · {len(names)}件"
+        try:
+            settings = lora_settings(names, rows)
+            infos = lora_library.validate_installed(
+                RUNTIME,
+                {
+                    "style_loras": settings,
+                    "allow_lora_base_mismatch": allow_mismatch,
+                },
+            )
+            active = sum(item["strength"] != 0 for item in settings)
+            if active != len(settings):
+                heading += f" · 有効{active}件"
+            if any(info["base_mismatch"] for info in infos):
+                heading += " · 実験"
+                message = "学習時と異なる量子化での実験"
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            heading += " · 要確認"
+            message, valid = str(exc), False
+            if "ConvRot INT8" in message:
+                message = "LoRA設定の「異なる量子化で試す」を確認してください。"
+    return gr.update(label=heading), message, gr.update(interactive=valid and not running)
 
 
 def on_ui_tabs():
@@ -927,6 +1036,42 @@ def on_ui_tabs():
                             label="編集指示の書き換え",
                             elem_id="qwen21-rewrite-edit-prompt",
                         )
+                    with gr.Accordion("LoRA · なし", open=False, elem_id="qwen21-lora-section") as lora_section:
+                        with gr.Row():
+                            style_loras = gr.Dropdown(
+                                lora_choices(),
+                                value=[],
+                                multiselect=True,
+                                label="LoRA（複数選択）",
+                                min_width=180,
+                                elem_id="qwen21-style-lora",
+                            )
+                            lora_refresh = gr.Button("一覧更新", size="sm", scale=0, min_width=70)
+                        lora_strengths = gr.Dataframe(
+                            value=[],
+                            headers=["LoRA", "強度"],
+                            datatype=["str", "number"],
+                            type="array",
+                            static_columns=[0],
+                            column_count=(2, "fixed"),
+                            row_count=0,
+                            interactive=True,
+                            visible=False,
+                            label="強度（−2〜2・0で無効）",
+                            column_widths=["75%", "25%"],
+                            max_chars=48,
+                            max_height=240,
+                            buttons=[],
+                            elem_id="qwen21-lora-strengths",
+                        )
+                        lora_info = gr.Markdown("")
+                        allow_lora_base_mismatch = gr.Checkbox(
+                            value=False, label="異なる量子化で試す（実験）", visible=False
+                        )
+                        with gr.Accordion("LoRAの追加方法", open=False):
+                            gr.Markdown(
+                                "`models/Qwen-Image-2.1/loras/` に Qwen Image 2.1 用の `.safetensors` を置き、一覧更新。サブフォルダーも使えます。"
+                            )
                     with gr.Column(min_width=0, elem_id="qwen21-basics"):
                         precision = gr.Dropdown(
                             [
@@ -1108,6 +1253,7 @@ def on_ui_tabs():
                         check = gr.Button("導入状態を確認", size="sm")
                         environment = gr.Textbox(value=check_runtime(), label="導入状態", interactive=False, lines=8)
                 with gr.Column(scale=0, min_width=0, elem_id="qwen21-run-dock"):
+                    lora_gate = gr.Markdown("", elem_id="qwen21-lora-gate")
                     settings_summary = gr.Markdown(
                         generation_summary(selected_precision, 40, "1024x1024"), elem_id="qwen21-settings-summary"
                     )
@@ -1191,6 +1337,25 @@ def on_ui_tabs():
             **PRIVATE,
         )
         tab.load(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
+        lora_refresh.click(refresh_loras, inputs=style_loras, outputs=style_loras, **PRIVATE)
+        style_loras.change(
+            lora_selection,
+            inputs=[style_loras, lora_strengths],
+            outputs=[lora_strengths, lora_info, allow_lora_base_mismatch],
+            **PRIVATE,
+        ).then(
+            lora_readiness,
+            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch, job],
+            outputs=[lora_section, lora_gate, generate],
+            **PRIVATE,
+        )
+        for component in (lora_strengths, allow_lora_base_mismatch):
+            component.input(
+                lora_readiness,
+                inputs=[style_loras, lora_strengths, allow_lora_base_mismatch, job],
+                outputs=[lora_section, lora_gate, generate],
+                **PRIVATE,
+            )
         workspace_view.change(switch_workspace, inputs=workspace_view, outputs=[edit_view, result_view], **PRIVATE)
         generate.click(
             start_canvas,
@@ -1229,6 +1394,9 @@ def on_ui_tabs():
                 fun_acc,
                 width,
                 height,
+                style_loras,
+                lora_strengths,
+                allow_lora_base_mismatch,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,
@@ -1243,6 +1411,11 @@ def on_ui_tabs():
             outputs=[status, generate, stop, timer, output, files, use, edit_result, workspace_view, effective_prompt],
             **PRIVATE,
         ).then(assistant_status, inputs=job, outputs=assistant, **PRIVATE).then(
+            lora_readiness,
+            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch, job],
+            outputs=[lora_section, lora_gate, generate],
+            **PRIVATE,
+        ).then(
             refresh_saved_after_generation,
             inputs=[job, precision],
             outputs=save_status,

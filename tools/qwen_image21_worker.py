@@ -186,6 +186,9 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
 
         installed(model_path.parent)
     request["fun_acc"] = fun_acc
+    from modules_forge.qwen_image21.style_lora import validate_installed
+
+    validate_installed(model_path.parent, request)
     if request["precision"].startswith("turbo_"):
         if steps != 4:
             raise ValueError("Viggle Turbo requires exactly 4 steps.")
@@ -483,6 +486,13 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         use_safetensors=True,
         **components,
     )
+    style_lora_info = []
+    if request.get("style_loras"):
+        from modules_forge.qwen_image21.style_lora_runtime import load_adapters
+
+        _progress(job, "loading", "追加LoRAを読み込み中", 0.28)
+        style_lora_info = load_adapters(pipe.transformer, model_path.parent, request)
+        pipe.transformer.eval()
     fun_acc_info = None
     fun_acc_config = None
     outpaint_info = None
@@ -535,6 +545,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         versions["comfy-kitchen"] = importlib.metadata.version("comfy-kitchen")
     return {
         "pipe": pipe,
+        "style_loras": style_lora_info,
         "controlnet": controlnet,
         "fun_acc": fun_acc_info,
         "fun_acc_config": fun_acc_config,
@@ -557,6 +568,9 @@ def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -
         request.get("fun_acc", False),
         request.get("outpaint_version", ""),
     )
+    from modules_forge.qwen_image21.style_lora import cache_key
+
+    key += (cache_key(model_path.parent, request),)
     if _RESIDENT_RUNTIME is not None and key == _RESIDENT_KEY:
         _progress(job, "loaded", "読み込み済みモデルを再利用", 0.30)
         return _RESIDENT_RUNTIME, True
@@ -886,6 +900,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "prompt_rewrite": rewrite,
             "fun_controlnet": control_info,
             "fun_acc": runtime.get("fun_acc"),
+            "style_loras": runtime.get("style_loras", []),
             "outpaint": {**request.get("outpaint", {}), "adapter": runtime.get("outpaint")}
             if request.get("outpaint_version")
             else None,

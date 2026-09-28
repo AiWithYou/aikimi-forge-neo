@@ -42,6 +42,26 @@ GGUFは画像生成本体だけです。共通のテキストエンコーダー�
 
 結果は画面から保存し、そのまま次の編集の参照にも使えます。保存先は`outputs/qwen-image-2.1/`です。各生成の`request.json`、`result.json`、`output.png`、`worker.log`に設定・画像・実行記録が残ります。停止はその画面で開始したジョブにだけ作用します。ブラウザーを閉じてもジョブは継続し、実プロセスの停止確認が終わるまでGPU使用権を保持します。
 
+<a id="追加lora"></a>
+
+## 追加LoRA（複数対応）
+
+Qwen Image 2.1用の `.safetensors` を `models/Qwen-Image-2.1/loras/` に置き、**LoRA → 一覧更新**。サブフォルダーも読めます。複数選択し、表の「強度」を各LoRAごとに設定します（−2〜2、初期値1、0は読み込み省略）。選択を追加・削除しても残ったLoRAの強度は保持されます。×で外したものを再選択すると1に戻ります。
+
+通常版Q4_K_M・W4A8・INT8・BF16用です。SushiUIの `lora_unet_...__...`、Diffusers/Comfy系の `transformer.` / `diffusion_model.` 配下の線形LoRA（A/Bまたはdown/up、alpha/rank）を読み込みます。Qwen Imageの別バージョン、DoRA、独自ヘッドなど、すべての形式への対応ではありません。未対応キー・不足ペア・寸法不一致があれば部分適用せずエラーにします。Turbo・Fun Acc・Outpaint専用処理・Sparse Attentionとの同時使用は受け付けません。
+
+Hugging Faceからファイル名を指定して取得する補助コマンドも使えます。取得revisionとSHA-256を保存し、LFSのハッシュと照合します。
+
+```powershell
+.\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_style_lora.py owner/repo --file model.safetensors
+```
+
+検証に使用した [celstk/qwen2.1_lora](https://huggingface.co/celstk/qwen2.1_lora) の重みは同梱しません。必要な場合は配布元から取得してください。[SushiUIの実装](https://github.com/celll1/SushiUI/blob/69de838b18dbed8e8fc1e1294fb649a4f7dc5452/backend/core/pipeline_backends/qwen_image_21.py#L55-L78)に従い、通常の全面生成では学習専用global adapterを除外します。ただしこのLoRAはConvRot INT8で学習され、ForgeのINT8はbitsandbytes、Q4はGGUFです。**同一再現ではないため「異なる量子化で試す（実験）」を明示的にONにした場合のみ適用**します。選択を変えるとOFFへ戻ります。
+
+各LoRAのファイル名・SHA-256・強度・適用層数・量子化の差を生成情報へ保存します。LoRAや強度を変えた場合はモデルを再読み込みします。元のモデルの重みには書き込みません。
+
+2026年9月28日にINT8とQ4_K_Mで実生成を確認しました。複数読み込みは同じ重みを2つの名前で参照し、0.75と0.25で同時適用する動作試験です。異なるLoRA同士の画風の相性は評価していません。W4A8・BF16の読み込み処理は実装済みですが、追加LoRAを使った実生成は今回未検証です。
+
 ## Fun ControlNet Union · INT8
 
 [公式のQwen Image 2.1 Fun ControlNet Union](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)を、[KijaiのINT8 ConvRot変換](https://huggingface.co/Kijai/QwenImage_experimental/tree/04987755e10002ff33e4ea307a811487dddd79d9/model_patches)で使えます。Canny、Depth、Gray、HED、Lineart、MLSD、Pose、Scribbleの**前処理済み画像**に対応します。種類の選択は記録用で、モデルは共通のUnion重みを使います。画像をアップロードしただけでCannyやPoseを抽出する機能ではありません。

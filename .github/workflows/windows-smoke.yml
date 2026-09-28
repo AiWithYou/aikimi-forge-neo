@@ -17,6 +17,8 @@ on:
       - "extensions-builtin/qwen-image21-studio/**"
       - "tools/*qwen_image21*.py"
       - "tools/tests/test_qwen_image21*.py"
+      - "tools/tests/test_qwen21_style_lora.py"
+      - "tools/prepare_qwen21_style_lora.py"
       - "tools/requirements-qwen-image21.txt"
       - "tests/yue2/**"
       - "javascript/**"
@@ -124,6 +126,8 @@ on:
       - "extensions-builtin/qwen-image21-studio/**"
       - "tools/*qwen_image21*.py"
       - "tools/tests/test_qwen_image21*.py"
+      - "tools/tests/test_qwen21_style_lora.py"
+      - "tools/prepare_qwen21_style_lora.py"
       - "tools/requirements-qwen-image21.txt"
       - "tests/yue2/**"
       - "javascript/**"
@@ -308,6 +312,7 @@ jobs:
           --module tools.tests.test_qwen_image21_service
           --module tools.tests.test_qwen_image21_ui_chromium
           --module tools.tests.test_qwen_image21_worker
+          --module tools.tests.test_qwen21_style_lora
           --module tools.tests.test_gpu_ownership
           --module tools.tests.test_gpu_residency
           --module tools.tests.test_minimax_h3_submission

@@ -109,6 +109,9 @@ class Studio:
         if not isinstance(owner, str) or not owner:
             raise QwenImage21Error("ブラウザーのQwen Image 2.1タブから操作してください。")
         runtime_manifest(self.runtime, request.precision)
+        from .style_lora import validate_installed
+
+        validate_installed(self.runtime, request.to_dict())
         if request.outpaint_version:
             from .outpaint_lora import installed
 
