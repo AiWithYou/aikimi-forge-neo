@@ -1,5 +1,12 @@
 # 変更履歴
 
+## v3.1.0 — 2026-09-28
+
+- Qwen Image 2.1タブに、手元のLoRAライブラリを追加。`models/Qwen-Image-2.1/loras/`に置いた対応する`.safetensors`を複数選択し、各−2〜2の強度で適用できます。選択を追加・削除しても残ったLoRAの強度を保持し、0は読み込みを省略します。
+- SushiUI・Diffusers/Comfy系のQwen Image 2.1用線形LoRAを読み込み、ファイルのハッシュ・強度・適用層数を生成情報に保存。未対応キー・不足ペア・寸法不一致は部分適用せず中止し、学習時と異なる量子化方式での実行には明示的な実験設定を必要とします。
+- Qwenに縦長960×1280のプリセットを追加し、生成操作と設定欄の重なりを修正しました。
+- READMEに、従来のForge用とQwen用それぞれのLoRA保存先・適用手順を掲載。INT8・Q4での実生成、Q4での複数読み込み、UI操作と自動テストを確認しました。W4A8・BF16での追加LoRA実生成は今回未検証です。[使い方と制限](extensions-builtin/qwen-image21-studio/README.md#追加lora) · [検証記録](docs/audits/2026-09-28-qwen21-style-loras.md)
+
 ## v3.0.0 — 2026-09-27
 
 - Qwen・SenseNova・MiniMax H3動画にプリセットと併用できる幅／高さ指定を追加。Nanosaur2・H3 Imageも含めて縦横入替に対応し、カスタム寸法を生成条件へ渡します。H3の履歴復元・ComfyUIへの書き出しでも寸法を保持します。

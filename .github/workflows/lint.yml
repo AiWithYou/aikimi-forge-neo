@@ -27,6 +27,8 @@ on:
       - "modules_forge/qwen_image21_environment.py"
       - "tools/*qwen_image21*.py"
       - "tools/tests/test_qwen_image21*.py"
+      - "tools/tests/test_qwen21_style_lora.py"
+      - "tools/prepare_qwen21_style_lora.py"
       - "extensions-builtin/qwen-image21-studio/**"
       - "modules_forge/gpu_residency.py"
       - "modules/ui_gpu_residency.py"
@@ -112,6 +114,8 @@ on:
       - "modules_forge/qwen_image21_environment.py"
       - "tools/*qwen_image21*.py"
       - "tools/tests/test_qwen_image21*.py"
+      - "tools/tests/test_qwen21_style_lora.py"
+      - "tools/prepare_qwen21_style_lora.py"
       - "extensions-builtin/qwen-image21-studio/**"
       - "modules_forge/gpu_residency.py"
       - "modules/ui_gpu_residency.py"
@@ -225,6 +229,8 @@ jobs:
             tools/setup_qwen_image21.py
             tools/qwen_image21_worker.py
             tools/tests/test_qwen_image21*.py
+            tools/tests/test_qwen21_style_lora.py
+            tools/prepare_qwen21_style_lora.py
             extensions-builtin/qwen-image21-studio/scripts/qwen_image21_studio.py
             modules_forge/gpu_residency.py
             modules/ui_gpu_residency.py

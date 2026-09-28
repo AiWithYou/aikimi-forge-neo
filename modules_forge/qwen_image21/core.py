@@ -142,7 +142,13 @@ class Request:
     outpaint_margins: tuple[int, int, int, int] = (0, 0, 0, 0)
     outpaint_feather: int = 32
 
+    style_loras: tuple[dict, ...] = ()
+    allow_lora_base_mismatch: bool = False
+
     def resolved(self) -> Request:
+        from .style_lora import validate_options
+
+        validate_options(self.to_dict())
         if self.operation not in {"generate", "prepare"}:
             raise QwenImage21Error("実行する操作が不正です。")
         if self.operation == "prepare" and self.precision not in {"int8", "w4a8"}:
