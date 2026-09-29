@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "repository": "Aikimi/Ming-Image-0.1-Design-W4A8",
+  "revision": "b9052bda826f4f9709bca1a3d51f432d08ac3786",
+  "license_url": "https://huggingface.co/Aikimi/Ming-Image-0.1-Design-W4A8/blob/b9052bda826f4f9709bca1a3d51f432d08ac3786/LICENSE",
+  "models": [
+    {
+      "path": "diffusion_models/ming_image_0.1_design_w4a8_convrot_experimental.safetensors",
+      "size": 3488163008,
+      "sha256": "66be75b57dfb464a905f7f1359a63303890e08ff8864d9fb8470e2513030d515"
+    },
+    {
+      "path": "diffusion_models/ming_image_0.1_design_w4a8_convrot_experimental.json",
+      "size": 676,
+      "sha256": "b61200fea3c64190a3d5479dbd697268c15856ec910e2c3ce099e7cc7e2c9751"
+    }
+  ]
+}

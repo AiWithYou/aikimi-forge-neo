@@ -186,11 +186,12 @@ class MingImageContracts(unittest.TestCase):
             patch.object(setup_ming_image, "runtime_ready", return_value=False),
         ):
             updates = list(ui._prepare())
-        message, generate, prepare, status = updates[-1]
+        message, generate, prepare, status, precision = updates[-1]
         self.assertEqual(message, failure)
-        self.assertFalse(generate["visible"])
+        self.assertEqual(generate["visible"], "hidden")
         self.assertTrue(prepare["interactive"])
         self.assertIn("&lt;detail&gt;", status)
+        self.assertTrue(precision["interactive"])
 
     def test_setup_streams_real_download_progress(self):
         ui = load_ui()
@@ -200,6 +201,7 @@ class MingImageContracts(unittest.TestCase):
             output = setup_ming_image.ProgressOutput(kwargs["progress"])
             output.write("ming-image-" + studio.ENCODER + ": 1.00 GiB")
             output.write(" / 11.93 GiB\n")
+            output.write("ming-image-" + studio.W4A8_MODEL.replace(".safetensors", ".json") + ": verified and installed\n")
             return {"ok": True}
 
         bridge = Mock()
@@ -210,7 +212,107 @@ class MingImageContracts(unittest.TestCase):
         ):
             updates = list(ui._setup())
         self.assertIn("テキストエンコーダーを取得中 · 1.00 GiB / 11.93 GiB", updates)
+        self.assertIn("モデルの変換記録の取得・検証が完了しました。", updates)
         self.assertTrue(updates[-1].startswith("準備できました"))
+
+    def test_w4a8_download_profile_excludes_int8_and_bf16_source(self):
+        data = setup_ming_image.manifest(setup_ming_image.W4A8_MANIFEST_PATH)
+        self.assertEqual(data["repository"], "Aikimi/Ming-Image-0.1-Design-W4A8")
+        self.assertRegex(data["revision"], r"^[0-9a-f]{40}$")
+        profile = setup_ming_image.profiles("w4a8")["models"]
+        names = {Path(item.relative_path).name for item in profile.artifacts}
+        self.assertEqual(
+            names, {studio.W4A8_MODEL, Path(studio.W4A8_MODEL).with_suffix(".json").name, studio.ENCODER, studio.VAE}
+        )
+        self.assertLess(sum(item.size for item in profile.artifacts), 16_600_000_000)
+        for item in profile.artifacts:
+            self.assertRegex(item.sha256, r"^[0-9a-f]{64}$")
+            self.assertNotIn("/resolve/main/", item.url)
+        with TemporaryDirectory() as directory, patch.object(setup_ming_image, "install_runtime") as install:
+            result = setup_ming_image.run(root=Path(directory), precision="w4a8", dry_run=True)
+            install.assert_not_called()
+            self.assertEqual(list(Path(directory).iterdir()), [])
+            self.assertNotIn(studio.MODEL, json.dumps(result))
+            self.assertNotIn("ming_image_0.1_design_bf16", json.dumps(result))
+
+    def test_w4a8_readiness_and_prepare_use_selected_precision(self):
+        ui = load_ui()
+        with (
+            patch.object(setup_ming_image, "runtime_ready", return_value=True),
+            patch.object(studio, "model_ready", return_value=False) as ready,
+        ):
+            _, generate, prepare, _, selector = ui._readiness("w4a8")
+            self.assertEqual(generate["visible"], "hidden")
+            self.assertTrue(prepare["visible"])
+            self.assertIn("W4A8 · 約16.6GB", prepare["value"])
+            self.assertTrue(selector["interactive"])
+            self.assertEqual(ready.call_args.kwargs["precision"], "w4a8")
+        bridge = Mock()
+        bridge.runtime_setup_session.return_value = nullcontext()
+        with (
+            patch.object(studio, "_bridge", return_value=bridge),
+            patch.object(setup_ming_image, "run", return_value={"ok": True}) as install,
+            patch.object(setup_ming_image, "runtime_ready", return_value=True),
+            patch.object(studio, "model_ready", return_value=True),
+        ):
+            updates = list(ui._prepare("w4a8"))
+            self.assertEqual(install.call_args.kwargs["precision"], "w4a8")
+            self.assertFalse(updates[0][-1]["interactive"])
+            self.assertTrue(updates[-1][1]["interactive"])
+            self.assertTrue(updates[-1][-1]["interactive"])
+
+    def test_precision_cannot_change_during_generation_and_is_restored_after_failure(self):
+        ui = load_ui()
+        with patch.object(studio, "run_generation", side_effect=studio.MingImageError("injected failure")):
+            updates = list(ui._generate("poster", "", False, 1024, 1024, 12, "42", {}, "w4a8"))
+        self.assertFalse(updates[0][-1]["interactive"])
+        self.assertTrue(updates[-1][-1]["interactive"])
+
+    def test_w4a8_only_install_is_ready_and_selected_without_int8(self):
+        ui = load_ui()
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = studio.manifest()
+            for entry in data["models"]:
+                if entry["path"].startswith("diffusion_models/"):
+                    continue
+                path = root / "models" / entry["path"]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"fixture")
+                entry["size"] = 7
+            with (
+                patch.object(studio, "manifest", return_value=data),
+                patch.object(studio, "runtime_root", return_value=root),
+                patch.object(studio, "w4a8_receipt", return_value={"format": "asym_w4a8_int8"}),
+            ):
+                self.assertFalse(studio.model_ready(root, verify_hash=False))
+                self.assertTrue(studio.model_ready(root, verify_hash=False, precision="w4a8"))
+                config = ui.on_ui_tabs()[0][0].get_config_file()
+                selector = next(c for c in config["components"] if c["props"].get("elem_id") == "ming-precision")
+                self.assertEqual(selector["props"]["value"], "w4a8")
+                self.assertTrue(selector["props"]["visible"])
+
+    def test_selected_profile_is_used_for_verification_and_repair(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            connection = Mock()
+            connection.connect_ex.return_value = 1
+            with (
+                patch.object(setup_ming_image, "runtime_ready", return_value=True),
+                patch.object(setup_ming_image, "install_runtime"),
+                patch.object(setup_ming_image, "setup_lock", return_value=nullcontext()),
+                patch.object(setup_ming_image.socket, "socket") as socket_factory,
+                patch.object(setup_ming_image, "Installer") as factory,
+            ):
+                socket_factory.return_value.__enter__.return_value = connection
+                factory.return_value.verify.return_value = {"ok": True}
+                result = setup_ming_image.run(root=root, precision="w4a8", verify=True)
+                self.assertTrue(result["ok"])
+                self.assertIn(studio.W4A8_MODEL, str(factory.call_args.args[1]))
+                factory.return_value.install.assert_not_called()
+                result = setup_ming_image.run(root=root, precision="w4a8", repair=True)
+                self.assertTrue(result["ok"])
+                factory.return_value.repair.assert_called_once_with("models", dry_run=False, keep_source=True)
 
     def test_ui_renders_offline_and_private_callbacks(self):
         ui = load_ui()
@@ -219,6 +321,8 @@ class MingImageContracts(unittest.TestCase):
             runtime.assert_not_called()
         self.assertEqual(tabs[0][1:], ("Ming Image", "ming_image_studio"))
         config = tabs[0][0].get_config_file()
+        prepare = next(c for c in config["components"] if c["props"].get("elem_id") == "ming-prepare")
+        self.assertEqual(prepare["props"]["visible"], "hidden")
         self.assertTrue(all(d["api_visibility"] == "private" for d in config["dependencies"] if d.get("backend_fn")))
 
     def test_w4a8_selects_only_the_diffusion_model_and_restores_precision(self):

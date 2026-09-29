@@ -123,6 +123,14 @@ exit 0
         self.assertEqual(result.returncode, 9)
         self.assertIn("23", result.stdout)
 
+    def test_ming_w4a8_batch_uses_download_profile(self):
+        result = self.run_ps(
+            f"& '{ROOT / 'aikimi-setup.bat'}' -Model ming-image -MingPrecision w4a8 -DryRun -NoPause; exit $LASTEXITCODE"
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("setup_ming_image.py --precision w4a8", result.stdout)
+        self.assertNotIn("quantize_ming_image.py", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,7 @@
 
 ## 導入
 
-1. `aikimi-setup.bat`で **6 Ming Image** を選ぶか、Neoの **Ming Image → Ming Imageを準備** を押します。
+1. Neoの **Ming Image → 詳細設定 → 本体モデル** でINT8（標準）またはW4A8（省メモリ・試験版）を選び、**Ming Imageを準備** を押します。`aikimi-setup.bat`の **6 Ming Image** からも精度を選んで導入できます。
 2. プロンプトを入力し、まず **1024×1024・12 steps** で「デザインを生成」を押します。
 3. PNG原本・生成条件JSON・実際に使用したプロンプトを保存できます。出力先は `outputs/ming-image/` です。
 
@@ -17,6 +17,9 @@
 .\venv\Scripts\python.exe tools\setup_ming_image.py
 .\venv\Scripts\python.exe tools\setup_ming_image.py --verify
 .\venv\Scripts\python.exe tools\setup_ming_image.py --repair
+# 本体W4A8を直接ダウンロード（変換不要）
+.\venv\Scripts\python.exe tools\setup_ming_image.py --precision w4a8
+.\venv\Scripts\python.exe tools\setup_ming_image.py --precision w4a8 --verify
 ```
 
 ## 3090向けのモデル構成
@@ -26,11 +29,11 @@
 | 画像生成本体 | INT8 ConvRot | 6.18 GB |
 | Ling-mini-2.0テキストエンコーダー・関連部品 | W4A8 | 12.81 GB |
 | VAE | BF16 | 0.254 GB |
-| 合計 | 本体INT8＋テキストW4A8 | 約19.3 GB（約17.9 GiB） |
+| 合計 | 本体INT8＋テキストW4A8 | 約19.2 GB（約17.9 GiB） |
 
 この容量は保存する重みの合計で、必要VRAMとは異なります。計算中の一時メモリも必要で、ComfyUIがGPUとCPU間の配置を管理します。両方INT8ではテキスト側だけで19.51 GBになるため、この統合ではW4A8を選んでいます。
 
-本体W4A8はBF16原本からローカル変換する試験版として追加できます。2026-09-29に確認した[Comfy-Orgの配布](https://huggingface.co/Comfy-Org/Ming-Image/tree/53654871e47a5d2daed7b3a986cbf1010ef81c78)には本体のW4A8ファイルがないため、下記の変換手順を使用します。4bit表記だけで同じ形式や性能になるわけではありません。
+本体W4A8は[変換済み配布版](https://huggingface.co/Aikimi/Ming-Image-0.1-Design-W4A8)を直接取得できます。本体は約3.49GB、テキスト・VAEと合わせて約16.6GB（約15.4GiB）です。4bit表記だけで同じ形式や性能になるわけではありません。
 
 ## デザインを作る
 
@@ -57,24 +60,41 @@ generous margins, minimal editorial design.
 - 自動プロンプト書き換え、参照画像編集、LoRA、別モデルのDesign-Layerはこのタブの対象外です。
 - 生成はローカルです。入力プロンプトを外部の生成サービスへ送りません。
 
-## 本体もW4A8にする（省メモリ・試験版）
+## 本体W4A8をダウンロードする（省メモリ・試験版）
 
-DiTの202層をBF16原本からW4A8 ConvRotへ変換できます。既存のINT8版は残します。テキストエンコーダーもW4A8なので、変換後は本体・テキストの両方がW4A8になります。VAEと量子化対象外の層はBF16です。
+Mingの **詳細設定 → 本体モデル → W4A8** を選び、**Ming Imageを準備** を押します。BF16原本の取得・変換は不要です。公開済みの本体W4A8と変換記録を取得し、固定revision・サイズ・SHA-256を検証します。共通のテキストエンコーダーとVAEは取得済みなら再利用します。既存のINT8版は残し、W4A8だけの新規導入ではINT8本体を取得しません。
 
-Neoを終了し、生成用ComfyUIも停止した状態で実行してください。
+コマンドで導入する場合は、Neoを終了して実行します。
+
+```powershell
+.\venv\Scripts\python.exe tools\setup_ming_image.py --precision w4a8 --dry-run
+.\venv\Scripts\python.exe tools\setup_ming_image.py --precision w4a8
+# セットアップランチャーから直接指定する場合
+.\aikimi-setup.bat -Model ming-image -MingPrecision w4a8
+```
+
+既存のINT8構成に追加する場合の取得量は約3.49GBです。新規のW4A8構成は重み合計約16.6GBで、別途専用Python・CUDA依存パッケージの空き容量が必要です。テキストエンコーダーもW4A8なので、本体・テキストの両方がW4A8になります。VAEと量子化対象外の層はBF16です。
+
+標準の選択はINT8で、W4A8だけを導入済みなら起動時にW4A8を選びます。選択した精度は生成条件に記録され、条件復元・高解像度再生成にも引き継がれます。「実行環境とモデル」の修復も選択中の精度が対象です。導入・生成中は精度を切り替えられません。
+
+W4A8は対象層の重みを4bit、活性値を8bitに量子化する方式です。重みの容量が減っても生成時間が短くなるとは限りません。文字・細部・構図も変わるため、用途に合わない場合はINT8に戻してください。
+
+### 変換を再現したい場合だけ
+
+配布版の利用には不要ですが、`tools/quantize_ming_image.py`も残しています。Neo・生成用ComfyUIを終了して実行すると、固定版BF16原本と公式変換ツールのハッシュを検証し、量子化前のQKV結合・202層の形式と形状検査を行います。追加容量はBF16原本約12.3GB＋出力約3.49GBです。取得済み原本は `--source <パス>` で指定でき、既存の変換先は上書きしません。
 
 ```powershell
 .\venv\Scripts\python.exe tools\quantize_ming_image.py --dry-run
 .\venv\Scripts\python.exe tools\quantize_ming_image.py
 ```
 
-BF16原本約12.3GBと変換結果約3.49GBの追加容量が必要です。既に取得した固定版BF16がある場合は `--source <原本のパス>` を指定できます。元モデルとComfy-Org公式変換スクリプトのSHA-256を検証し、Ming専用CUDA環境で変換します。量子化前に固定版ComfyUIの対応表でQKVを結合し、追加のBF16中間ファイルは作りません。既存ファイルを上書きせず、202層の形式・形状・モデル識別情報・Attention設定を検査してから公開します。
-
-Neoを起動し直すと、「詳細設定」に **本体モデル → W4A8（省メモリ・試験版）** が現れます。標準はINT8のままです。選択した精度は生成条件に記録され、条件復元・高解像度再生成にも引き継がれます。生成前にはW4A8ファイルのハッシュも検証します。
-
-W4A8は対象層の重みを4bit、活性値を8bitに量子化する方式です。重みの容量が減っても生成時間が短くなるとは限りません。文字・細部・構図も変わるため、用途に合わない場合はINT8に戻してください。
-
 ## 検証
+
+### v3.2.2の配布・導入確認
+
+2026-09-29、公開リポジトリへログインなしでアクセスできることと、配布本体のサイズ・SHA-256を確認しました。手元のW4A8本体と変換記録を退避し、Windows・Chromeの画面でW4A8を選択→準備→実ダウンロード→ハッシュ検証→1024px生成まで確認しています。保存した条件のモデル名・変換記録も公開版と一致しました。既存のINT8・テキスト・VAEはサイズと更新日時が変わらず再利用されました。
+
+未導入時に準備ボタンを再表示するGradio互換処理、W4A8だけを導入した場合の初期選択、選択した精度の取得・検証・修復を含むMingの23テストと、セットアップランチャーの5テストが通過しています。新規PCへの専用環境一式の導入は今回やり直していません。
 
 ### v3.2.1のINT8／W4A8比較
 
@@ -112,7 +132,7 @@ GPU使用量は他アプリを含む全体値を約0.8秒＋計測処理時間�
 
 ブラウザーで、自然文／JSON切り替え時の入力保持、不正JSONの送信阻止、条件復元、途中停止、停止・失敗時の前の結果の保持、モデル解放を確認しました。透明PNGのダウンロードは保存元とバイト単位で一致しました。デスクトップと390px幅の配置も確認しています。
 
-入力、JSON保持、PNG原本・透明面積、Seed復元、読み込みグラフ、準備の進捗と再試行、W4A8の精度復元・変換記録・ハッシュ・上書き防止・量子化前のQKV結合など18件の自動テストを `tools/tests/test_ming_image_studio.py` に含め、関連するタブ・GPU管理・セットアップ・状態表示の回帰テストも実行しています。
+入力、JSON保持、PNG原本・透明面積、Seed復元、読み込みグラフ、準備の進捗と再試行、W4A8の精度復元・変換記録・ハッシュ・上書き防止・量子化前のQKV結合、選択精度の直接取得・修復・操作中の固定などの自動テストを `tools/tests/test_ming_image_studio.py` に含め、関連するタブ・GPU管理・セットアップ・状態表示の回帰テストも実行しています。
 
 [実生成の作例・条件と注意点](../../docs/assets/ming-image-v3.2.0/README.md)
 
@@ -132,3 +152,4 @@ GPU使用量は他アプリを含む全体値を約0.8秒＋計測処理時間�
 - [Comfy-Org量子化重み](https://huggingface.co/Comfy-Org/Ming-Image/tree/53654871e47a5d2daed7b3a986cbf1010ef81c78)、全3ファイルのサイズ・SHA-256は [manifest](../../tools/ming_image_manifest.json)
 - 依存パッケージは [専用lock](../../tools/requirements-ming-image.lock) で固定・ハッシュ検証します。モデルはこのGitリポジトリに含みません。
 - 本体W4A8の変換は [Comfy-Org/comfy-model-tools](https://github.com/Comfy-Org/comfy-model-tools/blob/d6797787e6bdb1a1fb0094d588a26f8e71a1c757/quant_int8_convrot.py) の固定スクリプトと、導入済みのcomfy-kitchen 0.2.35を使います。
+- [本体W4A8配布版](https://huggingface.co/Aikimi/Ming-Image-0.1-Design-W4A8)の取得先revision・サイズ・SHA-256は [W4A8 manifest](../../tools/ming_image_w4a8_manifest.json) で固定しています。配布先に元モデルのMITライセンス・変換記録・実測結果を含めています。

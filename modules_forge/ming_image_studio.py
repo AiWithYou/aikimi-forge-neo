@@ -268,7 +268,7 @@ def ensure_runtime(*, restart: bool = False, precision: str = "int8") -> Any:
     if not runtime_ready(REPOSITORY_ROOT):
         raise MingImageError("Ming専用環境が未導入です。「実行環境とモデル」から準備してください。")
     if precision == "w4a8" and not w4a8_receipt(root):
-        raise MingImageError("本体W4A8が未作成または破損しています。MingガイドのW4A8変換手順を確認してください。")
+        raise MingImageError("本体W4A8が未導入または破損しています。「実行環境とモデル」から準備・修復してください。")
     if not model_ready(root, precision=precision):
         raise MingImageError("Mingモデルが不足または破損しています。セットアップを確認してください。")
     bridge = _bridge()
