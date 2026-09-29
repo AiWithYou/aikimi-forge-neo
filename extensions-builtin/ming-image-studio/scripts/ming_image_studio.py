@@ -45,11 +45,18 @@ def _integer(value):
         raise studio.MingImageError("寸法・Steps・Seedには整数を指定してください。") from exc
 
 
-def _request(prompt, text, transparent, width, height, steps, seed):
+def _request(prompt, text, transparent, width, height, steps, seed, precision="int8"):
     if studio.is_json_prompt(prompt or ""):
         text, transparent = "", False
     result = studio.MingImageRequest(
-        prompt or "", text or "", bool(transparent), _integer(width), _integer(height), _integer(steps), _integer(seed)
+        prompt or "",
+        text or "",
+        bool(transparent),
+        _integer(width),
+        _integer(height),
+        _integer(steps),
+        _integer(seed),
+        precision=precision,
     )
     result.validate()
     return result
@@ -87,7 +94,8 @@ def _caption(data):
         alpha = f" · 透明に近い部分 約{fraction:.0%}"
     elif data["request"]["transparent"]:
         alpha = " · 透過を指示しましたが、ほぼ不透明です（透明に近い部分1%未満）"
-    return f"{data['width']} × {data['height']} px{alpha} · Seed {data['seed']}"
+    precision = " · 本体W4A8" if data["request"].get("precision") == "w4a8" else ""
+    return f"{data['width']} × {data['height']} px{alpha} · Seed {data['seed']}{precision}"
 
 
 def _can_double(record):
@@ -113,7 +121,7 @@ def _result_controls(record):
 
 def _restore(record):
     if not record:
-        return (gr.update(),) * 9
+        return (gr.update(),) * 10
     data = record["metadata"]
     request = data["request"]
     preset = next((k for k, v in PRESETS.items() if v == (request["width"], request["height"])), "カスタム")
@@ -127,6 +135,7 @@ def _restore(record):
         str(data["seed"]),
         preset,
         "表示中の画像の条件を戻しました。",
+        request.get("precision", "int8"),
     )
 
 
@@ -207,8 +216,8 @@ def _run(request_factory, previous):
         )
 
 
-def _generate(prompt, text, transparent, width, height, steps, seed, previous):
-    yield from _run(lambda: _request(prompt, text, transparent, width, height, steps, seed), previous)
+def _generate(prompt, text, transparent, width, height, steps, seed, previous, precision="int8"):
+    yield from _run(lambda: _request(prompt, text, transparent, width, height, steps, seed, precision), previous)
 
 
 def _double(previous):
@@ -243,7 +252,7 @@ def _readiness():
     try:
         ready = runtime_ready() and studio.model_ready(studio.runtime_root(), verify_hash=False)
         message = (
-            "導入済み · 本体INT8・テキストW4A8。生成時に自動起動します。" if ready else "Ming Imageの準備が必要です。"
+            "導入済み。専用環境は生成時に自動起動します。" if ready else "Ming Imageの準備が必要です。"
         )
     except (OSError, ValueError) as exc:
         ready, message = False, "準備状態を確認できません: " + str(exc)
@@ -329,6 +338,13 @@ def on_ui_tabs():
                     seed = gr.Textbox(label="Seed（-1でランダム）", value="-1", elem_id="ming-seed")
                     steps = gr.Slider(label="Steps", minimum=1, maximum=50, value=12, step=1)
                     gr.Markdown("既定は12 steps・CFG 1。まず1024相当で試せます。")
+                    precision = gr.Radio(
+                        choices=[("INT8（標準）", "int8"), ("W4A8（省メモリ・試験版）", "w4a8")],
+                        value="int8",
+                        label="本体モデル",
+                        visible=bool(studio.w4a8_receipt(studio.runtime_root(), verify_hash=False)),
+                        elem_id="ming-precision",
+                    )
                 summary = gr.Markdown("1024 × 1024 px · 12 steps", elem_id="ming-summary")
                 with gr.Row(elem_id="ming-actions"):
                     generate = gr.Button("デザインを生成", variant="primary", elem_id="ming-generate")
@@ -341,7 +357,7 @@ def on_ui_tabs():
                     setup_status = gr.Markdown("準備状態を確認しています…")
                     setup = gr.Button("破損したモデルを退避して修復")
                     refresh = gr.Button("準備状態を更新")
-                    gr.Markdown("本体INT8・テキストW4A8 · 専用ComfyUI。保存先: `outputs/ming-image/`")
+                    gr.Markdown("テキストW4A8 · 専用ComfyUI。保存先: `outputs/ming-image/`")
             with gr.Column(scale=2, min_width=300, elem_id="ming-output"):
                 background = gr.Radio(
                     ["チェック", "白", "黒"],
@@ -377,7 +393,7 @@ def on_ui_tabs():
         record = gr.State({})
         job = gr.State({})
         private = {"api_visibility": "private", "show_progress": "hidden"}
-        inputs = [prompt, text, transparent, width, height, steps, seed, record]
+        inputs = [prompt, text, transparent, width, height, steps, seed, record, precision]
         outputs = [status, result, files, record, job, generate, cancel, restore, double, effective, caption]
         prompt.change(_prompt_mode, inputs=prompt, outputs=[hint, text, transparent], queue=False, **private)
         preset.change(
@@ -403,7 +419,7 @@ def on_ui_tabs():
         restore.click(
             _restore,
             inputs=record,
-            outputs=[prompt, text, transparent, width, height, steps, seed, preset, hint],
+            outputs=[prompt, text, transparent, width, height, steps, seed, preset, hint, precision],
             queue=False,
             **private,
         )

@@ -24,6 +24,8 @@ MANIFEST = REPOSITORY_ROOT / "tools/ming_image_manifest.json"
 OUTPUT = REPOSITORY_ROOT / "outputs/ming-image"
 LOGS = REPOSITORY_ROOT / "logs/ming-image"
 MODEL = "ming_image_0.1_design_int8_convrot.safetensors"
+W4A8_MODEL = "ming_image_0.1_design_w4a8_convrot_experimental.safetensors"
+W4A8_SOURCE_SHA256 = "8781c6fc679f1812ad318cc7fd84c4d05a23b3571b9a7efeff73a92054ef4659"
 ENCODER = "ming_image_0.1_ling_mini_2.0_w4a8.safetensors"
 VAE = "ming_image_vae_bf16.safetensors"
 RGBA_PREFIXES = (
@@ -82,8 +84,46 @@ def _file_hash(path: Path, size: int, modified: int, created: int) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def model_ready(root: Path, *, verify_hash: bool = True) -> bool:
+def w4a8_receipt(root: Path, *, verify_hash: bool = True) -> dict:
+    path = root / "models/diffusion_models" / W4A8_MODEL
+    receipt_path = path.with_suffix(".json")
+    try:
+        if path.is_symlink() or receipt_path.is_symlink():
+            return {}
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        stat = path.stat()
+        if (
+            receipt.get("schema_version") != 1
+            or receipt.get("format") != "asym_w4a8_int8"
+            or receipt.get("filename") != W4A8_MODEL
+            or receipt.get("source_sha256") != W4A8_SOURCE_SHA256
+            or receipt.get("quantized_layers") != 202
+            or receipt.get("size") != stat.st_size
+            or not 3_000_000_000 < stat.st_size < 4_000_000_000
+            or not isinstance(receipt.get("sha256"), str)
+            or len(receipt["sha256"]) != 64
+        ):
+            return {}
+        if verify_hash and _file_hash(path, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns) != receipt["sha256"]:
+            return {}
+        return receipt
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {}
+
+
+def diffusion_filename(precision: str) -> str:
+    if not isinstance(precision, str) or precision not in {"int8", "w4a8"}:
+        raise MingImageError("本体の精度はINT8またはW4A8を選択してください。")
+    return W4A8_MODEL if precision == "w4a8" else MODEL
+
+
+def model_ready(root: Path, *, verify_hash: bool = True, precision: str = "int8") -> bool:
+    diffusion_filename(precision)
+    if precision == "w4a8" and not w4a8_receipt(root, verify_hash=verify_hash):
+        return False
     for entry in manifest()["models"]:
+        if precision == "w4a8" and entry["path"].startswith("diffusion_models/"):
+            continue
         path = root / "models" / entry["path"]
         if path.is_symlink() or not path.is_file():
             return False
@@ -110,8 +150,10 @@ class MingImageRequest:
     seed: int = -1
     parent: str = ""
     save_candidates: bool = False
+    precision: str = "int8"
 
     def validate(self) -> None:
+        diffusion_filename(self.precision)
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 24000:
             raise MingImageError("プロンプトは1〜24,000文字で入力してください。")
         if not isinstance(self.text, str) or len(self.text) > 2000:
@@ -171,7 +213,7 @@ def build_workflow(request: MingImageRequest, seed: int) -> dict[str, dict[str, 
         return {"class_type": kind, "inputs": inputs}
 
     return {
-        "model": node("UNETLoader", unet_name=MODEL, weight_dtype="default"),
+        "model": node("UNETLoader", unet_name=diffusion_filename(request.precision), weight_dtype="default"),
         # The pinned ComfyUI detects Ming from weights; its enum has no ming_image value.
         "clip": node("CLIPLoader", clip_name=ENCODER, type="qwen_image", device="default"),
         "vae": node("VAELoader", vae_name=VAE),
@@ -204,13 +246,13 @@ def build_workflow(request: MingImageRequest, seed: int) -> dict[str, dict[str, 
     }
 
 
-def check_nodes(client: Any) -> None:
+def check_nodes(client: Any, precision: str = "int8") -> None:
     schemas = client.object_info(REQUIRED_NODES, timeout=12.0)
     missing = REQUIRED_NODES - schemas.keys()
     if missing:
         raise MingImageError("Ming対応ノードがありません: " + ", ".join(sorted(missing)))
     for kind, field, filename in (
-        ("UNETLoader", "unet_name", MODEL),
+        ("UNETLoader", "unet_name", diffusion_filename(precision)),
         ("CLIPLoader", "clip_name", ENCODER),
         ("VAELoader", "vae_name", VAE),
     ):
@@ -219,13 +261,15 @@ def check_nodes(client: Any) -> None:
             raise MingImageError(f"ComfyUIからモデルが見えません: {filename}")
 
 
-def ensure_runtime(*, restart: bool = False) -> Any:
+def ensure_runtime(*, restart: bool = False, precision: str = "int8") -> Any:
     from tools.setup_ming_image import runtime_ready
 
     root = runtime_root()
     if not runtime_ready(REPOSITORY_ROOT):
         raise MingImageError("Ming専用環境が未導入です。「実行環境とモデル」から準備してください。")
-    if not model_ready(root):
+    if precision == "w4a8" and not w4a8_receipt(root):
+        raise MingImageError("本体W4A8が未作成または破損しています。MingガイドのW4A8変換手順を確認してください。")
+    if not model_ready(root, precision=precision):
         raise MingImageError("Mingモデルが不足または破損しています。セットアップを確認してください。")
     bridge = _bridge()
     with bridge._RUNTIME_LIFECYCLE_LOCK:
@@ -239,7 +283,7 @@ def ensure_runtime(*, restart: bool = False) -> Any:
                 )
         client = bridge.ComfyH3Client(SERVER_URL)
         try:
-            check_nodes(client)
+            check_nodes(client, precision)
         finally:
             client.close()
     return readiness
@@ -270,7 +314,8 @@ def save_result(
     metadata = {
         "schema_version": 1,
         "model": "inclusionAI/Ming-Image-0.1-Design",
-        "precision": "DiT INT8 / encoder W4A8 / VAE BF16",
+        "precision": f"DiT {request.precision.upper()} / encoder W4A8 / VAE BF16",
+        "diffusion_file": diffusion_filename(request.precision),
         "weights_repository": manifest()["repository"],
         "weights_revision": manifest()["revision"],
         "request": asdict(request),
@@ -286,6 +331,8 @@ def save_result(
         "comfyui_revision": readiness.core_revision,
         "comfyui_version": readiness.comfy_version,
     }
+    if request.precision == "w4a8":
+        metadata["local_quantization"] = w4a8_receipt(runtime_root())
     try:
         destination = stage / "image.png"
         shutil.copyfile(source, destination)
@@ -330,14 +377,14 @@ def run_generation(
             time.sleep(0.1)
         bridge.release_forge_vram()
         yield {"stage": "runtime", "message": "Ming Image実行環境を確認しています。", "prompt_id": prompt_id}
-        readiness = ensure_runtime()
+        readiness = ensure_runtime(precision=request.precision)
         from modules_forge import gpu_residency
 
         gpu_residency.register("ming_image", lambda: bridge._release_retained_runtime(SERVER_URL), "ming_image")
         seed = request.resolved_seed()
         graph = build_workflow(request, seed)
         with bridge._RUNTIME_LIFECYCLE_LOCK:
-            readiness = ensure_runtime()
+            readiness = ensure_runtime(precision=request.precision)
             client = bridge.ComfyH3Client(SERVER_URL)
             if bridge._is_cancelled_job(prompt_id):
                 raise MingImageCancelled("画像生成を停止しました。")

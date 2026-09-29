@@ -85,3 +85,4 @@ The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comf
 - 量子化・ComfyUI用再梱包: [Comfy-Org/Ming-Image](https://huggingface.co/Comfy-Org/Ming-Image)（Kijaiによる変換）、MIT。重みは同梱せず、固定revision・SHA-256で別途取得します。
 - 推論: [ComfyUI](https://github.com/Comfy-Org/ComfyUI)（GPL-3.0）、専用の外部チェックアウトで利用。Ming対応コミット `3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251` を固定します。
 - ConvRot/W4A8の実行はComfy Kitchenを使用。導入構成と検証範囲は [Mingガイド](extensions-builtin/ming-image-studio/README.md) を参照してください。
+- 本体W4A8の任意変換では、[Comfy-Org/comfy-model-toolsの変換スクリプト](https://github.com/Comfy-Org/comfy-model-tools/blob/d6797787e6bdb1a1fb0094d588a26f8e71a1c757/quant_int8_convrot.py) を固定コミット・SHA-256で別途取得して実行します。スクリプトとモデル重みは同梱しません。生成ファイルには、原本・変換ツール・出力の識別情報を添付します。
