@@ -25,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--steps", type=int, default=12)
     parser.add_argument("--seed", type=int, default=20260929)
     parser.add_argument("--transparent", action="store_true")
+    parser.add_argument("--precision", choices=("int8", "w4a8"), default="int8")
     args = parser.parse_args(argv)
     request = MingImageRequest(
         args.prompt,
@@ -33,6 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         height=args.height,
         steps=args.steps,
         seed=args.seed,
+        precision=args.precision,
     )
     last = ""
     bridge = _bridge()

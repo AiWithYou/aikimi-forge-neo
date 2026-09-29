@@ -30,7 +30,7 @@
 
 この容量は保存する重みの合計で、必要VRAMとは異なります。計算中の一時メモリも必要で、ComfyUIがGPUとCPU間の配置を管理します。両方INT8ではテキスト側だけで19.51 GBになるため、この統合ではW4A8を選んでいます。
 
-両方W4A8の構成は今回含みません。2026-09-29に確認した[Comfy-Orgの配布](https://huggingface.co/Comfy-Org/Ming-Image/tree/53654871e47a5d2daed7b3a986cbf1010ef81c78)には本体のW4A8ファイルがなく、自前変換の文字再現性・速度は未検証です。4bit表記だけで同じ形式や性能になるわけではありません。
+本体W4A8はBF16原本からローカル変換する試験版として追加できます。2026-09-29に確認した[Comfy-Orgの配布](https://huggingface.co/Comfy-Org/Ming-Image/tree/53654871e47a5d2daed7b3a986cbf1010ef81c78)には本体のW4A8ファイルがないため、下記の変換手順を使用します。4bit表記だけで同じ形式や性能になるわけではありません。
 
 ## デザインを作る
 
@@ -57,7 +57,44 @@ generous margins, minimal editorial design.
 - 自動プロンプト書き換え、参照画像編集、LoRA、別モデルのDesign-Layerはこのタブの対象外です。
 - 生成はローカルです。入力プロンプトを外部の生成サービスへ送りません。
 
+## 本体もW4A8にする（省メモリ・試験版）
+
+DiTの202層をBF16原本からW4A8 ConvRotへ変換できます。既存のINT8版は残します。テキストエンコーダーもW4A8なので、変換後は本体・テキストの両方がW4A8になります。VAEと量子化対象外の層はBF16です。
+
+Neoを終了し、生成用ComfyUIも停止した状態で実行してください。
+
+```powershell
+.\venv\Scripts\python.exe tools\quantize_ming_image.py --dry-run
+.\venv\Scripts\python.exe tools\quantize_ming_image.py
+```
+
+BF16原本約12.3GBと変換結果約3.49GBの追加容量が必要です。既に取得した固定版BF16がある場合は `--source <原本のパス>` を指定できます。元モデルとComfy-Org公式変換スクリプトのSHA-256を検証し、Ming専用CUDA環境で変換します。量子化前に固定版ComfyUIの対応表でQKVを結合し、追加のBF16中間ファイルは作りません。既存ファイルを上書きせず、202層の形式・形状・モデル識別情報・Attention設定を検査してから公開します。
+
+Neoを起動し直すと、「詳細設定」に **本体モデル → W4A8（省メモリ・試験版）** が現れます。標準はINT8のままです。選択した精度は生成条件に記録され、条件復元・高解像度再生成にも引き継がれます。生成前にはW4A8ファイルのハッシュも検証します。
+
+W4A8は対象層の重みを4bit、活性値を8bitに量子化する方式です。重みの容量が減っても生成時間が短くなるとは限りません。文字・細部・構図も変わるため、用途に合わない場合はINT8に戻してください。
+
 ## 検証
+
+### v3.2.1のINT8／W4A8比較
+
+2026-09-29、RTX 3090 24GiB・RAM 64GB、同じ固定環境・プロンプト・Seed・12 stepsで、本体の精度だけを変えて実生成しました。テキスト側はどちらもW4A8です。
+
+| 比較項目 | 本体INT8 | 本体W4A8 |
+|---|---:|---:|
+| 本体ファイル | 6.18 GB | 3.49 GB |
+| 1024pxポスター、モデル保持後・2 Seed | 7.4〜7.6秒 | 8.5〜8.7秒 |
+| 1024pxポスターのGPU使用量・標本最大 | 20.2 GiB | 17.9 GiB |
+| 2048px透過素材、モデル保持後 | 53.2秒 | 57.8秒 |
+| 2048px透過素材のGPU使用量・標本最大 | 21.2 GiB | 20.9 GiB |
+
+1024pxでは余裕が増えましたが、今回の2048px生成ではピーク使用量の差は小さく、両サイズで生成時間は延びました。見出し・副題は両精度で読めましたが、W4A8のポスター1例には指定していない小さな文字列が加わりました。透過素材は両精度でRGBAを出力し、alpha16以下の面積はINT8約91.9%、W4A8約91.5%でした。形や細部は変わります。
+
+GPU使用量は他アプリを含む全体値を約0.8秒＋計測処理時間ごとに標本化した最大です。所要時間はジョブ受付後で、環境起動・初回ハッシュ検証を含みません。少数例であり、速度・品質・必要VRAMの保証ではありません。[比較画像・生成条件・計測値](../../docs/assets/ming-image-w4a8/README.md)
+
+画面からのW4A8生成、保存JSONの精度・変換記録、フォームを変更した後の精度・確定Seedの復元も実機で確認しました。
+
+### v3.2.0のINT8実測
 
 2026-09-29、Windows・RTX 3090 24GiB・RAM 64GB、専用Python 3.12.13 / PyTorch 2.11.0+cu130 / ComfyUI 0.37.0で確認しました。各12 steps・CFG 1の実測です。
 
@@ -75,7 +112,7 @@ generous margins, minimal editorial design.
 
 ブラウザーで、自然文／JSON切り替え時の入力保持、不正JSONの送信阻止、条件復元、途中停止、停止・失敗時の前の結果の保持、モデル解放を確認しました。透明PNGのダウンロードは保存元とバイト単位で一致しました。デスクトップと390px幅の配置も確認しています。
 
-入力、JSON保持、PNG原本・透明面積、Seed復元、読み込みグラフ、準備の進捗と再試行など13件の自動テストを `tools/tests/test_ming_image_studio.py` に含め、関連するタブ・GPU管理・セットアップ・状態表示の回帰テストも実行しています。
+入力、JSON保持、PNG原本・透明面積、Seed復元、読み込みグラフ、準備の進捗と再試行、W4A8の精度復元・変換記録・ハッシュ・上書き防止・量子化前のQKV結合など18件の自動テストを `tools/tests/test_ming_image_studio.py` に含め、関連するタブ・GPU管理・セットアップ・状態表示の回帰テストも実行しています。
 
 [実生成の作例・条件と注意点](../../docs/assets/ming-image-v3.2.0/README.md)
 
@@ -94,3 +131,4 @@ generous margins, minimal editorial design.
 - [ComfyUI公式のMing実装・量子化MoE修正](https://github.com/Comfy-Org/ComfyUI/pull/16482)、固定コミット `3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251`
 - [Comfy-Org量子化重み](https://huggingface.co/Comfy-Org/Ming-Image/tree/53654871e47a5d2daed7b3a986cbf1010ef81c78)、全3ファイルのサイズ・SHA-256は [manifest](../../tools/ming_image_manifest.json)
 - 依存パッケージは [専用lock](../../tools/requirements-ming-image.lock) で固定・ハッシュ検証します。モデルはこのGitリポジトリに含みません。
+- 本体W4A8の変換は [Comfy-Org/comfy-model-tools](https://github.com/Comfy-Org/comfy-model-tools/blob/d6797787e6bdb1a1fb0094d588a26f8e71a1c757/quant_int8_convrot.py) の固定スクリプトと、導入済みのcomfy-kitchen 0.2.35を使います。

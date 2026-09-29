@@ -268,6 +268,7 @@ jobs:
             tools/setup_minimax_h3.py
             modules_forge/ming_image_studio.py
             tools/setup_ming_image.py
+            tools/quantize_ming_image.py
             tools/test_ming_image_live.py
             tools/tests/test_ming_image_studio.py
             extensions-builtin/ming-image-studio/scripts/ming_image_studio.py

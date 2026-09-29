@@ -16,7 +16,7 @@ from unittest.mock import Mock, patch
 from PIL import Image
 
 from modules_forge import ming_image_studio as studio
-from tools import setup_ming_image
+from tools import quantize_ming_image, setup_ming_image
 
 
 def load_ui():
@@ -74,6 +74,8 @@ class MingImageContracts(unittest.TestCase):
             ("seed", True),
             ("text", None),
             ("transparent", "yes"),
+            ("precision", "fp4"),
+            ("precision", []),
         ):
             with self.subTest(field=field, value=value), self.assertRaises(studio.MingImageError):
                 replace(request, **{field: value}).validate()
@@ -218,6 +220,123 @@ class MingImageContracts(unittest.TestCase):
         self.assertEqual(tabs[0][1:], ("Ming Image", "ming_image_studio"))
         config = tabs[0][0].get_config_file()
         self.assertTrue(all(d["api_visibility"] == "private" for d in config["dependencies"] if d.get("backend_fn")))
+
+    def test_w4a8_selects_only_the_diffusion_model_and_restores_precision(self):
+        ui = load_ui()
+        request = ui._request("poster", "", False, 1024, 1024, 12, "321", "w4a8")
+        graph = studio.build_workflow(request, 321)
+        self.assertEqual(graph["model"]["inputs"]["unet_name"], studio.W4A8_MODEL)
+        self.assertEqual(graph["clip"]["inputs"]["clip_name"], studio.ENCODER)
+        from dataclasses import asdict
+
+        record = {
+            "metadata": {"request": asdict(request), "width": 1024, "height": 1024, "seed": 321, "prompt_id": "w4"}
+        }
+        self.assertEqual(ui._restore(record)[-1], "w4a8")
+        self.assertIn("本体W4A8", ui._caption(record["metadata"]))
+        with patch.object(studio, "run_generation", return_value=iter(())) as run:
+            list(ui._double(record))
+        self.assertEqual(run.call_args.args[0].precision, "w4a8")
+        del record["metadata"]["request"]["precision"]
+        self.assertEqual(ui._restore(record)[-1], "int8")
+
+    def test_w4a8_needs_matching_receipt_size_and_content_hash(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = root / "models/diffusion_models" / studio.W4A8_MODEL
+            model.parent.mkdir(parents=True)
+            model.write_bytes(b"fixture")
+            self.assertFalse(studio.w4a8_receipt(root))
+            receipt = {
+                "schema_version": 1,
+                "format": "asym_w4a8_int8",
+                "filename": studio.W4A8_MODEL,
+                "source_sha256": studio.W4A8_SOURCE_SHA256,
+                "quantized_layers": 202,
+                "size": 3_490_000_000,
+                "sha256": "a" * 64,
+            }
+            path = model.with_suffix(".json")
+            path.write_text(json.dumps(receipt))
+            # A tiny real file cannot be accepted just because its receipt claims a valid size.
+            self.assertFalse(studio.w4a8_receipt(root))
+            stat = SimpleNamespace(st_size=receipt["size"], st_mtime_ns=1, st_ctime_ns=1)
+            with patch.object(Path, "stat", return_value=stat), patch.object(Path, "is_symlink", return_value=False):
+                with patch.object(studio, "_file_hash", return_value="a" * 64) as digest:
+                    self.assertEqual(studio.w4a8_receipt(root), receipt)
+                    digest.assert_called_once()
+                with patch.object(studio, "_file_hash", return_value="b" * 64):
+                    self.assertFalse(studio.w4a8_receipt(root))
+                receipt["source_sha256"] = "c" * 64
+                path.write_text(json.dumps(receipt))
+                self.assertFalse(studio.w4a8_receipt(root, verify_hash=False))
+
+    def test_conversion_plan_is_pinned_and_import_does_not_download(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan = quantize_ming_image.convert(root=root, dry_run=True)
+            self.assertIn(studio.W4A8_MODEL, plan["output"])
+            self.assertFalse((root / "repositories").exists())
+            specs = quantize_ming_image.artifacts(download_source=True).artifacts
+            self.assertEqual(len(specs), 2)
+            self.assertTrue(all(len(item.sha256) == 64 for item in specs))
+            self.assertEqual(specs[-1].sha256, studio.W4A8_SOURCE_SHA256)
+            bad = root / "int8.safetensors"
+            bad.write_bytes(b"int8 is not the BF16 source")
+            with self.assertRaises(setup_ming_image.SetupError):
+                quantize_ming_image.validate_source(bad)
+
+    def test_conversion_refuses_to_overwrite_existing_model(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = root / "repositories/ming-image/ComfyUI/models/diffusion_models" / studio.W4A8_MODEL
+            model.parent.mkdir(parents=True)
+            model.write_bytes(b"existing")
+            connection = Mock()
+            connection.connect_ex.return_value = 1
+            with (
+                patch.object(quantize_ming_image, "runtime_ready", return_value=True),
+                patch.object(quantize_ming_image, "setup_lock", return_value=nullcontext()),
+                patch.object(quantize_ming_image.socket, "socket") as socket_factory,
+                patch.object(quantize_ming_image.Installer, "install") as install,
+            ):
+                socket_factory.return_value.__enter__.return_value = connection
+                with self.assertRaises(setup_ming_image.SetupError):
+                    quantize_ming_image.convert(root=root)
+                install.assert_not_called()
+            self.assertEqual(model.read_bytes(), b"existing")
+
+    def test_bf16_qkv_are_fused_in_native_order_before_quantization(self):
+        import torch
+        from safetensors.torch import save_file
+
+        prefix = "layers.0.attention."
+        mapping = {
+            prefix + "to_" + name + ".weight": (prefix + "qkv.weight", (0, i * 2, 2))
+            for i, name in enumerate(("q", "k", "v"))
+        }
+        mapping[prefix + "norm_q.weight"] = prefix + "q_norm.weight"
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "source.safetensors"
+            weights = {
+                prefix + "to_" + name + ".weight": torch.full((2, 4), float(i), dtype=torch.bfloat16)
+                for i, name in enumerate(("q", "k", "v"))
+            }
+            weights[prefix + "norm_q.weight"] = torch.ones(4, dtype=torch.bfloat16)
+            save_file(weights, str(source), metadata={"config": "ming-test"})
+            with (
+                patch.dict(sys.modules, {"comfy.utils": SimpleNamespace(z_image_to_diffusers=lambda _: mapping)}),
+                patch.object(sys, "path", list(sys.path)),
+                quantize_ming_image.NativeMingReader(source) as reader,
+            ):
+                fused = reader.get_tensor(prefix + "qkv.weight")
+                self.assertEqual(reader.get_slice(prefix + "qkv.weight").get_shape(), [6, 4])
+                self.assertEqual(fused[:, 0].tolist(), [0, 0, 1, 1, 2, 2])
+                self.assertIn(prefix + "q_norm.weight", reader.keys())
+                self.assertNotIn(prefix + "to_q.weight", reader.keys())
+                self.assertEqual(reader.metadata(), {"config": "ming-test"})
+                config = bytes(reader.get_tensor(prefix + "comfy_attention.config").tolist())
+                self.assertEqual(json.loads(config), {"attention": "comfy_kitchen_int8"})
 
 
 if __name__ == "__main__":
