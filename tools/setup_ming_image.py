@@ -23,11 +23,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from modules.aikimi_security.redaction import sanitized_subprocess_environment  # noqa: E402
-from modules_forge.ming_image_studio import runtime_root  # noqa: E402
+from modules_forge.ming_image_studio import diffusion_filename, runtime_root  # noqa: E402
 from modules_forge.minimax_h3_runtime import setup_lock  # noqa: E402
 from tools.aikimi_setup import ArtifactSpec, Installer, ProfileSpec, SetupError  # noqa: E402
 
 MANIFEST_PATH = ROOT / "tools/ming_image_manifest.json"
+W4A8_MANIFEST_PATH = ROOT / "tools/ming_image_w4a8_manifest.json"
 
 
 class ProgressOutput(io.TextIOBase):
@@ -44,32 +45,41 @@ class ProgressOutput(io.TextIOBase):
         return len(text)
 
 
-def manifest() -> dict:
-    data = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+def manifest(path: Path = MANIFEST_PATH) -> dict:
+    data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("schema_version") != 1:
         raise SetupError("Ming Image manifestの版を確認できません。")
     return data
 
 
-def profiles() -> dict[str, ProfileSpec]:
+def profiles(precision: str = "int8") -> dict[str, ProfileSpec]:
+    diffusion_filename(precision)
     data = manifest()
-    prefix = f"https://huggingface.co/{data['repository']}/resolve/{data['revision']}"
     license_url = data["license_url"]
-    artifacts = {}
     specs = []
-    for entry in data["models"]:
-        specs.append(
-            ArtifactSpec(
-                artifact_id=f"ming-image-{Path(entry['path']).name}",
-                relative_path=f"repositories/ming-image/ComfyUI/models/{entry['path']}",
-                url=f"{prefix}/{entry['path']}",
-                size=entry["size"],
-                sha256=entry["sha256"],
-                license_url=license_url,
+    sources = [data]
+    if precision == "w4a8":
+        sources.insert(0, manifest(W4A8_MANIFEST_PATH))
+    for source in sources:
+        prefix = f"https://huggingface.co/{source['repository']}/resolve/{source['revision']}"
+        for entry in source["models"]:
+            if precision == "w4a8" and source is data and entry["path"].startswith("diffusion_models/"):
+                continue
+            specs.append(
+                ArtifactSpec(
+                    artifact_id=f"ming-image-{Path(entry['path']).name}",
+                    relative_path=f"repositories/ming-image/ComfyUI/models/{entry['path']}",
+                    url=f"{prefix}/{entry['path']}",
+                    size=entry["size"],
+                    sha256=entry["sha256"],
+                    license_url=source["license_url"],
+                )
             )
+    return {
+        "models": ProfileSpec(
+            "models", f"Ming Image DiT {precision.upper()} / encoder W4A8", tuple(specs), (license_url,), 0
         )
-    artifacts["models"] = ProfileSpec("models", "Ming Image INT8 / W4A8", tuple(specs), (license_url,), 0)
-    return artifacts
+    }
 
 
 def runtime_ready(root: Path = ROOT) -> bool:
@@ -260,10 +270,11 @@ def run(
     dry_run: bool = False,
     verify: bool = False,
     repair: bool = False,
+    precision: str = "int8",
     progress: Callable[[str], None] | None = None,
 ) -> dict:
     root = root.resolve()
-    installer = Installer(root, profiles(), **({"stdout": ProgressOutput(progress)} if progress else {}))
+    installer = Installer(root, profiles(precision), **({"stdout": ProgressOutput(progress)} if progress else {}))
     if dry_run:
         return {
             "runtime_ready": runtime_ready(root),
@@ -304,9 +315,10 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--dry-run", action="store_true", help="導入予定だけを表示")
     mode.add_argument("--verify", action="store_true", help="環境・モデルを検証")
     mode.add_argument("--repair", action="store_true", help="壊れたファイルを退避して再取得")
+    parser.add_argument("--precision", choices=("int8", "w4a8"), default="int8", help="取得・検証する本体モデル")
     args = parser.parse_args(argv)
     try:
-        result = run(dry_run=args.dry_run, verify=args.verify, repair=args.repair)
+        result = run(dry_run=args.dry_run, verify=args.verify, repair=args.repair, precision=args.precision)
         sys.stdout.write(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
         return 0 if args.dry_run or result.get("ok", False) else 1
     except (SetupError, OSError, ValueError) as exc:

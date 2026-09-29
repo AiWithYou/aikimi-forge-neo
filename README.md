@@ -1,8 +1,8 @@
 # Aikimi Forge Neo
 
-**v3.2.1** · [変更履歴](CHANGELOG.md)
+**v3.2.2** · [変更履歴](CHANGELOG.md)
 
-**v3.2.1（2026-09-29）：** Ming Image Designの本体W4A8を試験版として追加しました。BF16原本からローカル変換し、標準INT8と切り替えられます。本体は約6.18GBから約3.49GBになり、テキストエンコーダーと合わせて両方W4A8で生成できます。自然文・JSON・透過PNG・生成条件の復元にも対応します。[導入・使い方・検証範囲](extensions-builtin/ming-image-studio/README.md)
+**v3.2.2（2026-09-29）：** Ming Image Designの[本体W4A8配布版](https://huggingface.co/Aikimi/Ming-Image-0.1-Design-W4A8)を公開しました。利用者による変換は不要です。「詳細設定」でW4A8を選び、「Ming Imageを準備」でダウンロードできます。本体は約3.49GB、共通のテキスト・VAEを含めて約16.6GB。標準INT8との切り替えにも対応します。[導入・使い方・検証範囲](extensions-builtin/ming-image-studio/README.md)
 
 以前の主な更新：**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 
@@ -38,7 +38,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
-| **Ming Image Design**（統合） | ポスター・UI案・インフォグラフィック・透過素材の画像生成。本体INT8＋テキストW4A8、本体W4A8の任意変換、自然文／JSON、実寸指定、透過PNGの背景切替、確定Seed・精度を含む条件復元、元の条件による高解像度再生成。標準構成は専用環境・重み約19.3GBです。[使い方・検証範囲](extensions-builtin/ming-image-studio/README.md) |
+| **Ming Image Design**（統合） | ポスター・UI案・インフォグラフィック・透過素材の画像生成。本体INT8／W4A8配布版＋テキストW4A8、自然文／JSON、実寸指定、透過PNGの背景切替、確定Seed・精度を含む条件復元、高解像度再生成。本体W4A8なら変換不要で重み合計約16.6GB、標準INT8は約19.2GBです。[使い方・検証範囲](extensions-builtin/ming-image-studio/README.md) |
 | **Qwen Outpaint**（追加） | 大きなプレビューを見ながら上下左右を指定し、既存QwenのQ4_K_M／INT8で描き足します。完成PNGの保存・結果からの再拡張・最初の元画像への戻しまで同じ画面で行えます。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) |
 | **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun Acc 4-step LoRAと、Fun ControlNet Unionの8種類の前処理済み制御画像・Inpainting＋Controlを個別に使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |

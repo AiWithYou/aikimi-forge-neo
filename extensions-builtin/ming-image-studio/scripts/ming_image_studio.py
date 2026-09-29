@@ -14,6 +14,7 @@ import gradio as gr
 
 from modules import script_callbacks
 from modules.aikimi_status import studio_status_html
+from modules.gradio_compat import keep_hidden_component_mounted
 from modules_forge import ming_image_studio as studio
 
 PRESETS = {
@@ -166,6 +167,7 @@ def _run(request_factory, previous):
         gr.update(interactive=False),
         unchanged(),
         unchanged(),
+        gr.update(interactive=False),
     )
     try:
         request = request_factory()
@@ -195,6 +197,7 @@ def _run(request_factory, previous):
                 gr.update(interactive=_can_double(record)),
                 event["metadata"]["effective_prompt"] if complete else unchanged(),
                 caption,
+                gr.update(interactive=complete),
             )
     except Exception as exc:
         message = str(exc)
@@ -213,6 +216,7 @@ def _run(request_factory, previous):
             gr.update(interactive=_can_double(previous)),
             unchanged(),
             unchanged(),
+            gr.update(interactive=True),
         )
 
 
@@ -246,25 +250,30 @@ def _cancel(job):
     return "実行中のジョブはありません。"
 
 
-def _readiness():
-    from tools.setup_ming_image import runtime_ready
+def _readiness(precision="int8"):
+    from tools.setup_ming_image import profiles, runtime_ready
 
+    size_gb = sum(item.size for item in profiles(precision)["models"].artifacts) / 1_000_000_000
+    label = f"Ming Imageを準備（{precision.upper()} · 約{size_gb:.1f}GB）"
     try:
-        ready = runtime_ready() and studio.model_ready(studio.runtime_root(), verify_hash=False)
+        ready = runtime_ready() and studio.model_ready(studio.runtime_root(), verify_hash=False, precision=precision)
         message = (
-            "導入済み。専用環境は生成時に自動起動します。" if ready else "Ming Imageの準備が必要です。"
+            f"本体{precision.upper()}は導入済み。専用環境は生成時に自動起動します。"
+            if ready
+            else f"Ming Image（本体{precision.upper()}）の準備が必要です。"
         )
     except (OSError, ValueError) as exc:
         ready, message = False, "準備状態を確認できません: " + str(exc)
     return (
         message,
-        gr.update(visible=ready, interactive=ready),
-        gr.update(visible=not ready, interactive=True),
+        gr.update(visible=keep_hidden_component_mounted(ready), interactive=ready),
+        gr.update(value=label, visible=keep_hidden_component_mounted(not ready), interactive=True),
         html.escape(message) if not ready else "",
+        gr.update(interactive=True),
     )
 
 
-def _setup(*, repair=False):
+def _setup(precision="int8", *, repair=False):
     yield "専用環境とモデルを準備しています。取得済みのファイルは再利用します。"
     updates = queue.Queue()
 
@@ -275,7 +284,7 @@ def _setup(*, repair=False):
             bridge = studio._bridge()
             active = bridge.server_runtime_root(studio.SERVER_URL)
             with bridge.runtime_setup_session(active or studio.runtime_root(), studio.SERVER_URL):
-                result = run(repair=repair, progress=updates.put)
+                result = run(repair=repair, precision=precision, progress=updates.put)
             if not result["ok"]:
                 raise studio.MingImageError("導入後の検証に失敗しました。")
             updates.put("準備できました。プロンプトを入力して生成できます。")
@@ -291,25 +300,43 @@ def _setup(*, repair=False):
             return
         for filename, label in (
             (studio.MODEL, "画像生成モデル"),
+            (studio.W4A8_MODEL, "画像生成モデル（W4A8）"),
+            (studio.W4A8_MODEL.replace(".safetensors", ".json"), "モデルの変換記録"),
             (studio.ENCODER, "テキストエンコーダー"),
             (studio.VAE, "VAE"),
         ):
-            message = message.replace("ming-image-" + filename + ":", label + "を取得中 ·")
+            prefix = "ming-image-" + filename + ":"
+            if message == prefix + " verified and installed":
+                message = label + "の取得・検証が完了しました。"
+            else:
+                message = message.replace(prefix, label + "を取得中 ·")
         yield message
 
 
-def _prepare(*, repair=False):
+def _prepare(precision="int8", *, repair=False):
     last_message = ""
-    for message in _setup(repair=repair):
+    for message in _setup(precision, repair=repair):
         last_message = message
-        yield message, gr.update(visible=False), gr.update(interactive=False), html.escape(message)
-    message, generate, prepare, status = _readiness()
+        yield (
+            message,
+            gr.update(visible=keep_hidden_component_mounted(False)),
+            gr.update(interactive=False),
+            html.escape(message),
+            gr.update(interactive=False),
+        )
+    message, generate, prepare, status, selector = _readiness(precision)
     if last_message.startswith("準備を完了できませんでした:"):
         message, status = last_message, html.escape(last_message)
-    yield message, generate, prepare, status
+    yield message, generate, prepare, status, selector
 
 
 def on_ui_tabs():
+    root = studio.runtime_root()
+    initial_precision = "int8"
+    if not studio.model_ready(root, verify_hash=False) and studio.model_ready(
+        root, verify_hash=False, precision="w4a8"
+    ):
+        initial_precision = "w4a8"
     with gr.Blocks(analytics_enabled=False) as tab:
         with gr.Row(elem_id="ming-workspace"):
             with gr.Column(scale=1, min_width=300, elem_id="ming-controls"):
@@ -340,9 +367,8 @@ def on_ui_tabs():
                     gr.Markdown("既定は12 steps・CFG 1。まず1024相当で試せます。")
                     precision = gr.Radio(
                         choices=[("INT8（標準）", "int8"), ("W4A8（省メモリ・試験版）", "w4a8")],
-                        value="int8",
+                        value=initial_precision,
                         label="本体モデル",
-                        visible=bool(studio.w4a8_receipt(studio.runtime_root(), verify_hash=False)),
                         elem_id="ming-precision",
                     )
                 summary = gr.Markdown("1024 × 1024 px · 12 steps", elem_id="ming-summary")
@@ -350,7 +376,10 @@ def on_ui_tabs():
                     generate = gr.Button("デザインを生成", variant="primary", elem_id="ming-generate")
                     cancel = gr.Button("停止", interactive=False, scale=0, min_width=65, elem_id="ming-cancel")
                 prepare = gr.Button(
-                    "Ming Imageを準備（約19.3GB）", variant="primary", visible=False, elem_id="ming-prepare"
+                    "Ming Imageを準備",
+                    variant="primary",
+                    visible=keep_hidden_component_mounted(False),
+                    elem_id="ming-prepare",
                 )
                 status = gr.HTML("", elem_id="ming-status")
                 with gr.Accordion("実行環境とモデル", open=False):
@@ -394,7 +423,7 @@ def on_ui_tabs():
         job = gr.State({})
         private = {"api_visibility": "private", "show_progress": "hidden"}
         inputs = [prompt, text, transparent, width, height, steps, seed, record, precision]
-        outputs = [status, result, files, record, job, generate, cancel, restore, double, effective, caption]
+        outputs = [status, result, files, record, job, generate, cancel, restore, double, effective, caption, precision]
         prompt.change(_prompt_mode, inputs=prompt, outputs=[hint, text, transparent], queue=False, **private)
         preset.change(
             lambda p: PRESETS.get(p) or (gr.update(), gr.update()),
@@ -442,18 +471,20 @@ def on_ui_tabs():
             **private,
         )
         cancel.click(_cancel, inputs=job, outputs=status, queue=False, **private)
-        readiness_outputs = [setup_status, generate, prepare, status]
+        readiness_outputs = [setup_status, generate, prepare, status, precision]
         for control, repair in ((setup, True), (prepare, False)):
             control.click(
                 partial(_prepare, repair=repair),
+                inputs=precision,
                 outputs=readiness_outputs,
                 concurrency_id="h3-runtime-control",
                 concurrency_limit=1,
                 **private,
             )
-        refresh.click(_readiness, outputs=readiness_outputs, **private)
+        refresh.click(_readiness, inputs=precision, outputs=readiness_outputs, **private)
+        precision.change(_readiness, inputs=precision, outputs=readiness_outputs, queue=False, **private)
         record.change(_result_controls, inputs=record, outputs=[result_tools, background, double], **private)
-        tab.load(_readiness, outputs=readiness_outputs, **private)
+        tab.load(_readiness, inputs=precision, outputs=readiness_outputs, **private)
     return [(tab, "Ming Image", "ming_image_studio")]
 
 
