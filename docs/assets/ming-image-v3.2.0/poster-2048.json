@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "model": "inclusionAI/Ming-Image-0.1-Design",
+  "precision": "DiT INT8 / encoder W4A8 / VAE BF16",
+  "weights_repository": "Comfy-Org/Ming-Image",
+  "weights_revision": "53654871e47a5d2daed7b3a986cbf1010ef81c78",
+  "request": {
+    "prompt": "A cream and forest green botanical poster. A large fern in the lower half, elegant headline \"BOTANICA\", small subtitle \"A quiet collection\", generous margins, minimal editorial design.",
+    "text": "",
+    "transparent": false,
+    "width": 2048,
+    "height": 2048,
+    "steps": 12,
+    "seed": 20260930,
+    "parent": "eae9adbd-6b12-412c-a797-d4d3e02db2d9",
+    "save_candidates": false
+  },
+  "seed": 20260930,
+  "effective_prompt": "A cream and forest green botanical poster. A large fern in the lower half, elegant headline \"BOTANICA\", small subtitle \"A quiet collection\", generous margins, minimal editorial design.",
+  "width": 2048,
+  "height": 2048,
+  "steps": 12,
+  "cfg": 1.0,
+  "sampler": "euler",
+  "scheduler": "simple",
+  "prompt_id": "5e874b68-ef2c-4963-a5b5-bae0ca0789ea",
+  "comfyui_revision": "3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251",
+  "comfyui_version": "0.37.0",
+  "image_mode": "RGBA",
+  "alpha_range": [
+    238,
+    255
+  ],
+  "has_transparency": true
+}

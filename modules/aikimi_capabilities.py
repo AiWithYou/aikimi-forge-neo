@@ -355,9 +355,25 @@ def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | Non
         "sensenova": _sensenova_check,
         "minimax_h3": _minimax_h3_check,
         "qwen_image21": _qwen_image21_check,
+        "ming_image": _ming_image_check,
         "yue2": _yue2_check,
     }.get(feature)
     return check(paths) if check else None
+
+
+def _ming_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
+    from modules_forge.ming_image_studio import model_ready, runtime_root
+    from tools.setup_ming_image import runtime_ready
+
+    try:
+        ready = runtime_ready(paths.root) and model_ready(runtime_root(paths.root), verify_hash=False)
+    except (OSError, ValueError):
+        ready = False
+    return DiagnosticCheck(
+        "ming_image", "Ming Image", CheckState.READY if ready else CheckState.BLOCKED,
+        "Ming専用環境とINT8・W4A8モデルを確認しました。" if ready else "Ming専用環境またはモデルが不足しています。",
+        "Ming Imageタブの「実行環境とモデル」から準備できます。", available=ready,
+    )
 
 
 def _yue2_check(paths: DiagnosticPaths) -> DiagnosticCheck:
@@ -392,6 +408,7 @@ def feature_checks(paths: DiagnosticPaths) -> tuple[DiagnosticCheck, ...]:
         _sensenova_check(paths),
         _minimax_h3_check(paths),
         _qwen_image21_check(paths),
+        _ming_image_check(paths),
         _implementation_check(
             paths,
             check_id="forge_canvas",

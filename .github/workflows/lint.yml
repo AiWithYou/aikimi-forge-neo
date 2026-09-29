@@ -52,6 +52,12 @@ on:
       - "tools/aikimi_setup.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "modules_forge/ming_image_studio.py"
+      - "extensions-builtin/ming-image-studio/**"
+      - "tools/*ming_image*.py"
+      - "tools/ming_image_manifest.json"
+      - "tools/requirements-ming-image.*"
+      - "tools/tests/test_ming_image_studio.py"
       - "tools/tests/test_minimax_h3_setup.py"
       - "modules_forge/minimax_h3_runtime.py"
       - "modules_forge/minimax_h3_setup_ui.py"
@@ -139,6 +145,12 @@ on:
       - "tools/aikimi_setup.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "modules_forge/ming_image_studio.py"
+      - "extensions-builtin/ming-image-studio/**"
+      - "tools/*ming_image*.py"
+      - "tools/ming_image_manifest.json"
+      - "tools/requirements-ming-image.*"
+      - "tools/tests/test_ming_image_studio.py"
       - "tools/tests/test_minimax_h3_setup.py"
       - "modules_forge/minimax_h3_runtime.py"
       - "modules_forge/minimax_h3_setup_ui.py"
@@ -254,6 +266,11 @@ jobs:
             tools/aikimi_setup.py
             tools/run_ci_tests.py
             tools/setup_minimax_h3.py
+            modules_forge/ming_image_studio.py
+            tools/setup_ming_image.py
+            tools/test_ming_image_live.py
+            tools/tests/test_ming_image_studio.py
+            extensions-builtin/ming-image-studio/scripts/ming_image_studio.py
             tools/tests/test_minimax_h3_setup.py
             modules_forge/minimax_h3_runtime.py
             modules_forge/minimax_h3_setup_ui.py

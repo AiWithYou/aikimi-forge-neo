@@ -330,6 +330,7 @@
             sensenova: "SenseNova",
             minimax_h3: "MiniMax H3",
             qwen_image21: "Qwen Image 2.1",
+            ming_image: "Ming Image",
             minimax_h3_image: "MiniMax H3 Image",
             yue2: "YuE2 Music",
             nanosaur2: "Nanosaur2",
@@ -696,7 +697,7 @@
         const candidate = deriveCandidate();
         const state = candidate.state;
         const stateConfig = manifest?.states?.[state] || manifest?.states?.[manifest?.default_state] || {};
-        const backendGeneration = snapshot?.generation || {};
+        const backendGeneration = activeFeature === "ming_image" ? {} : (snapshot?.generation || {});
         const model = snapshot?.model || {};
         const memory = snapshot?.memory || {};
         const backend = snapshot?.backend || {};
@@ -707,7 +708,7 @@
         const progressPercent = Number.isFinite(progress) ? Math.round(Math.min(Math.max(progress, 0), 1) * 100) : null;
         const stateMessage = candidate.message || stateConfig.message || STATUS_LABELS[state] || state;
         const portraitDescriptor = resolvePortrait(state);
-        const nativeFeature = ["qwen_image21", "sensenova", "minimax_h3", "minimax_h3_image", "nanosaur2", "yue2"].includes(activeFeature);
+        const nativeFeature = ["qwen_image21", "ming_image", "sensenova", "minimax_h3", "minimax_h3_image", "nanosaur2", "yue2"].includes(activeFeature);
         const modelName = candidate.modelName || (nativeFeature ? featureLabel(activeFeature) : model.loaded_name || model.selected_name) || "未選択";
         const modelLabel =
             !candidate.modelName && !nativeFeature && model.loaded_name && model.reload_pending && model.selected_name

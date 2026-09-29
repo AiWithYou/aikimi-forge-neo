@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "model": "inclusionAI/Ming-Image-0.1-Design",
+  "precision": "DiT INT8 / encoder W4A8 / VAE BF16",
+  "weights_repository": "Comfy-Org/Ming-Image",
+  "weights_revision": "53654871e47a5d2daed7b3a986cbf1010ef81c78",
+  "request": {
+    "prompt": "A single elegant watercolor ginkgo leaf, golden yellow with a thin stem, isolated in the center, no typography, no shadow.",
+    "text": "",
+    "transparent": true,
+    "width": 2048,
+    "height": 2048,
+    "steps": 12,
+    "seed": 20260931,
+    "parent": "",
+    "save_candidates": false
+  },
+  "seed": 20260931,
+  "effective_prompt": "RGBA, 4-channel, transparent background.\nA single elegant watercolor ginkgo leaf, golden yellow with a thin stem, isolated in the center, no typography, no shadow.",
+  "width": 2048,
+  "height": 2048,
+  "steps": 12,
+  "cfg": 1.0,
+  "sampler": "euler",
+  "scheduler": "simple",
+  "prompt_id": "97a4c5e0-9bb3-4ef5-81bb-441d35b2b598",
+  "comfyui_revision": "3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251",
+  "comfyui_version": "0.37.0",
+  "image_mode": "RGBA",
+  "alpha_range": [
+    0,
+    255
+  ],
+  "has_transparency": true
+}

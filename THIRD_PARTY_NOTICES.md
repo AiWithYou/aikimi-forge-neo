@@ -78,3 +78,10 @@ The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comf
 - Optional v1/v2 weights are downloaded separately and verified by SHA-256; model weights are not committed to this repository.
 - The author's [model card and license statement](https://huggingface.co/ausboss/Qwen-Image-2.1-Outpaint-LoRA/blob/449336db42ff074aee970ba0facc0ac0feb77863/README.md#license) apply the Qwen Research License to use with the Qwen base model.
 - The Forge integration maps the adapter's fused gate/up rows to native Diffusers projections and adds low-rank residuals without modifying the quantized base weights. It uses the existing Qwen worker and does not require ComfyUI.
+
+## Ming Image Design
+
+- モデル原作: [inclusionAI/Ming-Image-0.1-Design](https://huggingface.co/inclusionAI/Ming-Image-0.1-Design)、MIT。
+- 量子化・ComfyUI用再梱包: [Comfy-Org/Ming-Image](https://huggingface.co/Comfy-Org/Ming-Image)（Kijaiによる変換）、MIT。重みは同梱せず、固定revision・SHA-256で別途取得します。
+- 推論: [ComfyUI](https://github.com/Comfy-Org/ComfyUI)（GPL-3.0）、専用の外部チェックアウトで利用。Ming対応コミット `3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251` を固定します。
+- ConvRot/W4A8の実行はComfy Kitchenを使用。導入構成と検証範囲は [Mingガイド](extensions-builtin/ming-image-studio/README.md) を参照してください。

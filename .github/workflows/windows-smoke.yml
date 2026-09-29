@@ -56,6 +56,12 @@ on:
       - "tools/tests/test_h3_ram_profile.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "modules_forge/ming_image_studio.py"
+      - "extensions-builtin/ming-image-studio/**"
+      - "tools/*ming_image*.py"
+      - "tools/ming_image_manifest.json"
+      - "tools/requirements-ming-image.*"
+      - "tools/tests/test_ming_image_studio.py"
       - "tools/minimax_h3_runtime_manifest.json"
       - "tools/requirements-minimax-h3.*"
       - "tools/tests/test_minimax_h3_setup.py"
@@ -165,6 +171,12 @@ on:
       - "tools/tests/test_h3_ram_profile.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "modules_forge/ming_image_studio.py"
+      - "extensions-builtin/ming-image-studio/**"
+      - "tools/*ming_image*.py"
+      - "tools/ming_image_manifest.json"
+      - "tools/requirements-ming-image.*"
+      - "tools/tests/test_ming_image_studio.py"
       - "tools/minimax_h3_runtime_manifest.json"
       - "tools/requirements-minimax-h3.*"
       - "tools/tests/test_minimax_h3_setup.py"
@@ -332,6 +344,7 @@ jobs:
           --module tools.tests.test_launch_utils_environment
           --module tools.tests.test_minimax_h3_studio
           --module tools.tests.test_minimax_h3_setup
+          --module tools.tests.test_ming_image_studio
           --module tools.tests.test_option_migrations
           --module tools.tests.test_patcher_cleanup
           --module tools.tests.test_quant_ops_zero_scale

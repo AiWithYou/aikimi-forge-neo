@@ -42,16 +42,16 @@
 
 /* Independent Studios own their models. Keep shared GPU controls available. */
 body:has(#aikimi-feature-nav:is(
-    [data-active-feature="qwen_image21"], [data-active-feature="sensenova"],
+    [data-active-feature="qwen_image21"], [data-active-feature="ming_image"], [data-active-feature="sensenova"],
     [data-active-feature="minimax_h3"], [data-active-feature="minimax_h3_image"],
     [data-active-feature="nanosaur2"], [data-active-feature="yue2"]
 )) #quicksettings { display: none !important; }
 
 #aikimi-feature-nav + #tabs > .tab-wrapper > .tab-container[role="tablist"] > button:is(
-    [aria-controls="tab_minimax_h3_image_studio"], [aria-controls="tab_nanosaur2_studio"], [aria-controls="tab_aikimi_yue2_studio"]
+    [aria-controls="tab_minimax_h3_image_studio"], [aria-controls="tab_nanosaur2_studio"], [aria-controls="tab_aikimi_yue2_studio"], [aria-controls="tab_ming_image_studio"]
 ),
 #aikimi-feature-nav + #tabs > .tab-nav > button:is(
-    [aria-controls="tab_minimax_h3_image_studio"], [aria-controls="tab_nanosaur2_studio"], [aria-controls="tab_aikimi_yue2_studio"]
+    [aria-controls="tab_minimax_h3_image_studio"], [aria-controls="tab_nanosaur2_studio"], [aria-controls="tab_aikimi_yue2_studio"], [aria-controls="tab_ming_image_studio"]
 ) { display: none !important; }
 
 #aikimi-feature-nav + #tabs > .tab-wrapper > .tab-container[role="tablist"] > button[aria-controls="tab_sensenova_u15_studio"],
