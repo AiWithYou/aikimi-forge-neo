@@ -48,13 +48,14 @@ class ModelSetupLauncherTests(unittest.TestCase):
                 "launch.py",
                 "tools/aikimi_setup.py",
                 "tools/setup_minimax_h3.py",
+                "tools/setup_ming_image.py",
                 "download_sensenova_u15_int8.ps1",
             ):
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
             (root / "requirements.txt").write_text("starlette==1.0.0\n", encoding="utf-8")
-            for model in ("krea2", "anima38", "sensenova", "h3"):
+            for model in ("krea2", "anima38", "sensenova", "h3", "ming-image"):
                 for fail in (False, True):
                     with self.subTest(model=model, fail=fail):
                         result = self.run_ps(f"""
@@ -88,11 +89,11 @@ try {{
                             self.assertEqual(len(calls), 3)
                             continue
                         self.assertEqual(calls[3][-3:], ["--exit", "--uv", "--bnb"])
-                        if model == "h3":
+                        if model in {"h3", "ming-image"}:
                             self.assertEqual(len(calls[4]), 2)
                             self.assertEqual(calls[4][0], "-B")
                             self.assertEqual(
-                                Path(calls[4][1]).resolve(), (root / "tools/setup_minimax_h3.py").resolve()
+                                Path(calls[4][1]).resolve(), (root / ("tools/setup_minimax_h3.py" if model == "h3" else "tools/setup_ming_image.py")).resolve()
                             )
                         else:
                             self.assertEqual(calls[4][2:4], ["install", model])
@@ -103,7 +104,7 @@ try {{
                             self.assertEqual(calls[-1][-1], "-RuntimeOnly")
 
     def test_bat_dry_run_each_profile(self):
-        for model in ("krea2", "anima38", "sensenova", "h3"):
+        for model in ("krea2", "anima38", "sensenova", "h3", "ming-image"):
             with self.subTest(model=model):
                 result = self.run_ps(
                     f"& '{ROOT / 'aikimi-setup.bat'}' -Model {model} -DryRun -NoPause; exit $LASTEXITCODE"

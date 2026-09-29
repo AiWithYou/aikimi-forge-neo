@@ -1,14 +1,14 @@
 # Aikimi Forge Neo
 
-**v3.1.0** · [変更履歴](CHANGELOG.md)
+**v3.2.0** · [変更履歴](CHANGELOG.md)
 
-**v3.1.0（2026-09-28）：** Qwen Image 2.1に、手動でダウンロードしたLoRAの複数読み込みを追加しました。フォルダーに置いて一覧を更新し、使うLoRAを選んで各強度を調整できます。[保存先と使い方](#手動でダウンロードしたloraを使う) · [対応形式と制限](extensions-builtin/qwen-image21-studio/README.md#追加lora)
+**v3.2.0（2026-09-29）：** Ming Image Designを追加しました。自然文・JSONから文字を含むデザインや透過PNGを生成し、元画像の条件復元・高解像度での再生成・PNGと使用プロンプトの保存を同じ画面で行えます。3090向けに本体INT8＋テキストエンコーダーW4A8を使用します。[導入・使い方・検証範囲](extensions-builtin/ming-image-studio/README.md)
 
-以前の主な更新：**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
+以前の主な更新：**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
-**Qwen Image 2.1・Krea2・Anima・SenseNovaの画像生成・編集、Nanosaur2のイラスト生成、MiniMax H3の音声付き動画、YuE2の作曲を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
+**Qwen Image 2.1・Krea2・Anima・SenseNovaの画像生成・編集、Ming Imageのデザイン画像、Nanosaur2のイラスト生成、MiniMax H3の音声付き動画、YuE2の作曲を、Forge Neoの画面から使えるWindows向け派生版です。** モデルのセットアップ、4K／8K処理、画像の仕上げもまとめています。
 
 [Stable Diffusion WebUI Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo)を基盤にしています。主な対象はWindows 11・Python 3.13・NVIDIA GPUで、通常起動では自分のPC内だけで利用し、LANやインターネットへ自動公開しません。
 
@@ -20,7 +20,7 @@
 
 | 用途 | Forge Neoを基盤に、この派生版で加えたこと |
 |---|---|
-| **モデル対応** | Qwen Image 2.1のINT8・W4A8、手元のLoRAの複数読み込み、Fun Acc 4-step LoRA、任意の4bitプロンプト書き換え、Anima 3.8B v1.1、SenseNova、Nanosaur2、MiniMax H3の専用Studio、YuE2 Musicの作曲・楽譜編集。 |
+| **モデル対応** | Qwen Image 2.1のINT8・W4A8、手元のLoRAの複数読み込み、Fun Acc 4-step LoRA、任意の4bitプロンプト書き換え、Anima 3.8B v1.1、Ming Image、SenseNova、Nanosaur2、MiniMax H3の専用Studio、YuE2 Musicの作曲・楽譜編集。 |
 | **導入** | 画像・動画モデルを選ぶセットアップBATと、Qwen Image 2.1・YuE2の専用BAT。モデルの取得・変換と、必要な専用環境の準備。 |
 | **仕上げ** | HyperWeaveの高解像度再作画、Grain Cleaner、Color Flatten、CD Tunerの統合。 |
 | **操作** | 全モデル共通の保持設定・手動解放、ちびあいきみによる環境・実行状態の表示、追加機能へのショートカット、Extrasの処理順・予定サイズの表示、設定とジョブの復旧。 |
@@ -38,6 +38,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
+| **Ming Image Design**（統合） | ポスター・UI案・インフォグラフィック・透過素材の画像生成。本体INT8＋テキストW4A8、自然文／JSON、実寸指定、透過PNGの背景切替、確定Seedを含む条件復元、元の条件による高解像度再生成。専用環境・重み約19.3GBをセットアップします。[使い方・検証範囲](extensions-builtin/ming-image-studio/README.md) |
 | **Qwen Outpaint**（追加） | 大きなプレビューを見ながら上下左右を指定し、既存QwenのQ4_K_M／INT8で描き足します。完成PNGの保存・結果からの再拡張・最初の元画像への戻しまで同じ画面で行えます。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) |
 | **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun Acc 4-step LoRAと、Fun ControlNet Unionの8種類の前処理済み制御画像・Inpainting＋Controlを個別に使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
@@ -100,6 +101,7 @@ Forge側の保存先は起動引数`--lora-dir`／`--lora-dirs`でも指定で�
 ### 機能別ガイド
 
 - [Krea2の高解像度処理](docs/krea2_local_supersample_detail_ja.md)
+- [Ming Image Design：本体INT8＋テキストW4A8・文字を含むデザイン・透過PNG](extensions-builtin/ming-image-studio/README.md)
 - [Qwen Image 2.1：画像生成・編集・透過PNG・INT8・Fun ControlNet](extensions-builtin/qwen-image21-studio/README.md)
 - [Qwen Image 2.1 Fun Acc：T2I・I2IのLoRA ON/OFF画像と実測比較](docs/assets/qwen-image21-fun-acc/README.md)
 - [Qwen Image 2.1 Fun ControlNet：全8種類とInpaintingのアニメ調・3D調作例](docs/assets/qwen-image21-fun-controlnet/README.md)

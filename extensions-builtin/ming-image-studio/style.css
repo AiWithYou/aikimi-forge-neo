@@ -1,0 +1,29 @@
+/* Scoped to Ming: preserve Forge's theme and every other Studio. */
+#ming-workspace { align-items: flex-start; gap: 1.2rem; }
+#ming-controls { order: 2; max-width: 420px; }
+#ming-output { order: 1; }
+#ming-heading h3 { margin: 0; }
+#ming-preset { margin-inline: 0 !important; }
+#ming-input-hint, #ming-summary, #ming-caption, #ming-double-note { font-size: .85rem; }
+#ming-status { min-height: 2.5rem; overflow-wrap: anywhere; }
+#ming-actions:has(#ming-generate.hidden) { display: none; }
+#ming-background { border: 0; padding: 0; background: transparent; }
+#ming-result { background: var(--background-fill-secondary); }
+#ming-result:has(img), #ming-result:has(img) .image-container { background-color: #d1d1d1; background-image: conic-gradient(#fff 25%, #d1d1d1 0 50%, #fff 0 75%, #d1d1d1 0); background-size: 24px 24px; }
+#ming-output:has(#ming-background input[value="白"]:checked) #ming-result,
+#ming-output:has(#ming-background input[value="白"]:checked) #ming-result .image-container { background: #fff; }
+#ming-output:has(#ming-background input[value="黒"]:checked) #ming-result,
+#ming-output:has(#ming-background input[value="黒"]:checked) #ming-result .image-container { background: #161616; }
+#ming-result img { object-fit: contain; }
+#ming-files { min-height: 80px; }
+#ming-files button[aria-label="Remove this file"] { display: none; }
+@media (max-width: 560px) {
+    /* The fixed portrait otherwise covers image/download controls while scrolling. */
+    body:has(#aikimi-tab-ming-image.aikimi-feature-active) #aikimi-status,
+    body:has(#aikimi-tab-ming-image.aikimi-feature-active) #aikimi-pet-toggle { display: none !important; }
+}
+@media (max-width: 820px) {
+    #ming-workspace { flex-direction: column; }
+    #ming-controls, #ming-output { order: initial; width: 100%; max-width: none; min-width: 0 !important; }
+    #ming-result { height: 400px !important; }
+}

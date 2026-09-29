@@ -43,6 +43,12 @@
             label: "Qwen Image 2.1",
             kind: "native",
         }),
+        ming_image: Object.freeze({
+            buttonId: "aikimi-tab-ming-image",
+            containerId: "tab_ming_image_studio",
+            label: "Ming Image",
+            kind: "native",
+        }),
         minimax_h3_image: Object.freeze({
             buttonId: "aikimi-tab-h3-image",
             containerId: "tab_minimax_h3_image_studio",
@@ -67,6 +73,7 @@
         "anima38",
         "sensenova",
         "qwen_image21",
+        "ming_image",
         "minimax_h3_image",
         "nanosaur2",
         "minimax_h3",

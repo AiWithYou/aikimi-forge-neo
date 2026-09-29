@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "repository": "Comfy-Org/Ming-Image",
+  "revision": "53654871e47a5d2daed7b3a986cbf1010ef81c78",
+  "comfy_revision": "3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251",
+  "license_url": "https://huggingface.co/inclusionAI/Ming-Image-0.1-Design",
+  "models": [
+    {
+      "path": "diffusion_models/ming_image_0.1_design_int8_convrot.safetensors",
+      "size": 6175239953,
+      "sha256": "0d3f5bcc6d2cb830578ea6d0925b30b9fb66058bcb651cc8633e60760dceb1d0"
+    },
+    {
+      "path": "text_encoders/ming_image_0.1_ling_mini_2.0_w4a8.safetensors",
+      "size": 12813574339,
+      "sha256": "91de4cd0718bec1452b74ff3b0df0dfde280493dab384f0eb4007c18bf932ccd"
+    },
+    {
+      "path": "vae/ming_image_vae_bf16.safetensors",
+      "size": 253816696,
+      "sha256": "7f5bed402dc8c77dc2e0ab1929a85d4df433b7cf7b599dfa8c353da98db0b90a"
+    }
+  ]
+}
