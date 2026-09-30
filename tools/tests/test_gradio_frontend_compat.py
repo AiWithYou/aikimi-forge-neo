@@ -19,6 +19,22 @@ from modules.aikimi_security.gradio_file_guard import install_gradio_file_url_gu
 
 
 class GradioFrontendCompatibilityTests(unittest.TestCase):
+    def test_dataframe_route_is_verified_and_does_not_modify_the_wheel(self):
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.DATAFRAME_ASSET_NAME
+        before = path.read_bytes()
+        asset = module.build_patched_dataframe_asset()
+        self.assertEqual(before, path.read_bytes())
+        app = module.create_gradio_compatibility_app(module.build_patched_tabs_asset())
+        response = TestClient(app).get(f"/assets/{asset.filename}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, asset.content)
+        self.assertNotEqual(response.content, before)
+        self.assertEqual(response.headers["etag"], f'"{asset.patched_sha256}"')
+        with patch.object(module, "DATAFRAME_ORIGINAL_SHA256", "0" * 64):
+            with self.assertRaises(module.GradioFrontendCompatibilityError):
+                module.build_patched_dataframe_asset()
+
     def test_webui_validates_patch_before_starting_gradio_listener(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "webui.py").read_text(encoding="utf-8")

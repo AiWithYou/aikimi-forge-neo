@@ -151,9 +151,33 @@ class MingImageRequest:
     parent: str = ""
     save_candidates: bool = False
     precision: str = "int8"
+    model_path: str = ""
+    text_encoder_path: str = ""
+    vae_path: str = ""
+    loras: tuple[dict, ...] = ()
+
+    def uses_local_assets(self) -> bool:
+        return bool(
+            self.model_path or self.text_encoder_path or self.vae_path or any(x["strength"] != 0 for x in self.loras)
+        )
 
     def validate(self) -> None:
         diffusion_filename(self.precision)
+        from modules_forge.local_assets import lora_settings
+
+        for value in (self.model_path, self.text_encoder_path, self.vae_path):
+            if not isinstance(value, str):
+                raise MingImageError("モデルのパスが不正です。")
+        try:
+            if not isinstance(self.loras, (list, tuple)) or any(
+                not isinstance(item, dict) or set(item) != {"name", "strength"} for item in self.loras
+            ):
+                raise ValueError("LoRAの指定が不正です。")
+            if any(not isinstance(x["strength"], (int, float)) for x in self.loras):
+                raise ValueError("LoRAの強度は数値で指定してください。")
+            lora_settings([x["name"] for x in self.loras], [[x["name"], x["strength"]] for x in self.loras])
+        except ValueError as exc:
+            raise MingImageError(str(exc)) from exc
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 24000:
             raise MingImageError("プロンプトは1〜24,000文字で入力してください。")
         if not isinstance(self.text, str) or len(self.text) > 2000:
@@ -261,15 +285,21 @@ def check_nodes(client: Any, precision: str = "int8") -> None:
             raise MingImageError(f"ComfyUIからモデルが見えません: {filename}")
 
 
-def ensure_runtime(*, restart: bool = False, precision: str = "int8") -> Any:
+def ensure_runtime(*, restart: bool = False, precision: str = "int8", request: MingImageRequest | None = None) -> Any:
     from tools.setup_ming_image import runtime_ready
 
     root = runtime_root()
     if not runtime_ready(REPOSITORY_ROOT):
         raise MingImageError("Ming専用環境が未導入です。「実行環境とモデル」から準備してください。")
-    if precision == "w4a8" and not w4a8_receipt(root):
+    custom = request is not None and request.uses_local_assets()
+    if custom:
+        from modules_forge.ming_local import selected_assets, sync_nodes
+
+        selected_assets(request, root)
+        restart = sync_nodes(root) or restart
+    if not custom and precision == "w4a8" and not w4a8_receipt(root):
         raise MingImageError("本体W4A8が未導入または破損しています。「実行環境とモデル」から準備・修復してください。")
-    if not model_ready(root, precision=precision):
+    if not custom and not model_ready(root, precision=precision):
         raise MingImageError("Mingモデルが不足または破損しています。セットアップを確認してください。")
     bridge = _bridge()
     with bridge._RUNTIME_LIFECYCLE_LOCK:
@@ -283,7 +313,12 @@ def ensure_runtime(*, restart: bool = False, precision: str = "int8") -> Any:
                 )
         client = bridge.ComfyH3Client(SERVER_URL)
         try:
-            check_nodes(client, precision)
+            if custom:
+                required = {"AikimiMingModel", "AikimiMingTextEncoder", "AikimiMingVAE", "AikimiMingLoRA"}
+                if required - client.object_info(required, timeout=12.0).keys():
+                    raise MingImageError("ローカルモデル用ノードを読み込めません。実行環境を再起動してください。")
+            else:
+                check_nodes(client, precision)
         finally:
             client.close()
     return readiness
@@ -304,7 +339,13 @@ def transparency_stats(image) -> dict[str, Any]:
 
 
 def save_result(
-    source: Path, request: MingImageRequest, seed: int, prompt_id: str, readiness: Any, output_root: Path = OUTPUT
+    source: Path,
+    request: MingImageRequest,
+    seed: int,
+    prompt_id: str,
+    readiness: Any,
+    output_root: Path = OUTPUT,
+    assets: dict | None = None,
 ) -> dict[str, Any]:
     from PIL import Image
 
@@ -331,7 +372,16 @@ def save_result(
         "comfyui_revision": readiness.core_revision,
         "comfyui_version": readiness.comfy_version,
     }
-    if request.precision == "w4a8":
+    if assets:
+        metadata.update(
+            model=assets["model"]["path"],
+            diffusion_file=Path(assets["model"]["path"]).name,
+            precision="選択したファイルの精度",
+            weights_repository=None,
+            weights_revision=None,
+            local_assets=assets,
+        )
+    if request.precision == "w4a8" and not request.model_path:
         metadata["local_quantization"] = w4a8_receipt(runtime_root())
     try:
         destination = stage / "image.png"
@@ -377,14 +427,35 @@ def run_generation(
             time.sleep(0.1)
         bridge.release_forge_vram()
         yield {"stage": "runtime", "message": "Ming Image実行環境を確認しています。", "prompt_id": prompt_id}
-        readiness = ensure_runtime(precision=request.precision)
+        custom = request.uses_local_assets()
+        runtime_args = {"precision": request.precision, **({"request": request} if custom else {})}
+        readiness = ensure_runtime(**runtime_args)
         from modules_forge import gpu_residency
 
         gpu_residency.register("ming_image", lambda: bridge._release_retained_runtime(SERVER_URL), "ming_image")
         seed = request.resolved_seed()
         graph = build_workflow(request, seed)
+        from modules_forge.local_assets import save_selection
+
+        save_selection(
+            "ming",
+            {
+                key: asdict(request)[key]
+                for key in ("model_path", "text_encoder_path", "vae_path", "loras", "precision")
+            },
+        )
+        assets = None
+        if custom:
+            from modules_forge import local_assets
+            from modules_forge.ming_local import apply_graph, selected_assets
+
+            assets = selected_assets(request, runtime_root())
+            graph = apply_graph(graph, request, assets)
+            for kind in ("model", "text_encoder", "vae"):
+                local_assets.remember("ming_" + kind, [assets[kind]["path"]])
+            local_assets.remember("ming_lora", [x["path"] for x in assets["loras"]])
         with bridge._RUNTIME_LIFECYCLE_LOCK:
-            readiness = ensure_runtime(precision=request.precision)
+            readiness = ensure_runtime(**runtime_args)
             client = bridge.ComfyH3Client(SERVER_URL)
             if bridge._is_cancelled_job(prompt_id):
                 raise MingImageCancelled("画像生成を停止しました。")
@@ -443,7 +514,15 @@ def run_generation(
                 from modules_forge.minimax_h3_images import extract_image_outputs
 
                 primary, _ = extract_image_outputs(client.history(prompt_id), prompt_id, runtime_root(), request)
-                result = save_result(primary[0], request, seed, prompt_id, readiness, output_root)
+                result = save_result(
+                    primary[0],
+                    request,
+                    seed,
+                    prompt_id,
+                    readiness,
+                    output_root,
+                    **({"assets": assets} if assets else {}),
+                )
                 yield {
                     "stage": "complete",
                     "message": "PNGと生成条件を保存しました。",

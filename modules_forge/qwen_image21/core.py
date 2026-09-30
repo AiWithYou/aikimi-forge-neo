@@ -144,11 +144,21 @@ class Request:
 
     style_loras: tuple[dict, ...] = ()
     allow_lora_base_mismatch: bool = False
+    local_model: str = ""
+    local_components: str = ""
 
     def resolved(self) -> Request:
         from .style_lora import validate_options
 
         validate_options(self.to_dict())
+        if not isinstance(self.local_model, str) or not isinstance(self.local_components, str):
+            raise QwenImage21Error("ローカルモデルのパスが不正です。")
+        if self.local_components and not self.local_model:
+            raise QwenImage21Error("共通部品の指定にはローカル本体モデルを選択してください。")
+        if self.local_model and (self.operation != "generate" or self.fun_acc or self.outpaint_version):
+            raise QwenImage21Error(
+                "ローカル本体では通常生成と追加LoRAを使用してください。Fun Acc・Outpaintは標準モデル専用です。"
+            )
         if self.operation not in {"generate", "prepare"}:
             raise QwenImage21Error("実行する操作が不正です。")
         if self.operation == "prepare" and self.precision not in {"int8", "w4a8"}:
@@ -284,7 +294,7 @@ class Request:
         return asdict(self)
 
 
-def runtime_manifest(root: Path, precision: str = "int8") -> dict:
+def runtime_manifest(root: Path, precision: str = "int8", local_model: str = "", local_components: str = "") -> dict:
     """Read only installed, revision-matched local assets; never trigger downloads."""
     try:
         manifest = read_json(root / "runtime.json")
@@ -292,6 +302,19 @@ def runtime_manifest(root: Path, precision: str = "int8") -> dict:
         raise QwenImage21Error(f"未導入です。{SETUP_COMMAND}を実行してください。") from exc
     if not isinstance(manifest, dict) or manifest.get("schema") != 1:
         raise QwenImage21Error(f"実行環境の登録が不正です。{SETUP_COMMAND}を再実行してください。")
+    if local_model:
+        from .local_source import resolve
+
+        python = root / "worker-env" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        if not python.is_file() or manifest.get("diffusers_revision") != DIFFUSERS_REVISION:
+            raise QwenImage21Error(
+                f"専用環境が不足または古い版です。{SETUP_COMMAND} --runtime-only を実行してください。"
+            )
+        try:
+            source = resolve(root, local_model, local_components, precision)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise QwenImage21Error(f"ローカルモデル: {exc}") from exc
+        return {**manifest, "python": str(python.absolute()), "model": source["model"], "local_source": source}
     if manifest.get("model_revision") != MODEL_REVISION or manifest.get("diffusers_revision") != DIFFUSERS_REVISION:
         raise QwenImage21Error(f"実行環境のバージョンが一致しません。{SETUP_COMMAND}を再実行してください。")
     python = root / "worker-env" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")

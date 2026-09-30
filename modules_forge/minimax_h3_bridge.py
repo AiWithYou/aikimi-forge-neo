@@ -604,7 +604,9 @@ def _runtime_arguments_are_allowed(arguments: Sequence[str]) -> bool:
     except ValueError:
         return False
     whitelist = custom_node_whitelist(arguments)
-    if whitelist is None or set(whitelist) - {HANDOFF_PACK, FAST_VAE_PACK, NEGPIP_PACK, CLIP_CACHE_PACK, negpip_cache.PACK, hybrid.PACK}:
+    from modules_forge.ming_local import NODE_NAME as MING_LOCAL_PACK
+
+    if whitelist is None or set(whitelist) - {HANDOFF_PACK, FAST_VAE_PACK, NEGPIP_PACK, CLIP_CACHE_PACK, negpip_cache.PACK, hybrid.PACK, MING_LOCAL_PACK}:
         return False
     index = 0
     saw_main = False
@@ -1244,6 +1246,10 @@ def _start_runtime_locked(
     from modules_forge.nanosaur2_studio import NODE_NAME, source_ready
 
     extra_nodes = (NODE_NAME,) if source_ready(runtime_root) else ()
+    from modules_forge import ming_local
+
+    if ming_local.source_ready(runtime_root):
+        extra_nodes += (ming_local.NODE_NAME,)
     command = _runtime_command(python, port, runtime_profile, acceleration=acceleration,
                                trusted_custom_nodes=extra_nodes)
 

@@ -56,6 +56,10 @@ on:
       - "tools/tests/test_h3_ram_profile.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "modules_forge/local_assets.py"
+      - "modules_forge/ming_local.py"
+      - "scripts/local_lora_stack.py"
+      - "tools/tests/test_local_model_sources.py"
       - "modules_forge/ming_image_studio.py"
       - "extensions-builtin/ming-image-studio/**"
       - "tools/*ming_image*.py"
@@ -171,6 +175,10 @@ on:
       - "tools/tests/test_h3_ram_profile.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "modules_forge/local_assets.py"
+      - "modules_forge/ming_local.py"
+      - "scripts/local_lora_stack.py"
+      - "tools/tests/test_local_model_sources.py"
       - "modules_forge/ming_image_studio.py"
       - "extensions-builtin/ming-image-studio/**"
       - "tools/*ming_image*.py"
@@ -344,6 +352,7 @@ jobs:
           --module tools.tests.test_launch_utils_environment
           --module tools.tests.test_minimax_h3_studio
           --module tools.tests.test_minimax_h3_setup
+          --module tools.tests.test_local_model_sources
           --module tools.tests.test_ming_image_studio
           --module tools.tests.test_option_migrations
           --module tools.tests.test_patcher_cleanup

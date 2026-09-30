@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import html
 import re
+import subprocess
+import sys
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -199,6 +202,8 @@ def start(
     style_loras=None,
     lora_strengths=None,
     allow_lora_base_mismatch=False,
+    local_model="",
+    local_components="",
 ):
     try:
         if resolution not in {value for _, value in RESOLUTIONS}:
@@ -251,6 +256,8 @@ def start(
             control_inpaint=control_inpaint,
             fun_acc=fun_acc,
             style_loras=lora_settings(style_loras, lora_strengths),
+            local_model=local_model or "",
+            local_components=local_components or "",
             allow_lora_base_mismatch=allow_lora_base_mismatch,
         )
         identifier = STUDIO.start(generation, owner(request))
@@ -378,8 +385,10 @@ def check_runtime():
     )
 
 
-def save_quantized(precision, request: gr.Request):
+def save_quantized(precision, request: gr.Request, local_model=""):
     try:
+        if local_model:
+            raise ValueError("ローカルモデルのINT8／W4A8は生成時に変換・保存されます。")
         identifier = STUDIO.prepare(precision, owner(request))
         return (
             identifier,
@@ -393,7 +402,7 @@ def save_quantized(precision, request: gr.Request):
         return gr.update(), str(exc), *[gr.update() for _ in range(4)]
 
 
-def poll_save(identifier, precision, request: gr.Request):
+def poll_save(identifier, precision, request: gr.Request, local_model=""):
     if not identifier:
         return [gr.update()] * 5
     try:
@@ -404,7 +413,7 @@ def poll_save(identifier, precision, request: gr.Request):
             text += f" · 経過 {state['elapsed']:.0f} 秒"
         return (
             text,
-            gr.update(interactive=done and precision in {"int8", "w4a8"}),
+            gr.update(interactive=done and not local_model and precision in {"int8", "w4a8"}),
             gr.update(visible=not done, interactive=not done),
             gr.update(active=not done),
             gr.update(interactive=done),
@@ -412,14 +421,16 @@ def poll_save(identifier, precision, request: gr.Request):
     except JobNotFound as exc:
         return (
             str(exc),
-            gr.update(interactive=precision in {"int8", "w4a8"}),
+            gr.update(interactive=not local_model and precision in {"int8", "w4a8"}),
             gr.update(visible=False),
             gr.update(active=False),
             gr.update(interactive=True),
         )
 
 
-def model_save_status(precision, identifier, request: gr.Request):
+def model_save_status(precision, identifier, request: gr.Request, local_model=""):
+    if local_model:
+        return "ローカルモデルのINT8／W4A8は初回生成時に変換・保存します。", gr.update(interactive=False)
     if identifier:
         try:
             if not STUDIO.status(identifier, owner(request))["done"]:
@@ -582,6 +593,8 @@ def start_canvas(
     style_loras=None,
     lora_strengths=None,
     allow_lora_base_mismatch=False,
+    local_model="",
+    local_components="",
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
@@ -659,6 +672,8 @@ def start_canvas(
                 style_loras,
                 lora_strengths,
                 allow_lora_base_mismatch,
+                local_model,
+                local_components,
             )
     except Exception as exc:
         return gr.update(), str(exc), *[gr.update() for _ in range(8)]
@@ -768,19 +783,9 @@ def lora_display_name(name):
 
 
 def lora_settings(names, rows):
-    strengths = {row[0]: row[1] for row in (rows or []) if len(row) == 2}
-    settings = []
-    for name in names or []:
-        if name not in strengths:
-            raise ValueError("LoRA一覧の更新を待ってから、強度を確認してください。")
-        strength = strengths[name]
-        # Gradio's numeric cells emit strings after manual edits.
-        if isinstance(strength, str):
-            try:
-                strength = float(strength)
-            except ValueError as exc:
-                raise ValueError(f"{name}: 強度は−2〜2の数値で指定してください。") from exc
-        settings.append({"name": name, "strength": strength})
+    from modules_forge.local_assets import lora_settings as selected_loras
+
+    settings = selected_loras(names, rows)
     lora_library.validate_options({"style_loras": settings})
     return tuple(settings)
 
@@ -790,16 +795,15 @@ def refresh_loras(current):
     names = {value for _, value in choices}
     missing = [name for name in (current or []) if name not in names]
     if missing:
-        gr.Warning("見つからないLoRAを選択から外しました: " + ", ".join(missing))
-    return gr.update(choices=choices, value=[name for name in (current or []) if name in names])
+        choices.extend((name, name) for name in missing)
+    return gr.update(choices=choices, value=current or [])
 
 
 def lora_selection(names, rows):
+    from modules_forge.local_assets import lora_rows
+
     names = names or []
-    previous = {row[0]: row[1] for row in (rows or []) if len(row) == 2}
-    table = gr.update(
-        value=[[name, previous.get(name, 1.0)] for name in names], visible=bool(names), row_count=len(names)
-    )
+    table = gr.update(value=lora_rows(names, rows), visible=bool(names))
     mismatched, errors = [], []
     for name in names:
         try:
@@ -850,10 +854,65 @@ def lora_readiness(names, rows, allow_mismatch, identifier, request: gr.Request)
     return gr.update(label=heading), message, gr.update(interactive=valid and not running)
 
 
+def model_choices():
+    from modules_forge.local_assets import choices
+
+    return [("標準モデル", ""), *choices("qwen21_model", [RUNTIME / "checkpoints"], folders=True)]
+
+
+def local_model_selected(value, precision):
+    if not value:
+        return gr.update(), "標準モデルを使用します。"
+    path = Path(value.strip().strip('"'))
+    selected = (
+        "base_q4_k_m" if path.suffix.lower() == ".gguf" else "bf16" if path.suffix.lower() == ".safetensors" else "int8"
+    )
+    return gr.update(value=selected), "ローカルモデルを使用します。共通部品が揃っていれば標準本体の取得は不要です。"
+
+
+def prepare_local_environment(model, components):
+    path = Path((model or "").strip().strip('"'))
+    if not path.is_absolute():
+        path = Path(script_path) / path
+    mode = "--runtime-only" if components or (model and (path / "model_index.json").is_file()) else "--components-only"
+    description = "実行環境" if mode == "--runtime-only" else "実行環境と共通部品（約18.9GB）"
+    yield f"{description}を準備中です。標準の本体は取得しません。", gr.update(interactive=False)
+    try:
+        with subprocess.Popen(  # noqa: S603 -- fixed local setup script and one allowlisted mode flag.
+            [sys.executable, "-u", "-X", "utf8", str(Path(script_path) / "tools/setup_qwen_image21.py"), mode],
+            cwd=script_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        ) as process:
+            recent, updated = [], 0.0
+            for line in process.stdout:
+                recent = (recent + [line.strip()])[-5:]
+                if time.monotonic() - updated > 1:
+                    yield "準備中\n\n```text\n" + "\n".join(recent)[-2000:] + "\n```", gr.update(interactive=False)
+                    updated = time.monotonic()
+            code = process.wait()
+        message = (
+            "準備が完了しました。ローカルモデルを指定して生成できます。"
+            if code == 0
+            else "準備に失敗しました。\n\n```text\n" + "\n".join(recent)[-2000:] + "\n```"
+        )
+        yield message, gr.update(interactive=True)
+    except OSError as exc:
+        yield f"準備を開始できません: {exc}", gr.update(interactive=True)
+
+
 def on_ui_tabs():
+    from modules_forge import local_assets
+
+    saved_source = local_assets.selection("qwen21")
+    saved_loras = saved_source.get("style_loras", [])
     from modules_forge.forge_canvas.canvas import ForgeCanvas
 
-    selected_precision = default_precision()
+    selected_precision = saved_source.get("precision") or default_precision()
     with gr.Blocks(analytics_enabled=False, elem_id="qwen-image21-studio") as tab:
         with gr.Row(elem_id="qwen21-workspace"):
             with gr.Column(scale=8, min_width=340, elem_id="qwen21-visual"):
@@ -1036,30 +1095,60 @@ def on_ui_tabs():
                             label="編集指示の書き換え",
                             elem_id="qwen21-rewrite-edit-prompt",
                         )
-                    with gr.Accordion("LoRA · なし", open=False, elem_id="qwen21-lora-section") as lora_section:
+                    with gr.Accordion("本体モデル", open=False, elem_id="qwen21-local-source"):
+                        local_model = gr.Dropdown(
+                            model_choices(),
+                            value=saved_source.get("local_model", ""),
+                            allow_custom_value=True,
+                            label="使用する本体",
+                            elem_id="qwen21-local-model",
+                            info="一覧から選択、またはローカルファイル／Diffusersフォルダーのフルパスを貼り付けてEnter。",
+                        )
+                        local_components = gr.Textbox(
+                            label="共通部品フォルダー · 本体だけを選ぶ場合",
+                            value=saved_source.get("local_components", ""),
+                            placeholder="空欄: 導入済みの共通部品",
+                            elem_id="qwen21-local-components",
+                        )
+                        source_status = gr.Markdown(
+                            local_model_selected(saved_source.get("local_model", ""), selected_precision)[1]
+                        )
+                        source_refresh = gr.Button("モデル一覧を更新", size="sm")
+                        source_prepare = gr.Button("環境・共通部品を準備（標準本体なし）", size="sm")
+                        gr.Markdown(
+                            "共通部品がない場合は約18.9GBを取得。完全なDiffusersフォルダーか共通部品を指定済みなら実行環境のみ準備します。初回生成時はファイルの検証に時間がかかることがあります。"
+                        )
+                    with gr.Accordion(
+                        f"LoRA · {len(saved_loras)}件" if saved_loras else "LoRA · なし",
+                        open=False,
+                        elem_id="qwen21-lora-section",
+                    ) as lora_section:
                         with gr.Row():
                             style_loras = gr.Dropdown(
                                 lora_choices(),
-                                value=[],
+                                value=[x["name"] for x in saved_loras],
                                 multiselect=True,
-                                label="LoRA（複数選択）",
+                                label="LoRA（複数選択・フルパスも入力可）",
+                                allow_custom_value=True,
                                 min_width=180,
                                 elem_id="qwen21-style-lora",
                             )
                             lora_refresh = gr.Button("一覧更新", size="sm", scale=0, min_width=70)
                         lora_strengths = gr.Dataframe(
-                            value=[],
+                            value=local_assets.lora_rows(
+                                [x["name"] for x in saved_loras], [[x["name"], x["strength"]] for x in saved_loras]
+                            ),
                             headers=["LoRA", "強度"],
                             datatype=["str", "number"],
                             type="array",
                             static_columns=[0],
                             column_count=(2, "fixed"),
-                            row_count=0,
+                            row_count=len(saved_loras),
                             interactive=True,
                             visible=False,
                             label="強度（−2〜2・0で無効）",
                             column_widths=["75%", "25%"],
-                            max_chars=48,
+                            max_chars=64,
                             max_height=240,
                             buttons=[],
                             elem_id="qwen21-lora-strengths",
@@ -1310,7 +1399,7 @@ def on_ui_tabs():
         save_timer = gr.Timer(1, active=False)
         save_model.click(
             save_quantized,
-            inputs=precision,
+            inputs=[precision, local_model],
             outputs=[save_job, save_status, save_model, stop_save, save_timer, generate],
             concurrency_id="qwen-image21-submit",
             concurrency_limit=1,
@@ -1318,12 +1407,14 @@ def on_ui_tabs():
         ).then(assistant_status, inputs=save_job, outputs=assistant, **PRIVATE)
         save_timer.tick(
             poll_save,
-            inputs=[save_job, precision],
+            inputs=[save_job, precision, local_model],
             outputs=[save_status, save_model, stop_save, save_timer, generate],
             **PRIVATE,
         ).then(assistant_status, inputs=save_job, outputs=assistant, **PRIVATE)
         stop_save.click(cancel, inputs=save_job, outputs=[save_status, stop_save], queue=False, **PRIVATE)
-        precision.change(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
+        precision.change(
+            model_save_status, inputs=[precision, save_job, local_model], outputs=[save_status, save_model], **PRIVATE
+        )
         precision.change(
             profile_settings,
             inputs=[precision, profile_state, fun_acc],
@@ -1336,8 +1427,38 @@ def on_ui_tabs():
             outputs=[precision, steps, sparse_mode, control_kind, control_image, control_inpaint],
             **PRIVATE,
         )
-        tab.load(model_save_status, inputs=[precision, save_job], outputs=[save_status, save_model], **PRIVATE)
+        tab.load(
+            model_save_status, inputs=[precision, save_job, local_model], outputs=[save_status, save_model], **PRIVATE
+        )
+        for component in (local_model, local_components, style_loras, precision):
+            component.do_not_save_to_config = True  # Do not replace the asset library with old UI defaults.
+        local_model.change(
+            local_model_selected, inputs=[local_model, precision], outputs=[precision, source_status], **PRIVATE
+        )
+        local_model.change(
+            model_save_status, inputs=[precision, save_job, local_model], outputs=[save_status, save_model], **PRIVATE
+        )
+        source_refresh.click(
+            lambda value: gr.update(choices=model_choices(), value=value),
+            inputs=local_model,
+            outputs=local_model,
+            **PRIVATE,
+        )
+        source_prepare.click(
+            prepare_local_environment,
+            inputs=[local_model, local_components],
+            outputs=[source_status, source_prepare],
+            concurrency_id="qwen21-local-setup",
+            concurrency_limit=1,
+            **PRIVATE,
+        )
         lora_refresh.click(refresh_loras, inputs=style_loras, outputs=style_loras, **PRIVATE)
+        lora_section.expand(
+            lora_selection,
+            inputs=[style_loras, lora_strengths],
+            outputs=[lora_strengths, lora_info, allow_lora_base_mismatch],
+            **PRIVATE,
+        )
         style_loras.change(
             lora_selection,
             inputs=[style_loras, lora_strengths],
@@ -1397,6 +1518,8 @@ def on_ui_tabs():
                 style_loras,
                 lora_strengths,
                 allow_lora_base_mismatch,
+                local_model,
+                local_components,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,

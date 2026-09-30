@@ -1,8 +1,8 @@
 # Aikimi Forge Neo
 
-**v3.2.2** · [変更履歴](CHANGELOG.md)
+**v3.3.0** · [変更履歴](CHANGELOG.md)
 
-**v3.2.2（2026-09-29）：** Ming Image Designの[本体W4A8配布版](https://huggingface.co/Aikimi/Ming-Image-0.1-Design-W4A8)を公開しました。利用者による変換は不要です。「詳細設定」でW4A8を選び、「Ming Imageを準備」でダウンロードできます。本体は約3.49GB、共通のテキスト・VAEを含めて約16.6GB。標準INT8との切り替えにも対応します。[導入・使い方・検証範囲](extensions-builtin/ming-image-studio/README.md)
+**v3.3.0（2026-09-30）：** 手元の互換モデルと複数LoRAを画面から選べます。AnimaなどのForge対応モデル、Qwen Image 2.1、Ming Imageに外部パス指定と個別のLoRA強度を追加。Qwen／Mingは実行環境・共通部品だけを準備でき、標準の本体を先にダウンロードする必要はありません。[使い方・対応形式](docs/local-models.md)
 
 以前の主な更新：**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 
@@ -70,14 +70,15 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 
 ### 手動でダウンロードしたLoRAを使う
 
-使うモデルに対応したLoRAをダウンロードし、次の場所に置きます。どちらもサブフォルダーと複数同時適用に対応します。
+使うモデルに対応したLoRAをダウンロードし、次の場所に置くか、選択欄へフルパスを貼り付けてEnterを押します。複数選択し、各強度を−2〜2に設定できます。0は無効、×は選択解除です。
 
 | 使う画面 | 既定の保存先（本体フォルダー内） | 適用方法 |
 |---|---|---|
-| Forgeの`txt2img`／`img2img`（従来機能） | `models/Lora/` | **Lora**一覧を更新してカードを選択。プロンプトの`<lora:名前:0.8>`で強度を指定し、複数並べて使えます。 |
-| **Qwen Image 2.1**（v3.1.0で追加） | `models/Qwen-Image-2.1/loras/` | 対応する`.safetensors`を置き、**LoRA → 一覧更新 → 複数選択**。表で各強度を−2〜2に設定します。初期値は1、0は読み込みを省略します。 |
+| Forgeの`txt2img`／`img2img` | `models/Lora/` | **LoRAを組み合わせる**で選択。従来の`<lora:名前:0.8>`も利用可能。同じLoRAを両方へ指定しないでください。 |
+| **Qwen Image 2.1** | `models/Qwen-Image-2.1/loras/` | **LoRA → 一覧更新 → 複数選択**。 |
+| **Ming Image** | `models/Lora/Ming/` | **モデル・LoRA**で本体と追加LoRAを選択。 |
 
-Forge側の保存先は起動引数`--lora-dir`／`--lora-dirs`でも指定できます。Qwen側はQwen Image 2.1向けの線形LoRAに対応し、別モデル用やすべての独自形式を読み込める機能ではありません。他の専用Studioへの任意LoRA読み込みは今回の追加対象に含みません。
+本体モデルも外部パスを指定でき、元のファイルを移動・コピーする必要はありません。Forge側の保存先は起動引数`--lora-dir`／`--lora-dirs`でも指定できます。モデル名が似ていても、世代・テンソル構成・量子化方式が異なれば互換ではありません。[対応形式と標準本体なしの導入手順](docs/local-models.md)を確認してください。H3・YuE2など、他の専用Studioへの任意LoRAは今回の対象外です。
 
 追加するLoRAの重みは同梱しません。Qwenの対応形式、併用できる設定、実生成を確認した範囲は[追加LoRAガイド](extensions-builtin/qwen-image21-studio/README.md#追加lora)を参照してください。
 

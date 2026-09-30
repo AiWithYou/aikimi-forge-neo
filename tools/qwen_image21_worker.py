@@ -39,6 +39,9 @@ _RESIDENT_RUNTIME: dict[str, Any] | None = None
 _RESIDENT_KEY: tuple | None = None
 
 
+from modules_forge.qwen_image21.local_source import runtime_root, transformer_path  # noqa: E402
+
+
 class GenerationCancelled(RuntimeError):
     """A cooperative cancellation invalidates any partially used model cache."""
 
@@ -158,6 +161,21 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
             raise ValueError(f"Worker payload and request disagree about {key}.")
         request[key] = value
     model_path = Path(payload["model_path"]).resolve()
+    if payload.get("runtime_root"):
+        if request.get("runtime_root") and request["runtime_root"] != payload["runtime_root"]:
+            raise ValueError("Worker and request disagree about runtime root.")
+        request["runtime_root"] = payload["runtime_root"]
+    if request.get("local_model"):
+        from modules_forge.qwen_image21.local_source import resolve
+
+        source = resolve(
+            runtime_root(model_path, request),
+            request["local_model"],
+            request.get("local_components", ""),
+            request["precision"],
+        )
+        if source != request.get("local_source") or Path(source["model"]) != model_path:
+            raise ValueError("The selected local model changed after submission. Select it again.")
     if not model_path.is_dir():
         raise ValueError(f"Local Qwen-Image 2.1 model directory was not found: {model_path}")
     index = json.loads((model_path / "model_index.json").read_text(encoding="utf-8"))
@@ -184,21 +202,26 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
             raise ValueError("Fun Acc requires Sparse Attention and Fun ControlNet to be off.")
         from modules_forge.qwen_image21.fun_acc_lora import installed
 
-        installed(model_path.parent)
+        installed(runtime_root(model_path, request))
     request["fun_acc"] = fun_acc
     from modules_forge.qwen_image21.style_lora import validate_installed
 
-    validate_installed(model_path.parent, request)
+    lora_infos = validate_installed(runtime_root(model_path, request), request)
+    if request.get("lora_sources") is not None:
+        from modules_forge.local_assets import file_identity
+
+        if [file_identity(Path(item["path"])) for item in lora_infos] != request["lora_sources"]:
+            raise ValueError("The selected LoRA changed after submission. Select it again.")
     if request["precision"].startswith("turbo_"):
         if steps != 4:
             raise ValueError("Viggle Turbo requires exactly 4 steps.")
         from modules_forge.qwen_image21.turbo import turbo_manifest
 
-        turbo_manifest(model_path.parent, request["precision"])
-    elif request["precision"] == "base_q4_k_m":
+        turbo_manifest(runtime_root(model_path, request), request["precision"])
+    elif request["precision"] == "base_q4_k_m" and not request.get("local_model"):
         from modules_forge.qwen_image21.regular_gguf import regular_manifest
 
-        regular_manifest(model_path.parent)
+        regular_manifest(runtime_root(model_path, request))
     seed = request.get("seed", 0)
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**63:
         raise ValueError("seed must be an integer between 0 and 2^63 - 1.")
@@ -225,7 +248,7 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         validate_snapshot(request, job)
         from modules_forge.qwen_image21.outpaint_lora import installed
 
-        installed(model_path.parent, request["outpaint_version"])
+        installed(runtime_root(model_path, request), request["outpaint_version"])
     elif request.get("outpaint"):
         raise ValueError("Outpaintの設定と保存情報が一致しません。")
     control_image = request.get("control_image", "")
@@ -347,6 +370,13 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     _progress(job, "loading", "Qwen-Image 2.1 モデルを読み込み中", 0.05)
     started = time.monotonic()
     components: dict[str, Any] = {}
+    local = bool(request.get("local_model"))
+    selected_transformer = transformer_path(model_path, request)
+    if local and selected_transformer.is_dir():
+        from modules_forge.qwen_image21.local_source import validate_folder_tensors
+
+        validate_folder_tensors(selected_transformer, QwenImage21Transformer2DModel)
+    cache_base = runtime_root(model_path, request) / "model" if local else model_path
     counts: dict[str, int] = {}
     w4a8_stats: dict[str, dict] = {}
     disk_cache: dict[str, dict] = {}
@@ -376,13 +406,27 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             _check_cancel(job)
             _progress(job, "loading", f"{name} を INT8 で読み込み中", 0.08 if name == "transformer" else 0.17)
             identity = component_identity(
-                model_path, name, "int8", skip_modules=INT8_SKIP_MODULES if name == "transformer" else ()
+                model_path,
+                name,
+                "int8",
+                skip_modules=INT8_SKIP_MODULES if name == "transformer" else (),
+                **(
+                    {"source_path": selected_transformer if name == "transformer" else model_path / name}
+                    if local and (name == "transformer" or model_path != cache_base)
+                    else {}
+                ),
             )
 
             def load_int8(folder, *, cached=False, model_class=model_class, name=name, quantization=quantization):
                 loaded = model_class.from_pretrained(
-                    str(folder),
-                    **({} if cached else {"subfolder": name, "quantization_config": quantization}),
+                    str(folder if cached else selected_transformer if local and name == "transformer" else folder),
+                    **(
+                        {}
+                        if cached
+                        else {"quantization_config": quantization}
+                        if local and name == "transformer"
+                        else {"subfolder": name, "quantization_config": quantization}
+                    ),
                     torch_dtype=torch.bfloat16,
                     device_map={"": "cuda:0"},
                     local_files_only=True,
@@ -398,7 +442,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
                 return loaded
 
             component, disk_cache[name] = load_or_create(
-                model_path,
+                cache_base,
                 identity,
                 lambda path: load_int8(path, cached=True),
                 lambda: load_int8(model_path),
@@ -421,7 +465,14 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
 
                 label = "Turbo"
             _progress(job, "loading", f"{label} Q4_K_M GGUF Transformerを読み込み中", 0.27)
-            components["transformer"] = load_gguf_transformer(model_path)
+            if local:
+                from modules_forge.qwen_image21.local_source import load_single
+
+                components["transformer"] = load_single(
+                    selected_transformer, QwenImage21Transformer2DModel, runtime_root(model_path, request)
+                )
+            else:
+                components["transformer"] = load_gguf_transformer(model_path)
             _check_cancel(job)
     elif request["precision"] == "w4a8":
         from modules_forge.qwen_image21.w4a8 import load_model, load_saved_model, save_model, validate_dependency
@@ -434,7 +485,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             _check_cancel(job)
             component_progress = 0.08 if name == "transformer" else 0.18
             _progress(job, "loading", f"{name} の W4A8 モデルを確認中", component_progress)
-            folder = model_path / name
+            folder = selected_transformer if local and name == "transformer" else model_path / name
             if name == "transformer":
                 config = model_class.load_config(str(folder), local_files_only=True)
                 factory = partial(model_class.from_config, config)
@@ -453,9 +504,14 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
                     )
                     last_progress = done
 
-            identity = component_identity(model_path, name, "w4a8")
-            saved, disk_cache[name] = load_or_create(
+            identity = component_identity(
                 model_path,
+                name,
+                "w4a8",
+                **({"source_path": folder} if local and (name == "transformer" or model_path != cache_base) else {}),
+            )
+            saved, disk_cache[name] = load_or_create(
+                cache_base,
                 identity,
                 partial(load_saved_model, component=name, factory=factory, check_cancel=lambda: _check_cancel(job)),
                 partial(load_model, folder, name, factory, progress=packing_progress),
@@ -472,13 +528,31 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     elif request["precision"] == "turbo_bf16":
         _progress(job, "loading", "Turbo BF16 Transformerを読み込み中", 0.10)
         components["transformer"] = QwenImage21Transformer2DModel.from_pretrained(
-            str(model_path.parent / "turbo" / "bf16"),
+            str(runtime_root(model_path, request) / "turbo" / "bf16"),
             subfolder="transformer",
             torch_dtype=torch.bfloat16,
             local_files_only=True,
             use_safetensors=True,
         )
         _check_cancel(job)
+    if local and request["precision"] == "bf16":
+        if selected_transformer.is_file():
+            from modules_forge.qwen_image21.local_source import load_single
+
+            components["transformer"] = load_single(
+                selected_transformer, QwenImage21Transformer2DModel, runtime_root(model_path, request)
+            )
+        else:
+            model, loading = QwenImage21Transformer2DModel.from_pretrained(
+                str(selected_transformer),
+                torch_dtype=torch.bfloat16,
+                local_files_only=True,
+                use_safetensors=True,
+                output_loading_info=True,
+            )
+            if loading.get("missing_keys") or loading.get("unexpected_keys") or loading.get("mismatched_keys"):
+                raise ValueError("Local Transformer keys/shapes do not match Qwen Image 2.1.")
+            components["transformer"] = model
     pipe = QwenImage21Pipeline.from_pretrained(
         str(model_path),
         torch_dtype=torch.bfloat16,
@@ -491,7 +565,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         from modules_forge.qwen_image21.style_lora_runtime import load_adapters
 
         _progress(job, "loading", "追加LoRAを読み込み中", 0.28)
-        style_lora_info = load_adapters(pipe.transformer, model_path.parent, request)
+        style_lora_info = load_adapters(pipe.transformer, runtime_root(model_path, request), request)
         pipe.transformer.eval()
     fun_acc_info = None
     fun_acc_config = None
@@ -500,7 +574,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         from modules_forge.qwen_image21.outpaint_lora import installed
         from modules_forge.qwen_image21.outpaint_runtime import load_adapter
 
-        outpaint_info = installed(model_path.parent, request["outpaint_version"], verify=True)
+        outpaint_info = installed(runtime_root(model_path, request), request["outpaint_version"], verify=True)
         _progress(job, "loading", "Outpaint LoRAを読み込み中", 0.28)
         outpaint_info.update(load_adapter(pipe.transformer, outpaint_info["path"]))
         pipe.transformer.eval()
@@ -508,7 +582,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         from modules_forge.qwen_image21.fun_acc_lora import installed
         from modules_forge.qwen_image21.pdd_vendor.qwenimage21_pdd import QwenImage21PDDScheduler, load_pdd_lora
 
-        fun_acc_info = installed(model_path.parent)
+        fun_acc_info = installed(runtime_root(model_path, request))
         _progress(job, "loading", "Fun Acc 4-step LoRAを読み込み中", 0.28)
         fun_acc_config = load_pdd_lora(pipe.transformer, fun_acc_info["path"])
         pipe.transformer.eval()
@@ -519,7 +593,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         from modules_forge.qwen_image21.fun_controlnet import installed
         from modules_forge.qwen_image21.fun_controlnet_runtime import FunUnion
 
-        info = installed(model_path.parent)
+        info = installed(runtime_root(model_path, request))
         _progress(job, "loading", "Fun ControlNet INT8を読み込み中", 0.28)
         controlnet = FunUnion.from_checkpoint(Path(info["path"]))
         controlnet.attach(pipe.transformer)
@@ -527,7 +601,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         from diffusers import FlowMatchEulerDiscreteScheduler
 
         pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
-            str(model_path.parent / "turbo"), subfolder="scheduler", local_files_only=True
+            str(runtime_root(model_path, request) / "turbo"), subfolder="scheduler", local_files_only=True
         )
         if pipe.scheduler.config.shift_terminal is not None:
             raise RuntimeError("Turbo scheduler must have shift_terminal=null.")
@@ -561,7 +635,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
 def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -> tuple[dict[str, Any], bool]:
     global _RESIDENT_RUNTIME, _RESIDENT_KEY
     key = _cache_key(
-        model_path,
+        runtime_root(model_path, request) / "model" if request.get("local_model") else model_path,
         request["precision"],
         request["memory_mode"],
         bool(request.get("control_image")),
@@ -570,7 +644,11 @@ def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -
     )
     from modules_forge.qwen_image21.style_lora import cache_key
 
-    key += (cache_key(model_path.parent, request),)
+    key += (
+        cache_key(runtime_root(model_path, request), request),
+        json.dumps(request.get("local_source"), sort_keys=True),
+        str(runtime_root(model_path, request)),
+    )
     if _RESIDENT_RUNTIME is not None and key == _RESIDENT_KEY:
         _progress(job, "loaded", "読み込み済みモデルを再利用", 0.30)
         return _RESIDENT_RUNTIME, True
@@ -608,7 +686,7 @@ def _rewrite_for_request(model_path: Path, request: dict[str, Any], job: Path) -
             _RESIDENT_RUNTIME["pipe"].to("cpu")
             restore_gpu = True
     result = rewrite_prompt(
-        model_path.parent,
+        runtime_root(model_path, request),
         request["prompt"].strip(),
         request["width"],
         request["height"],
@@ -678,14 +756,14 @@ def _check_bf16_gpu_capacity(model_path: Path, request: dict[str, Any], torch) -
     """
     if request["memory_mode"] != "gpu" or request["precision"] not in {"bf16", "turbo_bf16"}:
         return
-    transformer = model_path / "transformer"
+    transformer = transformer_path(model_path, request)
     if request["precision"] == "turbo_bf16":
         transformer = model_path.parent / "turbo" / "bf16" / "transformer"
     indexes = (
         transformer / "diffusion_pytorch_model.safetensors.index.json",
         model_path / "text_encoder" / "model.safetensors.index.json",
     )
-    weight_bytes = 0
+    weight_bytes = _bf16_safetensors_bytes(transformer) if transformer.is_file() else 0
     for index in indexes:
         if index.is_file():
             metadata = json.loads(index.read_text(encoding="utf-8")).get("metadata", {})
@@ -791,7 +869,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 mask_image=inpaint_mask,
             )
             control_info = {
-                **installed(model_path.parent),
+                **installed(runtime_root(model_path, request)),
                 "kind": request.get("control_kind", "preprocessed"),
                 "strength": request["control_strength"],
                 "image": "control.png",
@@ -889,11 +967,18 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         _check_cancel(job)
         memory = _idle_cuda_memory(torch, request["memory_mode"])
         metadata = {
-            "model": PROFILES[request["precision"]][0] if request["precision"] in PROFILES else MODEL_ID,
-            "model_path": str(model_path),
-            "model_revision": PROFILES[request["precision"]][1]
+            "local_source": request.get("local_source"),
+            "model": request["local_model"]
+            if request.get("local_model")
+            else PROFILES[request["precision"]][0]
             if request["precision"] in PROFILES
-            else _model_revision(model_path),
+            else MODEL_ID,
+            "model_path": str(model_path),
+            "model_revision": None
+            if request.get("local_model")
+            else (
+                PROFILES[request["precision"]][1] if request["precision"] in PROFILES else _model_revision(model_path)
+            ),
             "diffusers_revision": DIFFUSERS_REVISION,
             "prompt": request["prompt"],
             "effective_prompt": prompt,

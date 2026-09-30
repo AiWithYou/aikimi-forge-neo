@@ -46,7 +46,23 @@ def _integer(value):
         raise studio.MingImageError("寸法・Steps・Seedには整数を指定してください。") from exc
 
 
-def _request(prompt, text, transparent, width, height, steps, seed, precision="int8"):
+def _request(
+    prompt,
+    text,
+    transparent,
+    width,
+    height,
+    steps,
+    seed,
+    precision="int8",
+    model_path="",
+    text_encoder_path="",
+    vae_path="",
+    loras=None,
+    strengths=None,
+):
+    from modules_forge.local_assets import lora_settings
+
     if studio.is_json_prompt(prompt or ""):
         text, transparent = "", False
     result = studio.MingImageRequest(
@@ -58,6 +74,10 @@ def _request(prompt, text, transparent, width, height, steps, seed, precision="i
         _integer(steps),
         _integer(seed),
         precision=precision,
+        model_path=model_path or "",
+        text_encoder_path=text_encoder_path or "",
+        vae_path=vae_path or "",
+        loras=lora_settings(loras, strengths),
     )
     result.validate()
     return result
@@ -220,8 +240,40 @@ def _run(request_factory, previous):
         )
 
 
-def _generate(prompt, text, transparent, width, height, steps, seed, previous, precision="int8"):
-    yield from _run(lambda: _request(prompt, text, transparent, width, height, steps, seed, precision), previous)
+def _generate(
+    prompt,
+    text,
+    transparent,
+    width,
+    height,
+    steps,
+    seed,
+    previous,
+    precision="int8",
+    model_path="",
+    text_encoder_path="",
+    vae_path="",
+    loras=None,
+    strengths=None,
+):
+    yield from _run(
+        lambda: _request(
+            prompt,
+            text,
+            transparent,
+            width,
+            height,
+            steps,
+            seed,
+            precision,
+            model_path,
+            text_encoder_path,
+            vae_path,
+            loras,
+            strengths,
+        ),
+        previous,
+    )
 
 
 def _double(previous):
@@ -250,15 +302,39 @@ def _cancel(job):
     return "実行中のジョブはありません。"
 
 
-def _readiness(precision="int8"):
+def _readiness(precision="int8", model_path="", text_encoder_path="", vae_path=""):
     from tools.setup_ming_image import profiles, runtime_ready
 
     size_gb = sum(item.size for item in profiles(precision)["models"].artifacts) / 1_000_000_000
     label = f"Ming Imageを準備（{precision.upper()} · 約{size_gb:.1f}GB）"
     try:
-        ready = runtime_ready() and studio.model_ready(studio.runtime_root(), verify_hash=False, precision=precision)
+        if model_path or text_encoder_path or vae_path:
+            from modules_forge.ming_local import selected_assets
+
+            if model_path:
+                label = "実行環境・共通部品を準備（標準本体なし）"
+            selected_assets(
+                studio.MingImageRequest(
+                    "check",
+                    precision=precision,
+                    model_path=model_path or "",
+                    text_encoder_path=text_encoder_path or "",
+                    vae_path=vae_path or "",
+                ),
+                studio.runtime_root(),
+                verify_hash=False,
+            )
+            ready = runtime_ready()
+        else:
+            ready = runtime_ready() and studio.model_ready(
+                studio.runtime_root(), verify_hash=False, precision=precision
+            )
         message = (
-            f"本体{precision.upper()}は導入済み。専用環境は生成時に自動起動します。"
+            (
+                "選択したローカルモデルを使用します。"
+                if model_path
+                else f"本体{precision.upper()}は導入済み。専用環境は生成時に自動起動します。"
+            )
             if ready
             else f"Ming Image（本体{precision.upper()}）の準備が必要です。"
         )
@@ -269,11 +345,11 @@ def _readiness(precision="int8"):
         gr.update(visible=keep_hidden_component_mounted(ready), interactive=ready),
         gr.update(value=label, visible=keep_hidden_component_mounted(not ready), interactive=True),
         html.escape(message) if not ready else "",
-        gr.update(interactive=True),
+        gr.update(interactive=not bool(model_path)),
     )
 
 
-def _setup(precision="int8", *, repair=False):
+def _setup(precision="int8", *, repair=False, components_only=False, runtime_only=False):
     yield "専用環境とモデルを準備しています。取得済みのファイルは再利用します。"
     updates = queue.Queue()
 
@@ -284,7 +360,13 @@ def _setup(precision="int8", *, repair=False):
             bridge = studio._bridge()
             active = bridge.server_runtime_root(studio.SERVER_URL)
             with bridge.runtime_setup_session(active or studio.runtime_root(), studio.SERVER_URL):
-                result = run(repair=repair, precision=precision, progress=updates.put)
+                result = run(
+                    repair=repair,
+                    precision=precision,
+                    progress=updates.put,
+                    **({"components_only": True} if components_only else {}),
+                    **({"runtime_only": True} if runtime_only else {}),
+                )
             if not result["ok"]:
                 raise studio.MingImageError("導入後の検証に失敗しました。")
             updates.put("準備できました。プロンプトを入力して生成できます。")
@@ -313,9 +395,12 @@ def _setup(precision="int8", *, repair=False):
         yield message
 
 
-def _prepare(precision="int8", *, repair=False):
+def _prepare(precision="int8", model_path="", text_encoder_path="", vae_path="", *, repair=False):
     last_message = ""
-    for message in _setup(precision, repair=repair):
+    options = {}
+    if model_path:
+        options["runtime_only" if text_encoder_path and vae_path else "components_only"] = True
+    for message in _setup(precision, repair=repair, **options):
         last_message = message
         yield (
             message,
@@ -324,23 +409,93 @@ def _prepare(precision="int8", *, repair=False):
             html.escape(message),
             gr.update(interactive=False),
         )
-    message, generate, prepare, status, selector = _readiness(precision)
+    message, generate, prepare, status, selector = _readiness(precision, model_path, text_encoder_path, vae_path)
     if last_message.startswith("準備を完了できませんでした:"):
         message, status = last_message, html.escape(last_message)
     yield message, generate, prepare, status, selector
 
 
+def _restore_assets(record):
+    request = (record or {}).get("metadata", {}).get("request", {})
+    loras = request.get("loras", [])
+    return (
+        *_restore(record),
+        request.get("model_path", ""),
+        request.get("text_encoder_path", ""),
+        request.get("vae_path", ""),
+        [x["name"] for x in loras],
+        [[x["name"], x["strength"]] for x in loras],
+    )
+
+
 def on_ui_tabs():
+    from modules_forge import local_assets
+
+    saved = local_assets.selection("ming")
     root = studio.runtime_root()
     initial_precision = "int8"
     if not studio.model_ready(root, verify_hash=False) and studio.model_ready(
         root, verify_hash=False, precision="w4a8"
     ):
         initial_precision = "w4a8"
+    initial_precision = saved.get("precision", initial_precision)
+    saved_loras = saved.get("loras", [])
     with gr.Blocks(analytics_enabled=False) as tab:
         with gr.Row(elem_id="ming-workspace"):
             with gr.Column(scale=1, min_width=300, elem_id="ming-controls"):
                 gr.Markdown("### Ming Image Design", elem_id="ming-heading")
+                with gr.Accordion("モデル・LoRA", open=False, elem_id="ming-models") as model_section:
+                    model_path = gr.Dropdown(
+                        label="本体モデル",
+                        choices=[
+                            ("標準モデル", ""),
+                            *local_assets.choices("ming_model", [root / "models/diffusion_models"]),
+                        ],
+                        value=saved.get("model_path", ""),
+                        allow_custom_value=True,
+                        elem_id="ming-local-model",
+                        info="一覧から選択、または手元のMing .safetensorsのフルパスを貼り付けてEnter。",
+                    )
+                    loras = gr.Dropdown(
+                        label="追加LoRA（複数選択）",
+                        choices=local_assets.choices(
+                            "ming_lora", [root / "models/loras", local_assets.ROOT / "models/Lora/Ming"]
+                        ),
+                        value=[x["name"] for x in saved_loras],
+                        multiselect=True,
+                        allow_custom_value=True,
+                        elem_id="ming-loras",
+                    )
+                    strengths = gr.Dataframe(
+                        headers=["LoRA", "強度"],
+                        datatype=["str", "number"],
+                        type="array",
+                        value=local_assets.lora_rows(
+                            [x["name"] for x in saved_loras], [[x["name"], x["strength"]] for x in saved_loras]
+                        ),
+                        static_columns=[0],
+                        column_count=(2, "fixed"),
+                        row_count=len(saved_loras),
+                        max_chars=64,
+                        interactive=True,
+                        elem_id="ming-lora-strengths",
+                        label="強度 −2〜2 · 0で無効",
+                        visible=False,
+                    )
+                    with gr.Accordion("共通部品を指定 · 任意", open=False):
+                        text_encoder_path = gr.Textbox(
+                            label="テキストエンコーダー",
+                            value=saved.get("text_encoder_path", ""),
+                            placeholder="空欄: 標準の共通部品",
+                            elem_id="ming-local-encoder",
+                        )
+                        vae_path = gr.Textbox(
+                            label="VAE",
+                            value=saved.get("vae_path", ""),
+                            placeholder="空欄: 標準の共通部品",
+                            elem_id="ming-local-vae",
+                        )
+                    refresh_assets = gr.Button("モデル・LoRA一覧を更新", size="sm")
                 prompt = gr.Textbox(label="プロンプト", lines=7, placeholder=EXAMPLE, elem_id="ming-prompt")
                 hint = gr.Markdown("自然文・JSONを入力できます。", elem_id="ming-input-hint")
                 with gr.Accordion("画像に載せる文字 · 任意", open=False):
@@ -368,7 +523,7 @@ def on_ui_tabs():
                     precision = gr.Radio(
                         choices=[("INT8（標準）", "int8"), ("W4A8（省メモリ・試験版）", "w4a8")],
                         value=initial_precision,
-                        label="本体モデル",
+                        label="標準モデルの精度",
                         elem_id="ming-precision",
                     )
                 summary = gr.Markdown("1024 × 1024 px · 12 steps", elem_id="ming-summary")
@@ -422,7 +577,25 @@ def on_ui_tabs():
         record = gr.State({})
         job = gr.State({})
         private = {"api_visibility": "private", "show_progress": "hidden"}
-        inputs = [prompt, text, transparent, width, height, steps, seed, record, precision]
+        source_inputs = [precision, model_path, text_encoder_path, vae_path]
+        for component in [*source_inputs, loras]:
+            component.do_not_save_to_config = True  # Do not replace the asset library with old UI defaults.
+        inputs = [
+            prompt,
+            text,
+            transparent,
+            width,
+            height,
+            steps,
+            seed,
+            record,
+            precision,
+            model_path,
+            text_encoder_path,
+            vae_path,
+            loras,
+            strengths,
+        ]
         outputs = [status, result, files, record, job, generate, cancel, restore, double, effective, caption, precision]
         prompt.change(_prompt_mode, inputs=prompt, outputs=[hint, text, transparent], queue=False, **private)
         preset.change(
@@ -446,9 +619,25 @@ def on_ui_tabs():
                 _summary, inputs=[width, height, steps, transparent, prompt], outputs=summary, queue=False, **private
             )
         restore.click(
-            _restore,
+            _restore_assets,
             inputs=record,
-            outputs=[prompt, text, transparent, width, height, steps, seed, preset, hint, precision],
+            outputs=[
+                prompt,
+                text,
+                transparent,
+                width,
+                height,
+                steps,
+                seed,
+                preset,
+                hint,
+                precision,
+                model_path,
+                text_encoder_path,
+                vae_path,
+                loras,
+                strengths,
+            ],
             queue=False,
             **private,
         )
@@ -475,16 +664,40 @@ def on_ui_tabs():
         for control, repair in ((setup, True), (prepare, False)):
             control.click(
                 partial(_prepare, repair=repair),
-                inputs=precision,
+                inputs=source_inputs,
                 outputs=readiness_outputs,
                 concurrency_id="h3-runtime-control",
                 concurrency_limit=1,
                 **private,
             )
-        refresh.click(_readiness, inputs=precision, outputs=readiness_outputs, **private)
-        precision.change(_readiness, inputs=precision, outputs=readiness_outputs, queue=False, **private)
+        refresh.click(_readiness, inputs=source_inputs, outputs=readiness_outputs, **private)
+        for control in source_inputs:
+            control.change(_readiness, inputs=source_inputs, outputs=readiness_outputs, queue=False, **private)
+        loras.change(
+            lambda names, rows: gr.update(value=local_assets.lora_rows(names, rows), visible=bool(names)),
+            inputs=[loras, strengths],
+            outputs=strengths,
+            queue=False,
+            **private,
+        )
+        model_section.expand(
+            lambda names, rows: gr.update(value=local_assets.lora_rows(names, rows), visible=bool(names)),
+            inputs=[loras, strengths],
+            outputs=strengths,
+            queue=False,
+            **private,
+        )
+
+        def refresh_choices(model, selected):
+            models = [("標準モデル", ""), *local_assets.choices("ming_model", [root / "models/diffusion_models"])]
+            adapters = local_assets.choices(
+                "ming_lora", [root / "models/loras", local_assets.ROOT / "models/Lora/Ming"]
+            )
+            return gr.update(choices=models, value=model), gr.update(choices=adapters, value=selected)
+
+        refresh_assets.click(refresh_choices, inputs=[model_path, loras], outputs=[model_path, loras], **private)
         record.change(_result_controls, inputs=record, outputs=[result_tools, background, double], **private)
-        tab.load(_readiness, inputs=precision, outputs=readiness_outputs, **private)
+        tab.load(_readiness, inputs=source_inputs, outputs=readiness_outputs, **private)
     return [(tab, "Ming Image", "ming_image_studio")]
 
 

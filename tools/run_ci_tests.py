@@ -125,15 +125,19 @@ def preload_modules(modules: Sequence[str]) -> None:
 @contextmanager
 def isolated_h3_records():
     """CPUテストが利用者の実ジョブを照合・回収しないよう、記録先を隔離する。"""
-    from modules_forge import minimax_h3_pending
+    from modules_forge import local_assets, minimax_h3_pending
 
     with TemporaryDirectory(prefix="aikimi-ci-h3-") as directory:
         previous = minimax_h3_pending.DIRECTORY
+        previous_assets, previous_hashes = local_assets.LIBRARY, local_assets.HASH_CACHE
         minimax_h3_pending.DIRECTORY = Path(directory)
+        local_assets.LIBRARY = Path(directory) / "assets" / "library.json"
+        local_assets.HASH_CACHE = Path(directory) / "assets" / "hashes.json"
         try:
             yield
         finally:
             minimax_h3_pending.DIRECTORY = previous
+            local_assets.LIBRARY, local_assets.HASH_CACHE = previous_assets, previous_hashes
 
 
 def main(argv: Sequence[str] | None = None) -> int:
