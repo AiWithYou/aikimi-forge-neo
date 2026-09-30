@@ -515,6 +515,19 @@ class QwenUiTests(unittest.TestCase):
     def setUpClass(cls):
         cls.ui = load_ui()
 
+    def test_local_setup_never_selects_standard_denoiser_download(self):
+        for components, expected in (("", "--components-only"), ("X:/shared", "--runtime-only")):
+            process = Mock()
+            process.stdout = iter(["prepared\n"])
+            process.wait.return_value = 0
+            process.__enter__ = Mock(return_value=process)
+            process.__exit__ = Mock(return_value=False)
+            with patch.object(self.ui.subprocess, "Popen", return_value=process) as popen:
+                updates = list(self.ui.prepare_local_environment("X:/custom/model.gguf", components))
+            self.assertIn(expected, popen.call_args.args[0])
+            self.assertIn("完了", updates[-1][0])
+            self.assertTrue(updates[-1][1]["interactive"])
+
     def test_real_ui_builds_and_all_callbacks_are_private(self):
         tab, label, identifier = self.ui.on_ui_tabs()[0]
         self.assertEqual((label, identifier), ("Qwen Image 2.1", "qwen_image21_studio"))

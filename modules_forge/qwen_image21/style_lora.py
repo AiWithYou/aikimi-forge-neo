@@ -22,8 +22,13 @@ def directory(runtime: Path) -> Path:
 
 def resolve(runtime: Path, name: str) -> Path:
     root = directory(runtime).resolve()
-    if not isinstance(name, str) or not name or Path(name).is_absolute():
+    if not isinstance(name, str) or not name:
         raise ValueError("LoRAは一覧から選択してください。")
+    name = name.strip().strip('"')
+    if Path(name).is_absolute():
+        from modules_forge.local_assets import local_path
+
+        return local_path(name, suffixes=(".safetensors",))
     path = (root / name).resolve()
     if not path.is_relative_to(root) or path.suffix.lower() != ".safetensors" or not path.is_file():
         raise ValueError("LoRAが見つかりません。一覧を更新して選び直してください。")
@@ -31,10 +36,11 @@ def resolve(runtime: Path, name: str) -> Path:
 
 
 def inventory(runtime: Path) -> list[str]:
+    from modules_forge.local_assets import library
+
     root = directory(runtime)
-    if not root.exists():
-        return []
-    return sorted(p.relative_to(root).as_posix() for p in root.rglob("*.safetensors") if p.is_file())
+    local = [p.relative_to(root).as_posix() for p in root.rglob("*.safetensors") if p.is_file()]
+    return sorted(set(local + library().get("qwen21_lora", [])))
 
 
 def read_header(path: Path) -> dict:
@@ -157,11 +163,16 @@ def validate_options(values: dict) -> None:
 def validate_installed(runtime: Path, values: dict) -> list[dict]:
     validate_options(values)
     infos = []
+    seen = set()
     for item in values.get("style_loras", ()):
         if item["strength"] == 0:
             continue
         try:
             info = inspect(runtime, item["name"])
+            path = Path(info["path"]).resolve()
+            if path in seen:
+                raise ValueError("同じ実ファイルのLoRAを二重に指定できません。")
+            seen.add(path)
             if info["base_mismatch"] and not values.get("allow_lora_base_mismatch"):
                 raise ValueError("ConvRot INT8用です。「異なる量子化で試す」をONにした実験のみ可能です。")
             infos.append({**info, "strength": item["strength"]})
@@ -176,8 +187,9 @@ def cache_key(runtime: Path, values: dict) -> tuple:
         if item["strength"] == 0:
             continue
         path = resolve(runtime, item["name"])
-        stat = path.stat()
-        entries.append((str(path), stat.st_size, stat.st_mtime_ns, item["strength"]))
+        from modules_forge.local_assets import file_identity
+
+        entries.append((str(path), file_identity(path)["sha256"], item["strength"]))
     return tuple(entries), values.get("allow_lora_base_mismatch", False)
 
 

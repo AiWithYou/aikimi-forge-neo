@@ -27,17 +27,17 @@ def file_hash(path, check_cancel=lambda: None):
     return digest.hexdigest()
 
 
-def component_identity(model_path, component, precision, *, skip_modules=(), versions=None):
+def component_identity(model_path, component, precision, *, skip_modules=(), versions=None, source_path=None):
     """Bind artifacts to the source revision, actual files, recipe and runtime."""
     model_path = Path(model_path).resolve()
-    folder = model_path / component
+    folder = Path(source_path).resolve() if source_path else model_path / component
     inventory = model_path.parent / "model-files.json"
     record = json.loads(inventory.read_text(encoding="utf-8")) if inventory.is_file() else {}
     names = ("torch", "diffusers", "transformers", "bitsandbytes", "accelerate", "safetensors")
     if precision == "w4a8":
         names += ("comfy-kitchen",)
     versions = {name: versions[name] if versions is not None else importlib.metadata.version(name) for name in names}
-    return {
+    result = {
         "schema": FORMAT_VERSION,
         "revision": record.get("revision"),
         "component": component,
@@ -56,6 +56,13 @@ def component_identity(model_path, component, precision, *, skip_modules=(), ver
             if path.is_file() and ".cache" not in path.relative_to(folder).parts
         ],
     }
+    if source_path is not None:
+        from modules_forge.local_assets import identity
+
+        result["local_source"] = identity(folder)
+        result["revision"] = None
+        result["source_inventory"] = []
+    return result
 
 
 def cache_path(model_path, identity):

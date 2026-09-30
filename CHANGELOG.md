@@ -1,5 +1,12 @@
 # 変更履歴
 
+## v3.3.0 — 2026-09-30
+
+- Anima 3.8BなどForge対応モデルのCheckpoint・VAE／Text Encoderへ、外部ファイルのフルパスを指定できるようにしました。`txt2img`／`img2img`には複数LoRAの選択・個別強度・0による無効化を追加し、既存のプロンプト指定も維持しています。
+- Qwen Image 2.1のローカルDiffusersパイプライン／Transformerフォルダー、単一safetensors、対応GGUFを選択可能に。本体と共通部品を分離し、標準本体を取得しない準備ボタン・`--runtime-only`／`--components-only`を追加しました。
+- Ming Imageにローカル本体・テキスト・VAE・複数の線形LoRAを追加。絶対パスを専用ノードへ渡し、同名ファイルの取り違えを防ぎます。標準本体なしで実行環境と共通部品だけを導入できます。
+- 選択と強度の保存、同一LoRAの二重指定の拒否、モデル内容に応じたキャッシュ分離、Windows上の同名上書きの検出に対応。Qwen／Mingは実行開始時のファイル情報を生成条件へ記録します。[使い方・対応範囲](docs/local-models.md)
+
 ## v3.2.2 — 2026-09-29
 
 - Ming Image本体W4A8を[Hugging Face](https://huggingface.co/Aikimi/Ming-Image-0.1-Design-W4A8)で公開。検証済みの約3.49GBファイル・変換記録・MITライセンス・実測結果を配布し、利用者によるBF16原本の取得・変換を不要にしました。

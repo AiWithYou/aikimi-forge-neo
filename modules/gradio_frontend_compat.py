@@ -19,6 +19,14 @@ TABS_ASSET_NAME = "Walkthrough.svelte_svelte_type_style_lang-DBgsQkoF.js"
 ORIGINAL_ASSET_SHA256 = "e9be5d9fd700f1521287465e80c768ba326c8d274f094a7cea4ecb8bf4cdb8f5"
 PATCHED_ASSET_SHA256 = "62076871b459f46dddfc920c2a756c574231b607e84eb714304decabd371b344"
 PATCH_ROUTE_NAME = "aikimi_gradio_tabs_compat"
+DATAFRAME_ASSET_NAME = "Index-QH0sWW3Z.js"
+DATAFRAME_ORIGINAL_SHA256 = "7faf27d05cb82bea0f5d317748b2908870c3e966a646c459e370fe52890299b3"
+DATAFRAME_ROUTE_NAME = "aikimi_gradio_dataframe_compat"
+
+# The virtualizer changes its count but only notifies Svelte for the first 0->N
+# transition. Notify on every count change so later additions/removals render.
+_ORIGINAL_TABLE_RESIZE = b"r===0&&o>0&&n.measure(),r=o"
+_REACTIVE_TABLE_RESIZE = b"r!==o&&n.measure(),r=o"
 
 # Gradio 6.17.3 predates the upstream Tabs mount-storm fix in PR #13509.
 # These are exact compiled snippets from that one audited wheel. The bounded
@@ -165,6 +173,22 @@ def install_gradio_tabs_compatibility_route(
 
     asset = asset or build_patched_tabs_asset()
     _validate_patched_asset(asset)
+    return _install_asset_route(app, asset, PATCH_ROUTE_NAME)
+
+
+def build_patched_dataframe_asset() -> PatchedFrontendAsset:
+    """Keep the wheel untouched and reject unaudited Gradio table builds."""
+    if gradio.__version__ != SUPPORTED_VERSION:
+        raise GradioFrontendCompatibilityError("Unsupported Gradio version for the dataframe compatibility patch.")
+    path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / DATAFRAME_ASSET_NAME
+    source = path.read_bytes()
+    if _sha256(source) != DATAFRAME_ORIGINAL_SHA256 or source.count(_ORIGINAL_TABLE_RESIZE) != 1:
+        raise GradioFrontendCompatibilityError("The Gradio dataframe asset does not match the audited SHA-256.")
+    patched = source.replace(_ORIGINAL_TABLE_RESIZE, _REACTIVE_TABLE_RESIZE, 1)
+    return PatchedFrontendAsset(DATAFRAME_ASSET_NAME, patched, DATAFRAME_ORIGINAL_SHA256, _sha256(patched))
+
+
+def _install_asset_route(app: FastAPI, asset: PatchedFrontendAsset, route_name: str) -> PatchedFrontendAsset:
 
     async def serve_patched_tabs(request: Request) -> Response:
         etag = f'"{asset.patched_sha256}"'
@@ -183,7 +207,7 @@ def install_gradio_tabs_compatibility_route(
         path=f"/assets/{asset.filename}",
         endpoint=serve_patched_tabs,
         methods=["GET", "HEAD"],
-        name=PATCH_ROUTE_NAME,
+        name=route_name,
         include_in_schema=False,
     )
     app.router.routes.insert(0, route)
@@ -201,5 +225,6 @@ def create_gradio_compatibility_app(
     prepared_kwargs = dict(app_kwargs or {})
     prepared_kwargs.setdefault("default_response_class", ORJSONResponse)
     prepared_app = App(debug=debug, **prepared_kwargs)
+    _install_asset_route(prepared_app, build_patched_dataframe_asset(), DATAFRAME_ROUTE_NAME)
     install_gradio_tabs_compatibility_route(prepared_app, asset)
     return prepared_app

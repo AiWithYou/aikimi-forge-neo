@@ -52,6 +52,10 @@ on:
       - "tools/aikimi_setup.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "modules_forge/local_assets.py"
+      - "modules_forge/ming_local.py"
+      - "scripts/local_lora_stack.py"
+      - "tools/tests/test_local_model_sources.py"
       - "modules_forge/ming_image_studio.py"
       - "extensions-builtin/ming-image-studio/**"
       - "tools/*ming_image*.py"
@@ -145,6 +149,10 @@ on:
       - "tools/aikimi_setup.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "modules_forge/local_assets.py"
+      - "modules_forge/ming_local.py"
+      - "scripts/local_lora_stack.py"
+      - "tools/tests/test_local_model_sources.py"
       - "modules_forge/ming_image_studio.py"
       - "extensions-builtin/ming-image-studio/**"
       - "tools/*ming_image*.py"
@@ -266,6 +274,11 @@ jobs:
             tools/aikimi_setup.py
             tools/run_ci_tests.py
             tools/setup_minimax_h3.py
+            modules_forge/local_assets.py
+            modules_forge/ming_local.py
+            scripts/local_lora_stack.py
+            tools/tests/test_local_model_sources.py
+            extensions-builtin/ming-image-studio/comfyui_nodes/Aikimi-Ming-Local/__init__.py
             modules_forge/ming_image_studio.py
             tools/setup_ming_image.py
             tools/quantize_ming_image.py

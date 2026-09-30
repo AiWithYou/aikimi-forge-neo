@@ -86,7 +86,7 @@ class QwenSetupTests(unittest.TestCase):
                     self.assertGreater(plan["shared_model_bytes"], 18_000_000_000)
             self.assertFalse(root.exists())
 
-    def test_runtime_only_never_registers_a_missing_model(self):
+    def test_runtime_only_registers_environment_without_downloading_model(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
             lock = mock.Mock()
@@ -98,7 +98,9 @@ class QwenSetupTests(unittest.TestCase):
             ):
                 self.assertEqual(setup.main(["--root", str(target), "--runtime-only"]), 0)
             download.assert_not_called()
-            self.assertFalse((target / "runtime.json").exists())
+            record = json.loads((target / "runtime.json").read_text(encoding="utf-8"))
+            self.assertEqual(record["python"], str(target / "python"))
+            self.assertFalse((target / "model-files.json").exists())
             lock.close.assert_called_once()
 
     def test_default_install_downloads_shared_assets_and_unsloth_gguf(self):

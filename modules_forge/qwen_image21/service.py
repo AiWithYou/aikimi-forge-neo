@@ -108,10 +108,15 @@ class Studio:
         request = request.resolved()
         if not isinstance(owner, str) or not owner:
             raise QwenImage21Error("ブラウザーのQwen Image 2.1タブから操作してください。")
-        runtime_manifest(self.runtime, request.precision)
+        source_args = (request.local_model, request.local_components) if request.local_model else ()
+        runtime_manifest(self.runtime, request.precision, *source_args)
         from .style_lora import validate_installed
 
-        validate_installed(self.runtime, request.to_dict())
+        lora_infos = validate_installed(self.runtime, request.to_dict())
+        if lora_infos:
+            from modules_forge.local_assets import remember
+
+            remember("qwen21_lora", [item["name"] for item in lora_infos if Path(item["name"]).is_absolute()])
         if request.outpaint_version:
             from .outpaint_lora import installed
 
@@ -156,7 +161,7 @@ class Studio:
                     self._residency.release_resource(ENGINE)
                     self._runtime_lock = runtime_lock(self.runtime)
                     new_lock = True
-                entry = runtime_manifest(self.runtime, request.precision)
+                entry = runtime_manifest(self.runtime, request.precision, *source_args)
                 if request.fun_acc:
                     from .fun_acc_lora import installed
 
@@ -169,6 +174,23 @@ class Studio:
                 directory.mkdir(parents=True, exist_ok=False)
                 job = Job(directory.name, owner, directory, operation=request.operation, precision=request.precision)
                 payload = request.to_dict()
+                if lora_infos:
+                    from modules_forge.local_assets import file_identity
+
+                    payload["lora_sources"] = [file_identity(Path(item["path"])) for item in lora_infos]
+                if request.local_model:
+                    from modules_forge import local_assets
+
+                    payload["local_source"] = entry["local_source"]
+                    local_assets.remember("qwen21_model", [request.local_model])
+                payload["runtime_root"] = str(self.runtime.resolve())
+                if request.operation == "generate":
+                    from modules_forge.local_assets import save_selection
+
+                    save_selection(
+                        "qwen21",
+                        {key: payload[key] for key in ("local_model", "local_components", "style_loras", "precision")},
+                    )
                 clean_paths = copy_inputs(request.input_images, directory)
                 if request.control_image:
                     payload["control_image"] = copy_control_image(request.control_image, directory)
@@ -285,6 +307,7 @@ class Studio:
                 environment,
                 {
                     "model_path": entry["model"],
+                    "runtime_root": str(self.runtime.resolve()),
                     "precision": request.precision,
                     "memory_mode": request.memory_mode,
                     "job_dir": str(job.directory.resolve()),

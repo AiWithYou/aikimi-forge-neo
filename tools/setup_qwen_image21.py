@@ -276,6 +276,9 @@ def main(argv=None):
     parser.add_argument("--download-turbo-profile", choices=["turbo_bf16", "turbo_q4_k_m"], help=argparse.SUPPRESS)
     model_group = parser.add_mutually_exclusive_group()
     model_group.add_argument(
+        "--components-only", action="store_true", help="実行環境・共通部品のみ。本体モデルは取得しません"
+    )
+    model_group.add_argument(
         "--official-full", action="store_true", help="公式フルモデルを導入（INT8 / W4A8 / BF16用）"
     )
     model_group.add_argument("--turbo-bf16-only", action="store_true", help="Viggle Turbo BF16と共通部品を導入")
@@ -309,11 +312,26 @@ def main(argv=None):
         parser.error("--runtime-only と書き換えモデルの導入は同時に指定できません。")
     if args.runtime_only and args.official_full:
         parser.error("--runtime-only と --official-full は同時に指定できません。")
+    if args.components_only and (args.runtime_only or include_rewriter or include_edit_rewriter):
+        parser.error("--components-only は実行環境のみ・書き換えモデルの導入と同時に指定できません。")
     if only_rewriters and args.official_full:
         parser.error("書き換えモデルだけの導入と --official-full は同時に指定できません。")
     if turbo_profile and (args.runtime_only or include_rewriter or include_edit_rewriter):
         parser.error("Turbo単独導入と他の導入オプションは同時に指定できません。")
     root = args.root.expanduser().absolute()
+    if args.dry_run and (args.runtime_only or args.components_only):
+        print(  # noqa: T201 -- CLI dry-run summary.
+            json.dumps(
+                {
+                    "runtime": str(root),
+                    "runtime_only": args.runtime_only,
+                    "components_only": args.components_only,
+                    "denoiser_download": False,
+                    "components": [] if args.runtime_only else ["text_encoder", "vae", "processor", "scheduler"],
+                }
+            )
+        )
+        return 0
     if args.dry_run:
         from modules_forge.qwen_image21 import prompt_rewriter as rewriter
 
@@ -465,8 +483,21 @@ def main(argv=None):
             return 0
         print(f"Qwen Image 2.1の利用条件: {TERMS}")  # noqa: T201
         python = install_environment(root)
+        if args.runtime_only:
+            atomic_json(
+                root / "runtime.json",
+                {
+                    "schema": 1,
+                    "python": str(python),
+                    "model": str(root / "model"),
+                    "model_revision": MODEL_REVISION,
+                    "diffusers_revision": DIFFUSERS_REVISION,
+                },
+            )
         if not args.runtime_only:
-            if turbo_profile:
+            if args.components_only:
+                download_model(root, python, shared_only=True)
+            elif turbo_profile:
                 for existing in ("int8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m"):
                     try:
                         runtime_manifest(root, existing)
@@ -510,7 +541,7 @@ def main(argv=None):
                     ]
                 )
                 runtime_manifest(root, turbo_profile)
-            elif not args.official_full:
+            elif not args.official_full and not args.components_only:
                 execute([python, "-X", "utf8", Path(__file__).resolve(), "--download-regular-gguf", "--root", root])
                 runtime_manifest(root, "base_q4_k_m")
             print("準備完了。Neoを起動してQwen Image 2.1を開いてください。")  # noqa: T201

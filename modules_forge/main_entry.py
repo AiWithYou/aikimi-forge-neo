@@ -159,6 +159,14 @@ def _rebuild_module_registry(module_roots: list[tuple[str, str]], extensions=MOD
             identity = f"{root_index}:{root_label.casefold()}:{relative}"
             candidates.append((root_label, full_path, normalized, identity))
 
+    from modules_forge.local_assets import library
+
+    for value in library().get("forge_module", []):
+        full_path = _canonical_module_path(value)
+        normalized = _normalize_module_path(full_path)
+        if os.path.isfile(full_path) and normalized not in seen_paths:
+            candidates.append(("Local", full_path, normalized, normalized))
+            seen_paths.add(normalized)
     candidates.sort(key=lambda candidate: (portable_module_basename(candidate[1]).casefold(), candidate[0].casefold(), candidate[2]))
     basename_counts = Counter(portable_module_basename(path).casefold() for _, path, _, _ in candidates)
 
@@ -445,9 +453,9 @@ def make_checkpoint_manager_ui():
 
     ui_forge_preset = gr.Dropdown(label="UI Preset", value=shared.opts.forge_preset, choices=PresetArch.choices(), elem_id="forge_ui_preset")
 
-    ui_checkpoint = gr.Dropdown(label="Checkpoint", **checkpoint_selection, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"])
+    ui_checkpoint = gr.Dropdown(label="Checkpoint · フルパスも入力可", **checkpoint_selection, allow_custom_value=True, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"])
 
-    ui_vae = gr.Dropdown(label="VAE / Text Encoder", value=module_value, choices=vae_list, multiselect=True, elem_id="setting_sd_modules", elem_classes=["model_selection"])
+    ui_vae = gr.Dropdown(label="VAE / Text Encoder · フルパスも入力可", value=module_value, choices=vae_list, multiselect=True, allow_custom_value=True, elem_id="setting_sd_modules", elem_classes=["model_selection"])
 
     def refresh_model_list():
         _, vae_list = refresh_models()
@@ -520,6 +528,15 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
 
 def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> bool:
     """Accept aliases and save the preset even when the active checkpoint is unchanged."""
+    candidate = ckpt_name.strip().strip('"') if isinstance(ckpt_name, str) else ckpt_name
+    if isinstance(candidate, str) and os.path.isabs(candidate) and os.path.isfile(candidate):
+        from modules_forge.local_assets import local_path, remember
+
+        path = local_path(candidate)
+        info = sd_models.CheckpointInfo(str(path))
+        info.register()
+        remember("forge_checkpoint", [str(path)])
+        ckpt_name = info.name
     new_ckpt_info = sd_models.get_closet_checkpoint_match(ckpt_name)
     if new_ckpt_info is None:
         raise ValueError(f"The selected checkpoint is not available: {ckpt_name}")
@@ -544,6 +561,15 @@ def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> b
 
 def modules_change(module_values: list, preset: str, save=True, refresh=True) -> bool:
     """Resolve every selector before atomically updating the active and preset module paths."""
+    from modules_forge.local_assets import local_path, remember
+
+    module_values = [value.strip().strip('"') if isinstance(value, str) else value for value in module_values or []]
+    external = [str(local_path(value)) for value in module_values or []
+                if isinstance(value, str) and os.path.isabs(value) and os.path.isfile(value)
+                and _normalize_module_path(value) not in _module_path_to_selector]
+    if external:
+        remember("forge_module", external)
+        _rebuild_module_registry(_ordered_module_roots())
     modules = resolve_module_values(module_values)
     current_modules = getattr(shared.opts, "forge_additional_modules", [])
     active_changed = modules != current_modules

@@ -48,7 +48,7 @@ class CheckpointInfo:
         self.is_safetensors = os.path.splitext(filename)[1].lower() == ".safetensors"
 
         # Initial fallback to prevent UnboundLocalError if no directory matches
-        name: str = os.path.basename(filename)
+        name: str = abspath
         for _dir in abs_ckpt_dirs:
             # Ensure both paths are absolute for consistent string comparison, fixing issues with relative paths like ../
             if abspath.startswith(_dir):
@@ -134,6 +134,9 @@ def list_models():
 
     for _dir in (*cmd_opts.ckpt_dirs, model_path):
         model_list.update(modelloader.load_models(model_path=_dir, ext_filter=[".ckpt", ".safetensors", ".gguf"], ext_blacklist=[".vae.ckpt", ".vae.safetensors"]))
+    from modules_forge.local_assets import library
+
+    model_list.update(path for path in library().get("forge_checkpoint", []) if os.path.isfile(path))
 
     for filename in model_list:
         checkpoint_info = CheckpointInfo(filename)

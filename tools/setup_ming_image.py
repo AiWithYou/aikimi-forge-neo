@@ -271,16 +271,31 @@ def run(
     verify: bool = False,
     repair: bool = False,
     precision: str = "int8",
+    components_only: bool = False,
+    runtime_only: bool = False,
     progress: Callable[[str], None] | None = None,
 ) -> dict:
     root = root.resolve()
-    installer = Installer(root, profiles(precision), **({"stdout": ProgressOutput(progress)} if progress else {}))
+    selected_profiles = profiles(precision)
+    if components_only:
+        from dataclasses import replace
+
+        profile = selected_profiles["models"]
+        selected_profiles["models"] = replace(
+            profile,
+            artifacts=tuple(item for item in profile.artifacts if "/diffusion_models/" not in item.relative_path),
+        )
+    installer = Installer(root, selected_profiles, **({"stdout": ProgressOutput(progress)} if progress else {}))
     if dry_run:
         return {
             "runtime_ready": runtime_ready(root),
-            "plans": [installer.install(name, dry_run=True, keep_source=True) for name in ("models",)],
+            "plans": []
+            if runtime_only
+            else [installer.install(name, dry_run=True, keep_source=True) for name in ("models",)],
         }
     if verify:
+        if runtime_only:
+            return {"ok": runtime_ready(root), "runtime_ready": runtime_ready(root)}
         result = installer.verify(("models",))
         result["runtime_ready"] = runtime_ready(root)
         result["ok"] = bool(result["ok"] and result["runtime_ready"])
@@ -292,6 +307,8 @@ def run(
             if connection.connect_ex(("127.0.0.1", 8189)) == 0:
                 raise SetupError("ComfyUIが起動中です。生成キューが空になってから停止してください。")
         install_runtime(root, report=progress or print)
+        if runtime_only:
+            return {"ok": runtime_ready(root), "runtime_ready": runtime_ready(root), "results": []}
         if progress:
             progress("保存済みのモデルを検証し、不足分を取得します。")
         results = []
@@ -316,9 +333,21 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--verify", action="store_true", help="環境・モデルを検証")
     mode.add_argument("--repair", action="store_true", help="壊れたファイルを退避して再取得")
     parser.add_argument("--precision", choices=("int8", "w4a8"), default="int8", help="取得・検証する本体モデル")
+    assets = parser.add_mutually_exclusive_group()
+    assets.add_argument("--runtime-only", action="store_true", help="実行環境のみ。重みは取得しません")
+    assets.add_argument(
+        "--components-only", action="store_true", help="実行環境・テキスト・VAEのみ。本体は取得しません"
+    )
     args = parser.parse_args(argv)
     try:
-        result = run(dry_run=args.dry_run, verify=args.verify, repair=args.repair, precision=args.precision)
+        result = run(
+            dry_run=args.dry_run,
+            verify=args.verify,
+            repair=args.repair,
+            precision=args.precision,
+            runtime_only=args.runtime_only,
+            components_only=args.components_only,
+        )
         sys.stdout.write(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
         return 0 if args.dry_run or result.get("ok", False) else 1
     except (SetupError, OSError, ValueError) as exc:

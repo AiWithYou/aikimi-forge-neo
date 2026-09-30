@@ -46,7 +46,9 @@ GGUFは画像生成本体だけです。共通のテキストエンコーダー�
 
 ## 追加LoRA（複数対応）
 
-Qwen Image 2.1用の `.safetensors` を `models/Qwen-Image-2.1/loras/` に置き、**LoRA → 一覧更新**。サブフォルダーも読めます。複数選択し、表の「強度」を各LoRAごとに設定します（−2〜2、初期値1、0は読み込み省略）。選択を追加・削除しても残ったLoRAの強度は保持されます。×で外したものを再選択すると1に戻ります。
+Qwen Image 2.1用の `.safetensors` を `models/Qwen-Image-2.1/loras/` に置き、**LoRA → 一覧更新**。サブフォルダーも読めます。v3.3.0からは選択欄へ外部ファイルのフルパスを貼り付けてEnterを押す方法も使えます。複数選択し、表の「強度」を各LoRAごとに設定します（−2〜2、初期値1、0は読み込み省略）。選択を追加・削除しても残ったLoRAの強度は保持されます。×で外したものを再選択すると1に戻ります。
+
+**本体モデル**では互換モデルのファイル／Diffusersフォルダーも指定できます。**環境・共通部品を準備（標準本体なし）**を使えば、標準の本体をダウンロードする必要はありません。単一safetensorsはBF16、TransformerフォルダーはBF16／INT8／W4A8、対応GGUFは通常版Q4で使用します。[導入手順と対応範囲](../../docs/local-models.md)
 
 通常版Q4_K_M・W4A8・INT8・BF16用です。SushiUIの `lora_unet_...__...`、Diffusers/Comfy系の `transformer.` / `diffusion_model.` 配下の線形LoRA（A/Bまたはdown/up、alpha/rank）を読み込みます。Qwen Imageの別バージョン、DoRA、独自ヘッドなど、すべての形式への対応ではありません。未対応キー・不足ペア・寸法不一致があれば部分適用せずエラーにします。Turbo・Fun Acc・Outpaint専用処理・Sparse Attentionとの同時使用は受け付けません。
 

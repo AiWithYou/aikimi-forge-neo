@@ -165,8 +165,9 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
     # Reuse an applied LoRA only while its file and strengths are unchanged.
     file_versions = []
     for filename, *_ in compiled_lora_targets:
-        stat = os.stat(filename)
-        file_versions.append((stat.st_mtime_ns, stat.st_size))
+        from modules_forge.local_assets import file_identity
+
+        file_versions.append(file_identity(filename)["sha256"])
     compiled_lora_targets_hash = str((compiled_lora_targets, file_versions))
     if current_sd.current_lora_hash == compiled_lora_targets_hash:
         return
@@ -217,6 +218,19 @@ def process_network_files(names: Optional[list[str]] = None):
 
         available_network_aliases[name] = entry
         available_network_aliases[entry.alias] = entry
+
+    from modules_forge.local_assets import library
+    import hashlib
+
+    for filename in library().get("forge_lora", []):
+        if not os.path.isfile(filename):
+            continue
+        name = "local_" + hashlib.sha256(str(os.path.realpath(filename)).encode()).hexdigest()[:16]
+        if requested_names is not None and name not in requested_names:
+            continue
+        entry = network.NetworkOnDisk(name, filename)
+        available_networks[name] = entry
+        available_network_aliases[name] = entry
 
 
 def update_available_networks_by_names(names: list[str]):
