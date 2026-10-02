@@ -374,6 +374,8 @@ git pull --ff-only origin neo
 
 既存のローカルフォルダー名を変更する必要はありません。`origin`の更新は一度行えば十分です。
 
+**2026-10-02の保守更新：** GitPythonを3.1.61から3.1.62へ更新しました。拡張機能の取得・更新・サブモジュール展開を、Windowsの空白・日本語を含むパスでも確認しています。Aikimiのバージョン表記はv3.4.0のままです。
+
 **2026-09-24の依存関係更新を取り込む場合**、導入済みのSenseNova・Qwenは、WebUIを起動する前に該当するコマンドを実行してください。モデルを取得し直さず、専用環境を更新します。
 
 ```powershell
@@ -393,6 +395,14 @@ git pull --ff-only origin neo
 ### 開発・テスト
 
 コードを変更する場合の環境構築とテスト手順は[開発ガイド](CONTRIBUTING.md)を参照してください。
+
+2026-10-02のGitPython更新では、依存関係チェックと全固定バージョンの照合が通り、CPU・offlineの全体テスト1,881件は通常の失敗0件でした（52件スキップ、Gradio由来の既知の期待失敗1件）。追加pytestは407件合格、5件スキップです。タブ数・LoRAキャッシュの古い期待値とpytestの誤収集も修正しました。
+
+拡張機能のGit取得・更新だけを再確認する場合は、次を実行してください。一時的なローカルリポジトリを使い、既存の拡張機能には変更を加えません。
+
+```powershell
+.\venv\Scripts\python.exe .\tools\run_ci_tests.py --module tools.tests.test_extension_git --verbosity 2
+```
 
 <a id="troubleshooting"></a>
 

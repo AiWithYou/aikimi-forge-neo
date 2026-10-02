@@ -54,7 +54,7 @@ def synthetic_rgba() -> Image.Image:
     return Image.fromarray(np.dstack([rgb, alpha]), mode="RGBA")
 
 
-def test_config(tempdir: str, seed: int = 123) -> HyperWeaveConfig:
+def fixture_config(tempdir: str, seed: int = 123) -> HyperWeaveConfig:
     return HyperWeaveConfig.from_preset(
         HyperWeavePreset.STRUCTURE_SAFE,
         target_mode=TargetMode.X2,
@@ -81,7 +81,7 @@ class EngineIntegrationTests(unittest.TestCase):
     def test_stub_integration_size_alpha_metadata_and_cleanup(self):
         source = synthetic_rgba()
         with tempfile.TemporaryDirectory() as temporary:
-            config = test_config(temporary)
+            config = fixture_config(temporary)
             generator = StubGenerator(mode_cycle=("coherent",))
             result = HyperWeaveEngine(config, generator).run(source)
             self.assertEqual((128, 128), result.image.size)
@@ -110,15 +110,15 @@ class EngineIntegrationTests(unittest.TestCase):
         source = synthetic_rgba()
         with tempfile.TemporaryDirectory() as temporary:
             first = HyperWeaveEngine(
-                test_config(temporary, 44),
+                fixture_config(temporary, 44),
                 StubGenerator(mode_cycle=("coherent",)),
             ).run(source)
             second = HyperWeaveEngine(
-                test_config(temporary, 44),
+                fixture_config(temporary, 44),
                 StubGenerator(mode_cycle=("coherent",)),
             ).run(source)
             different = HyperWeaveEngine(
-                test_config(temporary, 45),
+                fixture_config(temporary, 45),
                 StubGenerator(mode_cycle=("coherent",)),
             ).run(source)
             np.testing.assert_array_equal(np.asarray(first.image), np.asarray(second.image))
@@ -129,7 +129,7 @@ class EngineIntegrationTests(unittest.TestCase):
     def test_memmap_and_ram_outputs_match(self):
         source = synthetic_rgba()
         with tempfile.TemporaryDirectory() as temporary:
-            memory_config = test_config(temporary, 81)
+            memory_config = fixture_config(temporary, 81)
             disk_config = replace(
                 memory_config, accumulator_mode=AccumulatorMode.MEMMAP
             )
@@ -149,7 +149,7 @@ class EngineIntegrationTests(unittest.TestCase):
         mask = Image.fromarray(mask_array, mode="L")
         with tempfile.TemporaryDirectory() as temporary:
             config = replace(
-                test_config(temporary, 91),
+                fixture_config(temporary, 91),
                 manual_face_mask=mask,
                 enable_face_redraw=True,
                 face_candidates=1,
@@ -170,7 +170,7 @@ class EngineIntegrationTests(unittest.TestCase):
         mask = Image.fromarray(mask_array, mode="L")
         with tempfile.TemporaryDirectory() as temporary:
             config = replace(
-                test_config(temporary, 93),
+                fixture_config(temporary, 93),
                 manual_face_mask=mask,
                 enable_face_redraw=True,
                 face_candidates=2,
@@ -204,7 +204,7 @@ class EngineIntegrationTests(unittest.TestCase):
         cv2.circle(mask_array, (24, 24), 9, 255, -1)
         with tempfile.TemporaryDirectory() as temporary:
             config = replace(
-                test_config(temporary, 94),
+                fixture_config(temporary, 94),
                 manual_face_mask=Image.fromarray(mask_array, mode="L"),
                 enable_face_redraw=True,
                 enable_hair_redraw=True,
@@ -239,7 +239,7 @@ class EngineIntegrationTests(unittest.TestCase):
         manual = Image.fromarray(mask_array, mode="L")
         with tempfile.TemporaryDirectory() as temporary:
             baseline_config = replace(
-                test_config(temporary, 95),
+                fixture_config(temporary, 95),
                 manual_face_mask=manual,
                 enable_face_redraw=False,
                 enable_hair_redraw=False,
@@ -284,7 +284,7 @@ class EngineIntegrationTests(unittest.TestCase):
         cv2.circle(mask_array, (24, 24), 9, 255, -1)
         with tempfile.TemporaryDirectory() as temporary:
             config = replace(
-                test_config(temporary, 96),
+                fixture_config(temporary, 96),
                 manual_face_mask=Image.fromarray(mask_array, mode="L"),
                 enable_face_redraw=True,
                 face_candidates=1,
@@ -330,7 +330,7 @@ class EngineIntegrationTests(unittest.TestCase):
         source = synthetic_rgba()
         with tempfile.TemporaryDirectory() as temporary:
             config = replace(
-                test_config(temporary, 101),
+                fixture_config(temporary, 101),
                 accumulator_mode=AccumulatorMode.MEMMAP,
             )
             generator = StubGenerator(mode_cycle=("coherent",))
@@ -347,7 +347,7 @@ class EngineIntegrationTests(unittest.TestCase):
         source = synthetic_rgba()
         with tempfile.TemporaryDirectory() as temporary:
             config = replace(
-                test_config(temporary, 111),
+                fixture_config(temporary, 111),
                 global_candidates=4,
             )
             result = HyperWeaveEngine(
@@ -373,7 +373,7 @@ class EngineIntegrationTests(unittest.TestCase):
         source = synthetic_rgba()
         with tempfile.TemporaryDirectory() as temporary:
             result = HyperWeaveEngine(
-                test_config(temporary, 116),
+                fixture_config(temporary, 116),
                 StubGenerator(mode_cycle=("shift",)),
             ).run(source)
             report = result.metrics["stage_reports"][0]
@@ -384,7 +384,7 @@ class EngineIntegrationTests(unittest.TestCase):
         source = synthetic_rgba()
         with tempfile.TemporaryDirectory() as temporary:
             config = replace(
-                test_config(temporary, 118),
+                fixture_config(temporary, 118),
                 candidate_rejection_strictness=1.0,
                 global_overdraw_strength=0.90,
                 spatial_decision_size=32,
@@ -411,7 +411,7 @@ class EngineIntegrationTests(unittest.TestCase):
         source = synthetic_rgba()
         with tempfile.TemporaryDirectory() as temporary:
             config = replace(
-                test_config(temporary, 119),
+                fixture_config(temporary, 119),
                 candidate_rejection_strictness=1.0,
                 global_overdraw_strength=0.90,
                 enable_spatial_rescue=False,
@@ -431,7 +431,7 @@ class EngineIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             debug_destination = Path(temporary) / "published"
             config = replace(
-                test_config(temporary, 121),
+                fixture_config(temporary, 121),
                 save_debug_images=True,
                 save_all_candidates=True,
                 save_maps=True,

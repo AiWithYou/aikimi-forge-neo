@@ -1,4 +1,4 @@
-GitPython==3.1.61
+GitPython==3.1.62
 Pillow==12.3.0
 ./vendor/accelerate
 anyio==4.14.2

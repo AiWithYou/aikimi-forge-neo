@@ -75,6 +75,7 @@ on:
       - "tools/tests/test_chromium_helpers.py"
       - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_dependency_remediation.py"
+      - "tools/tests/test_extension_git.py"
       - "modules/metadata_cache.py"
       - "modules_forge/sensenova_transformers_compat.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
@@ -172,6 +173,7 @@ on:
       - "tools/tests/test_chromium_helpers.py"
       - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_dependency_remediation.py"
+      - "tools/tests/test_extension_git.py"
       - "modules/metadata_cache.py"
       - "modules_forge/sensenova_transformers_compat.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
@@ -309,6 +311,7 @@ jobs:
             tools/tests/test_chromium_helpers.py
             tools/tests/test_ci_audit_followup.py
             tools/tests/test_dependency_remediation.py
+            tools/tests/test_extension_git.py
             modules/metadata_cache.py
             modules_forge/sensenova_transformers_compat.py
             tools/tests/test_ci_workflow_boundaries.py

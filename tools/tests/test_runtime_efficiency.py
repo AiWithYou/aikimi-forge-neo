@@ -129,6 +129,13 @@ class LoraTests(unittest.TestCase):
         self.path.write_bytes(b"larger fixture")
         os.utime(self.path, ns=(old.st_atime_ns, old.st_mtime_ns))
         self.load()
+        self.assertEqual(self.reader.call_count, 2)
+        # Content identity, rather than a timestamp change, controls LoRA reloads.
+        os.utime(self.path, ns=(old.st_atime_ns, old.st_mtime_ns - 1_000_000_000))
+        self.load()
+        self.assertEqual(self.reader.call_count, 2)
+        # A same-size replacement with its mtime preserved must still be reloaded.
+        self.path.write_bytes(b"edited fixture")
         os.utime(self.path, ns=(old.st_atime_ns, old.st_mtime_ns - 1_000_000_000))
         self.load()
         self.assertEqual(self.reader.call_count, 3)
