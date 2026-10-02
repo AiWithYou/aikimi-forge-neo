@@ -276,6 +276,32 @@ class UIContractTests(unittest.TestCase):
         result = self.ui.restore_original(state, padded, 0, binding, False)
         self.assertEqual(result.crop(state.plan.box).tobytes(), state.original.tobytes())
 
+    def test_no_lora_needs_no_download_and_external_recipe_disables_adapter(self):
+        with patch("modules_forge.qwen_image21.outpaint_lora.installed", side_effect=AssertionError("No download")):
+            self.assertEqual(self.ui.adapter_status("none"), "")
+            self.assertFalse(self.ui.setup_visibility("none")["visible"])
+            self.assertEqual(self.ui.prepare_native("none"), "")
+        _, _, prompt, settings, _ = self.ui.prepare_canvas(
+            Image.new("RGB", (256, 256), "red"), 32, 0, 32, 0, "none", "room"
+        )
+        self.assertIsNone(settings["weights"])
+        self.assertIn("LoRAを無効にする", self.ui.handoff_steps(settings))
+        self.assertIn("Outpaint the image", prompt)
+
+    def test_canvas_commit_reaches_native_generation_with_all_four_sides(self):
+        source = Image.new("RGB", (736, 512), "blue")
+        pads = self.ui.commit_canvas(json.dumps({"w": 736, "h": 512, "pads": [192, 0, 64, 0]}), source)
+        captured = {}
+        studio = types.SimpleNamespace(
+            start=lambda generation, owner: captured.update(request=generation, owner=owner) or "job-gui"
+        )
+        browser = types.SimpleNamespace(session_hash="gui-owner", username=None)
+        with patch.object(self.ui, "native_studio", return_value=studio):
+            result = self.ui.start_native(source, *pads, "none", "room", "base_q4_k_m", 0, 25, 42, "", browser)
+        self.assertEqual(result[0], "job-gui")
+        self.assertEqual(captured["request"].outpaint_margins, (192, 0, 64, 0))
+        self.assertEqual((captured["request"].width, captured["request"].height), (992, 512))
+
     def test_real_gradio_tab_build_and_private_callbacks(self):
         tabs = self.ui.on_ui_tabs()
         self.assertEqual(tabs[0][2], "qwen_image21_outpaint")

@@ -1,10 +1,10 @@
 # Aikimi Forge Neo
 
-**v3.3.0** · [変更履歴](CHANGELOG.md)
+**v3.4.0** · [変更履歴](CHANGELOG.md)
 
-**v3.3.0（2026-09-30）：** 手元の互換モデルと複数LoRAを画面から選べます。AnimaなどのForge対応モデル、Qwen Image 2.1、Ming Imageに外部パス指定と個別のLoRA強度を追加。Qwen／Mingは実行環境・共通部品だけを準備でき、標準の本体を先にダウンロードする必要はありません。[使い方・対応形式](docs/local-models.md)
+**v3.4.0（2026-10-02）：** QwenのOutpaintに、辺・角をドラッグして画像を広げるGUIを追加しました。元画像の移動、比率プリセット、数値入力が同期します。上部の**Qwen Image 2.1**を押すと**画像生成／画像を広げる**が現れます。Outpaint LoRAなしも選択可能です。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助)
 
-以前の主な更新：**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
+以前の主な更新：**v3.3** [手元の互換モデル・複数LoRAと標準本体なしの準備](docs/local-models.md)、**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -39,7 +39,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
 | **Ming Image Design**（統合） | ポスター・UI案・インフォグラフィック・透過素材の画像生成。本体INT8／W4A8配布版＋テキストW4A8、自然文／JSON、実寸指定、透過PNGの背景切替、確定Seed・精度を含む条件復元、高解像度再生成。本体W4A8なら変換不要で重み合計約16.6GB、標準INT8は約19.2GBです。[使い方・検証範囲](extensions-builtin/ming-image-studio/README.md) |
-| **Qwen Outpaint**（追加） | 大きなプレビューを見ながら上下左右を指定し、既存QwenのQ4_K_M／INT8で描き足します。完成PNGの保存・結果からの再拡張・最初の元画像への戻しまで同じ画面で行えます。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) |
+| **Qwen Outpaint**（追加） | 辺・角のドラッグ、元画像の移動、比率プリセット、4辺の数値入力で範囲を指定し、既存QwenのQ4_K_M／INT8で描き足します。Outpaint LoRA v2／v1／なしを選べ、完成PNGの保存・再拡張・最初の元画像への戻しも同じ画面で行えます。境界幅0では元画像の全画素を保持します。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) |
 | **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun Acc 4-step LoRAと、Fun ControlNet Unionの8種類の前処理済み制御画像・Inpainting＋Controlを個別に使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
@@ -58,7 +58,7 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 | 機能 | できること |
 |---|---|
 | **Forge画像生成**（継承） | `txt2img`、`img2img`、Extras、モデル読み込みなど、Forgeの基本機能を利用。 |
-| **Aikimiナビゲーション**（追加） | 画面上部のショートカットからKrea2・Anima・SenseNova・MiniMax H3・Qwen Image 2.1へ移動。既存のForgeタブもそのまま使えます。 |
+| **Aikimiナビゲーション**（追加） | 画面上部のショートカットからKrea2・Anima・SenseNova・MiniMax H3・Qwen Image 2.1へ移動。Qwenを開いたときだけ「画像生成／画像を広げる」を表示し、他の機能へ移ると隠れます。既存のForgeタブもそのまま使えます。 |
 | **モデル保持・連続生成**（追加） | 全画面共通の「GPU・モデル保持」で、自動・連続生成優先・毎回解放を選択。同じエンジンのモデルを再利用し、別の機能へ切り替える前に待機モデルを解放します。[使い方](docs/model-retention.md) |
 | **ちびあいきみ・状態表示**（追加） | 通常のForge画面にも表示できるペット。ドラッグで移動し、クリックで生成状況や順番待ちを確認。上部の「ちびあいきみ」で表示を切り替えられます。 |
 | **Extrasの操作改善**（追加） | 処理順と予定サイズの表示、Grain Cleaner単独設定、見本範囲の選択、結果の要約。同じ画像の再調整では解析結果を再利用します。 |

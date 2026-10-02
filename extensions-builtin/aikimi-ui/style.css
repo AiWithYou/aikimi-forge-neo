@@ -10,7 +10,8 @@
     padding: 0;
 }
 
-#aikimi-feature-nav .aikimi-feature-nav__button {
+#aikimi-feature-nav .aikimi-feature-nav__button,
+#aikimi-feature-nav .aikimi-feature-section {
     min-height: 2rem;
     padding: 0.32rem 0.72rem;
     border: 1px solid var(--button-secondary-border-color, var(--block-border-color));
@@ -23,17 +24,32 @@
     cursor: pointer;
 }
 
-#aikimi-feature-nav .aikimi-feature-nav__button:hover {
+#aikimi-feature-nav .aikimi-feature-nav__button:hover,
+#aikimi-feature-nav .aikimi-feature-section:hover {
     background: var(--button-secondary-background-fill-hover, var(--background-fill-primary));
 }
 
-#aikimi-feature-nav .aikimi-feature-nav__button:focus-visible {
+#aikimi-feature-nav .aikimi-feature-nav__button:focus-visible,
+#aikimi-feature-nav .aikimi-feature-section:focus-visible {
     outline: 2px solid var(--color-accent, var(--primary-500));
     outline-offset: 1px;
 }
 
-#aikimi-feature-nav .aikimi-feature-nav__button.aikimi-feature-active {
+#aikimi-feature-nav .aikimi-feature-active {
     box-shadow: inset 0 -2px 0 var(--color-accent, var(--primary-500));
+}
+
+#aikimi-feature-nav .aikimi-feature-sections {
+    display: flex;
+    order: 1;
+    flex-basis: 100%;
+    gap: 0.25rem;
+    padding-top: 0.3rem;
+}
+
+#aikimi-feature-nav .aikimi-feature-sections[hidden],
+#aikimi-feature-nav .aikimi-feature-section[hidden] {
+    display: none !important;
 }
 
 #aikimi-tab-sensenova, #aikimi-tab-minimax-h3, #aikimi-tab-yue2 {
@@ -59,7 +75,9 @@ body:has(#aikimi-feature-nav:is(
 #aikimi-feature-nav + #tabs > .tab-wrapper > .tab-container[role="tablist"] > button[aria-controls="tab_qwen_image21_studio"],
 #aikimi-feature-nav + #tabs > .tab-nav > button[aria-controls="tab_sensenova_u15_studio"],
 #aikimi-feature-nav + #tabs > .tab-nav > button[aria-controls="tab_minimax_h3_studio"],
-#aikimi-feature-nav + #tabs > .tab-nav > button[aria-controls="tab_qwen_image21_studio"] {
+#aikimi-feature-nav + #tabs > .tab-nav > button[aria-controls="tab_qwen_image21_studio"],
+#aikimi-feature-nav + #tabs > .tab-wrapper > .tab-container[role="tablist"] > button[aria-controls="tab_qwen_image21_outpaint"],
+#aikimi-feature-nav + #tabs > .tab-nav > button[aria-controls="tab_qwen_image21_outpaint"] {
     display: none !important;
 }
 

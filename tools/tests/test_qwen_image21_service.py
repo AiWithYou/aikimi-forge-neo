@@ -344,6 +344,22 @@ class QwenServiceTests(unittest.TestCase):
         self.assertEqual(self.lease.releases, 0)
         self.assertFalse(self.worker.started.is_set())
 
+    def test_no_lora_outpaint_needs_no_installed_adapter(self):
+        source = self.root / "upload.png"
+        Image.new("RGB", (224, 256), "red").save(source)
+        with patch("modules_forge.qwen_image21.outpaint_lora.installed", side_effect=AssertionError("No adapter")):
+            identifier = self.studio.start(
+                self.request(input_images=(str(source),), outpaint_version="none", outpaint_margins=(16, 0, 16, 0)),
+                "owner",
+            )
+        final = self.wait_done(identifier)
+        self.assertEqual(final["state"], "complete")
+        self.assertIn("Outpaint LoRAなし", final["message"])
+        payload = core.read_json(self.root / "outputs" / identifier / "request.json")
+        from modules_forge.qwen_image21.outpaint_native import validate_snapshot
+
+        validate_snapshot(payload, self.root / "outputs" / identifier)
+
     def test_fun_control_map_is_copied_into_job_before_worker_starts(self):
         from modules_forge.qwen_image21 import fun_controlnet
 

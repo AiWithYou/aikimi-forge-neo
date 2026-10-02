@@ -117,7 +117,7 @@ class Studio:
             from modules_forge.local_assets import remember
 
             remember("qwen21_lora", [item["name"] for item in lora_infos if Path(item["name"]).is_absolute()])
-        if request.outpaint_version:
+        if request.outpaint_version in {"v1", "v2"}:
             from .outpaint_lora import installed
 
             installed(self.runtime, request.outpaint_version)
@@ -390,9 +390,8 @@ class Studio:
                     rewrite_message = " · 編集のため書き換え省略"
                 preservation_message = " · 範囲外固定" if request.preserve_unmasked else ""
                 if request.outpaint_version:
-                    preservation_message = (
-                        f" · Outpaint {request.outpaint_version} · 境界 {request.outpaint_feather} px"
-                    )
+                    adapter_label = "LoRAなし" if request.outpaint_version == "none" else request.outpaint_version
+                    preservation_message = f" · Outpaint {adapter_label} · 境界 {request.outpaint_feather} px"
                 final = {
                     "state": "complete",
                     "message": f"完了 · Seed {request.seed} · {request.width}×{request.height} · {precision_label(request.precision)}{rewrite_message}{preservation_message}",
