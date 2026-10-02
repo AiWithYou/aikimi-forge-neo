@@ -91,10 +91,11 @@ def register_page(page):
 def fetch_file(filename: str = ""):
     from starlette.responses import FileResponse
 
+    filename = str(Path(filename).resolve())
     if not os.path.isfile(filename):
         raise HTTPException(status_code=404, detail="File not found")
 
-    if not any(Path(x).absolute() in Path(filename).absolute().parents for x in allowed_dirs):
+    if not any(Path(x).resolve() in Path(filename).parents for x in allowed_dirs):
         raise ValueError(f"File cannot be fetched: {filename}. Must be in one of directories registered by extra pages.")
 
     ext = os.path.splitext(filename)[1].lower()[1:]
@@ -795,10 +796,7 @@ def create_ui(interface: gr.Blocks, unrelated_tabs, tabname):
 
 
 def path_is_parent(parent_path, child_path):
-    parent_path = os.path.abspath(parent_path)
-    child_path = os.path.abspath(child_path)
-
-    return child_path.startswith(parent_path)
+    return Path(child_path).resolve().is_relative_to(Path(parent_path).resolve())
 
 
 def setup_ui(ui, gallery):
@@ -812,6 +810,7 @@ def setup_ui(ui, gallery):
         index = int(index)
         index = 0 if index < 0 else index
         index = len(images) - 1 if index >= len(images) else index
+        filename = str(Path(filename).resolve())
 
         img_info = images[index if index >= 0 else 0]
         image = image_from_url_text(img_info)
@@ -823,7 +822,8 @@ def setup_ui(ui, gallery):
                 is_allowed = True
                 break
 
-        assert is_allowed, f"writing to {filename} is not allowed"
+        if not is_allowed:
+            raise AssertionError(f"writing to {filename} is not allowed")
 
         save_image_with_geninfo(image, geninfo, filename)
 

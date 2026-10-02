@@ -42,9 +42,9 @@ def weight_decompose(dora_scale, weight, lora_diff, alpha, strength, intermediat
     lora_diff *= alpha
     weight_calc = weight + function(lora_diff).type(weight.dtype)
 
-    wd_on_output_axis = dora_scale.shape[0] == weight_calc.shape[0]
+    wd_on_output_axis = dora_scale.shape[0] == weight_calc.shape[0] and dora_scale.numel() == dora_scale.shape[0]
     if wd_on_output_axis:
-        weight_norm = weight.reshape(weight.shape[0], -1).norm(dim=1, keepdim=True).reshape(weight.shape[0], *[1] * (weight.dim() - 1))
+        weight_norm = weight_calc.reshape(weight_calc.shape[0], -1).norm(dim=1, keepdim=True).reshape(weight_calc.shape[0], *[1] * (weight_calc.dim() - 1))
     else:
         weight_norm = weight_calc.transpose(0, 1).reshape(weight_calc.shape[1], -1).norm(dim=1, keepdim=True).reshape(weight_calc.shape[1], *[1] * (weight_calc.dim() - 1)).transpose(0, 1)
     weight_norm = weight_norm + torch.finfo(weight.dtype).eps

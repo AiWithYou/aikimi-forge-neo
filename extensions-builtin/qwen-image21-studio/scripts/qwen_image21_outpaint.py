@@ -542,8 +542,14 @@ def mark_native_draft(previous):
 
 
 def native_readiness(source, left, top, right, bottom, identifier, request: gr.Request, *shared):
-    if identifier and not native_studio().status(identifier, native_owner(request))["done"]:
-        return gr.update(interactive=False), gr.update()
+    if identifier:
+        from modules_forge.qwen_image21.service import JobNotFound
+
+        try:
+            if not native_studio().status(identifier, native_owner(request))["done"]:
+                return gr.update(interactive=False), gr.update()
+        except JobNotFound:
+            pass
     try:
         prepare(source, left, top, right, bottom)
     except (OSError, ValueError):
@@ -584,6 +590,15 @@ def outpaint_step_settings(precision, fun_acc, steps, normal_steps):
     if fixed:
         return gr.update(value=4, interactive=False), normal_steps if steps == 4 else steps
     return gr.update(value=normal_steps, interactive=True), normal_steps
+
+
+def native_feather_settings(source, feather):
+    try:
+        original = normalize_image(source)
+    except (OSError, ValueError):
+        return gr.update()
+    maximum = min(128, (min(original.size) - 1) // 2)
+    return gr.update(maximum=maximum, value=min(feather, maximum))
 
 
 def on_ui_tabs(profile_controls=None):
@@ -902,6 +917,7 @@ def on_ui_tabs(profile_controls=None):
             outputs=[source_accordion, stage, source_dimensions],
             **PRIVATE,
         )
+        source.change(native_feather_settings, inputs=[source, native_feather], outputs=[native_feather], **PRIVATE)
         native_cancel.click(cancel_native, inputs=[native_job], outputs=[native_status, native_cancel], **PRIVATE)
         setup_button.click(
             prepare_native,

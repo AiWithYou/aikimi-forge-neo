@@ -140,12 +140,17 @@ class Extension:
         def read_from_repo():
             with self.lock:
                 if self.have_info_from_repo:
-                    return
+                    return self.to_dict()
                 self.do_read_info_from_repo()
                 return self.to_dict()
 
         try:
-            d = cache.cached_data_for_file("extensions-git", self.name, os.path.join(self.path, ".git"), read_from_repo)
+            git_path = os.path.join(self.path, ".git")
+            # Worktree/submodule refs change outside their stable .git pointer.
+            if os.path.isfile(git_path):
+                d = read_from_repo()
+            else:
+                d = cache.cached_data_for_file("extensions-git", self.name, git_path, read_from_repo)
             self.from_dict(d)
         except FileNotFoundError:
             pass
@@ -167,8 +172,7 @@ class Extension:
                 self.remote = next(repo.remote().urls, None)
                 commit = repo.head.commit
                 self.commit_date = commit.committed_date
-                if repo.active_branch:
-                    self.branch = repo.active_branch.name
+                self.branch = None if repo.head.is_detached else repo.active_branch.name
                 self.commit_hash = commit.hexsha
                 self.version = self.commit_hash[:8]
 

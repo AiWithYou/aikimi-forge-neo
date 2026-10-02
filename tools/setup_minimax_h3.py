@@ -103,10 +103,14 @@ class RuntimeInstaller:
         for target in (
             self.runtime,
             self.runtime / ".git",
+            self.runtime / "extra_model_paths.yaml.tmp",
             self.base / ".venv",
+            self.base / ".venv/Scripts/python.exe",
             self.base / "python",
             self.base / "bootstrap",
+            self.base / "bootstrap/uv.exe",
             self.base / "cache",
+            self.base / "setup.json.tmp",
             self.log,
         ):
             if not target.resolve().is_relative_to(self.root):

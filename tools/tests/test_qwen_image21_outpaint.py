@@ -196,6 +196,14 @@ class StitchTests(unittest.TestCase):
         self.assertEqual(result.getpixel((32, 0)), (19, 101, 202, 255))
         self.assertEqual(result.getpixel((0, 0)), (0, 0, 0, 0))
 
+    def test_low_alpha_feather_preserves_source_color(self):
+        source, _, plan = prepare(Image.new("RGBA", (256, 256), (128, 67, 39, 1)), 32, 0, 0, 0)
+        generated = Image.new("RGBA", plan.size, (0, 0, 0, 0))
+        result = stitch(source, generated, plan, 2)
+        self.assertEqual(result.getpixel((plan.left + 1, 40)), (128, 67, 39, 1))
+        self.assertEqual(result.getpixel((plan.left + 2, 40)), source.getpixel((2, 40)))
+        self.assertEqual(result.getpixel((plan.left, 40)), generated.getpixel((plan.left, 40)))
+
     def test_inputs_are_not_mutated(self):
         before = self.generated.tobytes()
         stitch(self.source, self.generated, self.plan)
@@ -409,6 +417,14 @@ class UIContractTests(unittest.TestCase):
         ):
             self.assertIn(elem_id, ids)
         self.assertFalse(ids["qwen21-outpaint-preview-column"]["props"]["visible"])
+        source_id = ids["qwen21-outpaint-source"]["id"]
+        native_feather_id = ids["qwen21-outpaint-native-feather"]["id"]
+        self.assertTrue(
+            any(
+                dependency["inputs"] == [source_id, native_feather_id] and dependency["outputs"] == [native_feather_id]
+                for dependency in config["dependencies"]
+            )
+        )
         tabs[0][0].close()
 
     def test_native_start_snapshots_inputs_and_passes_owner_and_selected_model(self):
@@ -483,6 +499,17 @@ class UIContractTests(unittest.TestCase):
         self.assertEqual(result[4]["label"], "前回の生成結果 · 開始時の設定")
         self.assertNotIn("value", result[4])
         self.assertFalse(result[2]["interactive"])
+
+    def test_missing_job_does_not_block_readiness_for_a_new_valid_source(self):
+        from modules_forge.qwen_image21.service import JobNotFound
+
+        browser = types.SimpleNamespace(session_hash="session", username=None)
+        studio = types.SimpleNamespace(status=lambda *args: (_ for _ in ()).throw(JobNotFound("gone")))
+        with patch.object(self.ui, "native_studio", return_value=studio):
+            button, _ = self.ui.native_readiness(Image.new("RGB", (256, 256)), 32, 0, 0, 0, "missing", browser)
+            invalid, _ = self.ui.native_readiness(None, 32, 0, 0, 0, "missing", browser)
+        self.assertTrue(button["interactive"])
+        self.assertFalse(invalid["interactive"])
 
     def test_preview_marks_extension_and_keeps_original_visible(self):
         source = Image.new("RGB", (256, 256), (10, 200, 30))
@@ -675,6 +702,18 @@ class UIContractTests(unittest.TestCase):
         self.assertEqual(feather["maximum"], 15)
         result = self.ui.restore_original(state, padded, feather["value"], state.token, False)
         self.assertEqual(result.size, padded.size)
+
+    def test_native_feather_matches_source_limit_and_preserves_valid_choice(self):
+        for size, current, maximum, value in (
+            ((32, 32), 32, 15, 15),
+            ((256, 256), 128, 127, 127),
+            ((512, 512), 5, 128, 5),
+        ):
+            with self.subTest(size=size, current=current):
+                updated = self.ui.native_feather_settings(Image.new("RGB", size), current)
+                self.assertEqual(updated["maximum"], maximum)
+                self.assertEqual(updated["value"], value)
+        self.assertNotIn("value", self.ui.native_feather_settings(None, 32))
 
     def test_repreparation_keeps_generated_input_unbound(self):
         image = Image.new("RGB", (512, 512))

@@ -68,6 +68,8 @@ class ForgeCanvas {
         this.contrast_scribbles = contrast_scribbles;
 
         this.img = null;
+        this.imageLoadRevision = 0;
+        this.drawingLoadRevision = 0;
         this.imgX = 0;
         this.imgY = 0;
         this.orgWidth = 0;
@@ -623,8 +625,11 @@ class ForgeCanvas {
             base64 = url.href;
             cachedFile = true;
         }
+        const revision = ++this.imageLoadRevision;
+        if (!base64 || this.img !== base64) ++this.drawingLoadRevision;
         const image = new Image();
         image.onload = () => {
+            if (revision !== this.imageLoadRevision) return;
             const canvas = document.getElementById(`drawingCanvas_${this.uuid}`);
             if (cachedFile && this.img !== base64) {
                 // A Qwen reference is a new editing source. Its Undo history
@@ -664,8 +669,10 @@ class ForgeCanvas {
     }
 
     loadDrawing(base64) {
+        const revision = ++this.drawingLoadRevision;
         const image = new Image();
         image.onload = () => {
+            if (revision !== this.drawingLoadRevision) return;
             const canvas = document.getElementById(`drawingCanvas_${this.uuid}`);
             const ctx = canvas.getContext("2d");
             ctx.clearRect(0, 0, canvas.width, canvas.height);

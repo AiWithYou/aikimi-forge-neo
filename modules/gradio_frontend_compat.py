@@ -17,11 +17,20 @@ from gradio.routes import App
 SUPPORTED_VERSION = "6.17.3"
 TABS_ASSET_NAME = "Walkthrough.svelte_svelte_type_style_lang-DBgsQkoF.js"
 ORIGINAL_ASSET_SHA256 = "e9be5d9fd700f1521287465e80c768ba326c8d274f094a7cea4ecb8bf4cdb8f5"
-PATCHED_ASSET_SHA256 = "62076871b459f46dddfc920c2a756c574231b607e84eb714304decabd371b344"
+PATCHED_ASSET_SHA256 = "2f16cdacd4bc2fa1518e3faa1adac92466b5c2b32fe8d9b4e1f807fd3117d41d"
 PATCH_ROUTE_NAME = "aikimi_gradio_tabs_compat"
 DATAFRAME_ASSET_NAME = "Index-QH0sWW3Z.js"
 DATAFRAME_ORIGINAL_SHA256 = "7faf27d05cb82bea0f5d317748b2908870c3e966a646c459e370fe52890299b3"
 DATAFRAME_ROUTE_NAME = "aikimi_gradio_dataframe_compat"
+APPTREE_ASSET_NAME = "index-DT-PGBOg.js"
+APPTREE_ORIGINAL_SHA256 = "d9705297a4819b6c0e003703334615718c7daf00c1e0024a9b8ca50da745ea33"
+APPTREE_ROUTE_NAME = "aikimi_gradio_apptree_compat"
+
+_ORIGINAL_APPTREE_VISIBILITY_SYNC = b"async update_state(s,i,e=!0){const r=_(this.root,s);let n=!1;"
+_REACTIVE_APPTREE_VISIBILITY_SYNC = (
+    b"async update_state(s,i,e=!0){const r=_(this.root,s);"
+    b'r&&"visible"in i&&(r.original_visibility=i.visible,i.visible===!1&&this.#n.delete(s));let n=!1;'
+)
 
 # The virtualizer changes its count but only notifies Svelte for the first 0->N
 # transition. Notify on every count change so later additions/removals render.
@@ -31,7 +40,9 @@ _REACTIVE_TABLE_RESIZE = b"r!==o&&n.measure(),r=o"
 # Gradio 6.17.3 predates the upstream Tabs mount-storm fix in PR #13509.
 # These are exact compiled snippets from that one audited wheel. The bounded
 # workaround disables overflow measurement, batches initial_tabs updates, and
-# removes per-Tab registration invalidations. Any upstream byte change fails
+# skips unchanged per-Tab registration invalidations. Visibility, labels, and
+# interactivity updates still synchronize both the registry and visible tabs.
+# Any upstream byte change fails
 # before the server listens and requires a fresh compatibility review.
 _ORIGINAL_OVERFLOW_FUNCTION = (
     b"async function ne(){if(!e(m)||(await Ce(),await new Promise(n=>requestAnimationFrame(n)),!e(m)))return;"
@@ -48,7 +59,8 @@ _ORIGINAL_INITIAL_TAB_SYNC = (
     b"function Se(t){Ce().then(()=>{for(let s=0;s<t.length;s++)t[s]&&!ae.has(s)&&J(l,e(l)[s]=t[s])})}"
 )
 _STATIC_INITIAL_TAB_SYNC = (
-    b"function Se(t){Ce().then(()=>{const s=t.slice();J(l,s),d(he,s),d(I,[]),d(le,!1),d(we,!1)})}"
+    b"function Se(t){Ce().then(()=>{const s=t.map((n,_)=>"
+    b"ae.has(_)&&e(l)[_]?.id===n?.id?e(l)[_]:n);d(l,s),d(he,s),d(I,[]),d(le,!1),d(we,!1)})}"
 )
 
 _ORIGINAL_TAB_REGISTRATION = (
@@ -58,9 +70,11 @@ _ORIGINAL_TAB_REGISTRATION = (
     b"J(l,e(l)[s]=null)},selected_tab:P,selected_tab_index:X"
 )
 _STATIC_TAB_REGISTRATION = (
-    b"register_tab:(t,s)=>(ae.add(s),"
-    b"v()===!1&&t.visible!==!1&&t.interactive&&(N(P,t.id),N(X,s)),s),"
-    b"unregister_tab:(t,s)=>{ae.delete(s),v()===t.id&&N(P,e(l)[0]?.id||!1)},"
+    b"register_tab:(t,s)=>{ae.add(s);const _=e(l)[s];"
+    b"if(!_||Object.keys(t).some(n=>_[n]!==t[n])){const n=e(l).slice();n[s]=t;d(l,n),d(he,n)}"
+    b"return v()===!1&&t.visible!==!1&&t.interactive&&(N(P,t.id),N(X,s)),s},"
+    b"unregister_tab:(t,s)=>{ae.delete(s),v()===t.id&&N(P,e(l)[0]?.id||!1);"
+    b"if(e(l)[s]?.id===t.id){const _=e(l).slice();_[s]=null;d(l,_),d(he,_)}},"
     b"selected_tab:P,selected_tab_index:X"
 )
 
@@ -173,7 +187,22 @@ def install_gradio_tabs_compatibility_route(
 
     asset = asset or build_patched_tabs_asset()
     _validate_patched_asset(asset)
+    _install_asset_route(app, build_patched_apptree_asset(), APPTREE_ROUTE_NAME)
     return _install_asset_route(app, asset, PATCH_ROUTE_NAME)
+
+
+def build_patched_apptree_asset() -> PatchedFrontendAsset:
+    """Keep backend visibility distinct from lazy mounting's internal hiding."""
+    if gradio.__version__ != SUPPORTED_VERSION:
+        raise GradioFrontendCompatibilityError("Unsupported Gradio version for the app tree compatibility patch.")
+    path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / APPTREE_ASSET_NAME
+    source = path.read_bytes()
+    if _sha256(source) != APPTREE_ORIGINAL_SHA256:
+        raise GradioFrontendCompatibilityError("The Gradio app tree asset does not match the audited SHA-256.")
+    patched = _replace_exact(
+        source, _ORIGINAL_APPTREE_VISIBILITY_SYNC, _REACTIVE_APPTREE_VISIBILITY_SYNC, "visibility sync"
+    )
+    return PatchedFrontendAsset(APPTREE_ASSET_NAME, patched, APPTREE_ORIGINAL_SHA256, _sha256(patched))
 
 
 def build_patched_dataframe_asset() -> PatchedFrontendAsset:

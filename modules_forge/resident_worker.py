@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import atexit
 import contextlib
+import errno
 import importlib.util
 import os
 import subprocess
@@ -31,6 +32,20 @@ def _synchronized(method):
     return call
 
 
+def _read_control_json(path, is_running=None):
+    """Retry brief Windows sharing conflicts without hiding a failed worker."""
+    deadline = time.monotonic() + 1.0
+    while True:
+        try:
+            return read_json(path)
+        except PermissionError as exc:
+            winerror = getattr(exc, "winerror", None)
+            retryable = winerror in {5, 32, 33} or (winerror is None and os.name == "nt" and exc.errno == errno.EACCES)
+            if not retryable or (is_running is not None and not is_running()) or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
+
+
 class ResidentWorker:
     def __init__(self, name, root):
         self.name, self.root = name, Path(root)
@@ -43,6 +58,15 @@ class ResidentWorker:
 
     @_synchronized
     def start(self, python, script, environment, payload, log_path):
+        try:
+            return self._start(python, script, environment, payload, log_path)
+        except BaseException:
+            # A failed spawn or command dispatch must not leave an untracked
+            # process or its control files behind. close() confirms exit first.
+            self.close()
+            raise
+
+    def _start(self, python, script, environment, payload, log_path):
         key = (str(python), str(script), Path(script).stat().st_mtime_ns, tuple(sorted(environment.items())))
         reused = self.process is not None and self.process.poll() is None and key == self.key
         if not reused:
@@ -75,13 +99,9 @@ class ResidentWorker:
                     start_new_session=os.name != "nt",
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
-            try:
-                self.tree = ProcessTree(self.process)
-                self.process.stdin.write(self.tree.handshake())
-                self.process.stdin.flush()
-            except BaseException:
-                self.close()
-                raise
+            self.tree = ProcessTree(self.process)
+            self.process.stdin.write(self.tree.handshake())
+            self.process.stdin.flush()
             self.key = key
         self.identifier = uuid.uuid4().hex
         log_path = Path(log_path).resolve()
@@ -104,9 +124,14 @@ class ResidentWorker:
             raise RuntimeError(f"{self.name} workerは終了しています。")
         path = self.directory / "response.json"
         if path.exists():
-            response = read_json(path)
-            if response.get("id") == self.identifier:
-                return response
+            try:
+                response = _read_control_json(path, lambda: self.process.poll() is None)
+            except PermissionError:
+                if self.process.poll() is None:
+                    raise
+            else:
+                if response.get("id") == self.identifier:
+                    return response
         if self.process.poll() is not None:
             detail = (self.directory / "startup.log").read_text(encoding="utf-8", errors="replace")[-3000:]
             raise RuntimeError(f"{self.name} workerが終了しました: {detail}")
@@ -153,7 +178,7 @@ def serve(script, directory):
         if not command_path.exists():
             time.sleep(0.1)
             continue
-        command = read_json(command_path)
+        command = _read_control_json(command_path)
         if command["id"] == last:
             time.sleep(0.1)
             continue

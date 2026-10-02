@@ -1,10 +1,10 @@
 # Aikimi Forge Neo
 
-**v3.5.0** · [変更履歴](CHANGELOG.md)
+**v3.5.1** · [変更履歴](CHANGELOG.md)
 
-**v3.5.0（2026-10-02）：** Qwenの画像生成で選んだモデル・画風LoRAをOutpaintにも引き継ぎます。通常版Q4_K_M／INT8／W4A8／BF16、Turbo、Fun Acc、ControlNetを共通設定から使え、適用条件は生成ボタンの上に表示します。Turbo＋Fun Acc、Sparse＋Fun Acc／ControlNetは処理方式の都合で併用できません。[使い方・組み合わせ](extensions-builtin/qwen-image21-studio/README.md#outpaint補助)
+**v3.5.1（2026-10-03）：** Qwen Outpaintの境界検証、画像・透過情報の保存、Windowsのモデルキャッシュ、マスク編集後の画像混入、小画像のアップスケールなどを修正しました。生成の中断・失敗後の復元、LoRA・量子化・Attention、タブ更新と拡張機能のバージョン表示も改善しています。CPUと実ブラウザーで回帰を確認し、今回のGPU実生成は未実施です。
 
-以前の主な更新：**v3.3** [手元の互換モデル・複数LoRAと標準本体なしの準備](docs/local-models.md)、**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
+以前の主な更新：**v3.5** [Qwen画像生成とOutpaintのモデル・LoRA共有](extensions-builtin/qwen-image21-studio/README.md#outpaint補助)、**v3.3** [手元の互換モデル・複数LoRAと標準本体なしの準備](docs/local-models.md)、**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -27,7 +27,7 @@
 
 Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み、画像編集・動画生成があります。下の一覧では、**継承**はForgeから引き継いだ機能、**追加**は本ブランチの追加処理、**統合**は外部モデルや実行環境を使うための専用UI・連携を指します。
 
-比較の基準は[Forge Neoの同期元](https://github.com/Haoming02/sd-webui-forge-classic/tree/0d0cb72951b059c8ea17861ba86db8d0f6098c28)です。その後の更新は選んで取り込んでいます。[2026年9月22日までの更新確認](docs/upstream-sync.md)に採用・見送りの内容を記載しています。
+比較の基準は[Forge Neoの同期元](https://github.com/Haoming02/sd-webui-forge-classic/tree/0d0cb72951b059c8ea17861ba86db8d0f6098c28)です。その後の更新は選んで取り込んでいます。[2026年10月3日までの更新確認](docs/upstream-sync.md)に採用・見送りの内容を記載しています。
 
 モデルやComfyUIそのものは各開発元の成果です。出典と利用条件は機能別ガイドと[Third-party notices](THIRD_PARTY_NOTICES.md)を参照してください。
 

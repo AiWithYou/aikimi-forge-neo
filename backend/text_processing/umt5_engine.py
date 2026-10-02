@@ -59,7 +59,9 @@ class UMT5TextProcessingEngine:
     def tokenize_line(self, line):
         parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
 
-        tokenized = self.tokenize([text[self.tokens_start : self.tokens_end] for text, _ in parsed])
+        tokenized = [
+            tokens[self.tokens_start : self.tokens_end] for tokens in self.tokenize([text for text, _ in parsed])
+        ]
 
         chunks = []
         chunk = PromptChunk()
@@ -104,6 +106,16 @@ class UMT5TextProcessingEngine:
         if any(emphasis.uses_emphasis(x) for x in texts):
             dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
 
+        batch_chunks = {line: self.tokenize_line(line)[0] for line in dict.fromkeys(texts)}
+        max_tokens = max(
+            (len(chunk.tokens) for chunks in batch_chunks.values() for chunk in chunks),
+            default=self.min_length,
+        )
+        max_chunks = max((len(chunks) for chunks in batch_chunks.values()), default=0)
+        empty_chunk = PromptChunk()
+        empty_chunk.tokens = [self.end_token]
+        empty_chunk.multipliers = [1.0]
+
         zs = []
         cache = {}
 
@@ -111,28 +123,20 @@ class UMT5TextProcessingEngine:
             if line in cache:
                 line_z_values = cache[line]
             else:
-                chunks, _ = self.tokenize_line(line)
+                chunks = batch_chunks[line]
                 line_z_values = []
 
-                # pad all chunks to length of longest chunk
-                max_tokens = 0
-                for chunk in chunks:
-                    max_tokens = max(len(chunk.tokens), max_tokens)
-
-                for chunk in chunks:
-                    tokens = chunk.tokens
-                    multipliers = chunk.multipliers
-
-                    remaining_count = max_tokens - len(tokens)
-                    if remaining_count > 0:
-                        tokens += [self.id_pad] * remaining_count
-                        multipliers += [1.0] * remaining_count
+                for index in range(max_chunks):
+                    chunk = chunks[index] if index < len(chunks) else empty_chunk
+                    remaining_count = max_tokens - len(chunk.tokens)
+                    tokens = chunk.tokens + [self.pad_token] * remaining_count
+                    multipliers = chunk.multipliers + [1.0] * remaining_count
 
                     z = self.process_tokens([tokens], [multipliers])[0]
                     line_z_values.append(z)
                 cache[line] = line_z_values
 
-            zs.extend(line_z_values)
+            zs.append(torch.cat(line_z_values, dim=0))
 
         return torch.stack(zs)
 

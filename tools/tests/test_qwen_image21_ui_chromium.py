@@ -83,7 +83,8 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             )
         )
         cls.enterClassContext(patch.object(cls.ui.STUDIO, "artifact", return_value=cls.output))
-        studio = cls.ui.on_ui_tabs()[0][0]
+        with patch("modules_forge.local_assets.selection", return_value={"precision": "base_q4_k_m"}):
+            studio = cls.ui.on_ui_tabs()[0][0]
         # Match Forge: build the extension separately, then render it inside
         # a tab that is not selected at page load.
         with gr.Blocks() as cls.demo:
@@ -152,7 +153,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             self.assertIn("前処理済みの制御画像", page.evaluate("document.body.innerText"))
             self.assertFalse(page.exceptions)
 
-    def test_fun_acc_switch_sets_int8_and_four_steps(self):
+    def test_fun_acc_switch_keeps_selected_model_and_uses_four_steps(self):
         with cdp_page(self.chromium, self.url) as page:
             self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 45000), timeout=50))
             self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
@@ -160,26 +161,29 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-fun-acc input", "true", 15000)))
+            selected_model = page.evaluate("document.querySelector('#qwen21-precision input[role=listbox]')?.value")
+            self.assertTrue(selected_model)
             page.evaluate("document.querySelector('#qwen21-fun-acc input').click()")
             self.assertTrue(
                 page.evaluate(
                     _wait_expression(
-                        "#qwen21-precision",
-                        "element.querySelector('input[role=listbox]')?.value === '通常 · INT8 · 拡張対応' && element.querySelector('input[role=listbox]')?.disabled",
-                        10000,
-                    )
-                ),
-                page.exceptions,
-            )
-            self.assertTrue(
-                page.evaluate(
-                    _wait_expression(
                         "#qwen21-steps",
-                        "Array.from(element.querySelectorAll('input')).some(input => input.value === '4')",
+                        "Array.from(element.querySelectorAll('input')).some(input => input.value === '4' && input.disabled)",
                         10000,
                     )
                 ),
                 str(page.exceptions) + str(page.evaluate("document.querySelector('#qwen21-steps')?.outerHTML")),
+            )
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression(
+                        "#qwen21-precision",
+                        f"element.querySelector('input[role=listbox]')?.value === {json.dumps(selected_model)} && "
+                        "!element.querySelector('input[role=listbox]')?.disabled",
+                        10000,
+                    )
+                ),
+                page.exceptions,
             )
             self.assertFalse(page.exceptions)
 

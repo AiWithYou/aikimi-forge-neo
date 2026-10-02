@@ -63,10 +63,15 @@ class ScriptRescaleCFG(scripts.ScriptBuiltinUI):
             uncond = ((x - (x_orig - uncond)) * (sigma**2 + 1.0) ** 0.5) / (sigma)
 
             x_cfg = uncond + cond_scale * (cond - uncond)
-            ro_pos = torch.std(cond, dim=(1, 2, 3), keepdim=True)
-            ro_cfg = torch.std(x_cfg, dim=(1, 2, 3), keepdim=True)
+            dims = tuple(range(1, cond.ndim))
+            ro_pos = torch.std(cond, dim=dims, keepdim=True)
+            ro_cfg = torch.std(x_cfg, dim=dims, keepdim=True)
 
-            x_rescaled = x_cfg * (ro_pos / ro_cfg)
+            nonzero = ro_cfg != 0
+            ratio = ro_pos / torch.where(nonzero, ro_cfg, 1.0)
+            # A flat guided prediction cannot be rescaled to another variance.
+            ratio = torch.where(nonzero, ratio, 1.0)
+            x_rescaled = x_cfg * ratio
             x_final = cfg * x_rescaled + (1.0 - cfg) * x_cfg
 
             return x_orig - (x - x_final * sigma / (sigma * sigma + 1.0) ** 0.5)

@@ -112,12 +112,33 @@ def runtime_fingerprint(root: Path = ROOT) -> str:
     return digest.hexdigest()
 
 
+def _managed_runtime(root: Path) -> Path:
+    runtime = runtime_root(root)
+    base = runtime.parent
+    for target in (
+        runtime,
+        runtime / ".git",
+        base / ".venv/Scripts/python.exe",
+        base / "python",
+        base / "bootstrap/uv.exe",
+        base / "bootstrap/uv.whl",
+        base / "cache",
+        base / "setup.json",
+        base / "setup.json.tmp",
+        root / "logs/nanosaur2/setup.log",
+    ):
+        if not target.resolve().is_relative_to(root.resolve()):
+            raise SetupError("Nanosaur2の管理対象にNeo外へのリンクがあります。")
+    return runtime
+
+
 def install_runtime(root: Path = ROOT) -> None:
+    root = root.resolve()
+    runtime = _managed_runtime(root)
     if runtime_ready(root):
         return
     if sys.platform != "win32":
         raise SetupError("実行環境の自動導入はWindows専用です。ComfyUIを先に準備してください。")
-    runtime = runtime_root(root)
     base = runtime.parent
     base.mkdir(parents=True, exist_ok=True)
     log = root / "logs/nanosaur2/setup.log"
@@ -158,6 +179,7 @@ def install_runtime(root: Path = ROOT) -> None:
 
     if shutil.which("git") is None:
         raise SetupError("Gitがありません。Git for Windowsを導入してください。")
+    (base / "setup.json").unlink(missing_ok=True)
     if not runtime.exists():
         sys.stdout.write("固定版ComfyUIを準備しています。\n")
         command(
@@ -273,6 +295,7 @@ def install_runtime(root: Path = ROOT) -> None:
 
 def run(*, root: Path = ROOT, dry_run: bool = False, verify: bool = False, repair: bool = False) -> dict:
     root = root.resolve()
+    runtime = _managed_runtime(root)
     installer = Installer(root, profiles())
     if dry_run:
         return {
@@ -284,7 +307,6 @@ def run(*, root: Path = ROOT, dry_run: bool = False, verify: bool = False, repai
         result["runtime_ready"] = runtime_ready(root)
         result["ok"] = bool(result["ok"] and result["runtime_ready"])
         return result
-    runtime = runtime_root(root)
     with setup_lock(runtime):
         with socket.socket() as connection:
             connection.settimeout(1)

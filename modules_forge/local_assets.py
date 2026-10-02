@@ -39,11 +39,23 @@ def read_header(path: Path) -> dict:
         if len(prefix) != 8:
             raise ValueError("safetensorsファイルが不完全です。")
         size = struct.unpack("<Q", prefix)[0]
-        if not 2 <= size <= 32 * 1024 * 1024 or size + 8 > path.stat().st_size:
+        file_size = os.fstat(stream.fileno()).st_size
+        if not 2 <= size <= 32 * 1024 * 1024 or size + 8 > file_size:
             raise ValueError("safetensorsのヘッダーが不正です。")
         header = json.loads(stream.read(size))
     if not isinstance(header, dict) or not any(key != "__metadata__" for key in header):
         raise ValueError("モデルのテンソルがありません。")
+    for name, tensor in header.items():
+        if name == "__metadata__":
+            continue
+        offsets = tensor.get("data_offsets") if isinstance(tensor, dict) else None
+        if (
+            not isinstance(offsets, list)
+            or len(offsets) != 2
+            or any(type(value) is not int for value in offsets)
+            or not 0 <= offsets[0] <= offsets[1] <= file_size - size - 8
+        ):
+            raise ValueError("safetensorsのテンソル範囲が不正、またはファイルが不完全です。")
     return header
 
 

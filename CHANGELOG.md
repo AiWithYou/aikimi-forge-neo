@@ -1,5 +1,16 @@
 # 変更履歴
 
+## v3.5.1 — 2026-10-03
+
+- Qwen Outpaintの境界幅を生成前に検証し、失効した履歴の参照を回収。薄いalphaの変色、Canvasで遅れて読み込んだ旧画像による上書き、LoRA設定の再展開時のリセットを修正しました。
+- JPEG・WebP・PNGのmodeと透過情報、EXIFのOrientation補正後の日本語生成情報を保持。壊れた任意metadataを回収し、小画像のタイル処理での例外と端の暗化、Soft Inpaintingの次ジョブへの前画像混入を修正しました。
+- Windowsで更新時刻を保ったモデル書換え後も古いhash・LoRA情報を再利用する問題と、一時的なファイル共有ロックによる常駐workerの失敗を修正。中断・起動失敗後のプロセス回収とモデル設定の復元も改善しました。
+- Attentionの軸・mask、T5系の長さとBREAK、AND Promptの行別強度と相殺、動画のRescale CFGとSDE noiseを修正。DDIM・PLMSのstrength 0は元のlatentを保持します。
+- VAEのclone・OOM再試行、LoRAの適用順序・DoRA・LoKr・OFT、量子化の保存と全精度演算、ControlNet・IPAdapterの条件再利用を修正しました。取得途中のローカルモデルと破損したQwen配布物の検査も強化しました。
+- Gradioタブの表示・名称・操作可否と動的更新、空の設定保存、Seed・履歴の復元、進捗APIを修正。プレビューとモデル情報の保存では、実際の保存先と拡張子を確認します。
+- Git worktree・submoduleの拡張情報が古いcommit・branchを返す問題を修正。branchを持たないHEADの表示と同時読込も扱い、通常repositoryの永続キャッシュは維持します。
+- CPU・オフラインの全体回帰と実ChromiumのUI回帰を確認。今回のGPU実生成・画質・VRAM測定は未実施です。
+
 ## v3.5.0 — 2026-10-02
 
 - Qwenの画像生成とOutpaintでモデル・メモリ設定・複数の画風LoRAと強度・Fun Acc・Sparse・ControlNet・ローカル本体を共用。ブラウザーごとの入力を生成開始時に取り込み、適用条件をOutpaintの生成ボタン上と結果の生成情報へ表示します。

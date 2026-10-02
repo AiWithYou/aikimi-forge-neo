@@ -29,9 +29,7 @@ class WorkerProcess:
     def __init__(self):
         self.returncode = None
         self.fail_stop = False
-        self.stdout = WorkerOutput(
-            'SENSENOVA_EVENT {"stage":"loading","message":"test","progress":0.1}\n'
-        )
+        self.stdout = WorkerOutput('SENSENOVA_EVENT {"stage":"loading","message":"test","progress":0.1}\n')
 
     def poll(self):
         return self.returncode
@@ -67,6 +65,11 @@ class ResidentFixture:
             self.process.wait(timeout=15)
 
 
+class FailedStartResident(ResidentFixture):
+    def start(self, python, script, environment, payload, log_path):
+        super().start(python, script, environment, payload, log_path)
+        raise OSError("injected startup failure")
+
 
 class WorkerCleanupTests(unittest.TestCase):
     def setUp(self):
@@ -91,9 +94,7 @@ class WorkerCleanupTests(unittest.TestCase):
             ("_RESIDENT_WORKER", None),
         ):
             self.enterContext(patch.object(bridge, name, value, create=True))
-        self.enterContext(
-            patch.object(bridge, "inspect_runtime", return_value=SimpleNamespace(ready=True))
-        )
+        self.enterContext(patch.object(bridge, "inspect_runtime", return_value=SimpleNamespace(ready=True)))
         self.enterContext(patch.object(bridge, "_release_forge_vram"))
 
     def generation(self):
@@ -194,6 +195,36 @@ class WorkerCleanupTests(unittest.TestCase):
 
         with self.assertRaises(bridge.SenseNovaGenerationCancelled):
             list(generation)
+
+        self.assertIsNone(bridge._ACTIVE_JOB_ID)
+        self.assertFalse(directory.exists())
+        self.assert_next_job_starts()
+
+    def test_failed_start_and_stop_keep_worker_inputs_and_gpu_until_recancel(self):
+        process = WorkerProcess()
+        process.fail_stop = True
+        self.addCleanup(process.stdout.close)
+        self.enterContext(patch.object(bridge, "_RESIDENT_WORKER", FailedStartResident(process)))
+        generation = self.generation()
+        self.addCleanup(generation.close)
+        job_id = next(generation)["job_id"]
+        self.assertEqual(next(generation)["stage"], "vram")
+        directory = self.root / "cache" / "jobs" / job_id
+
+        try:
+            with self.assertRaises(OSError):
+                next(generation)
+
+            self.assertEqual(bridge._ACTIVE_JOB_ID, job_id)
+            self.assertIs(bridge._ACTIVE_PROCESS, process)
+            self.assertTrue((directory / "request.json").is_file())
+            self.assertFalse(self.gpu_lock.acquire(False))
+        finally:
+            process.fail_stop = False
+            if bridge._ACTIVE_JOB_ID is not None:
+                bridge.cancel_generation(job_id)
+            else:
+                process.terminate()
 
         self.assertIsNone(bridge._ACTIVE_JOB_ID)
         self.assertFalse(directory.exists())

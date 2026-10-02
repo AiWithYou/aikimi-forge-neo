@@ -807,7 +807,7 @@ def refresh_loras(current):
     return gr.update(choices=choices, value=current or [])
 
 
-def lora_selection(names, rows):
+def lora_selection(names, rows, allow_mismatch=False):
     from modules_forge.local_assets import lora_rows
 
     names = names or []
@@ -826,7 +826,11 @@ def lora_selection(names, rows):
             + "学習時はConvRot INT8: "
             + ", ".join(lora_display_name(name).split(" / ")[0] for name in mismatched)
         )
-    return table, message, gr.update(visible=True if mismatched else "hidden", value=False)
+    return (
+        table,
+        message,
+        gr.update(visible=True if mismatched else "hidden", value=bool(mismatched and allow_mismatch)),
+    )
 
 
 def lora_readiness(names, rows, allow_mismatch, identifier, request: gr.Request):
@@ -1464,7 +1468,7 @@ def on_ui_tabs():
         lora_refresh.click(refresh_loras, inputs=style_loras, outputs=style_loras, **PRIVATE)
         lora_section.expand(
             lora_selection,
-            inputs=[style_loras, lora_strengths],
+            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch],
             outputs=[lora_strengths, lora_info, allow_lora_base_mismatch],
             **PRIVATE,
         )

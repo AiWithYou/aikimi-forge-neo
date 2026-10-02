@@ -1,7 +1,6 @@
 import re
 
 import gradio as gr
-import numpy as np
 from PIL import Image
 
 from modules import scripts_postprocessing, shared
@@ -119,7 +118,18 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
                 upscale_by = max(upscale_to_width / image.width, upscale_to_height / image.height)
                 info["Max side length"] = max_side_length
 
-        cache_key = (hash(np.array(image.getdata()).tobytes()), upscaler.name, upscale_mode, upscale_by, upscale_to_width, upscale_to_height, upscale_crop)
+        pixels = image.convert("RGBA").tobytes() if image.mode == "P" else image.tobytes()
+        cache_key = (
+            image.size,
+            image.mode,
+            hash(pixels),
+            upscaler.name,
+            upscale_mode,
+            upscale_by,
+            upscale_to_width,
+            upscale_to_height,
+            upscale_crop,
+        )
         cached_image = upscale_cache.pop(cache_key, None)
 
         if cached_image is not None:

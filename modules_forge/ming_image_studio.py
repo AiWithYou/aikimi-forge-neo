@@ -326,7 +326,12 @@ def ensure_runtime(*, restart: bool = False, precision: str = "int8", request: M
 
 def transparency_stats(image) -> dict[str, Any]:
     """Measure alpha without treating the presence of a channel as a cutout."""
-    alpha = image.getchannel("A") if image.mode == "RGBA" else None
+    if "A" in image.getbands():
+        alpha = image.getchannel("A")
+    elif "transparency" in image.info:
+        alpha = image.convert("RGBA").getchannel("A")
+    else:
+        alpha = None
     alpha_range = alpha.getextrema() if alpha is not None else (255, 255)
     fraction = sum(alpha.histogram()[:17]) / (image.width * image.height) if alpha is not None else 0.0
     return {

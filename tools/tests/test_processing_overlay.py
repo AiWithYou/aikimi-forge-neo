@@ -12,12 +12,13 @@ if str(PACKAGES) not in sys.path:
     sys.path.insert(0, str(PACKAGES))
 
 _ORIGINAL_ARGV = sys.argv[:]
-sys.argv = [sys.argv[0]]
+try:
+    sys.argv = [sys.argv[0], "--cpu"]
+    import modules.shared_init as shared_init
 
-import modules.shared_init as shared_init
-
-shared_init.initialize()
-sys.argv = _ORIGINAL_ARGV
+    shared_init.initialize()
+finally:
+    sys.argv = _ORIGINAL_ARGV
 
 from modules import processing
 from modules.processing import (

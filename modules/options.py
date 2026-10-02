@@ -178,7 +178,8 @@ class Options:
         if key not in self.data_labels:
             return False
 
-        oldval = self.data.get(key, None)
+        had_value = key in self.data
+        oldval = self.data.get(key, self.data_labels[key].default)
         if oldval == value:
             return False
 
@@ -199,7 +200,10 @@ class Options:
                 option.onchange()
             except Exception as e:
                 errors.display(e, f"changing setting {key} to {value}")
-                setattr(self, key, oldval)
+                if had_value:
+                    self.data[key] = oldval
+                else:
+                    self.data.pop(key, None)
                 return False
 
         return True

@@ -80,10 +80,14 @@ def stage(model_root: Path, precision: str, output: Path) -> None:
                     raise ValueError(f"Source file missing or changed: {source}")
                 dest_name = f"{component}/{entry['path']}"
                 destination = checked_path(output, dest_name)
+                rewrite_config = destination.name == "config.json" and precision == "int8"
                 if destination.suffix == ".safetensors":
                     link_or_copy(source, destination)
-                elif destination.name == "config.json" and precision == "int8":
-                    config = json.loads(source.read_text(encoding="utf-8"))
+                elif rewrite_config:
+                    config_bytes = source.read_bytes()
+                    if hashlib.sha256(config_bytes).hexdigest() != entry["sha256"]:
+                        raise ValueError(f"Source file missing or changed: {source}")
+                    config = json.loads(config_bytes.decode("utf-8"))
                     if "_name_or_path" in config:
                         config["_name_or_path"] = BASE_MODEL
                     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -91,13 +95,16 @@ def stage(model_root: Path, precision: str, output: Path) -> None:
                 else:
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(source, destination)
+                digest = sha256(destination)
+                if not rewrite_config and (destination.stat().st_size != entry["size"] or digest != entry["sha256"]):
+                    raise ValueError(f"Staged file changed or corrupt: {destination}")
                 if destination.suffix == ".json" and LOCAL_PATH.search(destination.read_text(encoding="utf-8")):
                     raise ValueError(f"Local filesystem path in release metadata: {destination}")
                 files.append(
                     {
                         "path": dest_name,
                         "size": destination.stat().st_size,
-                        "sha256": sha256(destination) if destination.suffix != ".safetensors" else entry["sha256"],
+                        "sha256": digest,
                     }
                 )
             release["components"][component] = {

@@ -6,6 +6,7 @@ import os
 import sys
 import unittest
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType, SimpleNamespace
@@ -17,6 +18,22 @@ INFOTEXT_UTILS = ROOT / "modules" / "infotext_utils.py"
 PROCESSING = ROOT / "modules" / "processing.py"
 PID_SCRIPT = ROOT / "extensions-builtin" / "sd_forge_pid" / "scripts" / "pid.py"
 CHECKPOINT_METADATA = ROOT / "modules" / "ui_extra_networks_checkpoints_user_metadata.py"
+
+
+@contextmanager
+def stub_modules(stubs):
+    """Restore only stubbed names; native imports must remain registered."""
+    missing = object()
+    originals = {name: sys.modules.get(name, missing) for name in stubs}
+    sys.modules.update(stubs)
+    try:
+        yield
+    finally:
+        for name, original in originals.items():
+            if original is missing:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
 
 
 class FakeOptions:
@@ -121,7 +138,7 @@ def load_main_entry():
     module_name = "_test_additional_module_main_entry"
     spec = importlib.util.spec_from_file_location(module_name, MAIN_ENTRY)
     module = importlib.util.module_from_spec(spec)
-    with mock.patch.dict(sys.modules, stubs):
+    with stub_modules(stubs):
         assert spec.loader is not None
         spec.loader.exec_module(module)
     return module, opts, shared
@@ -168,6 +185,29 @@ def load_checkpoint_metadata_save(main_entry):
         namespace,
     )
     return namespace["save_user_metadata"]
+
+
+class ModuleStubIsolationTests(unittest.TestCase):
+    def test_stub_restore_keeps_new_dependency_imports_even_after_error(self):
+        existing_name = "_aikimi_test_existing_module"
+        absent_name = "_aikimi_test_absent_module"
+        dependency_name = "_aikimi_test_imported_dependency"
+        original = ModuleType(existing_name)
+        replacement = ModuleType(existing_name)
+        dependency = ModuleType(dependency_name)
+        sys.modules[existing_name] = original
+        for name in (existing_name, absent_name, dependency_name):
+            self.addCleanup(sys.modules.pop, name, None)
+
+        with self.assertRaisesRegex(RuntimeError, "fixture failure"):
+            with stub_modules({existing_name: replacement, absent_name: ModuleType(absent_name)}):
+                self.assertIs(sys.modules[existing_name], replacement)
+                sys.modules[dependency_name] = dependency
+                raise RuntimeError("fixture failure")
+
+        self.assertIs(sys.modules[existing_name], original)
+        self.assertNotIn(absent_name, sys.modules)
+        self.assertIs(sys.modules[dependency_name], dependency)
 
 
 class AdditionalModuleIdentityTests(unittest.TestCase):

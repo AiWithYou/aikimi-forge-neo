@@ -49,6 +49,14 @@ def installed_runtime(root):
     )
 
 
+def isolate_local_assets(test_case, directory):
+    from modules_forge import local_assets
+
+    assets = Path(directory) / "assets"
+    test_case.enterContext(patch.object(local_assets, "LIBRARY", assets / "library.json"))
+    test_case.enterContext(patch.object(local_assets, "HASH_CACHE", assets / "hashes.json"))
+
+
 class Lease:
     def __init__(self):
         self.engine = None
@@ -273,6 +281,7 @@ class QwenServiceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
+        isolate_local_assets(self, self.root)
         self.runtime = self.root / "runtime"
         installed_runtime(self.runtime)
         self.lease = Lease()
@@ -319,6 +328,15 @@ class QwenServiceTests(unittest.TestCase):
         self.assertTrue(self.worker.closed.is_set())
         core.runtime_lock(self.runtime).close()
 
+    def test_generation_selection_is_saved_only_in_isolated_fixture(self):
+        from modules_forge import local_assets
+
+        identifier = self.studio.start(self.request(precision="bf16"), "owner")
+        self.assertEqual(self.wait_done(identifier)["state"], "complete")
+        self.assertTrue(local_assets.LIBRARY.is_relative_to(self.root))
+        self.assertTrue(local_assets.HASH_CACHE.is_relative_to(self.root))
+        self.assertEqual(local_assets.selection("qwen21")["precision"], "bf16")
+
     def test_outpaint_snapshots_are_owned_by_the_same_service(self):
         source = self.root / "outpaint-upload.png"
         Image.new("RGB", (224, 256), (14, 28, 42)).save(source)
@@ -344,6 +362,29 @@ class QwenServiceTests(unittest.TestCase):
         self.assertFalse(self.lease.owned)
         self.assertEqual(self.lease.releases, 0)
         self.assertFalse(self.worker.started.is_set())
+
+    def test_outpaint_feather_rejected_before_gpu_acquisition(self):
+        source = self.root / "small-outpaint.png"
+        for size, pads, feather in (
+            ((32, 32), (112, 112, 112, 112), 32),
+            ((256, 256), (32, 0, 0, 0), 128),
+        ):
+            with self.subTest(size=size, feather=feather):
+                Image.new("RGB", size).save(source)
+                request = core.Request(
+                    "outpaint",
+                    width=size[0] + pads[0] + pads[2],
+                    height=size[1] + pads[1] + pads[3],
+                    input_images=(str(source),),
+                    outpaint_version="none",
+                    outpaint_margins=pads,
+                    outpaint_feather=feather,
+                )
+                with self.assertRaisesRegex(core.QwenImage21Error, "境界ぼかし"):
+                    self.studio.start(request, "owner")
+                self.assertFalse(self.lease.owned)
+                self.assertEqual(self.lease.releases, 0)
+                self.assertFalse(self.worker.started.is_set())
 
     def test_no_lora_outpaint_needs_no_installed_adapter(self):
         source = self.root / "upload.png"

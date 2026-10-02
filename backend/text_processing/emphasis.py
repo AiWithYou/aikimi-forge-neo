@@ -37,10 +37,12 @@ class EmphasisOriginal(Emphasis):
     description = "the original emphasis implementation"
 
     def after_transformers(self):
-        original_mean = self.z.mean()
-        self.z = self.z * self.multipliers.reshape(self.multipliers.shape + (1,)).expand(self.z.shape)
-        new_mean = self.z.mean()
-        self.z = self.z * (original_mean / new_mean)
+        z = self.z.float() if self.z.dtype in (torch.float16, torch.bfloat16) else self.z
+        original_mean = z.mean()
+        z = z * self.multipliers.to(z).reshape(self.multipliers.shape + (1,)).expand(z.shape)
+        new_mean = z.mean()
+        normalization = torch.where(new_mean != 0, original_mean / new_mean, 1.0)
+        self.z = (z * normalization).to(dtype=self.z.dtype)
 
 
 class EmphasisOriginalNoNorm(EmphasisOriginal):

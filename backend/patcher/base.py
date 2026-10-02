@@ -127,6 +127,8 @@ def get_key_weight(model: torch.nn.Linear, key: str) -> tuple[torch.nn.Parameter
     op_keys = key.rsplit(".", 1)
     if len(op_keys) < 2:
         weight = utils.get_attr(model, key)
+        set_func = getattr(model, f"set_{key}", None)
+        convert_func = getattr(model, f"convert_{key}", None)
     else:
         op = utils.get_attr(model, op_keys[0])
         try:
@@ -517,8 +519,8 @@ class ModelPatcher:
                             return weight.numel() * model_dtype.itemsize
                         return 0
 
-                    module_offload_mem += check_module_offload_mem("{}.weight".format(n))
-                    module_offload_mem += check_module_offload_mem("{}.bias".format(n))
+                    module_offload_mem += check_module_offload_mem(key_param_name_to_key(n, "weight"))
+                    module_offload_mem += check_module_offload_mem(key_param_name_to_key(n, "bias"))
                 loading.append((module_offload_mem, module_mem, n, m, params))
         return loading
 
@@ -541,8 +543,8 @@ class ModelPatcher:
             potential_offload = max(offload_buffer, module_offload_mem + sum([x1[1] for x1 in loading[i + 1 : i + 1 + memory_management.NUM_STREAMS]]))
             lowvram_fits = mem_counter + module_mem + potential_offload < lowvram_model_memory
 
-            weight_key = "{}.weight".format(n)
-            bias_key = "{}.bias".format(n)
+            weight_key = key_param_name_to_key(n, "weight")
+            bias_key = key_param_name_to_key(n, "bias")
 
             if not full_load and hasattr(m, "parameters_manual_cast"):
                 if not lowvram_fits:
@@ -732,8 +734,8 @@ class ModelPatcher:
                             utils.set_attr(self.model, key, bk.weight)
                         self.backup.pop(key)
 
-                weight_key = "{}.weight".format(n)
-                bias_key = "{}.bias".format(n)
+                weight_key = key_param_name_to_key(n, "weight")
+                bias_key = key_param_name_to_key(n, "bias")
                 if move_weight:
                     cast_weight = self.force_cast_weights
                     m.to(device_to)
@@ -742,13 +744,13 @@ class ModelPatcher:
                             if force_patch_weights:
                                 self.patch_weight_to_device(weight_key)
                             else:
-                                m.weight_function.append(LowVramPatch(weight_key, self.patches))
+                                m.weight_function.insert(0, LowVramPatch(weight_key, self.patches))
                                 patch_counter += 1
                         if bias_key in self.patches:
                             if force_patch_weights:
                                 self.patch_weight_to_device(bias_key)
                             else:
-                                m.bias_function.append(LowVramPatch(bias_key, self.patches))
+                                m.bias_function.insert(0, LowVramPatch(bias_key, self.patches))
                                 patch_counter += 1
                         cast_weight = True
 

@@ -130,12 +130,33 @@ def runtime_fingerprint(root: Path = ROOT) -> str:
     return digest.hexdigest()
 
 
+def _managed_runtime(root: Path) -> Path:
+    runtime = runtime_root(root)
+    base = runtime.parent
+    for target in (
+        runtime,
+        runtime / ".git",
+        base / ".venv/Scripts/python.exe",
+        base / "python",
+        base / "bootstrap/uv.exe",
+        base / "bootstrap/uv.whl",
+        base / "cache",
+        base / "setup.json",
+        base / "setup.json.tmp",
+        root / "logs/ming-image/setup.log",
+    ):
+        if not target.resolve().is_relative_to(root.resolve()):
+            raise SetupError("Ming Imageの管理対象にNeo外へのリンクがあります。")
+    return runtime
+
+
 def install_runtime(root: Path = ROOT, report: Callable[[str], None] = print) -> None:
+    root = root.resolve()
+    runtime = _managed_runtime(root)
     if runtime_ready(root):
         return
     if sys.platform != "win32":
         raise SetupError("実行環境の自動導入はWindows専用です。ComfyUIを先に準備してください。")
-    runtime = runtime_root(root)
     base = runtime.parent
     base.mkdir(parents=True, exist_ok=True)
     log = root / "logs/ming-image/setup.log"
@@ -176,6 +197,7 @@ def install_runtime(root: Path = ROOT, report: Callable[[str], None] = print) ->
 
     if shutil.which("git") is None:
         raise SetupError("Gitがありません。Git for Windowsを導入してください。")
+    (base / "setup.json").unlink(missing_ok=True)
     if not runtime.exists():
         report("固定版ComfyUIを準備しています。")
         command(
@@ -276,6 +298,7 @@ def run(
     progress: Callable[[str], None] | None = None,
 ) -> dict:
     root = root.resolve()
+    runtime = _managed_runtime(root)
     selected_profiles = profiles(precision)
     if components_only:
         from dataclasses import replace
@@ -300,7 +323,6 @@ def run(
         result["runtime_ready"] = runtime_ready(root)
         result["ok"] = bool(result["ok"] and result["runtime_ready"])
         return result
-    runtime = runtime_root(root)
     with setup_lock(runtime):
         with socket.socket() as connection:
             connection.settimeout(1)

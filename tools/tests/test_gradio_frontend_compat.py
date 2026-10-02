@@ -19,6 +19,30 @@ from modules.aikimi_security.gradio_file_guard import install_gradio_file_url_gu
 
 
 class GradioFrontendCompatibilityTests(unittest.TestCase):
+    def test_apptree_visibility_patch_is_exact_served_and_keeps_the_wheel(self):
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.APPTREE_ASSET_NAME
+        before = path.read_bytes()
+        asset = module.build_patched_apptree_asset()
+        self.assertEqual(before, path.read_bytes())
+        self.assertNotIn(module._ORIGINAL_APPTREE_VISIBILITY_SYNC, asset.content)
+        self.assertIn(module._REACTIVE_APPTREE_VISIBILITY_SYNC, asset.content)
+        app = module.create_gradio_compatibility_app(module.build_patched_tabs_asset())
+        response = TestClient(app).get(f"/assets/{asset.filename}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, asset.content)
+        self.assertEqual(response.headers["etag"], f'"{asset.patched_sha256}"')
+        for attribute, value in (
+            ("APPTREE_ORIGINAL_SHA256", "0" * 64),
+            ("_ORIGINAL_APPTREE_VISIBILITY_SYNC", b"missing audited snippet"),
+        ):
+            with self.subTest(attribute=attribute), patch.object(module, attribute, value):
+                with self.assertRaises(module.GradioFrontendCompatibilityError):
+                    module.build_patched_apptree_asset()
+        with patch.object(gradio, "__version__", "6.29.0"):
+            with self.assertRaises(module.GradioFrontendCompatibilityError):
+                module.build_patched_apptree_asset()
+
     def test_dataframe_route_is_verified_and_does_not_modify_the_wheel(self):
         module = gradio_frontend_compat
         path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.DATAFRAME_ASSET_NAME

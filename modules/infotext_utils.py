@@ -425,8 +425,8 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
 
     for line in lines:
         line = line.strip()
-        if line.startswith("Negative prompt:"):
-            line = line.replace("Negative prompt:", "").strip()
+        if not _neg and line.startswith("Negative prompt:"):
+            line = line.removeprefix("Negative prompt:").strip()
             _neg = True
         (_negative_prompts if _neg else _prompts).append(line)
 

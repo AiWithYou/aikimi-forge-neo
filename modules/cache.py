@@ -58,9 +58,12 @@ def cached_data_for_file(subsection, title, filename, func):
     or cached data is returned as a dictionary.
     """
 
+    from modules.file_identity import cache_file_identity
+
     existing_cache = cache(subsection)
-    ondisk_stat = os.stat(filename)
-    file_identity = (os.path.normcase(os.path.abspath(filename)), ondisk_stat.st_mtime_ns, ondisk_stat.st_size)
+    file_identity = cache_file_identity(filename)
+    if file_identity[-1] is None:
+        return func()
 
     entry = existing_cache.get(title)
     # A replacement can have an older timestamp or reuse another file's title.
@@ -73,7 +76,7 @@ def cached_data_for_file(subsection, title, filename, func):
         if value is None:
             return None
 
-        entry = {"mtime": ondisk_stat.st_mtime, "file_identity": file_identity, "value": value}
+        entry = {"mtime": file_identity[1] / 1_000_000_000, "file_identity": file_identity, "value": value}
         existing_cache[title] = entry
 
         dump_cache()

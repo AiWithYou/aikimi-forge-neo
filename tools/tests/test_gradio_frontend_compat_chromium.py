@@ -36,6 +36,7 @@ class CdpPage:
         self.websocket = websocket
         self.command_id = 0
         self.exceptions = []
+        self.console_errors = []
 
     def send(self, method: str, params: dict | None = None, *, timeout: float = 10):
         self.command_id += 1
@@ -51,6 +52,9 @@ class CdpPage:
                 detail = message.get("params", {}).get("exceptionDetails", {})
                 self.exceptions.append(detail.get("exception", {}).get("description", detail.get("text")))
                 self.exceptions = self.exceptions[-20:]
+            if message.get("method") == "Runtime.consoleAPICalled" and message.get("params", {}).get("type") == "error":
+                self.console_errors.append(message["params"].get("args", []))
+                self.console_errors = self.console_errors[-20:]
             if message.get("id") != command_id:
                 continue
             if "error" in message:
@@ -67,6 +71,9 @@ class CdpPage:
             },
             timeout=timeout,
         )
+        if "exceptionDetails" in result:
+            detail = result["exceptionDetails"]
+            raise RuntimeError(detail.get("exception", {}).get("description", detail.get("text")))
         return result["result"].get("value")
 
 
@@ -171,11 +178,18 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
 
             hide_toggle = gr.Button("Hide Toggle", elem_id="compat-hide-toggle")
             show_toggle = gr.Button("Show Toggle", elem_id="compat-show-toggle")
+            disable_toggle = gr.Button("Disable Toggle", elem_id="compat-disable-toggle")
+            enable_toggle = gr.Button("Enable Toggle", elem_id="compat-enable-toggle")
             hide_toggle.click(lambda: gr.update(visible=False), outputs=toggle_tab, queue=False)
             show_toggle.click(lambda: gr.update(visible=True), outputs=toggle_tab, queue=False)
+            disable_toggle.click(
+                lambda: gr.update(interactive=False, label="Renamed Toggle"), outputs=toggle_tab, queue=False
+            )
+            enable_toggle.click(lambda: gr.update(interactive=True, label="Toggle"), outputs=toggle_tab, queue=False)
 
             render_count = gr.State(2)
             add_render_tab = gr.Button("Add Render Tab", elem_id="compat-add-render-tab")
+            remove_render_tab = gr.Button("Remove Render Tab", elem_id="compat-remove-render-tab")
 
             @gr.render(inputs=render_count)
             def render_tabs(count):
@@ -189,6 +203,7 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
                             gr.Markdown(f"Rendered panel {index}")
 
             add_render_tab.click(lambda count: min(count + 1, 4), inputs=render_count, outputs=render_count)
+            remove_render_tab.click(lambda count: max(count - 1, 1), inputs=render_count, outputs=render_count)
 
         cls.port = reserve_local_port()
         app, _, _ = cls.demo.launch(
@@ -317,8 +332,7 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
             )
             self.assertTrue(reloaded)
 
-    @unittest.expectedFailure
-    def test_backend_tab_visibility_update_is_an_upstream_gradio617_limit(self):
+    def test_backend_tab_visibility_update_is_observable(self):
         with cdp_page(self.chromium, self.url) as page:
             self.assertTrue(
                 page.evaluate(
@@ -329,17 +343,50 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
                     timeout=20,
                 )
             )
-            page.evaluate("document.querySelector('#compat-hide-toggle').click()")
-            hidden = page.evaluate(
-                _wait_expression(
-                    '#compat-visible-tabs > .tab-wrapper > .tab-container[role="tablist"]',
-                    "Array.from(element.children).filter((node) => node.tagName === 'BUTTON').length === 1",
-                    timeout_ms=5_000,
-                ),
-                timeout=10,
+            self.assertTrue(page.evaluate(_wait_expression("#compat-enable-toggle", "true")))
+            for mounted in (False, True):
+                with self.subTest(mounted=mounted):
+                    if mounted:
+                        page.evaluate("document.querySelector('#compat-visible-toggle-button').click()")
+                        self.assertTrue(
+                            page.evaluate(
+                                _wait_expression(
+                                    "#compat-visible-toggle", "getComputedStyle(element).display === 'flex'"
+                                )
+                            )
+                        )
+                    page.evaluate("document.querySelector('#compat-hide-toggle').click()")
+                    self.assertTrue(
+                        page.evaluate(
+                            _wait_expression(
+                                '#compat-visible-tabs > .tab-wrapper > .tab-container[role="tablist"]',
+                                "element.querySelectorAll(':scope > button').length === 1",
+                                timeout_ms=5_000,
+                            )
+                        ),
+                        "backend Tab.visible updates must remain observable",
+                    )
+                    page.evaluate("document.querySelector('#compat-show-toggle').click()")
+                    self.assertTrue(page.evaluate(_wait_expression("#compat-visible-toggle-button", "true")))
+            page.evaluate("document.querySelector('#compat-disable-toggle').click()")
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression(
+                        "#compat-visible-toggle-button",
+                        "element.disabled && element.textContent.trim() === 'Renamed Toggle'",
+                    )
+                )
             )
-
-        self.assertTrue(hidden, "backend Tab.visible updates must remain observable")
+            page.evaluate("document.querySelector('#compat-enable-toggle').click()")
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression(
+                        "#compat-visible-toggle-button", "!element.disabled && element.textContent.trim() === 'Toggle'"
+                    )
+                )
+            )
+            self.assertEqual(page.exceptions, [])
+            self.assertEqual(page.console_errors, [])
 
     def test_unpatched_gradio617_has_the_same_backend_visibility_limit(self):
         with cdp_page(self.chromium, self.unpatched_url) as page:
@@ -352,6 +399,7 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
                     timeout=20,
                 )
             )
+            self.assertTrue(page.evaluate(_wait_expression("#unpatched-hide-toggle", "true")))
             page.evaluate("document.querySelector('#unpatched-hide-toggle').click()")
             time.sleep(2)
             button_count = page.evaluate(
@@ -375,6 +423,7 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
                     timeout=20,
                 )
             )
+            self.assertTrue(page.evaluate(_wait_expression("#compat-remove-render-tab", "true")))
             page.evaluate("document.querySelector('#compat-add-render-tab').click()")
             rendered = page.evaluate(
                 _wait_expression(
@@ -385,7 +434,27 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
                 timeout=12,
             )
 
-        self.assertTrue(rendered, "gr.render tab additions must remain observable")
+            self.assertTrue(rendered, "gr.render tab additions must remain observable")
+            page.evaluate("document.querySelector('#compat-render-panel-2-button').click()")
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression("#compat-render-panel-2", "getComputedStyle(element).display === 'flex'")
+                )
+            )
+            page.evaluate("document.querySelector('#compat-remove-render-tab').click()")
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression(
+                        '#compat-render-tabs > .tab-wrapper > .tab-container[role="tablist"]',
+                        "element.querySelectorAll(':scope > button').length === 2",
+                        timeout_ms=8_000,
+                    )
+                ),
+                "gr.render tab removals must remain observable",
+            )
+            self.assertIsNone(page.evaluate("document.querySelector('#compat-render-panel-2-button')"))
+            self.assertEqual(page.exceptions, [])
+            self.assertEqual(page.console_errors, [])
 
 
 if __name__ == "__main__":

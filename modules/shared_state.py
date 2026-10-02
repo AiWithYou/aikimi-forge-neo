@@ -163,6 +163,7 @@ class State:
         import modules.sd_samplers
 
         try:
+            preview_step = self.preview_step
             _video: bool = self.current_latent.ndim == 5 and self.current_latent.size(2) > 1
 
             vae_context = nullcontext()
@@ -178,7 +179,7 @@ class State:
                 else:
                     self.assign_current_image(modules.sd_samplers.sample_to_image(self.current_latent))
 
-            self.current_image_sampling_step = self.sampling_step
+            self.current_image_sampling_step = preview_step
 
         except Exception:
             errors.record_exception()

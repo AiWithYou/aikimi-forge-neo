@@ -445,24 +445,30 @@ def module_size(module: torch.nn.Module) -> int:
 
 class LoadedModel:
     def __init__(self, model: "ModelPatcher"):
-        self._set_model(model)
         self.device = model.load_device
         self.real_model = None
         self.currently_used = True
         self.model_finalizer = None
         self._patcher_finalizer = None
+        self._set_model(model)
 
     def _set_model(self, model):
+        if self._patcher_finalizer is not None:
+            self._patcher_finalizer.detach()
+            self._patcher_finalizer = None
         self._model = weakref.ref(model)
         if model.parent is not None:
             self._parent_model = weakref.ref(model.parent)
-            self._patcher_finalizer = weakref.finalize(model, self._switch_parent)
+            self._patcher_finalizer = weakref.finalize(model, self._switch_parent, weakref.ref(self))
             self._patcher_finalizer.atexit = False
 
-    def _switch_parent(self):
-        model = self._parent_model()
-        if model is not None:
-            self._set_model(model)
+    @staticmethod
+    def _switch_parent(loaded_ref):
+        loaded = loaded_ref()
+        if loaded is not None:
+            model = loaded._parent_model()
+            if model is not None:
+                loaded._set_model(model)
 
     @property
     def model(self) -> "ModelPatcher":

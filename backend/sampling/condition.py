@@ -1,4 +1,5 @@
 import math
+from itertools import zip_longest
 
 import torch
 
@@ -119,15 +120,15 @@ def compile_conditions(cond):
 
 
 def compile_weighted_conditions(cond, weights):
-    transposed = list(map(list, zip(*weights)))
     results = []
 
-    for cond_pre in transposed:
+    for cond_pre in zip_longest(*weights):
         current_indices = []
-        current_weight = 0
-        for i, w in cond_pre:
+        current_weights = []
+        for row, item in enumerate(cond_pre):
+            i, w = item if item is not None else (weights[row][0][0], 0.0)
             current_indices.append(i)
-            current_weight = w
+            current_weights.append(w)
 
         if hasattr(cond, "advanced_indexing"):
             feed = cond.advanced_indexing(current_indices)
@@ -135,7 +136,11 @@ def compile_weighted_conditions(cond, weights):
             feed = cond[current_indices]
 
         h = compile_conditions(feed)
-        h[0]["strength"] = current_weight
+        if all(weight == current_weights[0] for weight in current_weights):
+            h[0]["strength"] = current_weights[0]
+        else:
+            tensor = feed["crossattn"] if isinstance(feed, dict) else feed
+            h[0]["strength"] = torch.tensor(current_weights, device=tensor.device, dtype=torch.float32)
         results += h
 
     return results

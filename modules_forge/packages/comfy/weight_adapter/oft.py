@@ -98,7 +98,7 @@ class OFTAdapter(WeightAdapterBase):
             if dora_scale is not None:
                 weight = weight_decompose(dora_scale, weight, lora_diff, alpha, strength, intermediate_dtype, function)
             else:
-                weight += function((strength * lora_diff).type(weight.dtype))
+                weight += function(lora_diff.type(weight.dtype))
         except Exception as e:
             from backend.memory_management import is_oom
 

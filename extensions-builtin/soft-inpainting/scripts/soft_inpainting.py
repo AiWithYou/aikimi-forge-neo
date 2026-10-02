@@ -632,6 +632,9 @@ class Script(scripts.ScriptBuiltinUI):
         mba.blended_latent = latent_blend(settings, mba.init_latent, mba.current_latent, get_modified_nmask(settings, mba.nmask, mba.sigma[0]))
 
     def post_sample(self, p, ps: scripts.PostSampleArgs, enabled, power, scale, detail_preservation, mask_inf, dif_thresh, dif_contr):
+        self.masks_for_overlay = None
+        self.overlay_images = None
+
         if not enabled:
             return
 

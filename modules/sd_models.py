@@ -50,9 +50,12 @@ class CheckpointInfo:
         # Initial fallback to prevent UnboundLocalError if no directory matches
         name: str = abspath
         for _dir in abs_ckpt_dirs:
-            # Ensure both paths are absolute for consistent string comparison, fixing issues with relative paths like ../
-            if abspath.startswith(_dir):
-                name = abspath.replace(_dir, "")
+            try:
+                relative_name = os.path.relpath(abspath, _dir)
+            except ValueError:  # A configured root can be on another Windows drive.
+                continue
+            if relative_name != os.pardir and not relative_name.startswith(os.pardir + os.sep):
+                name = relative_name
                 break
 
         name = name.strip("/").strip("\\")

@@ -185,6 +185,13 @@ class AnnotationTests(unittest.TestCase):
 
 
 class AnnotationServiceTests(unittest.TestCase):
+    def setUp(self):
+        from tools.tests.test_qwen_image21_service import isolate_local_assets
+
+        temporary = tempfile.TemporaryDirectory(prefix="qwen-annotation-assets-")
+        self.addCleanup(temporary.cleanup)
+        isolate_local_assets(self, temporary.name)
+
     def test_service_archives_original_and_layers_before_worker_uses_annotated_reference(self):
         from tools.tests.test_qwen_image21_service import FakeResident, Lease, Residency, installed_runtime
 

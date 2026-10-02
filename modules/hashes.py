@@ -42,15 +42,9 @@ calculate_sha256 = calculate_sha256_real
 
 
 def _hash_file_identity(filename):
-    stat = os.stat(filename)
-    return (
-        os.path.normcase(os.path.abspath(filename)),
-        stat.st_mtime_ns,
-        stat.st_size,
-        stat.st_ctime_ns,
-        stat.st_ino,
-        stat.st_dev,
-    )
+    from modules.file_identity import cache_file_identity
+
+    return cache_file_identity(filename)
 
 
 def sha256_from_cache(filename: os.PathLike, title: str, use_addnet_hash=False):
@@ -58,6 +52,8 @@ def sha256_from_cache(filename: os.PathLike, title: str, use_addnet_hash=False):
     try:
         file_identity = _hash_file_identity(filename)
     except FileNotFoundError:
+        return None
+    if file_identity[-1] is None:
         return None
 
     # One database read; legacy entries are refreshed rather than trusted.
@@ -95,17 +91,19 @@ def _sha256_locked(filename, title, use_addnet_hash):
             sha256_value = addnet_hash_safetensors(file)
     else:
         sha256_value = calculate_sha256_real(filename)
-    if _hash_file_identity(filename) != file_identity:
+    after = _hash_file_identity(filename)
+    reliable_stamp = file_identity[-1] is not None and after[-1] is not None
+    if after[:6] != file_identity[:6] or (reliable_stamp and after[-1] != file_identity[-1]):
         raise RuntimeError(f"File changed while calculating sha256: {filename}")
     print(sha256_value)
 
-    hashes[title] = {
-        "mtime": file_identity[1] / 1_000_000_000,
-        "file_identity": file_identity,
-        "sha256": sha256_value,
-    }
-
-    dump_cache()
+    if reliable_stamp:
+        hashes[title] = {
+            "mtime": file_identity[1] / 1_000_000_000,
+            "file_identity": file_identity,
+            "sha256": sha256_value,
+        }
+        dump_cache()
 
     return sha256_value
 

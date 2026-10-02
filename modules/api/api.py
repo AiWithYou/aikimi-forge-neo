@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from PIL import PngImagePlugin
 
+import modules.progress as progress_module
 import modules.shared as shared
 import modules.textual_inversion.textual_inversion
 from modules import errors, images, infotext_utils, postprocessing, restart, script_callbacks, scripts, sd_models, sd_samplers, sd_schedulers, shared_items, ui
@@ -30,7 +31,7 @@ from modules.aikimi_security.auth import credentials_from_options
 from modules.aikimi_security.redaction import redact_mapping, safe_error_message
 from modules.aikimi_security.url_fetch import SafeFetchError, fetch_remote_image, validate_decoded_image
 from modules.processing import StableDiffusionProcessingImg2Img, StableDiffusionProcessingTxt2Img, process_extra_images, process_images
-from modules.progress import add_task_to_queue, create_task_id, current_task, finish_task, start_task
+from modules.progress import add_task_to_queue, create_task_id, finish_task, start_task
 from modules.shared import cmd_opts, opts
 
 
@@ -118,7 +119,7 @@ def _run_api_processing(p, script_runner, selectable_scripts, script_args):
 
 
 def setUpscalers(req: dict):
-    reqDict = vars(req)
+    reqDict = vars(req).copy()
     reqDict["extras_upscaler_1"] = reqDict.pop("upscaler_1", None)
     reqDict["extras_upscaler_2"] = reqDict.pop("upscaler_2", None)
     return reqDict
@@ -138,9 +139,9 @@ def decode_base64_to_image(encoding):
         except Exception as e:
             raise HTTPException(status_code=400, detail="Invalid remote image") from e
 
-    if encoding.startswith("data:image/"):
-        encoding = encoding.split(";")[1].split(",")[1]
     try:
+        if encoding.startswith("data:image/"):
+            encoding = encoding.split(",", 1)[1]
         image = images.read(BytesIO(base64.b64decode(encoding)))
         return image
     except Exception as e:
@@ -161,8 +162,10 @@ def encode_pil_to_base64(image):
             image.save(output_bytes, format="PNG", pnginfo=(metadata if use_metadata else None), quality=opts.jpeg_quality)
 
         elif opts.samples_format.lower() in ("jpg", "jpeg", "webp"):
-            if image.mode in ("RGBA", "P"):
+            if image.mode in ("RGBA", "LA", "P") and opts.samples_format.lower() in ("jpg", "jpeg"):
                 image = image.convert("RGB")
+            elif image.mode == "P":
+                image = image.convert("RGBA")
             parameters = image.info.get("parameters", None)
             exif_bytes = piexif.dump({"Exif": {piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(parameters or "", encoding="unicode")}})
             if opts.samples_format.lower() in ("jpg", "jpeg"):
@@ -653,7 +656,8 @@ class Api:
         with self.queue_lock:
             result = postprocessing.run_extras(extras_mode=0, image_folder="", input_dir="", output_dir="", save_output=False, **reqDict)
 
-        return models.ExtrasSingleImageResponse(image=encode_pil_to_base64(result[0][0]), html_info=result[1])
+        image = encode_pil_to_base64(result[0][0]) if result[0] else None
+        return models.ExtrasSingleImageResponse(image=image, html_info=result[1])
 
     def extras_batch_images_api(self, req: models.ExtrasBatchImagesRequest):
         reqDict = setUpscalers(req)
@@ -683,30 +687,37 @@ class Api:
     def progressapi(self, req: models.ProgressRequest = Depends()):
         # copy from check_progress_call of ui.py
 
-        if shared.state.job_count == 0:
-            return models.ProgressResponse(progress=0, eta_relative=0, state=shared.state.dict(), textinfo=shared.state.textinfo)
+        state = shared.state
+        current_task = progress_module.current_task
+        job_count = state.job_count
+        if job_count == 0:
+            return models.ProgressResponse(progress=0, eta_relative=0, state=state.dict(), textinfo=state.textinfo, current_task=current_task)
+
+        job_no = state.job_no
+        sampling_steps, sampling_step = state.sampling_steps, state.sampling_step
+        time_start = state.time_start
 
         # avoid dividing zero
         progress = 0.01
 
-        if shared.state.job_count > 0:
-            progress += shared.state.job_no / shared.state.job_count
-        if shared.state.sampling_steps > 0:
-            progress += 1 / shared.state.job_count * shared.state.sampling_step / shared.state.sampling_steps
-
-        time_since_start = time.time() - shared.state.time_start
-        eta = time_since_start / progress
-        eta_relative = eta - time_since_start
+        if job_count > 0:
+            progress += job_no / job_count
+            if sampling_steps > 0:
+                progress += 1 / job_count * sampling_step / sampling_steps
 
         progress = min(progress, 1)
 
-        shared.state.set_current_image()
+        time_since_start = time.time() - time_start
+        eta = time_since_start / progress
+        eta_relative = eta - time_since_start
+
+        state.set_current_image()
 
         current_image = None
-        if shared.state.current_image and not req.skip_current_image:
-            current_image = encode_pil_to_base64(shared.state.current_image)
+        if state.current_image and not req.skip_current_image:
+            current_image = encode_pil_to_base64(state.current_image)
 
-        return models.ProgressResponse(progress=progress, eta_relative=eta_relative, state=shared.state.dict(), current_image=current_image, textinfo=shared.state.textinfo, current_task=current_task)
+        return models.ProgressResponse(progress=progress, eta_relative=eta_relative, state=state.dict(), current_image=current_image, textinfo=state.textinfo, current_task=current_task)
 
     def interruptapi(self):
         shared.state.interrupt()
