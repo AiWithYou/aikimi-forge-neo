@@ -204,6 +204,36 @@ class WorkerJobTests(unittest.TestCase):
             worker.resident_run(self.payload)
         loader.assert_not_called()
 
+    def test_no_lora_outpaint_keeps_geometry_and_stitch_without_adapter(self):
+        from modules_forge.qwen_image21.outpaint_native import snapshot
+
+        source = self.job / "reference-01.png"
+        Image.new("RGBA", (256, 256), (12, 37, 91, 17)).save(source)
+        self.request.update(
+            transparent=False,
+            width=320,
+            height=256,
+            input_images=[str(source)],
+            clean_input_images=[str(source)],
+            outpaint_version="none",
+            outpaint_margins=[32, 0, 32, 0],
+            outpaint_feather=0,
+        )
+        snapshot(self.request, self.job)
+        self.write_request()
+        with mock.patch("modules_forge.qwen_image21.outpaint_lora.installed", side_effect=AssertionError("No adapter")):
+            result, _ = self.run_job()
+            self.assertEqual(
+                worker._cache_key(self.model, "int8", "offload"),
+                worker._cache_key(self.model, "int8", "offload", outpaint_version="none"),
+            )
+        self.assertAlmostEqual(self.pipe.calls[0]["output_resolution"] ** 2, 320 * 256)
+        self.assertEqual(self.pipe.calls[0]["image"][0].size, (320, 256))
+        self.assertIsNone(result["metadata"]["outpaint"]["adapter"])
+        with Image.open(result["output_path"]) as image:
+            self.assertEqual(image.getpixel((32, 0)), (12, 37, 91, 17))
+        self.assertTrue((self.job / "output-generated.png").is_file())
+
     def test_large_output_tiles_vae_and_reuse_restores_small_output(self):
         self.request.update(width=2048, height=2048)
         self.write_request()

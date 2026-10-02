@@ -125,7 +125,7 @@ def _cache_key(
             config_path.stat().st_mtime_ns,
         )
     outpaint = None
-    if outpaint_version:
+    if outpaint_version in {"v1", "v2"}:
         from modules_forge.qwen_image21.outpaint_lora import installed
 
         info = installed(model_path.parent, outpaint_version)
@@ -248,7 +248,8 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         validate_snapshot(request, job)
         from modules_forge.qwen_image21.outpaint_lora import installed
 
-        installed(runtime_root(model_path, request), request["outpaint_version"])
+        if request["outpaint_version"] != "none":
+            installed(runtime_root(model_path, request), request["outpaint_version"])
     elif request.get("outpaint"):
         raise ValueError("Outpaintの設定と保存情報が一致しません。")
     control_image = request.get("control_image", "")
@@ -570,7 +571,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     fun_acc_info = None
     fun_acc_config = None
     outpaint_info = None
-    if request.get("outpaint_version"):
+    if request.get("outpaint_version") in {"v1", "v2"}:
         from modules_forge.qwen_image21.outpaint_lora import installed
         from modules_forge.qwen_image21.outpaint_runtime import load_adapter
 

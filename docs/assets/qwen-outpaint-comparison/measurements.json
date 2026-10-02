@@ -1,0 +1,1079 @@
+[
+  {
+    "case": "street",
+    "version": "none",
+    "source": "docs/assets/qwen-native-outpaint/source.png",
+    "source_sha256": "e6851140820ef7a3b9394491eebc44a66925b169daf87634fee2c4d3059c78d5",
+    "reference_sha256": "2b82abfce33b7b2e5c3560d8c15d13df24d14b46ad7599c399a9b998ed68a0dd",
+    "request": {
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.",
+      "width": 992,
+      "height": 512,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\street-none\\outpaint-reference.png"
+      ],
+      "annotation_reference": -1,
+      "annotation_layers": [],
+      "rewrite_prompt": false,
+      "sparse_mode": "off",
+      "sparse_keep_percent": 75.0,
+      "sparse_jev_cadence": "legacy",
+      "sparse_jev_interval": 2,
+      "rewrite_edit_prompt": false,
+      "preserve_unmasked": false,
+      "edit_mask_reference": -1,
+      "edit_mask_path": "",
+      "mask_feather": 0.0,
+      "sparse_jev_max_calls": 0,
+      "sparse_jev_max_wait_seconds": 0.0,
+      "control_kind": "off",
+      "control_image": "",
+      "control_strength": 1.0,
+      "control_inpaint": false,
+      "fun_acc": false,
+      "operation": "generate",
+      "outpaint_version": "none",
+      "outpaint_margins": [
+        128,
+        0,
+        128,
+        0
+      ],
+      "outpaint_feather": 0,
+      "style_loras": [],
+      "allow_lora_base_mismatch": false,
+      "local_model": "",
+      "local_components": "",
+      "runtime_root": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1",
+      "clean_input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\street-none\\reference-01.png"
+      ],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\street-none\\reference-01.png",
+        "plan": {
+          "source_width": 736,
+          "source_height": 512,
+          "left": 128,
+          "top": 0,
+          "right": 128,
+          "bottom": 0
+        },
+        "feather": 0
+      }
+    },
+    "metadata": {
+      "local_source": null,
+      "model": "unsloth/Qwen-Image-2.1-GGUF",
+      "model_path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\model",
+      "model_revision": "2c31ccd392b367a6637841a143813320a02dff55",
+      "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.",
+      "effective_prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.",
+      "prompt_rewrite": {
+        "enabled": false,
+        "applied": false,
+        "reason": "disabled"
+      },
+      "fun_controlnet": null,
+      "fun_acc": null,
+      "style_loras": [],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\street-none\\reference-01.png",
+        "plan": {
+          "source_width": 736,
+          "source_height": 512,
+          "left": 128,
+          "top": 0,
+          "right": 128,
+          "bottom": 0
+        },
+        "feather": 0,
+        "adapter": null
+      },
+      "preservation": {},
+      "width": 992,
+      "height": 512,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "output_mode": "RGBA",
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "compute_dtype": "bfloat16",
+      "true_cfg_scale": 1.0,
+      "scheduler": "FlowMatchEulerDiscreteScheduler",
+      "scheduler_config": {
+        "num_train_timesteps": 1000,
+        "shift": 1.0,
+        "use_dynamic_shifting": true,
+        "base_shift": 0.5,
+        "max_shift": 0.9,
+        "base_image_seq_len": 256,
+        "max_image_seq_len": 8192,
+        "invert_sigmas": false,
+        "shift_terminal": 0.02,
+        "use_karras_sigmas": false,
+        "use_exponential_sigmas": false,
+        "use_beta_sigmas": false,
+        "time_shift_type": "exponential",
+        "stochastic_sampling": false,
+        "_class_name": "FlowMatchEulerDiscreteScheduler",
+        "_diffusers_version": "0.37.0.dev0"
+      },
+      "use_kv_cache": true,
+      "input_resolution": 712.6738384422428,
+      "input_image_count": 1,
+      "input_image_names": [
+        "outpaint-reference.png"
+      ],
+      "int8_layers": {
+        "text_encoder": 368
+      },
+      "w4a8": {},
+      "quantized_cache": {
+        "text_encoder": {
+          "status": "hit",
+          "path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\quantized\\int8\\fd04434ec769b49aeca223cf\\text_encoder"
+        }
+      },
+      "int8_skip_modules": [],
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "diffusers": "0.41.0.dev0",
+        "transformers": "5.17.0",
+        "accelerate": "1.15.0+aikimi.1",
+        "bitsandbytes": "0.50.2",
+        "gguf": "0.19.0"
+      },
+      "reused_model": false,
+      "memory": {
+        "peak_allocated_mib": 11275.8,
+        "peak_reserved_mib": 11730.0,
+        "idle_allocated_mib": 12.7,
+        "idle_reserved_before_mib": 1374.0,
+        "idle_reserved_after_mib": 72.0,
+        "released_cache_mib": 1302.0,
+        "note": "PyTorch allocator only; peak includes this request's model loading; not total device memory or system RAM."
+      },
+      "vae_tiling": false,
+      "vae_tiling_config": null,
+      "timings": {
+        "load_seconds": 420.847,
+        "sampling_seconds": 35.472
+      },
+      "elapsed_seconds": 484.929
+    },
+    "output_sha256": "9afe30159b40ec9d7aca9181545bee63c4ed85818091a870d9e08f09e90a96d1",
+    "raw_sha256": "e1285c7ac3f2b3caba06a5b2caee6206efceb35dba456fbd07b4cea96b97011b",
+    "original_rgba_exact": true,
+    "composition_exact": true
+  },
+  {
+    "case": "anime",
+    "version": "none",
+    "source": "docs/assets/qwen-image21-fun-controlnet/anime-v221-reference.png",
+    "source_sha256": "3654d42dad99d8fb5cbfedff33fa231d7acd1ca810230ff1d2c142a555c5e1a2",
+    "reference_sha256": "8ce7b89c3459bbae236d922fb59b72cf78c32edea5a6a1d52d825f3c9c016513",
+    "request": {
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Anime illustration of a woman with blonde and pink hair and a colorful white hoodie.",
+      "width": 768,
+      "height": 768,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\anime-none\\outpaint-reference.png"
+      ],
+      "annotation_reference": -1,
+      "annotation_layers": [],
+      "rewrite_prompt": false,
+      "sparse_mode": "off",
+      "sparse_keep_percent": 75.0,
+      "sparse_jev_cadence": "legacy",
+      "sparse_jev_interval": 2,
+      "rewrite_edit_prompt": false,
+      "preserve_unmasked": false,
+      "edit_mask_reference": -1,
+      "edit_mask_path": "",
+      "mask_feather": 0.0,
+      "sparse_jev_max_calls": 0,
+      "sparse_jev_max_wait_seconds": 0.0,
+      "control_kind": "off",
+      "control_image": "",
+      "control_strength": 1.0,
+      "control_inpaint": false,
+      "fun_acc": false,
+      "operation": "generate",
+      "outpaint_version": "none",
+      "outpaint_margins": [
+        128,
+        0,
+        128,
+        0
+      ],
+      "outpaint_feather": 0,
+      "style_loras": [],
+      "allow_lora_base_mismatch": false,
+      "local_model": "",
+      "local_components": "",
+      "runtime_root": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1",
+      "clean_input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\anime-none\\reference-01.png"
+      ],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\anime-none\\reference-01.png",
+        "plan": {
+          "source_width": 512,
+          "source_height": 768,
+          "left": 128,
+          "top": 0,
+          "right": 128,
+          "bottom": 0
+        },
+        "feather": 0
+      }
+    },
+    "metadata": {
+      "local_source": null,
+      "model": "unsloth/Qwen-Image-2.1-GGUF",
+      "model_path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\model",
+      "model_revision": "2c31ccd392b367a6637841a143813320a02dff55",
+      "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Anime illustration of a woman with blonde and pink hair and a colorful white hoodie.",
+      "effective_prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Anime illustration of a woman with blonde and pink hair and a colorful white hoodie.",
+      "prompt_rewrite": {
+        "enabled": false,
+        "applied": false,
+        "reason": "disabled"
+      },
+      "fun_controlnet": null,
+      "fun_acc": null,
+      "style_loras": [],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\anime-none\\reference-01.png",
+        "plan": {
+          "source_width": 512,
+          "source_height": 768,
+          "left": 128,
+          "top": 0,
+          "right": 128,
+          "bottom": 0
+        },
+        "feather": 0,
+        "adapter": null
+      },
+      "preservation": {},
+      "width": 768,
+      "height": 768,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "output_mode": "RGBA",
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "compute_dtype": "bfloat16",
+      "true_cfg_scale": 1.0,
+      "scheduler": "FlowMatchEulerDiscreteScheduler",
+      "scheduler_config": {
+        "num_train_timesteps": 1000,
+        "shift": 1.0,
+        "use_dynamic_shifting": true,
+        "base_shift": 0.5,
+        "max_shift": 0.9,
+        "base_image_seq_len": 256,
+        "max_image_seq_len": 8192,
+        "invert_sigmas": false,
+        "shift_terminal": 0.02,
+        "use_karras_sigmas": false,
+        "use_exponential_sigmas": false,
+        "use_beta_sigmas": false,
+        "time_shift_type": "exponential",
+        "stochastic_sampling": false,
+        "_class_name": "FlowMatchEulerDiscreteScheduler",
+        "_diffusers_version": "0.37.0.dev0"
+      },
+      "use_kv_cache": true,
+      "input_resolution": 768.0,
+      "input_image_count": 1,
+      "input_image_names": [
+        "outpaint-reference.png"
+      ],
+      "int8_layers": {
+        "text_encoder": 368
+      },
+      "w4a8": {},
+      "quantized_cache": {
+        "text_encoder": {
+          "status": "hit",
+          "path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\quantized\\int8\\fd04434ec769b49aeca223cf\\text_encoder"
+        }
+      },
+      "int8_skip_modules": [],
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "diffusers": "0.41.0.dev0",
+        "transformers": "5.17.0",
+        "accelerate": "1.15.0+aikimi.1",
+        "bitsandbytes": "0.50.2",
+        "gguf": "0.19.0"
+      },
+      "reused_model": true,
+      "memory": {
+        "peak_allocated_mib": 11442.8,
+        "peak_reserved_mib": 12072.0,
+        "idle_allocated_mib": 12.7,
+        "idle_reserved_before_mib": 2106.0,
+        "idle_reserved_after_mib": 72.0,
+        "released_cache_mib": 2034.0,
+        "note": "PyTorch allocator only; peak includes this request's model loading; not total device memory or system RAM."
+      },
+      "vae_tiling": false,
+      "vae_tiling_config": null,
+      "timings": {
+        "load_seconds": 0.0,
+        "sampling_seconds": 33.938
+      },
+      "elapsed_seconds": 34.208
+    },
+    "output_sha256": "49d8bacaf86cf9e192d53f67f72304196557a727e8ed8c94858380cae69d8c0a",
+    "raw_sha256": "ddabab0ebb034713d56a7a7752b6382872b54415856b4213e74fcdefda3139cc",
+    "original_rgba_exact": true,
+    "composition_exact": true
+  },
+  {
+    "case": "architecture",
+    "version": "none",
+    "source": "docs/assets/qwen-image21-fun-controlnet/ring-3d-control.png",
+    "source_sha256": "c34af4563e0ba35a65431d05a192d72cb3079ac3a695ed22970a0a77db6276d5",
+    "reference_sha256": "db20e556fdde9e6d4a9682696a62092bc78798a7aebd2ebc261cf7696fb96dd2",
+    "request": {
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: A limestone ring observatory and bridges over the sea at sunrise, cinematic 3D render.",
+      "width": 768,
+      "height": 832,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\architecture-none\\outpaint-reference.png"
+      ],
+      "annotation_reference": -1,
+      "annotation_layers": [],
+      "rewrite_prompt": false,
+      "sparse_mode": "off",
+      "sparse_keep_percent": 75.0,
+      "sparse_jev_cadence": "legacy",
+      "sparse_jev_interval": 2,
+      "rewrite_edit_prompt": false,
+      "preserve_unmasked": false,
+      "edit_mask_reference": -1,
+      "edit_mask_path": "",
+      "mask_feather": 0.0,
+      "sparse_jev_max_calls": 0,
+      "sparse_jev_max_wait_seconds": 0.0,
+      "control_kind": "off",
+      "control_image": "",
+      "control_strength": 1.0,
+      "control_inpaint": false,
+      "fun_acc": false,
+      "operation": "generate",
+      "outpaint_version": "none",
+      "outpaint_margins": [
+        0,
+        128,
+        0,
+        128
+      ],
+      "outpaint_feather": 0,
+      "style_loras": [],
+      "allow_lora_base_mismatch": false,
+      "local_model": "",
+      "local_components": "",
+      "runtime_root": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1",
+      "clean_input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\architecture-none\\reference-01.png"
+      ],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\architecture-none\\reference-01.png",
+        "plan": {
+          "source_width": 768,
+          "source_height": 576,
+          "left": 0,
+          "top": 128,
+          "right": 0,
+          "bottom": 128
+        },
+        "feather": 0
+      }
+    },
+    "metadata": {
+      "local_source": null,
+      "model": "unsloth/Qwen-Image-2.1-GGUF",
+      "model_path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\model",
+      "model_revision": "2c31ccd392b367a6637841a143813320a02dff55",
+      "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: A limestone ring observatory and bridges over the sea at sunrise, cinematic 3D render.",
+      "effective_prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: A limestone ring observatory and bridges over the sea at sunrise, cinematic 3D render.",
+      "prompt_rewrite": {
+        "enabled": false,
+        "applied": false,
+        "reason": "disabled"
+      },
+      "fun_controlnet": null,
+      "fun_acc": null,
+      "style_loras": [],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\architecture-none\\reference-01.png",
+        "plan": {
+          "source_width": 768,
+          "source_height": 576,
+          "left": 0,
+          "top": 128,
+          "right": 0,
+          "bottom": 128
+        },
+        "feather": 0,
+        "adapter": null
+      },
+      "preservation": {},
+      "width": 768,
+      "height": 832,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "output_mode": "RGBA",
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "compute_dtype": "bfloat16",
+      "true_cfg_scale": 1.0,
+      "scheduler": "FlowMatchEulerDiscreteScheduler",
+      "scheduler_config": {
+        "num_train_timesteps": 1000,
+        "shift": 1.0,
+        "use_dynamic_shifting": true,
+        "base_shift": 0.5,
+        "max_shift": 0.9,
+        "base_image_seq_len": 256,
+        "max_image_seq_len": 8192,
+        "invert_sigmas": false,
+        "shift_terminal": 0.02,
+        "use_karras_sigmas": false,
+        "use_exponential_sigmas": false,
+        "use_beta_sigmas": false,
+        "time_shift_type": "exponential",
+        "stochastic_sampling": false,
+        "_class_name": "FlowMatchEulerDiscreteScheduler",
+        "_diffusers_version": "0.37.0.dev0"
+      },
+      "use_kv_cache": true,
+      "input_resolution": 799.359743794995,
+      "input_image_count": 1,
+      "input_image_names": [
+        "outpaint-reference.png"
+      ],
+      "int8_layers": {
+        "text_encoder": 368
+      },
+      "w4a8": {},
+      "quantized_cache": {
+        "text_encoder": {
+          "status": "hit",
+          "path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\quantized\\int8\\fd04434ec769b49aeca223cf\\text_encoder"
+        }
+      },
+      "int8_skip_modules": [],
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "diffusers": "0.41.0.dev0",
+        "transformers": "5.17.0",
+        "accelerate": "1.15.0+aikimi.1",
+        "bitsandbytes": "0.50.2",
+        "gguf": "0.19.0"
+      },
+      "reused_model": true,
+      "memory": {
+        "peak_allocated_mib": 11548.8,
+        "peak_reserved_mib": 12320.0,
+        "idle_allocated_mib": 12.7,
+        "idle_reserved_before_mib": 2336.0,
+        "idle_reserved_after_mib": 70.0,
+        "released_cache_mib": 2266.0,
+        "note": "PyTorch allocator only; peak includes this request's model loading; not total device memory or system RAM."
+      },
+      "vae_tiling": false,
+      "vae_tiling_config": null,
+      "timings": {
+        "load_seconds": 0.0,
+        "sampling_seconds": 35.691
+      },
+      "elapsed_seconds": 36.001
+    },
+    "output_sha256": "f106108f8db70a231cf6785a0ccb88b80272033c6c27bf44a98fc4ce2c6ab7a1",
+    "raw_sha256": "48b559e93cd63efa234cace10bbf9674e98a2b28ee45d0c39b5e72681c49a185",
+    "original_rgba_exact": true,
+    "composition_exact": true
+  },
+  {
+    "case": "street",
+    "version": "v2",
+    "source": "docs/assets/qwen-native-outpaint/source.png",
+    "source_sha256": "e6851140820ef7a3b9394491eebc44a66925b169daf87634fee2c4d3059c78d5",
+    "reference_sha256": "2b82abfce33b7b2e5c3560d8c15d13df24d14b46ad7599c399a9b998ed68a0dd",
+    "request": {
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.",
+      "width": 992,
+      "height": 512,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\street-v2\\outpaint-reference.png"
+      ],
+      "annotation_reference": -1,
+      "annotation_layers": [],
+      "rewrite_prompt": false,
+      "sparse_mode": "off",
+      "sparse_keep_percent": 75.0,
+      "sparse_jev_cadence": "legacy",
+      "sparse_jev_interval": 2,
+      "rewrite_edit_prompt": false,
+      "preserve_unmasked": false,
+      "edit_mask_reference": -1,
+      "edit_mask_path": "",
+      "mask_feather": 0.0,
+      "sparse_jev_max_calls": 0,
+      "sparse_jev_max_wait_seconds": 0.0,
+      "control_kind": "off",
+      "control_image": "",
+      "control_strength": 1.0,
+      "control_inpaint": false,
+      "fun_acc": false,
+      "operation": "generate",
+      "outpaint_version": "v2",
+      "outpaint_margins": [
+        128,
+        0,
+        128,
+        0
+      ],
+      "outpaint_feather": 0,
+      "style_loras": [],
+      "allow_lora_base_mismatch": false,
+      "local_model": "",
+      "local_components": "",
+      "runtime_root": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1",
+      "clean_input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\street-v2\\reference-01.png"
+      ],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\street-v2\\reference-01.png",
+        "plan": {
+          "source_width": 736,
+          "source_height": 512,
+          "left": 128,
+          "top": 0,
+          "right": 128,
+          "bottom": 0
+        },
+        "feather": 0
+      }
+    },
+    "metadata": {
+      "local_source": null,
+      "model": "unsloth/Qwen-Image-2.1-GGUF",
+      "model_path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\model",
+      "model_revision": "2c31ccd392b367a6637841a143813320a02dff55",
+      "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.",
+      "effective_prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.",
+      "prompt_rewrite": {
+        "enabled": false,
+        "applied": false,
+        "reason": "disabled"
+      },
+      "fun_controlnet": null,
+      "fun_acc": null,
+      "style_loras": [],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\street-v2\\reference-01.png",
+        "plan": {
+          "source_width": 736,
+          "source_height": 512,
+          "left": 128,
+          "top": 0,
+          "right": 128,
+          "bottom": 0
+        },
+        "feather": 0,
+        "adapter": {
+          "repository": "ausboss/Qwen-Image-2.1-Outpaint-LoRA",
+          "revision": "449336db42ff074aee970ba0facc0ac0feb77863",
+          "sha256": "3611a5ccae5f790405eeacf1dfb2c89285c1e4f2987b9abc88cd0161a60eca28",
+          "version": "v2",
+          "path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\outpaint\\qwen-image-2.1-outpaint-v2.safetensors",
+          "source_tensors": 384,
+          "linear_layers": 224,
+          "rank": 32,
+          "alpha": 32,
+          "scale": 1.0
+        }
+      },
+      "preservation": {},
+      "width": 992,
+      "height": 512,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "output_mode": "RGBA",
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "compute_dtype": "bfloat16",
+      "true_cfg_scale": 1.0,
+      "scheduler": "FlowMatchEulerDiscreteScheduler",
+      "scheduler_config": {
+        "num_train_timesteps": 1000,
+        "shift": 1.0,
+        "use_dynamic_shifting": true,
+        "base_shift": 0.5,
+        "max_shift": 0.9,
+        "base_image_seq_len": 256,
+        "max_image_seq_len": 8192,
+        "invert_sigmas": false,
+        "shift_terminal": 0.02,
+        "use_karras_sigmas": false,
+        "use_exponential_sigmas": false,
+        "use_beta_sigmas": false,
+        "time_shift_type": "exponential",
+        "stochastic_sampling": false,
+        "_class_name": "FlowMatchEulerDiscreteScheduler",
+        "_diffusers_version": "0.37.0.dev0"
+      },
+      "use_kv_cache": true,
+      "input_resolution": 712.6738384422428,
+      "input_image_count": 1,
+      "input_image_names": [
+        "outpaint-reference.png"
+      ],
+      "int8_layers": {
+        "text_encoder": 368
+      },
+      "w4a8": {},
+      "quantized_cache": {
+        "text_encoder": {
+          "status": "hit",
+          "path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\quantized\\int8\\fd04434ec769b49aeca223cf\\text_encoder"
+        }
+      },
+      "int8_skip_modules": [],
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "diffusers": "0.41.0.dev0",
+        "transformers": "5.17.0",
+        "accelerate": "1.15.0+aikimi.1",
+        "bitsandbytes": "0.50.2",
+        "gguf": "0.19.0"
+      },
+      "reused_model": false,
+      "memory": {
+        "peak_allocated_mib": 11275.0,
+        "peak_reserved_mib": 11722.0,
+        "idle_allocated_mib": 12.7,
+        "idle_reserved_before_mib": 1560.0,
+        "idle_reserved_after_mib": 72.0,
+        "released_cache_mib": 1488.0,
+        "note": "PyTorch allocator only; peak includes this request's model loading; not total device memory or system RAM."
+      },
+      "vae_tiling": false,
+      "vae_tiling_config": null,
+      "timings": {
+        "load_seconds": 296.822,
+        "sampling_seconds": 33.593
+      },
+      "elapsed_seconds": 331.769
+    },
+    "output_sha256": "f1cc184720b60bb112508ec2b81b0a03ef4825a7cce9ef8c73a3850b5ba716ad",
+    "raw_sha256": "b1f12d02d081c60195d025bff8961cab4aafed4eeedeacc3cadf17b03886ee18",
+    "original_rgba_exact": true,
+    "composition_exact": true
+  },
+  {
+    "case": "anime",
+    "version": "v2",
+    "source": "docs/assets/qwen-image21-fun-controlnet/anime-v221-reference.png",
+    "source_sha256": "3654d42dad99d8fb5cbfedff33fa231d7acd1ca810230ff1d2c142a555c5e1a2",
+    "reference_sha256": "8ce7b89c3459bbae236d922fb59b72cf78c32edea5a6a1d52d825f3c9c016513",
+    "request": {
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Anime illustration of a woman with blonde and pink hair and a colorful white hoodie.",
+      "width": 768,
+      "height": 768,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\anime-v2\\outpaint-reference.png"
+      ],
+      "annotation_reference": -1,
+      "annotation_layers": [],
+      "rewrite_prompt": false,
+      "sparse_mode": "off",
+      "sparse_keep_percent": 75.0,
+      "sparse_jev_cadence": "legacy",
+      "sparse_jev_interval": 2,
+      "rewrite_edit_prompt": false,
+      "preserve_unmasked": false,
+      "edit_mask_reference": -1,
+      "edit_mask_path": "",
+      "mask_feather": 0.0,
+      "sparse_jev_max_calls": 0,
+      "sparse_jev_max_wait_seconds": 0.0,
+      "control_kind": "off",
+      "control_image": "",
+      "control_strength": 1.0,
+      "control_inpaint": false,
+      "fun_acc": false,
+      "operation": "generate",
+      "outpaint_version": "v2",
+      "outpaint_margins": [
+        128,
+        0,
+        128,
+        0
+      ],
+      "outpaint_feather": 0,
+      "style_loras": [],
+      "allow_lora_base_mismatch": false,
+      "local_model": "",
+      "local_components": "",
+      "runtime_root": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1",
+      "clean_input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\anime-v2\\reference-01.png"
+      ],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\anime-v2\\reference-01.png",
+        "plan": {
+          "source_width": 512,
+          "source_height": 768,
+          "left": 128,
+          "top": 0,
+          "right": 128,
+          "bottom": 0
+        },
+        "feather": 0
+      }
+    },
+    "metadata": {
+      "local_source": null,
+      "model": "unsloth/Qwen-Image-2.1-GGUF",
+      "model_path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\model",
+      "model_revision": "2c31ccd392b367a6637841a143813320a02dff55",
+      "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Anime illustration of a woman with blonde and pink hair and a colorful white hoodie.",
+      "effective_prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Anime illustration of a woman with blonde and pink hair and a colorful white hoodie.",
+      "prompt_rewrite": {
+        "enabled": false,
+        "applied": false,
+        "reason": "disabled"
+      },
+      "fun_controlnet": null,
+      "fun_acc": null,
+      "style_loras": [],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\anime-v2\\reference-01.png",
+        "plan": {
+          "source_width": 512,
+          "source_height": 768,
+          "left": 128,
+          "top": 0,
+          "right": 128,
+          "bottom": 0
+        },
+        "feather": 0,
+        "adapter": {
+          "repository": "ausboss/Qwen-Image-2.1-Outpaint-LoRA",
+          "revision": "449336db42ff074aee970ba0facc0ac0feb77863",
+          "sha256": "3611a5ccae5f790405eeacf1dfb2c89285c1e4f2987b9abc88cd0161a60eca28",
+          "version": "v2",
+          "path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\outpaint\\qwen-image-2.1-outpaint-v2.safetensors",
+          "source_tensors": 384,
+          "linear_layers": 224,
+          "rank": 32,
+          "alpha": 32,
+          "scale": 1.0
+        }
+      },
+      "preservation": {},
+      "width": 768,
+      "height": 768,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "output_mode": "RGBA",
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "compute_dtype": "bfloat16",
+      "true_cfg_scale": 1.0,
+      "scheduler": "FlowMatchEulerDiscreteScheduler",
+      "scheduler_config": {
+        "num_train_timesteps": 1000,
+        "shift": 1.0,
+        "use_dynamic_shifting": true,
+        "base_shift": 0.5,
+        "max_shift": 0.9,
+        "base_image_seq_len": 256,
+        "max_image_seq_len": 8192,
+        "invert_sigmas": false,
+        "shift_terminal": 0.02,
+        "use_karras_sigmas": false,
+        "use_exponential_sigmas": false,
+        "use_beta_sigmas": false,
+        "time_shift_type": "exponential",
+        "stochastic_sampling": false,
+        "_class_name": "FlowMatchEulerDiscreteScheduler",
+        "_diffusers_version": "0.37.0.dev0"
+      },
+      "use_kv_cache": true,
+      "input_resolution": 768.0,
+      "input_image_count": 1,
+      "input_image_names": [
+        "outpaint-reference.png"
+      ],
+      "int8_layers": {
+        "text_encoder": 368
+      },
+      "w4a8": {},
+      "quantized_cache": {
+        "text_encoder": {
+          "status": "hit",
+          "path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\quantized\\int8\\fd04434ec769b49aeca223cf\\text_encoder"
+        }
+      },
+      "int8_skip_modules": [],
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "diffusers": "0.41.0.dev0",
+        "transformers": "5.17.0",
+        "accelerate": "1.15.0+aikimi.1",
+        "bitsandbytes": "0.50.2",
+        "gguf": "0.19.0"
+      },
+      "reused_model": true,
+      "memory": {
+        "peak_allocated_mib": 11442.8,
+        "peak_reserved_mib": 12072.0,
+        "idle_allocated_mib": 12.7,
+        "idle_reserved_before_mib": 1948.0,
+        "idle_reserved_after_mib": 72.0,
+        "released_cache_mib": 1876.0,
+        "note": "PyTorch allocator only; peak includes this request's model loading; not total device memory or system RAM."
+      },
+      "vae_tiling": false,
+      "vae_tiling_config": null,
+      "timings": {
+        "load_seconds": 0.0,
+        "sampling_seconds": 35.064
+      },
+      "elapsed_seconds": 35.348
+    },
+    "output_sha256": "88f86e9791a4cc275b72b5259185957b9f3e7c2ccd28ad6b1c588a4e77fae233",
+    "raw_sha256": "25709ca56738c07459022400c93db6bc93a68a4b259191cc7799d512f5983e9f",
+    "original_rgba_exact": true,
+    "composition_exact": true
+  },
+  {
+    "case": "architecture",
+    "version": "v2",
+    "source": "docs/assets/qwen-image21-fun-controlnet/ring-3d-control.png",
+    "source_sha256": "c34af4563e0ba35a65431d05a192d72cb3079ac3a695ed22970a0a77db6276d5",
+    "reference_sha256": "db20e556fdde9e6d4a9682696a62092bc78798a7aebd2ebc261cf7696fb96dd2",
+    "request": {
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: A limestone ring observatory and bridges over the sea at sunrise, cinematic 3D render.",
+      "width": 768,
+      "height": 832,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\architecture-v2\\outpaint-reference.png"
+      ],
+      "annotation_reference": -1,
+      "annotation_layers": [],
+      "rewrite_prompt": false,
+      "sparse_mode": "off",
+      "sparse_keep_percent": 75.0,
+      "sparse_jev_cadence": "legacy",
+      "sparse_jev_interval": 2,
+      "rewrite_edit_prompt": false,
+      "preserve_unmasked": false,
+      "edit_mask_reference": -1,
+      "edit_mask_path": "",
+      "mask_feather": 0.0,
+      "sparse_jev_max_calls": 0,
+      "sparse_jev_max_wait_seconds": 0.0,
+      "control_kind": "off",
+      "control_image": "",
+      "control_strength": 1.0,
+      "control_inpaint": false,
+      "fun_acc": false,
+      "operation": "generate",
+      "outpaint_version": "v2",
+      "outpaint_margins": [
+        0,
+        128,
+        0,
+        128
+      ],
+      "outpaint_feather": 0,
+      "style_loras": [],
+      "allow_lora_base_mismatch": false,
+      "local_model": "",
+      "local_components": "",
+      "runtime_root": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1",
+      "clean_input_images": [
+        "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\architecture-v2\\reference-01.png"
+      ],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\architecture-v2\\reference-01.png",
+        "plan": {
+          "source_width": 768,
+          "source_height": 576,
+          "left": 0,
+          "top": 128,
+          "right": 0,
+          "bottom": 128
+        },
+        "feather": 0
+      }
+    },
+    "metadata": {
+      "local_source": null,
+      "model": "unsloth/Qwen-Image-2.1-GGUF",
+      "model_path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\model",
+      "model_revision": "2c31ccd392b367a6637841a143813320a02dff55",
+      "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+      "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: A limestone ring observatory and bridges over the sea at sunrise, cinematic 3D render.",
+      "effective_prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: A limestone ring observatory and bridges over the sea at sunrise, cinematic 3D render.",
+      "prompt_rewrite": {
+        "enabled": false,
+        "applied": false,
+        "reason": "disabled"
+      },
+      "fun_controlnet": null,
+      "fun_acc": null,
+      "style_loras": [],
+      "outpaint": {
+        "source": "H:\\AI\\forge-neo\\outputs\\qwen-outpaint-comparison\\architecture-v2\\reference-01.png",
+        "plan": {
+          "source_width": 768,
+          "source_height": 576,
+          "left": 0,
+          "top": 128,
+          "right": 0,
+          "bottom": 128
+        },
+        "feather": 0,
+        "adapter": {
+          "repository": "ausboss/Qwen-Image-2.1-Outpaint-LoRA",
+          "revision": "449336db42ff074aee970ba0facc0ac0feb77863",
+          "sha256": "3611a5ccae5f790405eeacf1dfb2c89285c1e4f2987b9abc88cd0161a60eca28",
+          "version": "v2",
+          "path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\outpaint\\qwen-image-2.1-outpaint-v2.safetensors",
+          "source_tensors": 384,
+          "linear_layers": 224,
+          "rank": 32,
+          "alpha": 32,
+          "scale": 1.0
+        }
+      },
+      "preservation": {},
+      "width": 768,
+      "height": 832,
+      "steps": 25,
+      "seed": 42,
+      "transparent": false,
+      "output_mode": "RGBA",
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "compute_dtype": "bfloat16",
+      "true_cfg_scale": 1.0,
+      "scheduler": "FlowMatchEulerDiscreteScheduler",
+      "scheduler_config": {
+        "num_train_timesteps": 1000,
+        "shift": 1.0,
+        "use_dynamic_shifting": true,
+        "base_shift": 0.5,
+        "max_shift": 0.9,
+        "base_image_seq_len": 256,
+        "max_image_seq_len": 8192,
+        "invert_sigmas": false,
+        "shift_terminal": 0.02,
+        "use_karras_sigmas": false,
+        "use_exponential_sigmas": false,
+        "use_beta_sigmas": false,
+        "time_shift_type": "exponential",
+        "stochastic_sampling": false,
+        "_class_name": "FlowMatchEulerDiscreteScheduler",
+        "_diffusers_version": "0.37.0.dev0"
+      },
+      "use_kv_cache": true,
+      "input_resolution": 799.359743794995,
+      "input_image_count": 1,
+      "input_image_names": [
+        "outpaint-reference.png"
+      ],
+      "int8_layers": {
+        "text_encoder": 368
+      },
+      "w4a8": {},
+      "quantized_cache": {
+        "text_encoder": {
+          "status": "hit",
+          "path": "H:\\AI\\forge-neo\\models\\Qwen-Image-2.1\\quantized\\int8\\fd04434ec769b49aeca223cf\\text_encoder"
+        }
+      },
+      "int8_skip_modules": [],
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "diffusers": "0.41.0.dev0",
+        "transformers": "5.17.0",
+        "accelerate": "1.15.0+aikimi.1",
+        "bitsandbytes": "0.50.2",
+        "gguf": "0.19.0"
+      },
+      "reused_model": true,
+      "memory": {
+        "peak_allocated_mib": 11548.8,
+        "peak_reserved_mib": 12320.0,
+        "idle_allocated_mib": 12.7,
+        "idle_reserved_before_mib": 2050.0,
+        "idle_reserved_after_mib": 70.0,
+        "released_cache_mib": 1980.0,
+        "note": "PyTorch allocator only; peak includes this request's model loading; not total device memory or system RAM."
+      },
+      "vae_tiling": false,
+      "vae_tiling_config": null,
+      "timings": {
+        "load_seconds": 0.0,
+        "sampling_seconds": 36.324
+      },
+      "elapsed_seconds": 36.685
+    },
+    "output_sha256": "2bacff36aea11c4f20996fb8b514d8857376ff49fbaacc1a96d4c8dd188b313c",
+    "raw_sha256": "5859b9fe8edb91b7d372cdbc85ff8cd69b5a048638181bcc7a4499fc24f42ab2",
+    "original_rgba_exact": true,
+    "composition_exact": true
+  }
+]

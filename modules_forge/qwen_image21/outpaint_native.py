@@ -12,8 +12,8 @@ from .outpaint import Plan, _integer, prepare, stitch
 
 def validate_options(values: dict) -> None:
     version = values.get("outpaint_version", "")
-    if not isinstance(version, str) or version not in {"", "v1", "v2"}:
-        raise ValueError("Outpaint LoRAはv1またはv2を選んでください。")
+    if not isinstance(version, str) or version not in {"", "none", "v1", "v2"}:
+        raise ValueError("Outpaint LoRAはなし・v1・v2を選んでください。")
     if not version:
         return
     if values.get("operation", "generate") != "generate" or values.get("precision", "int8") not in {

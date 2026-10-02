@@ -40,6 +40,11 @@
         qwen_image21: Object.freeze({
             buttonId: "aikimi-tab-qwen-image21",
             containerId: "tab_qwen_image21_studio",
+            containerIds: Object.freeze(["tab_qwen_image21_studio", "tab_qwen_image21_outpaint"]),
+            sections: Object.freeze([
+                Object.freeze({containerId: "tab_qwen_image21_studio", label: "画像生成"}),
+                Object.freeze({containerId: "tab_qwen_image21_outpaint", label: "画像を広げる"}),
+            ]),
             label: "Qwen Image 2.1",
             kind: "native",
         }),
@@ -236,6 +241,21 @@
                 button.removeAttribute("aria-current");
             }
         });
+        syncFeatureSections(feature);
+    }
+
+    function syncFeatureSections(feature) {
+        featureNavigation()?.querySelectorAll(".aikimi-feature-sections").forEach(function (group) {
+            group.hidden = group.dataset.aikimiFeature !== feature;
+            group.querySelectorAll("button").forEach(function (button) {
+                const containerId = button.getAttribute("aria-controls");
+                button.hidden = !nativeButtonFor(containerId);
+                const selected = nativeButtonFor(containerId) === selectedNativeButton();
+                button.classList.toggle("aikimi-feature-active", selected);
+                if (selected) button.setAttribute("aria-current", "page");
+                else button.removeAttribute("aria-current");
+            });
+        });
     }
 
     function setActiveFeature(feature, warning) {
@@ -264,6 +284,28 @@
         row.setAttribute("aria-label", "Aikimi機能");
         FEATURE_ORDER.forEach(function (feature) {
             row.append(createFeatureButton(feature));
+        });
+        FEATURE_ORDER.forEach(function (feature) {
+            const sections = FEATURES[feature].sections;
+            if (!sections) return;
+            const group = document.createElement("div");
+            group.className = "aikimi-feature-sections";
+            group.dataset.aikimiFeature = feature;
+            group.setAttribute("role", "group");
+            group.setAttribute("aria-label", `${FEATURES[feature].label}の操作`);
+            group.hidden = true;
+            sections.forEach(function (section) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "aikimi-feature-section";
+                button.setAttribute("aria-controls", section.containerId);
+                button.textContent = section.label;
+                button.addEventListener("click", function () {
+                    clickNativeTab(section.containerId);
+                });
+                group.append(button);
+            });
+            row.append(group);
         });
         row.addEventListener("click", handleFeatureNavigationClick);
         row.addEventListener("keydown", handleFeatureNavigationKeydown);
@@ -564,7 +606,7 @@
     function nativeFeatureFor(button) {
         return FEATURE_ORDER.find(function (feature) {
             return FEATURES[feature].kind === "native" &&
-                nativeButtonFor(FEATURES[feature].containerId) === button;
+                selectedButtonMatches(feature, button);
         }) || null;
     }
 
@@ -623,6 +665,12 @@
         const nativeFeature = nativeFeatureFor(selected);
         if (nativeFeature) {
             if (activeFeature !== nativeFeature) setActiveFeature(nativeFeature, null);
+            else {
+                syncFeatureButtonState(nativeFeature);
+                if (featureContainer(nativeFeature) !== dispatchedContainer) {
+                    dispatchFeatureChange(nativeFeature, null);
+                }
+            }
             redispatchWhenContainerMounts(nativeFeature);
             return;
         }

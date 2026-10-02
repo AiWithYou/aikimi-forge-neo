@@ -1,0 +1,44 @@
+[
+  {
+    "case": "street",
+    "version": "none",
+    "raw_known_area_rgb_psnr_db": 35.64,
+    "sampling_seconds": 35.472,
+    "original_rgba_exact_after_stitch": true
+  },
+  {
+    "case": "street",
+    "version": "v2",
+    "raw_known_area_rgb_psnr_db": 44.29,
+    "sampling_seconds": 33.593,
+    "original_rgba_exact_after_stitch": true
+  },
+  {
+    "case": "anime",
+    "version": "none",
+    "raw_known_area_rgb_psnr_db": 27.31,
+    "sampling_seconds": 33.938,
+    "original_rgba_exact_after_stitch": true
+  },
+  {
+    "case": "anime",
+    "version": "v2",
+    "raw_known_area_rgb_psnr_db": 32.42,
+    "sampling_seconds": 35.064,
+    "original_rgba_exact_after_stitch": true
+  },
+  {
+    "case": "architecture",
+    "version": "none",
+    "raw_known_area_rgb_psnr_db": 25.01,
+    "sampling_seconds": 35.691,
+    "original_rgba_exact_after_stitch": true
+  },
+  {
+    "case": "architecture",
+    "version": "v2",
+    "raw_known_area_rgb_psnr_db": 36.89,
+    "sampling_seconds": 36.324,
+    "original_rgba_exact_after_stitch": true
+  }
+]

@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw
 
 from modules import script_callbacks
 from modules_forge.qwen_image21.outpaint import Plan, normalize_image, prepare, recipe, stitch
+from modules_forge.qwen_image21.outpaint_gui import canvas_markup, parse_canvas_commit
 
 PRIVATE = {"api_visibility": "private", "show_progress": "hidden", "queue": False}
 EMPTY = "元画像を選び、広げたい方向の余白を指定してください。"
@@ -187,11 +188,19 @@ def preview_for_native(source, left, top, right, bottom):
     return column, preview, caption, valid, gr.update(selected="range")
 
 
+def commit_canvas(value, source):
+    try:
+        return parse_canvas_commit(value, source)
+    except ValueError as exc:
+        raise gr.Error(str(exc)) from exc
+
+
 def handoff_steps(settings):
     comfy = settings["comfyui"]
     width, height = settings["canvas_size"]
+    adapter = f"`{settings['weights']}` を使う" if settings["weights"] else "LoRAを無効にする"
     return (
-        f"1. [ausboss配布ページ]({settings['source']})のワークフローで `{settings['weights']}` を使う\n"
+        f"1. [ausboss配布ページ]({settings['source']})のワークフローで {adapter}\n"
         f"2. 参照PNGを `{comfy['reference_input']}` に読み込み、resolutionを `{comfy['reference_resolution']}` にする\n"
         "3. 下の指示をプロンプトへ貼り付ける\n"
         f"4. latentは `{comfy['latent_source']}` をそのまま使い、"
@@ -374,6 +383,8 @@ def native_owner(request):
 
 
 def adapter_status(version):
+    if version == "none":
+        return ""
     from modules_forge.qwen_image21.outpaint_lora import installed
 
     # Keep UI construction lightweight, including when the model is absent.
@@ -391,6 +402,8 @@ def setup_visibility(version):
 
 # Gradio discovers and injects its progress tracker through this default.
 def prepare_native(version, progress=gr.Progress()):  # noqa: B008
+    if version == "none":
+        return ""
     from modules_forge.qwen_image21.outpaint_lora import install
 
     try:
@@ -542,6 +555,8 @@ def on_ui_tabs():
                         )
                     with gr.Tabs(selected="range", visible=False, elem_id="qwen21-outpaint-view") as stage:
                         with gr.Tab("広げる範囲", id="range", elem_id="qwen21-outpaint-range-tab"):
+                            canvas = gr.HTML("", elem_id="qwen21-outpaint-canvas")
+                            canvas_commit = gr.Textbox("", elem_id="qwen21-outpaint-canvas-commit")
                             with gr.Column(visible=False, elem_id="qwen21-outpaint-preview-column") as preview_column:
                                 preview = gr.Image(
                                     label="広げる範囲",
@@ -574,47 +589,47 @@ def on_ui_tabs():
                             "生成結果をさらに広げる", interactive=False, elem_id="qwen21-outpaint-reuse"
                         )
                 with gr.Column(scale=1, min_width=280, elem_id="qwen21-outpaint-controls"):
-                    gr.Markdown("### 広げる量（px）", elem_id="qwen21-outpaint-margin-heading")
-                    with gr.Row(elem_id="qwen21-outpaint-margins"):
-                        top = gr.Number(
-                            value=128,
-                            minimum=0,
-                            maximum=4096,
-                            step=1,
-                            label="上",
-                            min_width=70,
-                            elem_id="qwen21-outpaint-top",
-                        )
-                        left = gr.Number(
-                            value=128,
-                            minimum=0,
-                            maximum=4096,
-                            step=1,
-                            label="左",
-                            min_width=70,
-                            elem_id="qwen21-outpaint-left",
-                        )
-                        source_dimensions = gr.HTML(
-                            '<span aria-hidden="true">元画像</span>', elem_id="qwen21-outpaint-center"
-                        )
-                        right = gr.Number(
-                            value=128,
-                            minimum=0,
-                            maximum=4096,
-                            step=1,
-                            label="右",
-                            min_width=70,
-                            elem_id="qwen21-outpaint-right",
-                        )
-                        bottom = gr.Number(
-                            value=128,
-                            minimum=0,
-                            maximum=4096,
-                            step=1,
-                            label="下",
-                            min_width=70,
-                            elem_id="qwen21-outpaint-bottom",
-                        )
+                    with gr.Accordion("余白を数値で調整", open=False):
+                        with gr.Row(elem_id="qwen21-outpaint-margins"):
+                            top = gr.Number(
+                                value=128,
+                                minimum=0,
+                                maximum=4096,
+                                step=1,
+                                label="上",
+                                min_width=70,
+                                elem_id="qwen21-outpaint-top",
+                            )
+                            left = gr.Number(
+                                value=128,
+                                minimum=0,
+                                maximum=4096,
+                                step=1,
+                                label="左",
+                                min_width=70,
+                                elem_id="qwen21-outpaint-left",
+                            )
+                            source_dimensions = gr.HTML(
+                                '<span aria-hidden="true">元画像</span>', elem_id="qwen21-outpaint-center"
+                            )
+                            right = gr.Number(
+                                value=128,
+                                minimum=0,
+                                maximum=4096,
+                                step=1,
+                                label="右",
+                                min_width=70,
+                                elem_id="qwen21-outpaint-right",
+                            )
+                            bottom = gr.Number(
+                                value=128,
+                                minimum=0,
+                                maximum=4096,
+                                step=1,
+                                label="下",
+                                min_width=70,
+                                elem_id="qwen21-outpaint-bottom",
+                            )
                     with gr.Row(elem_id="qwen21-outpaint-shortcuts"):
                         horizontal = gr.Button("左右128", size="sm")
                         vertical = gr.Button("上下128", size="sm")
@@ -630,7 +645,11 @@ def on_ui_tabs():
                     )
                     with gr.Accordion("生成設定", open=False):
                         version = gr.Dropdown(
-                            choices=[("v2 · 標準（1〜2 MPで学習）", "v2"), ("v1 · 約1 MPで学習", "v1")],
+                            choices=[
+                                ("v2 · 標準（1〜2 MPで学習）", "v2"),
+                                ("v1 · 約1 MPで学習", "v1"),
+                                ("なし · 同じ条件で比較", "none"),
+                            ],
                             value="v2",
                             label="Outpaint LoRA",
                             elem_id="qwen21-outpaint-version",
@@ -869,6 +888,12 @@ def on_ui_tabs():
         # those wrappers. Bind through each component's supported event method.
         for component in (source, left, top, right, bottom):
             component.change(
+                canvas_markup,
+                inputs=[source, left, top, right, bottom],
+                outputs=[canvas],
+                **PRIVATE,
+            )
+            component.change(
                 preview_for_native,
                 inputs=[source, left, top, right, bottom],
                 outputs=[preview_column, preview, preview_caption, valid_canvas, stage],
@@ -879,6 +904,9 @@ def on_ui_tabs():
                 outputs=[native_generate, native_status],
                 **PRIVATE,
             )
+        canvas_commit.change(
+            commit_canvas, inputs=[canvas_commit, source], outputs=[left, top, right, bottom], **PRIVATE
+        )
         for button, pads in (
             (horizontal, (128, 0, 128, 0)),
             (vertical, (0, 128, 0, 128)),

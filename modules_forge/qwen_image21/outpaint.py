@@ -147,8 +147,8 @@ def prepare(
 def recipe(plan: Plan, version: str = "v2", scene: str = "") -> dict:
     """Describe the external ComfyUI recipe; this is not an executable graph."""
     plan.validate()
-    if not isinstance(version, str) or version not in WEIGHTS:
-        raise ValueError("Outpaint LoRAはv1またはv2を選んでください。")
+    if not isinstance(version, str) or version not in {*WEIGHTS, "none"}:
+        raise ValueError("Outpaint LoRAはなし・v1・v2を選んでください。")
     if not isinstance(scene, str) or len(scene) > 10000:
         raise ValueError("場面の説明は10000文字以内で入力してください。")
     prompt = PROMPT + ("\nScene: " + scene.strip() if scene.strip() else "")
@@ -162,7 +162,7 @@ def recipe(plan: Plan, version: str = "v2", scene: str = "") -> dict:
         "source": SOURCE,
         "checked_on": CHECKED_ON,
         "base_model": "Qwen/Qwen-Image-2.1",
-        "weights": WEIGHTS[version],
+        "weights": WEIGHTS.get(version),
         "weight_format": "ComfyUI (not verified for Forge Diffusers)",
         "geometry": asdict(plan),
         "canvas_size": list(plan.size),

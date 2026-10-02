@@ -1,0 +1,20 @@
+{
+  "verified_at": "2026-10-02",
+  "job_id": "df03d5649b964ff4b311ca5e494f437e",
+  "dimensions": [
+    992,
+    512
+  ],
+  "outpaint_adapter": null,
+  "download_rgba_matches_worker_output": true,
+  "original_rgba_exact_after_stitch": true,
+  "download_sha256": "9afe30159b40ec9d7aca9181545bee63c4ed85818091a870d9e08f09e90a96d1",
+  "steps": 25,
+  "seed": 42,
+  "feather": 0,
+  "precision": "base_q4_k_m",
+  "timings": {
+    "load_seconds": 315.763,
+    "sampling_seconds": 34.708
+  }
+}

@@ -1,0 +1,200 @@
+[
+  {
+    "frame": 0,
+    "seconds_from_start": 0,
+    "label": "元画像 736×512",
+    "display_ms": 1200
+  },
+  {
+    "frame": 1,
+    "seconds_from_start": 2,
+    "label": "右辺をドラッグして広げる",
+    "display_ms": 1200
+  },
+  {
+    "frame": 2,
+    "seconds_from_start": 14,
+    "label": "小数単位の移動でも寸法を保持",
+    "display_ms": 1200
+  },
+  {
+    "frame": 3,
+    "seconds_from_start": 53,
+    "label": "元画像の移動、寸法は1152×768を保持",
+    "display_ms": 1200
+  },
+  {
+    "frame": 4,
+    "seconds_from_start": 82,
+    "label": "1:1プリセット",
+    "display_ms": 1200
+  },
+  {
+    "frame": 5,
+    "seconds_from_start": 114,
+    "label": "余白をリセット",
+    "display_ms": 1200
+  },
+  {
+    "frame": 6,
+    "seconds_from_start": 126,
+    "label": "全体を広げる",
+    "display_ms": 1200
+  },
+  {
+    "frame": 7,
+    "seconds_from_start": 191,
+    "label": "上限を超えた余白は生成を無効化",
+    "display_ms": 1200
+  },
+  {
+    "frame": 8,
+    "seconds_from_start": 215,
+    "label": "4辺の数値指定 1184×704",
+    "display_ms": 1200
+  },
+  {
+    "frame": 9,
+    "seconds_from_start": 282,
+    "label": "Q4_K_M・v2・25 steps・Seed 42・境界0",
+    "display_ms": 1200
+  },
+  {
+    "frame": 10,
+    "seconds_from_start": 293,
+    "label": "4辺Outpaintの実生成を開始",
+    "display_ms": 1200
+  },
+  {
+    "frame": 11,
+    "seconds_from_start": 319,
+    "label": "モデル読み込み開始",
+    "display_ms": 350
+  },
+  {
+    "frame": 12,
+    "seconds_from_start": 357,
+    "label": "保存済み text_encoder INT8 を読み込み中 · 経過 61 秒",
+    "display_ms": 350
+  },
+  {
+    "frame": 13,
+    "seconds_from_start": 373,
+    "label": "保存済み text_encoder INT8 を読み込み中 · 経過 68 秒",
+    "display_ms": 350
+  },
+  {
+    "frame": 14,
+    "seconds_from_start": 381,
+    "label": "保存済み text_encoder INT8 を読み込み中 · 経過 85 秒",
+    "display_ms": 350
+  },
+  {
+    "frame": 15,
+    "seconds_from_start": 522,
+    "label": "通常版 Q4_K_M GGUF Transformerを読み込み中 · 経過 226 秒",
+    "display_ms": 350
+  },
+  {
+    "frame": 16,
+    "seconds_from_start": 607,
+    "label": "通常版 Q4_K_M GGUF Transformerを読み込み中 · 経過 312 秒",
+    "display_ms": 350
+  },
+  {
+    "frame": 17,
+    "seconds_from_start": 667,
+    "label": "生成中 16/25 · 経過 372 秒",
+    "display_ms": 350
+  },
+  {
+    "frame": 18,
+    "seconds_from_start": 691,
+    "label": "4辺Outpaint完了 1184×704",
+    "display_ms": 2200
+  },
+  {
+    "frame": 19,
+    "seconds_from_start": 721,
+    "label": "完成PNGを保存",
+    "display_ms": 2200
+  },
+  {
+    "frame": 20,
+    "seconds_from_start": 736,
+    "label": "完成画像を次の元画像へ",
+    "display_ms": 350
+  },
+  {
+    "frame": 21,
+    "seconds_from_start": 790,
+    "label": "再拡張の範囲 1440×704",
+    "display_ms": 350
+  },
+  {
+    "frame": 22,
+    "seconds_from_start": 804,
+    "label": "モデルを再利用して2回目の生成",
+    "display_ms": 350
+  },
+  {
+    "frame": 23,
+    "seconds_from_start": 833,
+    "label": "2回目の生成中も前回の結果を保持",
+    "display_ms": 350
+  },
+  {
+    "frame": 24,
+    "seconds_from_start": 864,
+    "label": "再拡張の生成結果を確認",
+    "display_ms": 350
+  },
+  {
+    "frame": 25,
+    "seconds_from_start": 875,
+    "label": "再拡張した1440×704 PNGを保存",
+    "display_ms": 2200
+  },
+  {
+    "frame": 26,
+    "seconds_from_start": 908,
+    "label": "最初の元画像へ戻す",
+    "display_ms": 350
+  },
+  {
+    "frame": 27,
+    "seconds_from_start": 933,
+    "label": "元画像736×512への復帰を確認",
+    "display_ms": 350
+  },
+  {
+    "frame": 28,
+    "seconds_from_start": 960,
+    "label": "停止テスト：前回の結果を残して生成中",
+    "display_ms": 350
+  },
+  {
+    "frame": 29,
+    "seconds_from_start": 963,
+    "label": "停止を要求",
+    "display_ms": 350
+  },
+  {
+    "frame": 30,
+    "seconds_from_start": 1006,
+    "label": "停止完了・前回PNGと再拡張操作を保持",
+    "display_ms": 2200
+  },
+  {
+    "frame": 31,
+    "seconds_from_start": 1365,
+    "label": "停止後も完成PNGを保持・狭い画面でタッチ拡張と移動を確認",
+    "display_ms": 2200
+  },
+  {
+    "frame": 32,
+    "seconds_from_start": 1590,
+    "label": "停止後に前回の完成画像へ切替・PNG保存と再拡張が有効",
+    "display_ms": 2200
+  }
+]

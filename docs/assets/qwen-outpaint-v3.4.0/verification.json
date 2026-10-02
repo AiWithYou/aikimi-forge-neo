@@ -1,0 +1,135 @@
+{
+  "date": "2026-10-02",
+  "gpu": "NVIDIA RTX 3090 24 GB",
+  "completed": [
+    {
+      "job": "ade373ee9b544f7aab4326d99d15b391",
+      "output": "pass-1.png",
+      "source_size": [
+        736,
+        512
+      ],
+      "output_size": [
+        1184,
+        704
+      ],
+      "margins_left_top_right_bottom": [
+        192,
+        64,
+        256,
+        128
+      ],
+      "plan": {
+        "source_width": 736,
+        "source_height": 512,
+        "left": 192,
+        "top": 64,
+        "right": 256,
+        "bottom": 128
+      },
+      "seed": 42,
+      "steps": 25,
+      "feather": 0,
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "adapter": {
+        "repository": "ausboss/Qwen-Image-2.1-Outpaint-LoRA",
+        "revision": "449336db42ff074aee970ba0facc0ac0feb77863",
+        "sha256": "3611a5ccae5f790405eeacf1dfb2c89285c1e4f2987b9abc88cd0161a60eca28",
+        "version": "v2",
+        "source_tensors": 384,
+        "linear_layers": 224,
+        "rank": 32,
+        "alpha": 32,
+        "scale": 1.0
+      },
+      "timings": {
+        "load_seconds": 314.929,
+        "sampling_seconds": 50.748
+      },
+      "reused_model": false,
+      "original_rgba_exact": true,
+      "output_sha256": "3408616fd4a7ade84184eab463f8d973f372438652fa9e4c3b1af4aac19890f4"
+    },
+    {
+      "job": "e22c2db2617a4d4a96370038b9383bbe",
+      "output": "pass-2.png",
+      "source_size": [
+        1184,
+        704
+      ],
+      "output_size": [
+        1440,
+        704
+      ],
+      "margins_left_top_right_bottom": [
+        128,
+        0,
+        128,
+        0
+      ],
+      "plan": {
+        "source_width": 1184,
+        "source_height": 704,
+        "left": 128,
+        "top": 0,
+        "right": 128,
+        "bottom": 0
+      },
+      "seed": 42,
+      "steps": 25,
+      "feather": 0,
+      "precision": "base_q4_k_m",
+      "memory_mode": "offload",
+      "adapter": {
+        "repository": "ausboss/Qwen-Image-2.1-Outpaint-LoRA",
+        "revision": "449336db42ff074aee970ba0facc0ac0feb77863",
+        "sha256": "3611a5ccae5f790405eeacf1dfb2c89285c1e4f2987b9abc88cd0161a60eca28",
+        "version": "v2",
+        "source_tensors": 384,
+        "linear_layers": 224,
+        "rank": 32,
+        "alpha": 32,
+        "scale": 1.0
+      },
+      "timings": {
+        "load_seconds": 0.0,
+        "sampling_seconds": 54.195
+      },
+      "reused_model": true,
+      "original_rgba_exact": true,
+      "output_sha256": "2ef408c812a96ef5dc9c93284d5b54bdefe721535fc33ba755043f407773daa7"
+    }
+  ],
+  "cancelled": {
+    "job": "091c4d6a6dfa4ad5b4d3bb8ea00440e4",
+    "state": "cancelled",
+    "no_output_written": true,
+    "restored_original_source_exact": true,
+    "previous_output_preserved_exact": true
+  },
+  "browser": {
+    "saved_pngs_match_job_outputs": true,
+    "console_errors_at_final_check": 0,
+    "touch_resize_and_move_at_css_width": 487,
+    "viewport_reset": true
+  },
+  "tests": {
+    "qwen_python": {
+      "run": 262,
+      "passed": 254,
+      "skipped": 8
+    },
+    "node_contracts": {
+      "passed": 20
+    },
+    "focused_python": {
+      "passed": 95
+    }
+  },
+  "limitations": [
+    "New GPU GUI tests cover Q4_K_M and Outpaint v2 only.",
+    "Touch input was emulated through Chrome, not a physical phone.",
+    "Timelapse records UI actions and progress, not intermediate diffusion images."
+  ]
+}

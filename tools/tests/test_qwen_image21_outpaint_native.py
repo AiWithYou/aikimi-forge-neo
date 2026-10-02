@@ -76,6 +76,13 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(resolved.outpaint_version, "v2")
         self.assertEqual(resolved.outpaint_margins, (32, 0, 32, 0))
 
+    def test_no_lora_uses_the_same_snapshot_validation_and_composition(self):
+        self.request = replace(self.request, outpaint_version="none")
+        payload = self.snapshot()
+        outpaint_native.validate_snapshot(payload, self.job)
+        result = outpaint_native.finish(Image.new("RGBA", (320, 256), "white"), payload)
+        self.assertEqual(result.crop((32, 0, 288, 256)).tobytes(), Image.open(self.source).tobytes())
+
     def test_worker_rejects_changed_reference_and_plan(self):
         payload = self.snapshot()
         payload["outpaint"]["plan"]["left"] = 0
