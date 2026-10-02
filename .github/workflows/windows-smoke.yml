@@ -53,6 +53,7 @@ on:
       - "modules_forge/**"
       - "requirements.txt"
       - "tools/requirements-test.txt"
+      - "tools/tests/test_extension_git.py"
       - "tools/tests/test_h3_ram_profile.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
@@ -172,6 +173,7 @@ on:
       - "modules_forge/**"
       - "requirements.txt"
       - "tools/requirements-test.txt"
+      - "tools/tests/test_extension_git.py"
       - "tools/tests/test_h3_ram_profile.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
@@ -350,6 +352,7 @@ jobs:
           --module tools.tests.test_gradio_file_url_guard
           --module tools.tests.test_legacy_yaml_security
           --module tools.tests.test_launch_utils_environment
+          --module tools.tests.test_extension_git
           --module tools.tests.test_minimax_h3_studio
           --module tools.tests.test_minimax_h3_setup
           --module tools.tests.test_local_model_sources

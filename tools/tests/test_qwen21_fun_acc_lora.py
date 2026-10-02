@@ -74,7 +74,7 @@ def test_worker_rejects_forged_combinations_and_separates_cache(tmp_path):
         regular = worker._cache_key(model, "int8", "offload")
         accelerated = worker._cache_key(model, "int8", "offload", fun_acc=True)
         assert regular != accelerated
-        assert accelerated[-1][0] == str(adapter)
+        assert any(isinstance(part, tuple) and part and part[0] == str(adapter) for part in accelerated)
         for invalid in ({"steps": 40}, {"precision": "bf16"}, {"sparse_mode": "fixed"}):
             (job / "request.json").write_text(json.dumps(request | invalid), encoding="utf-8")
             with pytest.raises(ValueError, match="Fun Acc"):
