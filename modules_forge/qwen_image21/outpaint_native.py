@@ -38,6 +38,7 @@ def source_plan(source: str, values: dict):
         original, canvas, plan = prepare(image, *values["outpaint_margins"])
     if plan.size != (values["width"], values["height"]):
         raise ValueError("Outpaintの完成サイズと元画像・余白が一致しません。")
+    _integer(values["outpaint_feather"], "境界ぼかし", 0, min(128, (min(original.size) - 1) // 2))
     return original, canvas, plan
 
 

@@ -6,16 +6,18 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 _ORIGINAL_ARGV = sys.argv[:]
-sys.argv = [sys.argv[0]]
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGES = ROOT / "modules_forge" / "packages"
 if str(PACKAGES) not in sys.path:
     sys.path.insert(0, str(PACKAGES))
 
-import modules.shared_init as shared_init
+try:
+    sys.argv = [sys.argv[0], "--cpu"]
+    import modules.shared_init as shared_init
 
-shared_init.initialize()
-sys.argv = _ORIGINAL_ARGV
+    shared_init.initialize()
+finally:
+    sys.argv = _ORIGINAL_ARGV
 
 from backend import memory_management
 from modules import processing

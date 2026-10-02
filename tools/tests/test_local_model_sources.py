@@ -6,7 +6,6 @@ import importlib.util
 import json
 import os
 import struct
-import sys
 import unittest
 from contextlib import nullcontext
 from dataclasses import replace
@@ -17,6 +16,7 @@ from unittest.mock import patch
 
 from modules_forge import local_assets, ming_image_studio, ming_local
 from modules_forge.qwen_image21 import core, local_source, quantized_cache, style_lora
+from tools.tests.test_additional_module_identity import load_main_entry, stub_modules
 
 
 def tensor_file(path, keys=None, value=1, metadata=None):
@@ -120,7 +120,7 @@ class QwenLocalSourceTests(unittest.TestCase):
         )
         with (
             TemporaryDirectory() as folder,
-            patch.dict(sys.modules, {"accelerate": SimpleNamespace(init_empty_weights=nullcontext)}),
+            stub_modules({"accelerate": SimpleNamespace(init_empty_weights=nullcontext)}),
         ):
             path = Path(folder)
             json_file(path / "config.json", local_source.TRANSFORMER_CONFIG)
@@ -283,7 +283,7 @@ class MingLocalSourceTests(unittest.TestCase):
         down = "layers.0.attention.qkv.lora_A.weight"
         up = "layers.0.attention.qkv.lora_B.weight"
         good = {down: torch.ones(1, 3), up: torch.ones(4, 1)}
-        with patch.dict(sys.modules, {"comfy": comfy, "comfy.lora": comfy.lora}):
+        with stub_modules({"comfy": comfy, "comfy.lora": comfy.lora}):
             self.assertEqual(len(nodes.linear_patches(model, good)), 1)
             for weights in (
                 {down: good[down]},
@@ -301,8 +301,6 @@ class MingLocalSourceTests(unittest.TestCase):
 
 class ForgeLocalSelectionTests(unittest.TestCase):
     def test_external_module_with_same_basename_stays_distinct(self):
-        from tools.tests.test_additional_module_identity import load_main_entry
-
         ui, _, _ = load_main_entry()
         with TemporaryDirectory() as folder, patch.object(local_assets, "LIBRARY", Path(folder) / "library.json"):
             root = Path(folder)
@@ -314,6 +312,8 @@ class ForgeLocalSelectionTests(unittest.TestCase):
             self.assertEqual(len(ui.module_list), 2)
 
     def test_multiple_external_loras_keep_path_identity_and_zero_skips_missing_file(self):
+        from tools.tests.test_ui_loadsave_selection import load_add_component
+
         package = ModuleType("modules")
         package.scripts = SimpleNamespace(Script=object, AlwaysVisible=True)
         package.shared = SimpleNamespace()
@@ -321,14 +321,14 @@ class ForgeLocalSelectionTests(unittest.TestCase):
             "local_stack_test", local_assets.ROOT / "scripts/local_lora_stack.py"
         )
         picker = importlib.util.module_from_spec(spec)
-        with patch.dict(sys.modules, {"modules": package}):
+        with stub_modules({"modules": package}):
             spec.loader.exec_module(picker)
         networks = SimpleNamespace(available_networks={}, available_network_aliases={})
         network = SimpleNamespace(NetworkOnDisk=lambda name, filename: SimpleNamespace(name=name, filename=filename))
         with (
             TemporaryDirectory() as folder,
             patch.object(local_assets, "LIBRARY", Path(folder) / "library.json"),
-            patch.dict(sys.modules, {"network": network, "networks": networks}),
+            stub_modules({"network": network, "networks": networks}),
         ):
             a = str(tensor_file(Path(folder) / "a/style.safetensors"))
             b = str(tensor_file(Path(folder) / "b/style.safetensors"))
@@ -340,14 +340,15 @@ class ForgeLocalSelectionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "同じファイル"):
                 picker.apply_selections(p, [a], [[a, 1]])
 
-            from modules.ui_loadsave import UiLoadsave
-
             with patch.object(picker, "available", return_value=[(name, name) for name in (a, b, "missing")]):
                 with picker.gr.Blocks(analytics_enabled=False):
                     names, _rows = picker.Script().ui(False)
-            defaults = UiLoadsave(str(Path(folder) / "ui.json"))
-            defaults.ui_settings["stack/value"] = []
-            defaults.add_component("stack", names)
+            defaults = SimpleNamespace(
+                finalized_ui=False,
+                ui_settings={"stack/value": []},
+                component_mapping={},
+            )
+            load_add_component()(defaults, "stack", names)
             self.assertEqual(names.value, [a, b, "missing"], "Legacy UI defaults must not erase the asset selection")
 
 

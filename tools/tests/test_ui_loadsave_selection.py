@@ -63,6 +63,18 @@ class SavedSelectionTests(unittest.TestCase):
                 self.add_component(self.loader(saved), "xyz/X values", dropdown)
                 self.assertEqual(dropdown.preprocess(dropdown.value), saved)
 
+    def test_labeled_choices_restore_the_underlying_value(self):
+        for component_class in (gr.Dropdown, gr.Radio):
+            with self.subTest(component=component_class):
+                component = component_class(choices=[("Label A", "a"), ("Label B", "b")], value="a")
+                self.add_component(self.loader("b"), "xyz/X values", component)
+                self.assertEqual(component.preprocess(component.value), "b")
+
+    def test_numeric_choices_restore_numeric_values(self):
+        component = gr.Dropdown(choices=[10, 20], value=10)
+        self.add_component(self.loader(20), "xyz/X values", component)
+        self.assertEqual(component.preprocess(component.value), 20)
+
     def test_hidden_controlnet_defaults_survive_legacy_slider_bounds(self):
         path = (
             Path(__file__).resolve().parents[2]

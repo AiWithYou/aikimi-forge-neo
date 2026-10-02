@@ -1,13 +1,23 @@
 """YuE2 tab: additive to Forge, with no model imports at UI startup."""
+
 from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
 
 import gradio as gr
+
 from modules import script_callbacks
 from modules.paths import data_path, script_path
-from modules_forge.yue2_studio.core import Request, YuE2Error, import_project, inside, integer, read_json, runtime_manifest
+from modules_forge.yue2_studio.core import (
+    Request,
+    YuE2Error,
+    import_project,
+    inside,
+    integer,
+    read_json,
+    runtime_manifest,
+)
 from modules_forge.yue2_studio.service import JobNotFound, Studio
 
 RUNTIME = Path(script_path) / "extensions-builtin" / "yue2-studio" / "runtime"
@@ -100,7 +110,7 @@ def load_result(key):
         return None, "", [], ""
     try:
         directory = STUDIO.artifact(key)
-        metadata = read_json(directory / "studio-result.json")
+        metadata = read_json(inside(STUDIO.outputs, directory / "studio-result.json"))
         files = []
         for name in ("audio.flac", "audio.wav", "score.abc", "project.json", "result.json", "config.json", "studio-result.json"):
             path = inside(STUDIO.outputs, directory / name)
@@ -137,7 +147,7 @@ def values_for(request: Request):
 
 
 def restore(key):
-    return values_for(import_project(STUDIO.artifact(key) / "project.json"))
+    return values_for(import_project(inside(STUDIO.outputs, STUDIO.artifact(key) / "project.json")))
 
 
 def restore_file(path):

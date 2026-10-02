@@ -170,13 +170,15 @@ def get_attr_with_parent(obj, attr):
 def calculate_parameters(sd: dict[str, torch.Tensor], prefix: str = "") -> int:
     params = 0
     for k in sd.keys():
-        if k.startswith(prefix):
+        if k.startswith(prefix) and isinstance(sd[k], torch.Tensor):
             params += sd[k].nelement()
     return params
 
 
 def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype | str:
     for k, v in sd.items():
+        if not k.startswith(prefix):
+            continue
         if hasattr(v, "gguf_cls"):
             return "gguf"
         if "bitsandbytes__nf4" in k:
@@ -186,7 +188,7 @@ def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype |
 
     dtypes: dict[torch.dtype, int] = {}
     for k in sd.keys():
-        if k.startswith(prefix):
+        if k.startswith(prefix) and isinstance(sd[k], torch.Tensor):
             w = sd[k]
             dtypes[w.dtype] = dtypes.get(w.dtype, 0) + w.numel()
 
@@ -194,7 +196,7 @@ def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype |
         return None
 
     dtypes = {_d: dtypes[_d] for _d in dtypes if _d.is_floating_point}
-    return max(dtypes, key=dtypes.get)
+    return max(dtypes, key=dtypes.get, default=None)
 
 
 def tensor2parameter(x):

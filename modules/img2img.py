@@ -112,8 +112,10 @@ def process_batch(p, input, output_dir, inpaint_mask_dir, args, to_scale=False, 
                 geninfo, _ = images.read_info_from_image(info_img)
                 _orig: str = shared.opts.infotext_styles
                 shared.opts.infotext_styles = "Ignore"
-                parsed_parameters = parse_generation_parameters(geninfo)
-                shared.opts.infotext_styles = _orig
+                try:
+                    parsed_parameters = parse_generation_parameters(geninfo)
+                finally:
+                    shared.opts.infotext_styles = _orig
                 parsed_parameters = {k: v for k, v in parsed_parameters.items() if k in (png_info_props or [])}
             except Exception:
                 parsed_parameters = {}

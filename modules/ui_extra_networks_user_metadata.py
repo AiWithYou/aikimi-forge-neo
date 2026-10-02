@@ -104,7 +104,7 @@ class UserMetadataEditor:
 
             stats = os.stat(filename)
             params = [
-                ("Filename: ", self.relative_path(filename)),
+                ("Filename: ", html.escape(self.relative_path(filename))),
                 ("File size: ", sysinfo.pretty_bytes(stats.st_size)),
                 ("Hash: ", shorthash),
                 ("Modified: ", datetime.datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M")),
@@ -134,7 +134,10 @@ class UserMetadataEditor:
         basename, ext = os.path.splitext(filename)
 
         metadata_path = basename + ".json"
-        with open(metadata_path, "w", encoding="utf8") as file:
+        resolved_metadata_path = os.path.realpath(metadata_path)
+        if not ui_extra_networks.path_is_parent(os.path.dirname(metadata_path), resolved_metadata_path) or os.path.splitext(resolved_metadata_path)[1].lower() != ".json":
+            raise AssertionError("metadata target must be a JSON file in the model directory")
+        with open(resolved_metadata_path, "w", encoding="utf8") as file:
             json.dump(metadata, file, indent=4, ensure_ascii=False)
         self.page.lister.update_file_entry(metadata_path)
 
@@ -182,7 +185,10 @@ class UserMetadataEditor:
         image = infotext_utils.image_from_url_text(img_info)
         geninfo, items = images.read_info_from_image(image)
 
-        images.save_image_with_geninfo(image, geninfo, item["local_preview"])
+        filename = os.path.realpath(item["local_preview"])
+        if not any(ui_extra_networks.path_is_parent(directory, filename) for directory in self.page.allowed_directories_for_previews()):
+            raise AssertionError("writing to this directory is not allowed")
+        images.save_image_with_geninfo(image, geninfo, filename)
         self.page.lister.update_file_entry(item["local_preview"])
         item["preview"] = self.page.find_preview(item["local_preview"])
         return self.get_card_html(name), ""

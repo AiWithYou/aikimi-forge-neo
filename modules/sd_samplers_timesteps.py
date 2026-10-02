@@ -66,6 +66,9 @@ class CompVisSampler(sd_samplers_common.Sampler):
         return timesteps
 
     def sample_img2img(self, p, x, noise, conditioning, unconditional_conditioning, steps=None, image_conditioning=None):
+        if p.denoising_strength == 0:
+            return x
+
         unet_patcher = self.model_wrap.inner_model.forge_objects.unet
         sampling_prepare(self.model_wrap.inner_model.forge_objects.unet, x=x)
 

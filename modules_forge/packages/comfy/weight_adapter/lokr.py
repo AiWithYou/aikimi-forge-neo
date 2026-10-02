@@ -141,7 +141,7 @@ class LoKrAdapter(WeightAdapterBase):
             alpha = 1.0
 
         try:
-            lora_diff = torch.kron(w1, w2).reshape(weight.shape)
+            lora_diff = torch.kron(w1.contiguous(), w2.contiguous()).reshape(weight.shape)
             if dora_scale is not None:
                 weight = weight_decompose(dora_scale, weight, lora_diff, alpha, strength, intermediate_dtype, function)
             else:

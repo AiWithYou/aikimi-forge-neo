@@ -189,8 +189,13 @@ class VAE:
         n.patcher = self.patcher.clone()
         n.memory_used_encode = self.memory_used_encode
         n.memory_used_decode = self.memory_used_decode
+        n.upscale_ratio = self.upscale_ratio
+        n.upscale_index_formula = self.upscale_index_formula
         n.downscale_ratio = self.downscale_ratio
+        n.downscale_index_formula = self.downscale_index_formula
+        n.latent_dim = self.latent_dim
         n.latent_channels = self.latent_channels
+        n.output_channels = self.output_channels
         n.first_stage_model = self.first_stage_model
         n.device = self.device
         n.vae_dtype = self.vae_dtype
@@ -224,6 +229,7 @@ class VAE:
             return self.decode_tiled(samples_in).to(self.output_device)
 
         pixel_samples = None
+        samples = out = None
         _tile = False
 
         try:
@@ -246,6 +252,7 @@ class VAE:
             _tile = True
 
         if _tile:
+            pixel_samples = samples = out = None
             memory_management.soft_empty_cache()
             return self.decode_tiled(samples_in).to(self.output_device)
 
@@ -278,13 +285,13 @@ class VAE:
         if self.is_wan and _samples.ndim < 5:
             _samples = _samples.movedim(1, 0).unsqueeze(0)
 
+        samples = pixels_in = out = None
         try:
             memory_used = self.memory_used_encode(_samples.shape, self.vae_dtype)
             memory_management.load_models_gpu([self.patcher], memory_required=memory_used)
             free_memory = memory_management.get_free_memory(self.device)
             batch_number = int(free_memory / max(1, memory_used))
             batch_number = max(1, batch_number)
-            samples = None
             for x in range(0, _samples.shape[0], batch_number):
                 pixels_in = self.process_input(_samples[x : x + batch_number]).to(self.vae_dtype).to(self.device)
                 out = self.first_stage_model.encode(pixels_in).to(self.output_device).float()
@@ -299,6 +306,7 @@ class VAE:
             _tile = True
 
         if _tile:
+            samples = pixels_in = out = None
             memory_management.soft_empty_cache()
             return self.encode_tiled(pixel_samples)
 

@@ -6,7 +6,7 @@ import torch
 from backend import memory_management, state_dict, utils
 from backend.logging import setup_logger
 from backend.misc import image_resize
-from backend.nn.cnets import cldm, t2i_adapter
+from backend.nn.cnets import t2i_adapter
 from backend.operations import (
     ForgeOperations,
     ForgeWeights,
@@ -321,8 +321,7 @@ class ControlNet(ControlBase):
                 del self.cond_hint
             self.cond_hint = None
             self.cond_hint = image_resize.adaptive_resize(self.cond_hint_original, x_noisy.shape[3] * 8, x_noisy.shape[2] * 8, "nearest-exact", "center").to(dtype)
-        if x_noisy.shape[0] != self.cond_hint.shape[0]:
-            self.cond_hint = broadcast_image_to(self.cond_hint, x_noisy.shape[0], batched_number)
+        cond_hint = broadcast_image_to(self.cond_hint, x_noisy.shape[0], batched_number)
 
         context = cond["c_crossattn"]
         y = cond.get("y", None)
@@ -334,16 +333,16 @@ class ControlNet(ControlBase):
         controlnet_model_function_wrapper = to.get("controlnet_model_function_wrapper", None)
 
         if controlnet_model_function_wrapper is not None:
-            wrapper_args = dict(x=x_noisy.to(dtype), hint=self.cond_hint, timesteps=timestep.float(), context=context.to(dtype), y=y, control_type=self.control_type)
+            wrapper_args = dict(x=x_noisy.to(dtype), hint=cond_hint, timesteps=timestep.float(), context=context.to(dtype), y=y, control_type=self.control_type)
             wrapper_args["model"] = self
             wrapper_args["inner_model"] = self.control_model
             control = controlnet_model_function_wrapper(**wrapper_args)
         else:
-            control = self.control_model(x=x_noisy.to(dtype), hint=self.cond_hint.to(self.device), timesteps=timestep.float(), context=context.to(dtype), y=y, control_type=self.control_type)
+            control = self.control_model(x=x_noisy.to(dtype), hint=cond_hint.to(self.device), timesteps=timestep.float(), context=context.to(dtype), y=y, control_type=self.control_type)
         return self.control_merge(None, control, control_prev, output_dtype)
 
     def copy(self):
-        c = ControlNet(self.control_model, global_average_pooling=self.global_average_pooling, load_device=self.load_device, manual_cast_dtype=self.manual_cast_dtype)
+        c = ControlNet(self.control_model, global_average_pooling=self.global_average_pooling, device=self.device, load_device=self.load_device, manual_cast_dtype=self.manual_cast_dtype)
         self.copy_to(c)
         return c
 
@@ -417,6 +416,8 @@ class ControlLora(ControlNet):
         self.global_average_pooling = global_average_pooling
 
     def pre_run(self, model, percent_to_timestep_function):
+        from backend.nn.cnets import cldm
+
         super().pre_run(model, percent_to_timestep_function)
         controlnet_config = model.diffusion_model.config.copy()
         controlnet_config.pop("out_channels")
@@ -451,12 +452,11 @@ class ControlLora(ControlNet):
                 utils.set_attr(self.control_model, k, self.control_weights[k].to(dtype).to(memory_management.get_torch_device()))
 
     def copy(self):
-        c = ControlLora(self.control_weights, global_average_pooling=self.global_average_pooling)
+        c = ControlLora(self.control_weights, global_average_pooling=self.global_average_pooling, device=self.device)
         self.copy_to(c)
         return c
 
     def cleanup(self):
-        del self.control_model
         self.control_model = None
         super().cleanup()
 
@@ -498,17 +498,15 @@ class T2IAdapter(ControlBase):
                 else:
                     return None
 
-        if self.cond_hint is None or x_noisy.shape[2] * 8 != self.cond_hint.shape[2] or x_noisy.shape[3] * 8 != self.cond_hint.shape[3]:
+        width, height = self.scale_image_to(x_noisy.shape[3] * 8, x_noisy.shape[2] * 8)
+        if self.cond_hint is None or height != self.cond_hint.shape[2] or width != self.cond_hint.shape[3]:
             if self.cond_hint is not None:
                 del self.cond_hint
             self.control_input = None
             self.cond_hint = None
-            width, height = self.scale_image_to(x_noisy.shape[3] * 8, x_noisy.shape[2] * 8)
             self.cond_hint = image_resize.adaptive_resize(self.cond_hint_original, width, height, "nearest-exact", "center").float()
             if self.channels_in == 1 and self.cond_hint.shape[1] > 1:
                 self.cond_hint = torch.mean(self.cond_hint, 1, keepdim=True)
-        if x_noisy.shape[0] != self.cond_hint.shape[0]:
-            self.cond_hint = broadcast_image_to(self.cond_hint, x_noisy.shape[0], batched_number)
         if self.control_input is None:
             self.t2i_model.to(x_noisy.dtype)
             self.t2i_model.to(self.device)
@@ -526,7 +524,7 @@ class T2IAdapter(ControlBase):
 
             self.t2i_model.cpu()
 
-        control_input = list(map(lambda a: None if a is None else a.clone(), self.control_input))
+        control_input = [None if a is None else broadcast_image_to(a.clone(), x_noisy.shape[0], batched_number) for a in self.control_input]
         mid = None
         if self.t2i_model.xl == True:
             mid = control_input[-1:]
@@ -534,9 +532,13 @@ class T2IAdapter(ControlBase):
         return self.control_merge(control_input, mid, control_prev, x_noisy.dtype)
 
     def copy(self):
-        c = T2IAdapter(self.t2i_model, self.channels_in)
+        c = T2IAdapter(self.t2i_model, self.channels_in, device=self.device)
         self.copy_to(c)
         return c
+
+    def cleanup(self):
+        self.control_input = None
+        super().cleanup()
 
 
 def load_t2i_adapter(t2i_data):

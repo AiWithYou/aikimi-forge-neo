@@ -11,7 +11,14 @@ import gradio as gr
 from PIL import Image, ImageChops, ImageDraw
 
 from modules_forge.qwen_image21 import annotations, core, service
-from tools.tests.test_qwen_image21_service import FakeResident, Lease, Residency, installed_runtime, load_ui
+from tools.tests.test_qwen_image21_service import (
+    FakeResident,
+    Lease,
+    Residency,
+    installed_runtime,
+    isolate_local_assets,
+    load_ui,
+)
 
 
 class EditMaskTests(unittest.TestCase):
@@ -19,6 +26,7 @@ class EditMaskTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="qwen-edit-mask-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
+        isolate_local_assets(self, self.root)
         self.original = self.root / "original.png"
         self.mask = self.root / "mask.png"
         with Image.new("RGBA", (256, 256), (12, 34, 56, 72)) as image:

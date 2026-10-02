@@ -1073,18 +1073,30 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                 shared.state.job = f"Batch {n+1} out of {p.n_iter}"
 
             sigmas_backup = None
+            noise_schedule_predictor = None
             if (opts.sd_noise_schedule == "Zero Terminal SNR" or getattr(p.sd_model.model_config, "ztsnr", False)) and p is not None:
                 p.extra_generation_params["Noise Schedule"] = "Zero Terminal SNR"
-                sigmas_backup = p.sd_model.forge_objects.unet.model.predictor.sigmas
-                p.sd_model.forge_objects.unet.model.predictor.set_sigmas(rescale_zero_terminal_snr_sigmas(p.sd_model.forge_objects.unet.model.predictor.sigmas))
+                noise_schedule_predictor = p.sd_model.forge_objects.unet.model.predictor
+                sigmas_backup = noise_schedule_predictor.sigmas
 
-            samples_ddim = p.sample(conditioning=p.c, unconditional_conditioning=p.uc, seeds=p.seeds, subseeds=p.subseeds, subseed_strength=p.subseed_strength, prompts=p.prompts)
+            try:
+                if sigmas_backup is not None:
+                    noise_schedule_predictor.set_sigmas(rescale_zero_terminal_snr_sigmas(sigmas_backup))
 
-            for x_sample in samples_ddim:
-                p.latents_after_sampling.append(x_sample)
+                samples_ddim = p.sample(
+                    conditioning=p.c,
+                    unconditional_conditioning=p.uc,
+                    seeds=p.seeds,
+                    subseeds=p.subseeds,
+                    subseed_strength=p.subseed_strength,
+                    prompts=p.prompts,
+                )
 
-            if sigmas_backup is not None:
-                p.sd_model.forge_objects.unet.model.predictor.set_sigmas(sigmas_backup)
+                for x_sample in samples_ddim:
+                    p.latents_after_sampling.append(x_sample)
+            finally:
+                if sigmas_backup is not None:
+                    noise_schedule_predictor.set_sigmas(sigmas_backup)
 
             if p.scripts is not None:
                 ps = scripts.PostSampleArgs(samples_ddim)

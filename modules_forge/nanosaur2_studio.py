@@ -235,6 +235,8 @@ def save_result(
             if image.format != "PNG" or image.size != (request.width, request.height):
                 raise Nanosaur2Error("生成PNGの形式・サイズが指定と一致しません。")
             image.verify()
+        with Image.open(destination) as image:
+            image.load()
         (stage / "parameters.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )

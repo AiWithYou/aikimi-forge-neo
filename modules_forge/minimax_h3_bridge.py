@@ -394,6 +394,20 @@ def normalize_file_list(value: Any) -> tuple[str, ...]:
     return tuple(result)
 
 
+def _integer_setting(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise H3BridgeError(f"{label} は整数で指定してください。")
+    if isinstance(value, str) and not re.fullmatch(r"[+-]?[0-9]+", value.strip()):
+        raise H3BridgeError(f"{label} は整数で指定してください。")
+    try:
+        number = int(value)
+        if not isinstance(value, str) and number != value:
+            raise ValueError("fractional integer setting")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise H3BridgeError(f"{label} は有限の整数で指定してください。") from exc
+    return number
+
+
 def validate_request(request: H3Request) -> None:
     try:
         if not isinstance(request.acceleration, H3Acceleration):
@@ -423,11 +437,8 @@ def validate_request(request: H3Request) -> None:
             raise H3BridgeError("長尺生成ではFun ControlNetをオフにしてください。")
         if request.reference_videos or request.reference_audios:
             raise H3BridgeError("長尺生成の参照素材には画像を指定してください。")
-    try:
-        steps = int(request.steps)
-        seed = int(request.seed)
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise H3BridgeError("Steps と Seed は有限の整数で指定してください。") from exc
+    steps = _integer_setting(request.steps, "Steps")
+    seed = _integer_setting(request.seed, "Seed")
     if not 1 <= steps <= 100:
         raise H3BridgeError("Steps は 1〜100 で指定してください。")
     if request.acceleration.hybrid.enabled and request.acceleration.hybrid.switch_step > steps:
@@ -2591,10 +2602,13 @@ def cancel_generation(prompt_id: str, server_url: str) -> None:
 def list_history(runtime_root: Path | None, output_directory: Path, limit: int = 12) -> list[HistoryItem]:
     found: dict[Path, HistoryItem] = {}
     if output_directory.is_dir():
+        output_root = output_directory.resolve()
         for path in output_directory.glob("MiniMax_H3_*.mp4"):
             try:
                 resolved = path.resolve()
-                file_stat = path.stat()
+                if not resolved.is_relative_to(output_root) or not resolved.is_file():
+                    continue
+                file_stat = resolved.stat()
             except OSError:
                 continue
             found[resolved] = HistoryItem(
@@ -2606,11 +2620,14 @@ def list_history(runtime_root: Path | None, output_directory: Path, limit: int =
     if runtime_root is not None:
         runtime_output = runtime_root / "output" / "video"
         if runtime_output.is_dir():
+            runtime_output_root = runtime_output.resolve()
             for pattern in ("*MiniMax*H3*.mp4", "*minimax*h3*.mp4"):
                 for path in runtime_output.glob(pattern):
                     try:
                         resolved = path.resolve()
-                        file_stat = path.stat()
+                        if not resolved.is_relative_to(runtime_output_root) or not resolved.is_file():
+                            continue
+                        file_stat = resolved.stat()
                     except OSError:
                         continue
                     found.setdefault(
@@ -2736,8 +2753,8 @@ def load_history_request(
             aspect=metadata["aspect"],
             quality=metadata["quality"],
             duration_seconds=float(metadata["requested_seconds"]),
-            steps=int(metadata["steps"]),
-            seed=int(metadata["seed"]),
+            steps=_integer_setting(metadata["steps"], "Steps"),
+            seed=_integer_setting(metadata["seed"], "Seed"),
             scheduler=metadata["scheduler"],
             ref_image_size=metadata["ref_image_size"],
             acceleration=H3Acceleration.from_dict(metadata.get("acceleration")),
@@ -2853,7 +2870,7 @@ def cache_history_video(selected: str, items: Sequence[HistoryItem], output_dire
     try:
         output_directory.mkdir(parents=True, exist_ok=True)
         source_stat = selected_path.stat()
-        refresh = not target.exists()
+        refresh = target.is_symlink() or not target.exists()
         if not refresh:
             target_stat = target.stat()
             refresh = (

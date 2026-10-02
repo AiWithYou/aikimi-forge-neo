@@ -96,6 +96,7 @@ DEFAULT_WORKER_PATH = _ROOT / "tools" / "sensenova_u15_worker.py"
 _PROCESS_LOCK = threading.RLock()
 _ACTIVE_PROCESS: subprocess.Popen[str] | None = None
 _ACTIVE_JOB_ID: str | None = None
+_ACTIVE_JOB_COMMITTED = False
 _CANCELLED_JOB_IDS: set[str] = set()
 # Only populated when the generator has exited but its worker has not.
 _PENDING_CLEANUP: tuple[str, Path, Path] | None = None
@@ -827,7 +828,7 @@ def run_generation(
     log_directory: str | os.PathLike[str],
     worker_path: str | os.PathLike[str] = DEFAULT_WORKER_PATH,
 ) -> Iterator[dict[str, Any]]:
-    global _ACTIVE_JOB_ID, _ACTIVE_PROCESS, _PENDING_CLEANUP, _GPU_OWNERSHIP, _RESIDENT_WORKER
+    global _ACTIVE_JOB_ID, _ACTIVE_JOB_COMMITTED, _ACTIVE_PROCESS, _PENDING_CLEANUP, _GPU_OWNERSHIP, _RESIDENT_WORKER
 
     _finish_pending_cleanup()
     validate_request(request)
@@ -867,6 +868,7 @@ def run_generation(
                 "別のSenseNova生成が実行中です。完了またはキャンセルを待ってください。"
             )
         _ACTIVE_JOB_ID = job_id
+        _ACTIVE_JOB_COMMITTED = False
         _CANCELLED_JOB_IDS.discard(job_id)
 
     try:
@@ -923,8 +925,8 @@ def run_generation(
                 "TOKENIZERS_PARALLELISM": "false",
             }
         )
-        from modules_forge.resident_worker import ResidentWorker
         from modules_forge import gpu_residency
+        from modules_forge.resident_worker import ResidentWorker
 
         with _PROCESS_LOCK:
             if job_id in _CANCELLED_JOB_IDS:
@@ -932,9 +934,13 @@ def run_generation(
             if _RESIDENT_WORKER is None:
                 _RESIDENT_WORKER = ResidentWorker("sensenova", cache_root / "sessions")
             resident = _RESIDENT_WORKER
-            reused = resident.start(WORKER_PYTHON, worker, environment, payload, log_path)
-            process = resident.process
-            _ACTIVE_PROCESS = process
+            try:
+                reused = resident.start(WORKER_PYTHON, worker, environment, payload, log_path)
+            finally:
+                # Startup cleanup may fail while the worker is still running.
+                # Keep it tracked so finalization cannot return GPU ownership.
+                process = resident.process
+                _ACTIVE_PROCESS = process
         last_event = {"stage": "loading", "message": "SenseNova U1.5を読み込んでいます", "progress": 0.06}
         log_tail = []
         last_yield = time.monotonic()
@@ -991,8 +997,12 @@ def run_generation(
         ):
             raise SenseNovaBridgeError("worker出力が許可された保存先の外にあります。")
         metadata = _validate_worker_result(output_path, metadata_path, request)
-        success = True
-        gpu_residency.register("sensenova", resident.close, "sensenova")
+        with _PROCESS_LOCK:
+            if job_id in _CANCELLED_JOB_IDS:
+                raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
+            gpu_residency.register("sensenova", resident.close, "sensenova")
+            _ACTIVE_JOB_COMMITTED = True
+            success = True
         yield {
             "stage": "complete",
             "message": "生成が完了しました",
@@ -1013,6 +1023,7 @@ def run_generation(
                 if stopped:
                     if _ACTIVE_JOB_ID == job_id:
                         _ACTIVE_JOB_ID = None
+                        _ACTIVE_JOB_COMMITTED = False
                     if _ACTIVE_PROCESS is process:
                         _ACTIVE_PROCESS = None
                     _CANCELLED_JOB_IDS.discard(job_id)
@@ -1041,6 +1052,8 @@ def cancel_generation(job_id: str | None = None) -> str:
         if active_job is None:
             return "実行中のSenseNova生成はありません。"
         if job_id and job_id != active_job:
+            return "指定された生成はすでに終了しています。"
+        if _ACTIVE_JOB_COMMITTED:
             return "指定された生成はすでに終了しています。"
         _CANCELLED_JOB_IDS.add(active_job)
         if process is None or process.poll() is not None:

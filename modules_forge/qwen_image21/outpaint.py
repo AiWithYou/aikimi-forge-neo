@@ -236,13 +236,10 @@ def stitch(source: Image.Image, generated: Image.Image, plan: Plan, feather: int
     mask = _feather_mask(plan, feather)
     crop = result.crop(plan.box)
     if mode == "RGBA":
-        # Premultiplication avoids dark halos at transparent boundaries.
-        blended = Image.composite(source.convert("RGBa"), crop.convert("RGBa"), mask).convert("RGBA")
-        # Premultiplication roundoff must not change protected original pixels.
-        exact = mask.point([255 if value == 255 else 0 for value in range(256)])
-        blended = Image.composite(source, blended, exact)
-        unchanged = mask.point([255 if value == 0 else 0 for value in range(256)])
-        blended = Image.composite(crop, blended, unchanged)
+        from .annotations import composite_preserving_outside
+
+        # Integer premultiplied blending keeps low-alpha colors and exact endpoints.
+        blended = composite_preserving_outside(crop, source, mask)
     else:
         blended = Image.composite(source, crop, mask)
     result.paste(blended, (plan.left, plan.top))

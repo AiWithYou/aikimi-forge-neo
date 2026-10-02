@@ -179,19 +179,15 @@ def weights_manual_cast(
 
 @contextlib.contextmanager
 def main_stream_worker(weight, bias, offload_stream: tuple[torch.Stream, torch.Tensor, torch.Tensor]):
-    yield
-    if offload_stream is None:
-        return
-    os, weight_a, bias_a = offload_stream
-    if os is None:
-        return
-    if weight_a is not None:
-        device = weight_a.device
-    elif bias_a is not None:
-        device = bias_a.device
-    else:
-        return
-    os.wait_stream(memory_management.current_stream(device))
+    try:
+        yield
+    finally:
+        if offload_stream is not None:
+            offload, weight_a, bias_a = offload_stream
+            if offload is not None:
+                device = weight_a.device if weight_a is not None else bias_a.device if bias_a is not None else None
+                if device is not None:
+                    offload.wait_stream(memory_management.current_stream(device))
 
 
 current_device: torch.device = None
@@ -681,58 +677,63 @@ class TiledOperations(ForgeOperations):
 def using_forge_operations(operations=None, device=None, dtype=None, manual_cast_enabled=False, bnb_dtype=None):
     global current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype
 
+    previous = current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype
     current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype = device, dtype, manual_cast_enabled, bnb_dtype
 
-    if isinstance(bnb_dtype, dict):
-        # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/ops.py#L950
-
-        _device = memory_management.get_torch_device()
-        _dtype = torch.bfloat16 if memory_management.should_use_bf16(_device) else torch.float32
-        fp8_compute = memory_management.supports_fp8_compute(_device)
-        nvfp4_compute = memory_management.supports_nvfp4_compute(_device)
-        mxfp8_compute = memory_management.supports_mxfp8_compute(_device)
-
-        disabled = set()
-        if not nvfp4_compute:
-            disabled.add("nvfp4")
-        if not mxfp8_compute:
-            disabled.add("mxfp8")
-        if not fp8_compute:
-            disabled.add("float8_e4m3fn")
-            disabled.add("float8_e5m2")
-
-        _full: bool = bnb_dtype.pop("TE", False)  # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/sd1_clip.py#L114
-        operations = mixed_precision_ops(quant_config=bnb_dtype, compute_dtype=_dtype, full_precision_mm=_full, disabled=disabled)
-
-    if operations is None:
-        if bnb_dtype in ["gguf"]:
-            operations = ForgeOperationsGGUF
-        elif bnb_dtype in ["nf4", "fp4"]:
-            assert memory_management.bnb_enabled(), 'Install the "bitsandbytes" package with --bnb'
-            operations = ForgeOperationsBNB4bits
-        elif bnb_dtype in ["vae"] and args.tiled_conv2d:
-            memory_management.logger.info(f"Using TiledOperations ({args.tiled_conv2d}) for VAE")
-            operations = TiledOperations
-        elif dtype is torch.float8_e4m3fn and args.fast_fp8 and memory_management.supports_fp8_compute(memory_management.get_torch_device()):
-            operations = ForgeOperationsFP8
-        else:
-            operations = ForgeOperations
-
-    if dynamic_args.ops is None:
-        dynamic_args.ops = str(operations.__name__)
-
-    op_names = ("Linear", "Conv1d", "Conv2d", "Conv3d", "GroupNorm", "LayerNorm", "RMSNorm", "Embedding")
-    backups = {op_name: getattr(torch.nn, op_name) for op_name in op_names}
-
     try:
-        for op_name in op_names:
-            setattr(torch.nn, op_name, getattr(operations, op_name))
+        if isinstance(bnb_dtype, dict):
+            # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/ops.py#L950
 
-        yield
+            _device = memory_management.get_torch_device()
+            _dtype = torch.bfloat16 if memory_management.should_use_bf16(_device) else torch.float32
+            fp8_compute = memory_management.supports_fp8_compute(_device)
+            nvfp4_compute = memory_management.supports_nvfp4_compute(_device)
+            mxfp8_compute = memory_management.supports_mxfp8_compute(_device)
 
+            disabled = set()
+            if not nvfp4_compute:
+                disabled.add("nvfp4")
+            if not mxfp8_compute:
+                disabled.add("mxfp8")
+            if not fp8_compute:
+                disabled.add("float8_e4m3fn")
+                disabled.add("float8_e5m2")
+
+            bnb_dtype = bnb_dtype.copy()
+            _full: bool = bnb_dtype.pop("TE", False)  # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/sd1_clip.py#L114
+            operations = mixed_precision_ops(quant_config=bnb_dtype, compute_dtype=_dtype, full_precision_mm=_full, disabled=disabled)
+
+        if operations is None:
+            if bnb_dtype in ["gguf"]:
+                operations = ForgeOperationsGGUF
+            elif bnb_dtype in ["nf4", "fp4"]:
+                assert memory_management.bnb_enabled(), 'Install the "bitsandbytes" package with --bnb'
+                operations = ForgeOperationsBNB4bits
+            elif bnb_dtype in ["vae"] and args.tiled_conv2d:
+                memory_management.logger.info(f"Using TiledOperations ({args.tiled_conv2d}) for VAE")
+                operations = TiledOperations
+            elif dtype is torch.float8_e4m3fn and args.fast_fp8 and memory_management.supports_fp8_compute(memory_management.get_torch_device()):
+                operations = ForgeOperationsFP8
+            else:
+                operations = ForgeOperations
+
+        if dynamic_args.ops is None:
+            dynamic_args.ops = str(operations.__name__)
+
+        op_names = ("Linear", "Conv1d", "Conv2d", "Conv3d", "GroupNorm", "LayerNorm", "RMSNorm", "Embedding")
+        backups = {op_name: getattr(torch.nn, op_name) for op_name in op_names}
+
+        try:
+            for op_name in op_names:
+                setattr(torch.nn, op_name, getattr(operations, op_name))
+
+            yield
+
+        finally:
+            for op_name in op_names:
+                setattr(torch.nn, op_name, backups[op_name])
     finally:
-        for op_name in op_names:
-            setattr(torch.nn, op_name, backups[op_name])
+        current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype = previous
 
 
 from functools import wraps

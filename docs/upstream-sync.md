@@ -1,5 +1,13 @@
 # Forge Neo更新の確認記録
 
+## 2026年10月3日
+
+`upstream/neo`の`97b26fb4`までを確認しました。一括同期の基準は`0d0cb72951b059c8ea17861ba86db8d0f6098c28`のままで、依存関係の更新と一括mergeは行っていません。
+
+Refinerの終了時にUNetが既に解放されている条件を再現し、[10月2日の修正](https://github.com/Haoming02/sd-webui-forge-classic/commit/4f0ee8ff1b63e7a4724f5df92e2746e1fe59b823)と照合して反映しました。W4A8保存時のgroup size保持も[10月1日の修正](https://github.com/Haoming02/sd-webui-forge-classic/commit/89903ecbe26cae4791f742f1881063602a4f957d)と比較し、不正なpacked shapeの拒否を追加しています。Embeddingのdtype指定と、checkpointの非Tensor metadata・prefix判定もCPUで確認しました。
+
+テキスト処理の一括書換えやGPUメモリ推定の変更は、今回のCPU再現から正否を判断できず採用していません。個別の不具合と新旧の検証は[バグ修正と更新情報](audits/2026-10-03-bugfix-and-knowledge.md)にまとめています。今回のGPU実生成・画質・VRAM比較は未実施です。
+
 ## 2026年9月22日
 
 `upstream/neo` の `c21fa928cc08f2662fbcaedf3389858e7cf4a16f` までを確認し、[ControlLLLiteとMultiDiffusionの併用対応（b469e221）](https://github.com/Haoming02/sd-webui-forge-classic/commit/b469e2214f182b7df07a6ba8fdb82824c62c007f)を選択的に取り込みました。対象3ファイルに後続の関連修正はありませんでした。一括マージと依存関係の変更は行っていません。

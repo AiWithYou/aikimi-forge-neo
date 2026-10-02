@@ -7,7 +7,7 @@ import unittest
 
 original_argv = sys.argv
 try:
-    sys.argv = [sys.argv[0]]
+    sys.argv = [sys.argv[0], "--cpu"]
     from modules import progress
 finally:
     sys.argv = original_argv

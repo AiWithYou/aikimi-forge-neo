@@ -23,6 +23,7 @@ from modules_forge.minimax_h3_bridge import (
     H3BridgeError,
     H3GenerationCancelled,
     H3Request,
+    _integer_setting,
     append_prompt_section,
     cache_history_video,
     cancel_generation,
@@ -686,7 +687,7 @@ def _restore_history_settings(selected: str, runtime_value: str, include_acceler
          else gr.update(value=restored_request.quality)),
         gr.update(value=restored_request.duration_seconds),
         gr.update(value=restored_request.steps),
-        gr.update(value=restored_request.seed),
+        gr.update(value=str(restored_request.seed)),
         gr.update(value=restored_request.scheduler),
         mode_updates[3],
         mode_updates[4],
@@ -724,14 +725,8 @@ def _request_from_ui(
             raise ValueError("non-finite duration")
     except (TypeError, ValueError, OverflowError) as exc:
         raise H3BridgeError("長さは秒数で指定してください。") from exc
-    try:
-        steps_value = int(steps)
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise H3BridgeError("Steps は整数で指定してください。") from exc
-    try:
-        seed_value = int(seed)
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise H3BridgeError("Seed は整数で指定してください。") from exc
+    steps_value = _integer_setting(steps, "Steps")
+    seed_value = _integer_setting(seed, "Seed")
     return H3Request(
         mode=str(mode),
         prompt=str(prompt or ""),
@@ -1302,9 +1297,8 @@ def _build_ui():
                                     interactive=False,
                                     elem_id="h3-steps",
                                 )
-                                seed = gr.Number(
-                                    value=-1,
-                                    precision=0,
+                                seed = gr.Textbox(
+                                    value="-1",
                                     label="Seed（-1 = ランダム）",
                                     interactive=False,
                                     elem_id="h3-seed",

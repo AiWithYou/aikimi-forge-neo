@@ -541,11 +541,13 @@ def _configure_yaml(base: str, config: str | list, arg: str):
     if config is None:
         return
     if isinstance(config, str):
-        config = [config]
+        config = config.splitlines()
 
     assert isinstance(config, list)
 
     for folder in config:
+        if not folder:
+            continue
         path = os.path.abspath(os.path.normpath(os.path.join(base, folder)))
         if os.path.isdir(path):
             sys.argv.extend([arg, str(path)])
@@ -559,8 +561,12 @@ def configure_comfy_yaml(comfy_yaml: Path):
     with open(comfy_yaml, "r", encoding="utf-8") as file:
         configs: dict[str, dict[str, os.PathLike]] = yaml.safe_load(file)
 
+    yaml_directory = Path(comfy_yaml).absolute().parent
     for config in configs.values():
-        base = config.get("base_path", "")
+        if config is None:
+            continue
+        base = os.path.expandvars(os.path.expanduser(config.get("base_path", "")))
+        base = os.path.abspath(os.path.join(yaml_directory, base))
         _configure_yaml(base, config.get("checkpoints", None), "--ckpt-dirs")
         _configure_yaml(base, config.get("diffusion_models", None), "--ckpt-dirs")
         _configure_yaml(base, config.get("unet", None), "--ckpt-dirs")

@@ -107,7 +107,8 @@ def resolve(runtime: Path, model: str, components: str, precision: str) -> dict:
         raise ValueError("共通部品にはQwen Image 2.1のDiffusersフォルダーを指定してください。")
     for name in ("text_encoder", "vae"):
         read_json(base / name / "config.json")
-        weight_files(base / name)
+        for weights in weight_files(base / name):
+            local_assets.read_header(weights)
     if read_json(base / "text_encoder/config.json").get("model_type") != "qwen3_vl":
         raise ValueError("Qwen 2.1のテキストエンコーダーではありません。")
     if read_json(base / "vae/config.json").get("_class_name") != "AutoencoderKLQwenImage21":

@@ -1,4 +1,5 @@
 """Own a worker and GPU lease independently of a browser's connection lifetime."""
+
 from __future__ import annotations
 
 import atexit
@@ -12,7 +13,16 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .core import Request, YuE2Error, atomic_json, inside, read_json, runtime_manifest, runtime_lock, safe_environment
+from .core import (
+    Request,
+    YuE2Error,
+    atomic_json,
+    inside,
+    read_json,
+    runtime_lock,
+    runtime_manifest,
+    safe_environment,
+)
 
 MAX_FINISHED_JOBS = 64
 
@@ -180,12 +190,17 @@ class Studio:
             if self._resident is None:
                 self._resident = ResidentWorker("yue2", self.runtime / "sessions")
             resident = self._resident
-            reused = resident.start(python, Path(__file__).with_name("worker.py"), safe_environment(),
-                                    {"runtime": str(self.runtime.resolve()), "job": str(job.directory.resolve())},
-                                    job.directory / "worker.log")
+            try:
+                reused = resident.start(
+                    python, Path(__file__).with_name("worker.py"), safe_environment(),
+                    {"runtime": str(self.runtime.resolve()), "job": str(job.directory.resolve())},
+                    job.directory / "worker.log",
+                )
+            finally:
+                # Preserve ownership even when startup or its cleanup fails.
+                with job.guard:
+                    job.process, job.tree = resident.process, resident.tree
             atomic_json(job.directory / "worker-session.json", {"reused": reused, "pid": resident.process.pid})
-            with job.guard:
-                job.process, job.tree = resident.process, resident.tree
             cancelled_at = None
             while True:
                 result = resident.result()
@@ -267,13 +282,19 @@ class Studio:
         entries = []
         if not self.outputs.exists():
             return entries
-        for directory in sorted(self.outputs.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-            if not re_job(directory.name) or directory.is_symlink() or not directory.is_dir():
+        directories = []
+        for directory in self.outputs.iterdir():
+            try:
+                if not re_job(directory.name) or directory.is_symlink() or not directory.is_dir():
+                    continue
+                directories.append((directory.stat().st_mtime, directory))
+            except OSError:
                 continue
+        for _modified, directory in sorted(directories, key=lambda item: item[0], reverse=True):
             for item in sorted(directory.glob("take-*")):
                 try:
                     item = inside(self.outputs, item)
-                    meta = read_json(item / "studio-result.json")
+                    meta = read_json(inside(self.outputs, item / "studio-result.json"))
                     if meta.get("state") != "complete":
                         continue
                     title = str(meta.get("title") or "無題")[:160]

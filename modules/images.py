@@ -9,6 +9,7 @@ import math
 import os
 import re
 import string
+import struct
 import time
 from collections import namedtuple
 
@@ -81,8 +82,8 @@ def split_grid(image: Image.Image, tile_w: int = 512, tile_h: int = 512, overlap
     non_overlap_width = tile_w - overlap
     non_overlap_height = tile_h - overlap
 
-    cols = math.ceil((w - overlap) / non_overlap_width)
-    rows = math.ceil((h - overlap) / non_overlap_height)
+    cols = max(1, math.ceil((w - overlap) / non_overlap_width))
+    rows = max(1, math.ceil((h - overlap) / non_overlap_height))
 
     dx = (w - tile_w) / (cols - 1) if cols > 1 else 0
     dy = (h - tile_h) / (rows - 1) if rows > 1 else 0
@@ -124,15 +125,15 @@ def combine_grid(grid):
     for y, h, row in grid.tiles:
         combined_row = Image.new("RGB", (grid.image_w, h))
         for x, w, tile in row:
-            if x == 0:
-                combined_row.paste(tile, (0, 0))
+            if x <= 0:
+                combined_row.paste(tile, (x, 0))
                 continue
 
             combined_row.paste(tile.crop((0, 0, grid.overlap, h)), (x, 0), mask=mask_w)
             combined_row.paste(tile.crop((grid.overlap, 0, w, h)), (x + grid.overlap, 0))
 
-        if y == 0:
-            combined_image.paste(combined_row, (0, 0))
+        if y <= 0:
+            combined_image.paste(combined_row, (0, y))
             continue
 
         combined_image.paste(combined_row.crop((0, 0, combined_row.width, grid.overlap)), (0, y), mask=mask_h)
@@ -581,7 +582,7 @@ def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_p
     if extension is None:
         extension = os.path.splitext(filename)[1]
 
-    image_format = Image.registered_extensions()[extension]
+    image_format = Image.registered_extensions()[extension.lower()]
 
     if extension.lower() == ".png":
         existing_pnginfo = existing_pnginfo or {}
@@ -596,7 +597,7 @@ def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_p
         image.save(filename, format=image_format, quality=opts.jpeg_quality, pnginfo=pnginfo_data)
 
     elif extension.lower() in (".jpg", ".jpeg", ".webp"):
-        if image.mode == "RGBA":
+        if image.mode in ("RGBA", "LA", "P") and extension.lower() != ".webp":
             image = image.convert("RGB")
         elif image.mode == "I;16":
             image = image.point(lambda p: p * 0.0038910505836576).convert("RGB" if extension.lower() == ".webp" else "L")
@@ -610,7 +611,7 @@ def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_p
                 }
             )
 
-            piexif.insert(exif_bytes, filename)
+            piexif.insert(exif_bytes, os.fspath(filename))
     elif extension.lower() in (".avif", ".jxl"):
         if opts.enable_pnginfo and geninfo is not None:
             exif_bytes = piexif.dump(
@@ -812,14 +813,17 @@ def read_info_from_image(image: Image.Image) -> tuple[str | None, dict]:
             exif_data = items["exif"]
             try:
                 exif = piexif.load(exif_data)
-            except OSError:
-                # memory / exif was not valid so piexif tried to read from a file
+            except (OSError, ValueError, TypeError, struct.error):
+                # Invalid optional EXIF must not hide usable PNG parameters.
                 exif = None
             exif_comment = (exif or {}).get("Exif", {}).get(piexif.ExifIFD.UserComment, b"")
+            # Pillow can serialize UserComment as BYTE, which piexif returns as a tuple.
+            if isinstance(exif_comment, tuple) and all(type(value) is int and 0 <= value <= 255 for value in exif_comment):
+                exif_comment = bytes(exif_comment)
             try:
                 exif_comment = piexif.helper.UserComment.load(exif_comment)
-            except ValueError:
-                exif_comment = exif_comment.decode("utf8", errors="ignore")
+            except (ValueError, TypeError):
+                exif_comment = exif_comment.decode("utf8", errors="ignore") if isinstance(exif_comment, bytes) else ""
 
             if exif_comment:
                 geninfo = exif_comment

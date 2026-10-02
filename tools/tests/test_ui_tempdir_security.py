@@ -50,6 +50,27 @@ class ManagedTempCleanupTests(unittest.TestCase):
 
             self.assertTrue(protected.is_file())
 
+    def test_cleanup_unlinks_managed_file_symlink_without_deleting_its_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            protected = root / "photo.png"
+            protected.write_bytes(b"keep")
+            link = root / f"{ui_tempdir.MANAGED_TEMP_PREFIX}linked.png"
+            try:
+                link.symlink_to(protected)
+            except OSError:
+                self.skipTest("file symlinks require additional privileges on this Windows host")
+
+            with mock.patch.object(
+                ui_tempdir,
+                "shared",
+                SimpleNamespace(opts=SimpleNamespace(temp_dir=str(root)), demo=None),
+            ):
+                ui_tempdir.cleanup_tmpdr()
+
+            self.assertEqual(protected.read_bytes(), b"keep")
+            self.assertFalse(link.is_symlink())
+
 
 if __name__ == "__main__":
     unittest.main()

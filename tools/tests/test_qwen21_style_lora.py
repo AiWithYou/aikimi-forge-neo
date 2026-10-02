@@ -1,5 +1,6 @@
 """LoRA compatibility boundaries, residual math, and multiple adapter contracts."""
 
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,9 +16,12 @@ from modules_forge.qwen_image21.style_lora_runtime import load_adapters
 
 class StyleLoraTests(unittest.TestCase):
     def setUp(self):
+        from tools.tests.test_qwen_image21_service import isolate_local_assets
+
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        isolate_local_assets(self, self.root)
         (self.root / "loras").mkdir()
         self.path = self.root / "loras/test.safetensors"
         self.prefix = "lora_unet_transformer_blocks__0__attn__to_q"
@@ -171,6 +175,31 @@ class StyleLoraTests(unittest.TestCase):
                 ui.lora_settings([self.path.name], [[self.path.name, "bad"]])
             with self.assertRaisesRegex(ValueError, "更新"):
                 ui.lora_settings([self.path.name], [])
+
+    def test_reopening_settings_preserves_base_mismatch_opt_in(self):
+        from tools.tests.test_qwen_image21_service import load_ui
+
+        ui = load_ui()
+        self.write({"qwen_base_forward": "convrot_int8_bf16_backward_v1"})
+        names, rows = [self.path.name], [[self.path.name, 0.65]]
+        with patch.object(ui, "RUNTIME", self.root):
+            demo = ui.on_ui_tabs()[0][0]
+            self.addCleanup(demo.close)
+            config = demo.get_config_file()
+            section = next(
+                item["id"] for item in config["components"] if item["props"].get("elem_id") == "qwen21-lora-section"
+            )
+            expand = next(
+                item
+                for item in config["dependencies"]
+                if any(target[0] == section and target[1] == "expand" for target in item["targets"])
+            )
+            self.assertEqual(len(expand["inputs"]), 3)
+            reopened = asyncio.run(demo.call_function(expand["id"], [names, rows, True]))["prediction"]
+            self.assertTrue(reopened[2]["value"])
+            self.assertEqual(reopened[0]["value"], rows)
+            selection_changed = ui.lora_selection(names, rows)
+            self.assertFalse(selection_changed[2]["value"])
 
 
 if __name__ == "__main__":

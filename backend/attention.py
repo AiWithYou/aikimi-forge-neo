@@ -4,7 +4,6 @@ import logging
 import math
 
 import torch
-from einops import rearrange, repeat
 from torch import einsum
 
 from backend import memory_management, operations
@@ -146,7 +145,6 @@ def attention_basic(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
 
     scale = kwargs.get("scale", dim_head**-0.5)
 
-    h = heads
     if skip_reshape:
         if kwargs.get("enable_gqa", False):
             k, v = operations.repeat_kv_for_gqa(k, v, q.shape[-3], -3)
@@ -167,10 +165,16 @@ def attention_basic(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
 
     if exists(mask):
         if mask.dtype == torch.bool:
-            mask = rearrange(mask, "b ... -> b (...)")
-            max_neg_value = -torch.finfo(sim.dtype).max
-            mask = repeat(mask, "b j -> (b h) () j", h=h)
-            sim.masked_fill_(~mask, max_neg_value)
+            if mask.ndim == 2:
+                if mask.shape[0] == b:
+                    # Preserve the existing [batch, key] padding-mask form.
+                    mask = mask[:, None, None, :]
+                else:
+                    mask = mask[None, None, :, :]
+            elif mask.ndim == 3:
+                mask = mask.unsqueeze(1)
+            mask = mask.expand(b, heads, sim.shape[-2], sim.shape[-1]).reshape(sim.shape)
+            sim.masked_fill_(~mask, float("-inf"))
         else:
             if len(mask.shape) == 2:
                 bs = 1
@@ -179,7 +183,10 @@ def attention_basic(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
             mask = mask.reshape(bs, -1, mask.shape[-2], mask.shape[-1]).expand(b, heads, -1, -1).reshape(-1, mask.shape[-2], mask.shape[-1])
             sim.add_(mask)
 
-    sim = sim.softmax(dim=-1)
+        fully_masked = torch.isneginf(sim).all(dim=-1, keepdim=True)
+        sim = sim.masked_fill(fully_masked, 0).softmax(dim=-1).masked_fill(fully_masked, 0)
+    else:
+        sim = sim.softmax(dim=-1)
 
     out = einsum("b i j, b j d -> b i d", sim.to(v.dtype), v)
 
@@ -197,7 +204,9 @@ def attention_xformers(q, k, v, heads, mask=None, attn_precision=None, skip_resh
     dim_head = q.shape[-1]
 
     if torch.jit.is_tracing() or torch.jit.is_scripting():
-        return attention_pytorch(q, k, v, heads, mask, skip_reshape=skip_reshape, **kwargs)
+        return attention_pytorch(
+            q, k, v, heads, mask, skip_reshape=skip_reshape, skip_output_reshape=skip_output_reshape, **kwargs
+        )
 
     if skip_reshape:
         q, k, v = map(
@@ -216,6 +225,8 @@ def attention_xformers(q, k, v, heads, mask=None, attn_precision=None, skip_resh
             mask = mask.unsqueeze(0)
         if mask.ndim == 3:
             mask = mask.unsqueeze(1)
+        if mask.dtype == torch.bool:
+            mask = torch.zeros_like(mask, dtype=q.dtype).masked_fill_(~mask, float("-inf"))
         pad = 8 - mask.shape[-1] % 8
         mask_out = torch.empty([mask.shape[0], mask.shape[1], q.shape[1], mask.shape[-1] + pad], dtype=q.dtype, device=q.device)
         mask_out[..., : mask.shape[-1]] = mask
@@ -233,12 +244,10 @@ def attention_xformers(q, k, v, heads, mask=None, attn_precision=None, skip_resh
         _fallback = True
 
     if _fallback:
-        if not skip_reshape:
-            q, k, v = map(
-                lambda t: t.transpose(1, 2),
-                (q, k, v),
-            )
-        return attention_pytorch(q, k, v, heads, mask=mask, skip_reshape=True, **kwargs)
+        q, k, v = map(lambda t: t.transpose(1, 2), (q, k, v))
+        return attention_pytorch(
+            q, k, v, heads, mask=mask, skip_reshape=True, skip_output_reshape=skip_output_reshape, **kwargs
+        )
 
     if skip_output_reshape:
         out = out.permute(0, 2, 1, 3)
@@ -271,14 +280,26 @@ def attention_pytorch(q, k, v, heads, mask=None, attn_precision=None, skip_resha
         if not skip_output_reshape:
             out = out.transpose(1, 2).reshape(b, -1, heads * dim_head)
     else:
-        out = torch.empty((b, q.shape[2], heads * dim_head), dtype=q.dtype, layout=q.layout, device=q.device)
+        output_shape = (b, heads, q.shape[2], dim_head) if skip_output_reshape else (b, q.shape[2], heads * dim_head)
+        out = torch.empty(output_shape, dtype=q.dtype, layout=q.layout, device=q.device)
         for i in range(0, b, SDP_BATCH_LIMIT):
             m = mask
             if mask is not None:
                 if mask.shape[0] > 1:
                     m = mask[i : i + SDP_BATCH_LIMIT]
 
-            out[i : i + SDP_BATCH_LIMIT] = operations.scaled_dot_product_attention(q[i : i + SDP_BATCH_LIMIT], k[i : i + SDP_BATCH_LIMIT], v[i : i + SDP_BATCH_LIMIT], attn_mask=m, dropout_p=0.0, is_causal=False, **sdpa_extra).transpose(1, 2).reshape(-1, q.shape[2], heads * dim_head)
+            chunk = operations.scaled_dot_product_attention(
+                q[i : i + SDP_BATCH_LIMIT],
+                k[i : i + SDP_BATCH_LIMIT],
+                v[i : i + SDP_BATCH_LIMIT],
+                attn_mask=m,
+                dropout_p=0.0,
+                is_causal=False,
+                **sdpa_extra,
+            )
+            if not skip_output_reshape:
+                chunk = chunk.transpose(1, 2).reshape(-1, q.shape[2], heads * dim_head)
+            out[i : i + SDP_BATCH_LIMIT] = chunk
 
     return out
 
@@ -431,7 +452,7 @@ def slice_attention_vae(q, k, v):
 
     while True:
         try:
-            slice_size = q.shape[1] // steps if (q.shape[1] % steps) == 0 else q.shape[1]
+            slice_size = max(1, math.ceil(q.shape[1] / steps))
             for i in range(0, q.shape[1], slice_size):
                 end = i + slice_size
                 s1 = torch.bmm(q[:, i:end], k) * scale

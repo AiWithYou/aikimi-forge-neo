@@ -1,3 +1,4 @@
+import html
 import json
 import math
 import os
@@ -8,8 +9,9 @@ from modules import errors
 from modules.ui_components import InputAccordionImpl, ToolButton
 
 
-def radio_choices(comp):  # gradio 3.41 changes choices from list of values to list of pairs
-    return [x[0] if isinstance(x, tuple) else x for x in getattr(comp, "choices", [])]
+def radio_choices(comp):
+    # Gradio stores choices as (display label, underlying value) pairs.
+    return [x[1] if isinstance(x, (tuple, list)) else x for x in getattr(comp, "choices", [])]
 
 
 class UiLoadsave:
@@ -185,18 +187,18 @@ class UiLoadsave:
             old_value = current_ui_settings.get(path)
 
             choices = radio_choices(component)
-            if isinstance(new_value, int) and choices:
-                if new_value >= len(choices):
+            if getattr(component, "type", None) == "index" and choices:
+                indices = new_value if getattr(component, "multiselect", False) else [new_value]
+                if isinstance(indices, list) and all(type(index) is int and 0 <= index < len(choices) for index in indices):
+                    selections = [choices[index] for index in indices]
+                    new_value = selections if getattr(component, "multiselect", False) else selections[0]
+                elif new_value is not None:
                     continue
-
-                new_value = choices[new_value]
-                if isinstance(new_value, tuple):
-                    new_value = new_value[0]
 
             if new_value == old_value:
                 continue
 
-            if old_value is None and new_value == "" or new_value == []:
+            if old_value is None and new_value in ("", []):
                 continue
 
             yield path, old_value, new_value
@@ -207,13 +209,17 @@ class UiLoadsave:
         for path, old_value, new_value in self.iter_changes(self.read_from_file(), values):
             if old_value is None:
                 old_value = "<span class='ui-defaults-none'>None</span>"
+            else:
+                old_value = html.escape(str(old_value))
 
-            text.append(f"<tr><td>{path}</td><td>{old_value}</td><td>{new_value}</td></tr>")
+            text.append(
+                f"<tr><td>{html.escape(path)}</td><td>{old_value}</td><td>{html.escape(str(new_value))}</td></tr>"
+            )
 
         if len(text) == 1:
             text.append("<tr><td colspan=3>No changes</td></tr>")
 
-        text.append("</tbody>")
+        text.append("</tbody></table>")
         return "".join(text)
 
     def ui_apply(self, *values):

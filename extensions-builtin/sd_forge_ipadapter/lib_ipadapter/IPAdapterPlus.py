@@ -1,6 +1,7 @@
 # https://github.com/cubiq/ComfyUI_IPAdapter_plus/blob/main/IPAdapterPlus.py from some early version
 # Then maintained by Forge to add InstanceID and many other things
 
+import copy
 import math
 import os.path
 
@@ -146,12 +147,18 @@ def set_model_patch_replace(model, patch_kwargs, key):
         patch = CrossAttentionPatch(**patch_kwargs)
         to["patches_replace"]["attn2"][key] = patch
     else:
-        to["patches_replace"]["attn2"][key].set_new_condition(**patch_kwargs)
+        patch = copy.copy(to["patches_replace"]["attn2"][key])
+        for name, value in vars(patch).items():
+            if isinstance(value, list):
+                setattr(patch, name, value.copy())
+        patch.set_new_condition(**patch_kwargs)
+        to["patches_replace"]["attn2"][key] = patch
 
 
+@torch.random.fork_rng(devices=[])
 def image_add_noise(image, noise):
     image = image.permute([0, 3, 1, 2])
-    torch.manual_seed(0)  # use a fixed random for reproducible results
+    torch.random.default_generator.manual_seed(0)  # use a fixed random for reproducible results
     transforms = TT.Compose(
         [
             TT.CenterCrop(min(image.shape[2], image.shape[3])),

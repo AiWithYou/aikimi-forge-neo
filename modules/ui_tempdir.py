@@ -112,9 +112,9 @@ def cleanup_tmpdr():
             if not name.startswith(MANAGED_TEMP_PREFIX):
                 continue
 
-            filename = (Path(root) / name).resolve(strict=False)
+            filename = Path(root) / name
             try:
-                filename.relative_to(managed_root)
+                filename.resolve(strict=False).relative_to(managed_root)
             except ValueError:
                 continue
             for attempt in range(3):

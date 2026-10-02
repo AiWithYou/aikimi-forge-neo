@@ -126,7 +126,7 @@ class ImageRNG:
         self.is_first = True
 
     def first(self):
-        noise_shape = self.shape if self.seed_resize_from_h <= 0 or self.seed_resize_from_w <= 0 else (self.shape[0], int(self.seed_resize_from_h) // 8, int(self.seed_resize_from_w // 8))
+        noise_shape = self.shape if self.seed_resize_from_h <= 0 or self.seed_resize_from_w <= 0 else (*self.shape[:-2], int(self.seed_resize_from_h) // 8, int(self.seed_resize_from_w // 8))
 
         xs = []
 
@@ -146,16 +146,16 @@ class ImageRNG:
 
             if noise_shape != self.shape:
                 x = randn(seed, self.shape, generator=generator)
-                dx = (self.shape[2] - noise_shape[2]) // 2
-                dy = (self.shape[1] - noise_shape[1]) // 2
-                w = noise_shape[2] if dx >= 0 else noise_shape[2] + 2 * dx
-                h = noise_shape[1] if dy >= 0 else noise_shape[1] + 2 * dy
+                dx = (self.shape[-1] - noise_shape[-1]) // 2
+                dy = (self.shape[-2] - noise_shape[-2]) // 2
+                w = min(self.shape[-1], noise_shape[-1])
+                h = min(self.shape[-2], noise_shape[-2])
                 tx = 0 if dx < 0 else dx
                 ty = 0 if dy < 0 else dy
                 dx = max(-dx, 0)
                 dy = max(-dy, 0)
 
-                x[:, ty : ty + h, tx : tx + w] = noise[:, dy : dy + h, dx : dx + w]
+                x[..., ty : ty + h, tx : tx + w] = noise[..., dy : dy + h, dx : dx + w]
                 noise = x
 
             xs.append(noise)

@@ -370,9 +370,12 @@ def _ming_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     except (OSError, ValueError):
         ready = False
     return DiagnosticCheck(
-        "ming_image", "Ming Image", CheckState.READY if ready else CheckState.BLOCKED,
+        "ming_image",
+        "Ming Image",
+        CheckState.READY if ready else CheckState.BLOCKED,
         "Ming専用環境とINT8・W4A8モデルを確認しました。" if ready else "Ming専用環境またはモデルが不足しています。",
-        "Ming Imageタブの「実行環境とモデル」から準備できます。", available=ready,
+        "Ming Imageタブの「実行環境とモデル」から準備できます。",
+        available=ready,
     )
 
 

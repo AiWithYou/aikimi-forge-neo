@@ -5,6 +5,7 @@
 
 import collections
 import math
+from functools import partial
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -39,6 +40,8 @@ def get_area_and_mult(conds, x_in, timestep_in):
         strength = conds["strength"]
 
     input_x = x_in[:, :, area[2] : area[0] + area[2], area[3] : area[1] + area[3]]
+    if isinstance(strength, torch.Tensor) and strength.ndim == 1:
+        strength = strength.to(input_x).reshape((-1,) + (1,) * (input_x.ndim - 1))
 
     if "mask" in conds:
         mask_strength = 1.0
@@ -153,9 +156,11 @@ def compute_cond_indices(cond_or_uncond, sigmas):
     return cond_indices, uncond_indices
 
 
-def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options):
+def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options, *, zero_sum_rows=None):
     out_cond = torch.zeros_like(x_in)
     out_count = torch.ones_like(x_in) * 1e-37
+    if zero_sum_rows is not None:
+        out_count = torch.where(zero_sum_rows, 0.0, out_count)
 
     out_uncond = torch.zeros_like(x_in)
     out_uncond_count = torch.ones_like(x_in) * 1e-37
@@ -282,9 +287,17 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options):
                 out_uncond_count[:, :, area[o][2] : area[o][0] + area[o][2], area[o][3] : area[o][1] + area[o][3]] += mult[o]
         del mult
 
-    out_cond /= out_count
+    if zero_sum_rows is None:
+        out_cond /= out_count
+        out_uncond /= out_uncond_count
+    else:
+        out_uncond /= torch.where(out_uncond_count != 0, out_uncond_count, 1.0)
+        # A zero-sum average is undefined; preserve its local weighted CFG
+        # contrast, including masks and context windows, as an effective cond.
+        effective_zero_sum = out_uncond + (out_cond - out_uncond * out_count)
+        out_cond /= torch.where(out_count != 0, out_count, 1.0)
+        out_cond = torch.where(zero_sum_rows, effective_zero_sum, out_cond)
     del out_count
-    out_uncond /= out_uncond_count
     del out_uncond_count
     return out_cond, out_uncond
 
@@ -292,22 +305,51 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options):
 def sampling_function_inner(model, x, timestep, uncond, cond, cond_scale, model_options={}, seed=None, return_full=False):
     edit_strength = sum((item["strength"] if "strength" in item else 1) for item in cond)
 
-    if math.isclose(cond_scale, 1.0) and model_options.get("disable_cfg1_optimization", False) == False:
-        uncond_ = None
-    else:
-        uncond_ = uncond
+    cfg1_optimization = math.isclose(cond_scale, 1.0) and not model_options.get("disable_cfg1_optimization", False)
+    if cfg1_optimization:
+        if isinstance(edit_strength, torch.Tensor):
+            cfg1_optimization = bool(torch.all(edit_strength == 1.0))
+        else:
+            cfg1_optimization = math.isclose(edit_strength, 1.0)
+    uncond_ = None if cfg1_optimization else uncond
 
     for fn in model_options.get("sampler_pre_cfg_function", []):
         model, cond, uncond_, x, timestep, model_options = fn(model, cond, uncond_, x, timestep, model_options)
 
+    # Decimal weights can cancel up to the precision used by their multipliers.
+    # Compare against their magnitude so a small uncancelled weight stays normal.
+    weight_magnitude = sum(abs(item.get("strength", 1)) for item in cond)
+    weight_epsilon = torch.finfo(x.dtype).eps
+    zero_sum_rows = None
+    if isinstance(edit_strength, torch.Tensor):
+        if edit_strength.is_floating_point():
+            weight_epsilon = max(weight_epsilon, torch.finfo(edit_strength.dtype).eps)
+        cancelled = torch.isfinite(edit_strength) & (edit_strength.abs() <= weight_magnitude * weight_epsilon)
+        if bool(torch.any(cancelled)):
+            zero_sum_rows = cancelled.to(device=x.device).reshape((-1,) + (1,) * (x.ndim - 1))
+    elif math.isclose(edit_strength, 0.0, rel_tol=0.0, abs_tol=weight_magnitude * weight_epsilon):
+        zero_sum_rows = torch.tensor(True, device=x.device)
+    calc_cond_batch = calc_cond_uncond_batch
+    if zero_sum_rows is not None:
+        calc_cond_batch = partial(calc_cond_batch, zero_sum_rows=zero_sum_rows)
+
     if getattr(dynamic_args.context_handler, "should_use_context", lambda *args: False)(x):
-        cond_pred, uncond_pred = dynamic_args.context_handler.execute(calc_cond_uncond_batch, model, [cond, uncond_], x, timestep, model_options)
+        cond_pred, uncond_pred = dynamic_args.context_handler.execute(calc_cond_batch, model, [cond, uncond_], x, timestep, model_options)
     else:
-        cond_pred, uncond_pred = calc_cond_uncond_batch(model, cond, uncond_, x, timestep, model_options)
+        cond_pred, uncond_pred = calc_cond_batch(model, cond, uncond_, x, timestep, model_options)
+
+    if zero_sum_rows is not None:
+        if isinstance(edit_strength, torch.Tensor):
+            edit_strength = torch.where(zero_sum_rows.reshape(-1).to(device=edit_strength.device), 1.0, edit_strength)
+        else:
+            edit_strength = 1.0
 
     if "sampler_cfg_function" in model_options:
         args = {"cond": x - cond_pred, "uncond": x - uncond_pred, "cond_scale": cond_scale, "timestep": timestep, "input": x, "sigma": timestep, "cond_denoised": cond_pred, "uncond_denoised": uncond_pred, "model": model, "model_options": model_options}
         cfg_result = x - model_options["sampler_cfg_function"](args)
+    elif isinstance(edit_strength, torch.Tensor):
+        edit_strength = edit_strength.to(x).reshape((-1,) + (1,) * (x.ndim - 1))
+        cfg_result = uncond_pred + (cond_pred - uncond_pred) * cond_scale * edit_strength
     elif not math.isclose(edit_strength, 1.0):
         cfg_result = uncond_pred + (cond_pred - uncond_pred) * cond_scale * edit_strength
     else:
@@ -368,7 +410,7 @@ def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor):
 
     unet_inference_memory = unet.memory_required(mem_shape)
     additional_inference_memory = unet.extra_preserved_memory_during_sampling
-    additional_model_patchers = unet.extra_model_patchers_during_sampling
+    additional_model_patchers = unet.extra_model_patchers_during_sampling.copy()
 
     if unet.controlnet_linked_list is not None:
         additional_inference_memory += unet.controlnet_linked_list.inference_memory_requirements(unet.model_dtype())

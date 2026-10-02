@@ -91,12 +91,14 @@ def refresh_vae_list():
 
 
 def reload_vae_weights(vae: str) -> bool:
+    global loaded_vae_file
     if vae in (None, "None"):
         return False
 
     store_base_vae(shared.sd_model)
     vae_sd = utils.load_torch_file(vae)
     _load_vae_dict(shared.sd_model, vae_sd)
+    loaded_vae_file = vae
     return True
 
 

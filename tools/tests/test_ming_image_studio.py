@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 
 from PIL import Image
 
+from modules_forge import local_assets
 from modules_forge import ming_image_studio as studio
 from tools import quantize_ming_image, setup_ming_image
 
@@ -29,6 +30,11 @@ def load_ui():
 
 
 class MingImageContracts(unittest.TestCase):
+    def setUp(self):
+        root = Path(self.enterContext(TemporaryDirectory(prefix="ming-test-assets-")))
+        self.enterContext(patch.object(local_assets, "LIBRARY", root / "library.json"))
+        self.enterContext(patch.object(local_assets, "HASH_CACHE", root / "hashes.json"))
+
     def test_quantization_and_upstream_pins(self):
         manifest = setup_ming_image.manifest()
         self.assertEqual(manifest["repository"], "Comfy-Org/Ming-Image")
@@ -201,7 +207,9 @@ class MingImageContracts(unittest.TestCase):
             output = setup_ming_image.ProgressOutput(kwargs["progress"])
             output.write("ming-image-" + studio.ENCODER + ": 1.00 GiB")
             output.write(" / 11.93 GiB\n")
-            output.write("ming-image-" + studio.W4A8_MODEL.replace(".safetensors", ".json") + ": verified and installed\n")
+            output.write(
+                "ming-image-" + studio.W4A8_MODEL.replace(".safetensors", ".json") + ": verified and installed\n"
+            )
             return {"ok": True}
 
         bridge = Mock()

@@ -90,17 +90,25 @@ class T5TextProcessingEngine:
         zs = []
         cache = {}
 
+        batch_chunks = {}
+        max_tokens = 0
+        max_chunks = 0
+        for line in texts:
+            if line not in batch_chunks:
+                chunks, _ = self.tokenize_line(line)
+                batch_chunks[line] = chunks
+                max_tokens = max(max_tokens, *(len(chunk.tokens) for chunk in chunks))
+                max_chunks = max(max_chunks, len(chunks))
+        empty_chunk = self.tokenize_line("")[0][0] if max_chunks > 1 else None
+
         for line in texts:
             if line in cache:
                 line_z_values = cache[line]
             else:
-                chunks, token_count = self.tokenize_line(line)
+                chunks = batch_chunks[line]
+                if len(chunks) < max_chunks:
+                    chunks = chunks + [empty_chunk] * (max_chunks - len(chunks))
                 line_z_values = []
-
-                # pad all chunks to length of longest chunk
-                max_tokens = 0
-                for chunk in chunks:
-                    max_tokens = max(len(chunk.tokens), max_tokens)
 
                 for chunk in chunks:
                     tokens = chunk.tokens
@@ -113,9 +121,10 @@ class T5TextProcessingEngine:
 
                     z = self.process_tokens([tokens], [multipliers])[0]
                     line_z_values.append(z)
+                line_z_values = torch.cat(line_z_values, dim=0)
                 cache[line] = line_z_values
 
-            zs.extend(line_z_values)
+            zs.append(line_z_values)
 
         return torch.stack(zs)
 

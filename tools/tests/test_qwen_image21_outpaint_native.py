@@ -163,6 +163,21 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             outpaint_native.finish(Image.new("RGBA", (256, 256)), payload)
 
+    def test_small_source_accepts_feather_limit_and_finishes(self):
+        Image.new("RGBA", (32, 32), (11, 77, 133, 23)).save(self.source)
+        self.request = replace(
+            self.request,
+            width=288,
+            height=288,
+            outpaint_margins=(128, 128, 128, 128),
+            outpaint_feather=15,
+        )
+        payload = self.snapshot()
+        outpaint_native.validate_snapshot(payload, self.job)
+        finished = outpaint_native.finish(Image.new("RGBA", (288, 288), "white"), payload)
+        self.assertEqual(finished.getpixel((143, 143)), (11, 77, 133, 23))
+        self.assertEqual(finished.getpixel((0, 0)), (255, 255, 255, 255))
+
 
 class DownloadTests(unittest.TestCase):
     def setUp(self):

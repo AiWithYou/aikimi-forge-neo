@@ -370,6 +370,8 @@ class Studio:
                 if image.format != "PNG" or image.size != (request.width, request.height):
                     raise QwenImage21Error("生成画像の形式またはサイズが要求と一致しません。")
                 image.verify()
+            with Image.open(output) as image:
+                image.load()
             preferred = output
             if request.preserve_unmasked:
                 preferred = inside(job.directory, job.directory / "output-preserved.png")
@@ -379,6 +381,8 @@ class Studio:
                     if image.format != "PNG" or image.mode != "RGBA" or image.size != (request.width, request.height):
                         raise QwenImage21Error("範囲外固定画像の形式またはサイズが一致しません。")
                     image.verify()
+                with Image.open(preferred) as image:
+                    image.load()
             with self._guard:
                 if job.cancel.is_set():
                     raise InterruptedError("停止しました。")

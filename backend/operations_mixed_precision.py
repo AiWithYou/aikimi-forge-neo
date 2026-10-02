@@ -122,6 +122,12 @@ def _load_quantized_module(module: torch.nn.Module, super_load, state_dict: dict
                 "linear_dtype": layer_conf.get("linear_dtype", params_conf.get("linear_dtype", "int4")),
             }
         elif module.quant_format == "asym_w4a8_int8":
+            expected_shape = (module._orig_shape[0], module._orig_shape[1] // 2)
+            if weight.ndim != 2 or weight.shape != expected_shape or module._orig_shape[1] % 2:
+                raise ValueError(
+                    f'Invalid Layer "{layer_name}" (W4A8 packed weight width/shape {tuple(weight.shape)} '
+                    f"does not match original shape {module._orig_shape} at 4 bits)"
+                )
             scale = pop_scale("weight_s_rel")
             if scale is None:
                 raise ValueError(f"Missing W4A8 group scale (weight_s_rel) for layer {layer_name}")
@@ -189,6 +195,9 @@ def _quantized_weight_state_dict(module: torch.nn.Module, sd: dict[str, torch.Te
             linear_dtype = getattr(params, "linear_dtype", "int4")
             if linear_dtype != "int4":
                 quant_conf["linear_dtype"] = linear_dtype
+        elif module.quant_format == "asym_w4a8_int8":
+            quant_conf["group_size"] = getattr(params, "group_size", 16)
+            quant_conf["convrot_groupsize"] = getattr(params, "convrot_groupsize", 256)
         if extra_quant_conf:
             quant_conf.update(extra_quant_conf)
         sd[f"{prefix}comfy_quant"] = torch.tensor(list(json.dumps(quant_conf).encode("utf-8")), dtype=torch.uint8)
@@ -264,6 +273,8 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                     weight, bias, signal = weights_manual_cast(self, x=input)
 
                 with main_stream_worker(weight, bias, signal):
+                    if self._full_precision_mm and isinstance(weight, QuantizedTensor):
+                        weight = weight.dequantize()
                     output = torch.nn.functional.linear(input, weight, bias)
 
                 if reshaped_nd:

@@ -81,7 +81,7 @@ class PreprocessorReference(Preprocessor):
             self.is_recording_style = True
 
             xt = latent_image.to(x) + torch.randn(x.size(), dtype=x.dtype, generator=gen_cpu).to(x) * sigma
-            sampling_function_inner(model, xt, timestep, uncond, cond, 1, model_options, seed)
+            sampling_function_inner(model, xt, timestep, None, cond, 1, model_options, seed)
 
             self.is_recording_style = False
 
