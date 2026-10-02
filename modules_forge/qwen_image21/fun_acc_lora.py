@@ -94,4 +94,4 @@ def status(runtime: Path) -> str:
         installed(runtime)
     except (OSError, ValueError, TypeError):
         return "Fun Acc · 4 steps: 未導入。専用の導入コマンドを実行してください。"
-    return "Fun Acc · 4 steps: 導入済み（通常版INT8用）。"
+    return "Fun Acc · 4 steps: 導入済み（通常版Q4_K_M／W4A8／INT8／BF16用）。"

@@ -6,7 +6,7 @@ QwenのDiffusersパイプラインを専用環境で実行する画像生成・�
 
 解像度プリセットを選んでから、**幅 px／高さ px**を直接変更できます。手入力すると「カスタム」に切り替わり、**縦横入替**で向きを変えられます。各辺256〜4096 px・32の倍数・合計約4.30 MPが上限です。端数を勝手に丸めません。「編集元と同じサイズ」を選ぶと数値欄が無効になり、実際の参照画像の寸法を使います。マスク外固定もこの元サイズを使います。
 
-通常版は **Q4_K_M → W4A8 → INT8 → BF16** の順で表示します。W4A8はINT8より重みのメモリを節約しますが、速度の順位を示すものではありません。Fun Acc／ControlNetは通常版INT8用です。Turboは別の4 stepsモデルとして区別します。必要VRAMは解像度、参照画像、CPU退避でも変わります。
+通常版は **Q4_K_M → W4A8 → INT8 → BF16** の順で表示します。W4A8はINT8より重みのメモリを節約しますが、速度の順位を示すものではありません。Fun Accは通常版4精度、ControlNetは通常版とTurboで使用できます。Turboは別の4 stepsモデルとして区別します。必要VRAMは解像度、参照画像、CPU退避でも変わります。
 
 <a id="outpaint補助"></a>
 
@@ -19,7 +19,21 @@ QwenのDiffusersパイプラインを専用環境で実行する画像生成・�
 3. 必要なら描き足す内容を入力し、**生成**。同じ画像領域が**生成結果**に切り替わり、**結果のPNGを保存**できます。Qwenが余白を生成し、元画像の合成まで自動で行います。生成中は停止でき、前回の結果は残ります。
 4. **生成結果をさらに広げる**で、完成PNGを次の元画像にできます。余白と説明は引き継ぎます。生成は自動で始まりません。**最初の元画像に戻す**で直前にアップロードした画像へ戻れます。画像を差し替える場合は、プレビュー上の**元画像 … · 変更**を開きます。
 
-「生成設定」でOutpaint LoRA v2／v1／なし、通常版Q4_K_M／INT8、Steps（初期値25）、Seed、境界をなじませる幅を変更できます。「なし」は追加LoRAの準備が不要で、同じ余白参照・指示・元画像合成を使います。LoRAの有無を比較するときは同じSeed・Steps・余白・境界幅を指定してください。境界幅0では元画像の全画素を保持し、初期値32では広げた辺から元画像の内側32 pxも生成画像となじませます。再拡張時の「元画像」は直前の生成結果です。W4A8・BF16・Turbo、Fun Acc・ControlNet・Sparseの同時使用は今回の対応に含めません。Q4_K_Mは通常のQwen導入を共用します。INT8を使う場合は既存の公式フルモデルが必要です。
+**モデル・画風LoRA・高速化・制御は「画像生成」で設定し、Outpaintへ引き継ぎます。** 通常版Q4_K_M／INT8／W4A8／BF16、Turbo BF16／Q4_K_M、複数の画風LoRAと強度、Fun Acc、Sparse、ControlNet、ローカル互換本体が共通です。生成ボタン上に次の生成の条件を表示し、結果の生成情報には開始時の条件を残します。元画像・余白・描き足す内容はOutpaint側の入力を使います。通常の編集マスクや描き込みは引き継ぎません。
+
+Outpaintの「生成設定」でLoRA v2／v1／なし、Steps（通常版の初期値25）、Seed、境界幅を変更できます。Turbo／Fun Accでは4 stepsに固定し、通常版へ戻すとOutpaintのStepsを戻します。「なし」は追加Outpaint LoRAの準備が不要で、画風LoRAの選択はそのまま使えます。LoRAの有無を比較するときは同じSeed・Steps・余白・境界幅を指定してください。境界幅0では元画像の全画素を保持し、初期値32では広げた辺から元画像の内側32 pxも生成画像となじませます。再拡張時の「元画像」は直前の生成結果です。
+
+| 組み合わせ | 対応範囲 |
+| --- | --- |
+| 通常版4精度＋Outpaint v1／v2／なし＋画風LoRA | 対応。LoRA形式・形状・学習時の量子化差の確認は共通です。 |
+| 通常版＋Fun Acc＋Outpaint／画風LoRA／ControlNet | 対応。4 steps・PDDスケジューラ・KVキャッシュOFF。追加LoRA・制御との画質は実験扱いです。 |
+| Turbo＋Outpaint／画風LoRA／ControlNet | 対応。4 steps・Viggleスケジューラ。追加LoRA・制御との画質は実験扱いです。 |
+| Sparse＋通常版／Turbo＋Outpaint／画風LoRA | 対応。KVキャッシュが必要です。短い入力ではdenseへ戻る場合があります。 |
+| Turbo＋Fun Acc | 非対応。異なる4-step方式が衝突します。 |
+| Sparse＋Fun Acc／ControlNet | 非対応。Fun Acc／ControlNetはKVキャッシュを無効にします。 |
+| ローカル互換本体＋Outpaint／Fun Acc／画風LoRA | 対応。構造・形状・必要な共通部品を検証します。Turbo選択との同時指定は受け付けません。 |
+
+OutpaintでControlNetを使う場合、前処理済み画像は**元画像と同じサイズ**か**完成キャンバスと同じサイズ**にしてください。元画像サイズなら元画像と同じ位置へ余白を付け、制御の位置を保持します。ControlNet欄の「ControlNetにもマスクを渡す」をONにすると、余白だけ白・元画像部分は黒のマスクを自動作成します。通常版INT8／W4A8／BF16には公式フル本体、Turboには選択したTurbo本体が必要です。対応表は読み込み・実行方式の対応を示し、すべての画風LoRAや被写体で画質を保証するものではありません。
 
 元画像は拡縮せず、指定した方向の余白だけを32 px単位へ調整し、調整量をプレビューに表示します。完成寸法は各辺256〜4096 px、合計約2 MPまで。余白がすべて0、上限超過などの場合は理由を表示して生成を無効にします。再拡張でも上限は同じです。開始時の元画像・余白・Seed・LoRA情報をジョブへ保存するので、途中で入力を変更しても開始済みの生成には混ざりません。結果のSeedなどは**この結果の生成情報**にまとまっています。
 
@@ -50,7 +64,7 @@ Qwen Image 2.1用の `.safetensors` を `models/Qwen-Image-2.1/loras/` に置き
 
 **本体モデル**では互換モデルのファイル／Diffusersフォルダーも指定できます。**環境・共通部品を準備（標準本体なし）**を使えば、標準の本体をダウンロードする必要はありません。単一safetensorsはBF16、TransformerフォルダーはBF16／INT8／W4A8、対応GGUFは通常版Q4で使用します。[導入手順と対応範囲](../../docs/local-models.md)
 
-通常版Q4_K_M・W4A8・INT8・BF16用です。SushiUIの `lora_unet_...__...`、Diffusers/Comfy系の `transformer.` / `diffusion_model.` 配下の線形LoRA（A/Bまたはdown/up、alpha/rank）を読み込みます。Qwen Imageの別バージョン、DoRA、独自ヘッドなど、すべての形式への対応ではありません。未対応キー・不足ペア・寸法不一致があれば部分適用せずエラーにします。Turbo・Fun Acc・Outpaint専用処理・Sparse Attentionとの同時使用は受け付けません。
+通常版Q4_K_M・W4A8・INT8・BF16とTurboで使用できます。SushiUIの `lora_unet_...__...`、Diffusers/Comfy系の `transformer.` / `diffusion_model.` 配下の線形LoRA（A/Bまたはdown/up、alpha/rank）を読み込みます。Qwen Imageの別バージョン、DoRA、独自ヘッドなど、すべての形式への対応ではありません。未対応キー・不足ペア・寸法不一致があれば部分適用せずエラーにします。Fun Acc・Outpaint・Sparseとの併用も受け付けますが、高速化モデルへの画風の適用は実験扱いです。
 
 Hugging Faceからファイル名を指定して取得する補助コマンドも使えます。取得revisionとSHA-256を保存し、LFSのハッシュと照合します。
 
@@ -62,13 +76,13 @@ Hugging Faceからファイル名を指定して取得する補助コマンド�
 
 各LoRAのファイル名・SHA-256・強度・適用層数・量子化の差を生成情報へ保存します。LoRAや強度を変えた場合はモデルを再読み込みします。元のモデルの重みには書き込みません。
 
-2026年9月28日にINT8とQ4_K_Mで実生成を確認しました。複数読み込みは同じ重みを2つの名前で参照し、0.75と0.25で同時適用する動作試験です。異なるLoRA同士の画風の相性は評価していません。W4A8・BF16の読み込み処理は実装済みですが、追加LoRAを使った実生成は今回未検証です。
+2026年9月28日にINT8とQ4_K_Mで実生成を確認しました。複数読み込みは同じ重みを2つの名前で参照し、0.75と0.25で同時適用する動作試験です。異なるLoRA同士の画風の相性は評価していません。この時点ではW4A8・BF16の追加LoRA実生成は未検証でした。
 
 ## Fun ControlNet Union · INT8
 
 [公式のQwen Image 2.1 Fun ControlNet Union](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)を、[KijaiのINT8 ConvRot変換](https://huggingface.co/Kijai/QwenImage_experimental/tree/04987755e10002ff33e4ea307a811487dddd79d9/model_patches)で使えます。Canny、Depth、Gray、HED、Lineart、MLSD、Pose、Scribbleの**前処理済み画像**に対応します。種類の選択は記録用で、モデルは共通のUnion重みを使います。画像をアップロードしただけでCannyやPoseを抽出する機能ではありません。
 
-1. Neoを終了し、`aikimi-qwen-image21-setup.bat --official-full`で通常版INT8に必要な公式フルモデルを導入します。GGUFだけでは利用できません。
+1. 使用するQwen本体・共通部品を導入します。通常版Q4_K_Mでも利用できます。INT8／W4A8／BF16では `aikimi-qwen-image21-setup.bat --official-full` が必要です。
 2. Qwen専用環境で追加の約3.78GBの重みを取得・SHA-256検証します。
 
 ```powershell
@@ -77,19 +91,19 @@ Hugging Faceからファイル名を指定して取得する補助コマンド�
 .\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_fun_controlnet.py --verify
 ```
 
-3. Qwenタブで**通常 · INT8**、**CPUへ退避**を選び、**Fun ControlNet · INT8**欄の種類、前処理済み画像、制御の強さを指定して生成します。人物や外見も参照する場合は、別途上の**参照画像**へ元画像を追加し、プロンプトに「Image 1の人物」などと書きます。[公式の作例](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)と同じ条件は**40 steps・制御の強さ`1.0`・通常版Qwen 2.1のFlowMatch Eulerスケジューラ**です。スケジューラはQwen本体から自動で読み込みます。制御画像は出力と同じ縦横比に中央切り抜きしてリサイズし、ジョブの`control.png`へ保存します。結果のダウンロード欄にも含まれます。
+3. Qwenタブで使用するモデルと**CPUへ退避**を選び、**ControlNet**欄の種類、前処理済み画像、制御の強さを指定して生成します。人物や外見も参照する場合は、別途上の**参照画像**へ元画像を追加し、プロンプトに「Image 1の人物」などと書きます。[公式の作例](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)と同じ条件は**40 steps・制御の強さ`1.0`・通常版Qwen 2.1のFlowMatch Eulerスケジューラ**です。スケジューラはQwen本体から自動で読み込みます。制御画像は出力と同じ縦横比に中央切り抜きしてリサイズし、ジョブの`control.png`へ保存します。結果のダウンロード欄にも含まれます。
 
-**Inpainting＋Control**も使えます。参照画像に編集元を追加して**選択画像を開く・囲む**を押し、Fun ControlNet欄のInpaintingをONにします。編集範囲はマスク欄で塗るか、編集元と同じサイズの白黒マスクをアップロードしてください。白は再生成、黒は保持の指示です。出力サイズは**編集元と同じサイズ**にし、前処理済み制御画像と種類も指定します。モデルには制御画像64チャンネル、保持マスク1チャンネル、マスクで隠した編集元64チャンネルを渡します。通常の画像参照も同時に指定できます。
+**Inpainting＋Control**も使えます。参照画像に編集元を追加して**選択画像を開く・囲む**を押し、ControlNet欄の「ControlNetにもマスクを渡す」をONにします。編集範囲はマスク欄で塗るか、編集元と同じサイズの白黒マスクをアップロードしてください。白は再生成、黒は保持の指示です。出力サイズは**編集元と同じサイズ**にし、前処理済み制御画像と種類も指定します。モデルには制御画像64チャンネル、保持マスク1チャンネル、マスクで隠した編集元64チャンネルを渡します。通常の画像参照も同時に指定できます。
 
-ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所へ制御を加えます。重みはINT8 ConvRotのまま読み込み、未量子化の入力層や正規化層はBF16です。モデル本体のINT8は既存のbitsandbytes形式で、両者の量子化方式は異なります。ControlNet使用時はKVキャッシュを無効にし、Sparse AttentionもOFFにします。通常版INT8以外の精度やTurboとの組み合わせは受け付けません。制御画像と通常の参照画像は別入力です。**マスク範囲外を元画像に固定**は独立した生成後の合成で、Inpaintingと併用すると範囲外の画素を厳密に固定できます。マスク境界のぼかし設定はこの合成だけに使い、モデルへ渡すマスクは白黒で判定します。
+ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所へ制御を加えます。重みはINT8 ConvRotのまま読み込み、未量子化の入力層や正規化層はBF16です。モデル本体の精度とは独立しており、通常版4精度・Turbo・Fun Accに組み合わせられます。ControlNet使用時はKVキャッシュを無効にし、Sparse Attentionは併用できません。制御画像と通常の参照画像は別入力です。**マスク範囲外を元画像に固定**は独立した生成後の合成で、Inpaintingと併用すると範囲外の画素を厳密に固定できます。マスク境界のぼかし設定はこの合成だけに使い、モデルへ渡すマスクは白黒で判定します。高速化モデルとの併用時は画質を確認してください。
 
 [同じ人物参照による全8方式とInpainting＋Control、3D建築の実生成例、条件画像、実測記録](../../docs/assets/qwen-image21-fun-controlnet/README.md)を掲載しています。モデル重みはGitに含めません。公式重みと派生版には[非商用のQwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/blob/8a4702014d4dabb5f896fcba917e2ee0a961465f/LICENSE)が適用されます。商用利用には提供元の別途許諾が必要です。
 
-## Fun Acc 4-step LoRA · INT8
+## Fun Acc 4-step LoRA
 
-[Alibaba PAI公式のFun Acc LoRA](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs)は、Qwen Image 2.1の新規生成と参照画像編集を**4回のモデル評価（4 NFE）**で行うPDDアダプターです。通常のLoRA読み込みに加えて、配布元の専用PDDスケジューラ、sigma列、stepコールバックを使います。Qwen本体のTransformerとテキストエンコーダーは既存のbitsandbytes INT8を再利用し、LoRAの差分やPDDの出力ヘッドは浮動小数点のままです。全体を一律INT8に変換する機能ではありません。
+[Alibaba PAI公式のFun Acc LoRA](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs)は、Qwen Image 2.1の新規生成と参照画像編集を**4回のモデル評価（4 NFE）**で行うPDDアダプターです。通常のLoRA読み込みに加えて、配布元の専用PDDスケジューラ、sigma列、stepコールバックを使います。選んだ通常版の本体を使い、LoRAの差分やPDDの出力ヘッドは浮動小数点のままです。全体を一律INT8に変換する機能ではありません。
 
-1. Neoを終了し、`aikimi-qwen-image21-setup.bat --official-full`で通常版INT8用の公式フルモデルを導入します。GGUFだけでは利用できません。
+1. 通常版Qwen本体と共通部品を導入します。通常版Q4_K_Mでも利用できます。INT8／W4A8／BF16を使う場合は `aikimi-qwen-image21-setup.bat --official-full` が必要です。
 2. 専用環境で約346MBのLoRA重み、PDD設定、利用条件を取得し、固定revisionのSHA-256を検証します。
 
 ```powershell
@@ -98,7 +112,7 @@ ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所
 .\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_fun_acc_lora.py --verify
 ```
 
-3. Qwenタブの**Fun Acc · 4 steps（通常版INT8）**をONにして生成します。モデル・精度は通常版INT8、Stepsは4に固定されます。OFFにすると通常版INT8・40 stepsへ戻ります。CPUへ退避を選べます。Fun AccではSparse AttentionとFun ControlNetを同時に使いません。切替時は読み込み済みモデルを再読み込みし、結果の`metadata.json`にLoRA revisionとスケジューラを保存します。
+3. Qwenタブの**Fun Acc · 4 steps（通常モデル）**をONにして生成します。モデル・精度の選択は保持し、Stepsだけ4に固定します。OFFでは画像生成のStepsが40へ戻り、Outpaintでは以前のStepsへ戻ります。CPUへ退避を選べます。画風LoRA・Outpaint・ControlNetも使えますが、TurboやSparseは同時に使えません。切替時は読み込み済みモデルを再読み込みし、結果の`metadata.json`にLoRA revisionとスケジューラを保存します。GGUFではPDDが複製する出力層だけをBF16へ復元し、本体の量子化重みは保持します。
 
 配布元は[小さく密な文字の可読性低下、編集画像のぼけ・暗さ、細部の劣化](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs#limitations)を挙げています。4 NFEは生成全体の所要時間が必ず10分の1になるという意味ではありません。重みはGitに含めません。重みには[Qwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs/blob/f7545234760e1847cd8e89e52bd951cb0b7e327f/LICENSE)が適用され、非商用の研究・評価用途に限られます。
 
@@ -121,7 +135,7 @@ ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所
 
 ## Viggle Turbo（BF16 / Q4_K_M）
 
-画面の**モデル・精度**で `Viggle Turbo · BF16` または `Viggle Turbo · Q4_K_M` を選びます。選択時にStepsは4へ変わり固定され、Sparse AttentionはOFFになります。通常版へ戻すと40 stepsに戻ります。両Turboモデルはテキストからの生成と参照画像編集に使えます。CFGは1.0、negative promptは使わず、Viggle配布の`shift_terminal=null`スケジューラーを読み込みます。
+画面の**モデル・精度**で `Viggle Turbo · BF16` または `Viggle Turbo · Q4_K_M` を選びます。選択時にStepsは4へ変わり固定されます。通常版へ戻すと画像生成では40 steps、Outpaintでは以前のStepsに戻ります。両Turboモデルはテキストからの生成と参照画像編集に使えます。CFGは1.0、negative promptは使わず、Viggle配布の`shift_terminal=null`スケジューラーを読み込みます。Fun Accとは排他です。
 
 Neoを終了して、必要な方だけ導入してください。既に通常版を導入している場合は共通のテキストエンコーダー・VAEを再利用します。Turboから導入する場合はその共通部品だけを取得し、公式フルモデルのTransformer（約14GB）は取得しません。生成中の自動ダウンロードはありません。
 

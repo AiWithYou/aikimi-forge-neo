@@ -154,10 +154,8 @@ def validate_options(values: dict) -> None:
     if not isinstance(values.get("allow_lora_base_mismatch", False), bool):
         raise ValueError("異なる量子化の指定が不正です。")
     if any(item["strength"] != 0 for item in adapters):
-        if values.get("operation", "generate") != "generate" or values.get("precision", "int8").startswith("turbo_"):
-            raise ValueError("追加LoRAは通常版モデルの画像生成で使用してください。")
-        if values.get("fun_acc") or values.get("outpaint_version") or values.get("sparse_mode", "off") != "off":
-            raise ValueError("追加LoRAではFun Acc・Outpaint・Sparse AttentionをOFFにしてください。")
+        if values.get("operation", "generate") != "generate":
+            raise ValueError("追加LoRAは画像生成で使用してください。")
 
 
 def validate_installed(runtime: Path, values: dict) -> list[dict]:

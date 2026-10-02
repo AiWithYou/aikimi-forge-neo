@@ -20,8 +20,11 @@ def test_control_image_is_snapshotted_without_changing_the_reference_list(tmp_pa
     source = tmp_path / "source.png"
     Image.new("RGBA", (48, 32), (12, 34, 56, 70)).save(source)
     request = core.Request(
-        "A dancer", control_kind="pose", control_image=str(source),
-        precision="int8", seed=43,
+        "A dancer",
+        control_kind="pose",
+        control_image=str(source),
+        precision="int8",
+        seed=43,
     ).resolved()
     job = tmp_path / "job"
     job.mkdir()
@@ -32,14 +35,16 @@ def test_control_image_is_snapshotted_without_changing_the_reference_list(tmp_pa
     assert request.input_images == ()
 
 
-@pytest.mark.parametrize("fields", [
-    {"control_kind": "pose", "control_image": ""},
-    {"control_kind": "pose", "precision": "bf16"},
-    {"control_kind": "pose", "sparse_mode": "fixed"},
-    {"control_kind": "pose", "control_strength": float("nan")},
-    {"control_kind": "pose", "control_strength": 2.1},
-    {"control_kind": "unknown"},
-])
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"control_kind": "pose", "control_image": ""},
+        {"control_kind": "pose", "sparse_mode": "fixed"},
+        {"control_kind": "pose", "control_strength": float("nan")},
+        {"control_kind": "pose", "control_strength": 2.1},
+        {"control_kind": "unknown"},
+    ],
+)
 def test_invalid_control_requests_stop_before_gpu_or_download(tmp_path, fields):
     image = tmp_path / "pose.png"
     Image.new("RGB", (32, 32)).save(image)
@@ -55,9 +60,16 @@ def test_worker_rejects_missing_control_and_incompatible_base(tmp_path):
     job = tmp_path / "job"
     job.mkdir()
     request = {
-        "prompt": "A dancer", "width": 512, "height": 512, "steps": 2, "seed": 43,
-        "control_image": str(tmp_path / "missing.png"), "control_strength": 1.0,
-        "input_images": [], "precision": "int8", "memory_mode": "offload",
+        "prompt": "A dancer",
+        "width": 512,
+        "height": 512,
+        "steps": 2,
+        "seed": 43,
+        "control_image": str(tmp_path / "missing.png"),
+        "control_strength": 1.0,
+        "input_images": [],
+        "precision": "int8",
+        "memory_mode": "offload",
     }
     (job / "request.json").write_text(json.dumps(request))
     payload = {"job_dir": str(job), "model_path": str(model)}
@@ -68,8 +80,7 @@ def test_worker_rejects_missing_control_and_incompatible_base(tmp_path):
     request["control_image"] = str(image)
     request["precision"] = "bf16"
     (job / "request.json").write_text(json.dumps(request))
-    with pytest.raises(ValueError, match="INT8"):
-        worker._read_request(payload)
+    assert worker._read_request(payload)[2]["precision"] == "bf16"
     request["precision"] = "int8"
     request["sparse_mode"] = "fixed"
     (job / "request.json").write_text(json.dumps(request))
@@ -90,9 +101,15 @@ def test_inpainting_request_requires_a_control_and_a_matching_edit_mask(tmp_path
     for path in (source, mask, control):
         Image.new("RGB", (512, 512), "white").save(path)
     fields = dict(
-        control_kind="pose", control_image=str(control), control_inpaint=True,
-        input_images=(str(source),), edit_mask_reference=0, edit_mask_path=str(mask),
-        width=512, height=512, precision="int8",
+        control_kind="pose",
+        control_image=str(control),
+        control_inpaint=True,
+        input_images=(str(source),),
+        edit_mask_reference=0,
+        edit_mask_path=str(mask),
+        width=512,
+        height=512,
+        precision="int8",
     )
     resolved = core.Request("Change the jacket", **fields).resolved()
     assert resolved.control_inpaint and resolved.edit_mask_path == str(mask)
@@ -116,9 +133,15 @@ def test_worker_inpainting_requires_the_source_mask_and_output_size(tmp_path):
     for path in (control, source, mask):
         Image.new("RGB", (512, 512), "white").save(path)
     request = {
-        "prompt": "Change the jacket", "width": 512, "height": 512,
-        "steps": 2, "seed": 1, "control_image": str(control),
-        "control_inpaint": True, "precision": "int8", "memory_mode": "offload",
+        "prompt": "Change the jacket",
+        "width": 512,
+        "height": 512,
+        "steps": 2,
+        "seed": 1,
+        "control_image": str(control),
+        "control_inpaint": True,
+        "precision": "int8",
+        "memory_mode": "offload",
         "edit_mask": {"original_path": str(source), "mask_path": str(mask)},
     }
     payload = {"job_dir": str(job), "model_path": str(model)}
@@ -167,8 +190,13 @@ def test_inpaint_condition_packs_control_keep_mask_and_masked_source():
     mask = Image.new("L", (2, 2), 0)
     mask.putpixel((1, 0), 255)
     FunUnion.set_control(
-        subject, Pipe(), control, 0.8, torch.Generator(),
-        inpaint_image=source, mask_image=mask,
+        subject,
+        Pipe(),
+        control,
+        0.8,
+        torch.Generator(),
+        inpaint_image=source,
+        mask_image=mask,
     )
     assert subject.context.shape == (1, 129, 1, 2, 2)
     assert torch.all(subject.context[:, :64] == 1)

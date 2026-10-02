@@ -1,8 +1,8 @@
 # Aikimi Forge Neo
 
-**v3.4.0** · [変更履歴](CHANGELOG.md)
+**v3.5.0** · [変更履歴](CHANGELOG.md)
 
-**v3.4.0（2026-10-02）：** QwenのOutpaintに、辺・角をドラッグして画像を広げるGUIを追加しました。元画像の移動、比率プリセット、数値入力が同期します。上部の**Qwen Image 2.1**を押すと**画像生成／画像を広げる**が現れます。Outpaint LoRAなしも選択可能です。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助)
+**v3.5.0（2026-10-02）：** Qwenの画像生成で選んだモデル・画風LoRAをOutpaintにも引き継ぎます。通常版Q4_K_M／INT8／W4A8／BF16、Turbo、Fun Acc、ControlNetを共通設定から使え、適用条件は生成ボタンの上に表示します。Turbo＋Fun Acc、Sparse＋Fun Acc／ControlNetは処理方式の都合で併用できません。[使い方・組み合わせ](extensions-builtin/qwen-image21-studio/README.md#outpaint補助)
 
 以前の主な更新：**v3.3** [手元の互換モデル・複数LoRAと標準本体なしの準備](docs/local-models.md)、**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 
@@ -39,8 +39,8 @@ Forge NeoにもKrea2・Animaの基本対応、量子化モデルの読み込み�
 |---|---|
 | **かんたんセットアップ**（追加） | BATでモデルを選び、本体と必要な専用環境をまとめて準備。取得済みのモデルは再利用できます。 |
 | **Ming Image Design**（統合） | ポスター・UI案・インフォグラフィック・透過素材の画像生成。本体INT8／W4A8配布版＋テキストW4A8、自然文／JSON、実寸指定、透過PNGの背景切替、確定Seed・精度を含む条件復元、高解像度再生成。本体W4A8なら変換不要で重み合計約16.6GB、標準INT8は約19.2GBです。[使い方・検証範囲](extensions-builtin/ming-image-studio/README.md) |
-| **Qwen Outpaint**（追加） | 辺・角のドラッグ、元画像の移動、比率プリセット、4辺の数値入力で範囲を指定し、既存QwenのQ4_K_M／INT8で描き足します。Outpaint LoRA v2／v1／なしを選べ、完成PNGの保存・再拡張・最初の元画像への戻しも同じ画面で行えます。境界幅0では元画像の全画素を保持します。[使い方](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) |
-| **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。通常版INT8ではFun Acc 4-step LoRAと、Fun ControlNet Unionの8種類の前処理済み制御画像・Inpainting＋Controlを個別に使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
+| **Qwen Outpaint**（追加） | 辺・角のドラッグ、元画像の移動、比率プリセット、4辺の数値入力で範囲を指定し、通常版4精度・Turbo 2精度で描き足します。画像生成のモデル・画風LoRA・高速化・制御を共有し、Outpaint LoRA v2／v1／なし、完成PNGの保存・再拡張・最初の元画像への戻しを同じ画面で扱えます。境界幅0では元画像の全画素を保持します。[使い方・併用条件](extensions-builtin/qwen-image21-studio/README.md#outpaint補助) |
+| **Qwen Image 2.1**（統合） | Unsloth通常版Q4_K_Mを既定で導入。新規生成・最大10枚の参照画像による編集・透過PNG。囲み注釈と、明示マスクの範囲外を元画像へ固定する編集に対応。生成結果と固定版を切り替えて続けて編集できます。INT8・W4A8は変換後のモデルを保存し、再起動後も再利用。BF16・Viggle Turbo・CPU退避も選べます。Fun Acc 4-stepは通常版4精度、Fun ControlNet Unionの8種類の前処理済み制御画像・Inpainting＋Controlは通常版とTurboで使えます。新規生成用PE-T2Iと編集用PE-I2Iの4bit補助を個別にON/OFFし、使用文を確認できます。[使い方・検証範囲](extensions-builtin/qwen-image21-studio/README.md) |
 | **Krea2**（継承＋統合） | ForgeのKrea2対応に、INT8モデルの導入支援と4K／8K向けの追加処理を同梱。高解像度処理の一部は実験機能です。 |
 | **Anima 3.8B**（継承＋統合） | Qwen3.5を使う専用設定、v1.1のSemantic Connector v2、INT8変換・導入支援。v1／v1.1それぞれのモデル構成に対応します。 |
 | **SenseNova U1.5 Studio**（統合） | 画像生成と複数参照による編集。参照の順序変更・役割指定・生成結果からの継続編集に対応。テキスト生成は公式8-Step LoRA、参照編集はQuality 50-Stepを使います。 |
@@ -374,7 +374,7 @@ git pull --ff-only origin neo
 
 既存のローカルフォルダー名を変更する必要はありません。`origin`の更新は一度行えば十分です。
 
-**2026-10-02の保守更新：** GitPythonを3.1.61から3.1.62へ更新しました。拡張機能の取得・更新・サブモジュール展開を、Windowsの空白・日本語を含むパスでも確認しています。Aikimiのバージョン表記はv3.4.0のままです。
+**2026-10-02の保守更新：** GitPythonを3.1.61から3.1.62へ更新しました。拡張機能の取得・更新・サブモジュール展開を、Windowsの空白・日本語を含むパスでも確認しています。この保守更新はv3.4.0に含まれます。
 
 **2026-09-24の依存関係更新を取り込む場合**、導入済みのSenseNova・Qwenは、WebUIを起動する前に該当するコマンドを実行してください。モデルを取得し直さず、専用環境を更新します。
 

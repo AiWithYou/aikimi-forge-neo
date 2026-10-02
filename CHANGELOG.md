@@ -1,5 +1,15 @@
 # 変更履歴
 
+## v3.5.0 — 2026-10-02
+
+- Qwenの画像生成とOutpaintでモデル・メモリ設定・複数の画風LoRAと強度・Fun Acc・Sparse・ControlNet・ローカル本体を共用。ブラウザーごとの入力を生成開始時に取り込み、適用条件をOutpaintの生成ボタン上と結果の生成情報へ表示します。
+- Outpaintを通常版Q4_K_M／INT8／W4A8／BF16とTurbo BF16／Q4へ拡張。Fun AccとControlNetのINT8限定を解除し、Turbo＋Fun Acc、Sparse＋Fun Acc／ControlNetの衝突は生成前に拒否します。高速化モデルと追加LoRA・制御の組み合わせは画質実験です。
+- Fun Acc → Outpaint → 画風LoRA → ControlNetの順に読み込み、共有する層への差分を加算。Fun AccがGGUFの小さな出力層をコピーできるよう、その層だけをBF16へ復元します。量子化本体と保存済み重みには書き込みません。
+- Outpaintの制御画像は元画像サイズなら指定位置へ配置し、完成サイズならそのまま使用。Inpainting＋Controlには余白だけ白のマスクを自動作成し、画像とマスクをジョブ内で検証します。
+- LoRA選択後に強度表と異なる量子化の確認項目が表示されない、Gradioの非表示コンポーネントの問題を修正。固定Sparseの保持率も表示・操作でき、ControlNetのマスク指定はControlNet欄から使えます。
+- ControlNetをOFFにした後に以前のアップロード画像が残ると、通常生成でSparseとの衝突と誤判定する問題を修正。EXIFで回転する制御画像のOutpaint寸法判定もジョブの画像処理と統一しました。
+- 停止・失敗後も前回画像に「新しい画像を生成中」が残る表示を修正。通常版4精度・Turbo 2精度、画風強度0、固定Sparseの実生成と、GUIの設定固定・保存・モデル再利用・停止を確認し、[タイムラプス](docs/assets/qwen-outpaint-v3.5.0/timelapse.mp4)を保存しました。
+
 ## v3.4.0 — 2026-10-02
 
 - Qwen Outpaintに、辺・角のドラッグで余白を広げ、元画像のドラッグで配置を変えるGUIを追加。比率プリセット、全体拡張、中央配置、リセットと4辺の数値入力を同期し、タッチ・キーボードでも操作できます。
