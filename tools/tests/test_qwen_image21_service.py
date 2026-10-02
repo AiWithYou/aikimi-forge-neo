@@ -168,8 +168,9 @@ class QwenCoreTests(unittest.TestCase):
                 self.assertEqual(core.Request("test", precision=precision, steps=4).resolved().steps, 4)
         self.assertEqual(core.Request("test", precision="int8", steps=40).resolved().steps, 40)
         self.assertEqual(core.Request("test", precision="base_q4_k_m", steps=40).resolved().steps, 40)
-        with self.assertRaisesRegex(core.QwenImage21Error, "Sparse Attention"):
-            core.Request("test", precision="base_q4_k_m", sparse_mode="fixed").resolved()
+        self.assertEqual(
+            core.Request("test", precision="base_q4_k_m", sparse_mode="fixed").resolved().sparse_mode, "fixed"
+        )
 
     def test_regular_gguf_uses_shared_assets_without_teacher_transformer(self):
         from modules_forge.qwen_image21 import regular_gguf
@@ -563,11 +564,15 @@ class QwenUiTests(unittest.TestCase):
             ["base_q4_k_m", "w4a8", "int8", "bf16", "turbo_q4_k_m", "turbo_bf16"],
         )
         self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8")[0]["value"], 4)
-        self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8")[1]["value"], "off")
+        self.assertTrue(self.ui.profile_settings("turbo_q4_k_m", "int8")[1]["interactive"])
+        self.assertFalse(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[3]["value"])
+        self.assertFalse(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[3]["interactive"])
+        self.assertEqual(self.ui.fun_acc_settings(False, "turbo_q4_k_m")[1]["value"], 4)
+        self.assertFalse(self.ui.fun_acc_settings(False, "turbo_q4_k_m")[1]["interactive"])
         self.assertNotIn("value", self.ui.profile_settings("bf16", "int8")[0])
         self.assertEqual(self.ui.profile_settings("int8", "turbo_q4_k_m")[0]["value"], 40)
         self.assertEqual(self.ui.profile_settings("base_q4_k_m", "turbo_q4_k_m")[0]["value"], 40)
-        self.assertEqual(self.ui.profile_settings("base_q4_k_m", "turbo_q4_k_m")[1]["value"], "off")
+        self.assertTrue(self.ui.profile_settings("base_q4_k_m", "turbo_q4_k_m")[1]["interactive"])
         links = "\n".join(item["props"].get("value", "") for item in config["components"] if item["type"] == "markdown")
         self.assertIn("https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo", links)
         self.assertIn("https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF", links)

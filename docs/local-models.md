@@ -44,7 +44,7 @@ Animaの既存4枠・プロンプトの`<lora:...>`も利用できます。同�
 | Qwen Image **2.1** | 完全なDiffusersフォルダー、`config.json`と重みのあるTransformerフォルダー、Comfy／Diffusers系の単一safetensors、対応テンソル構成のGGUF | 線形A/B・down/up＋alpha。単一safetensorsはBF16、フォルダーはBF16／実行時INT8・W4A8、GGUFは通常版Q4の設定。外部の事前量子化safetensors／Diffusersフォルダーは未対応 |
 | Ming Image | ComfyUI形式の単一safetensors（本体、テキスト、VAEを個別に指定） | 本体の線形A/B・down/up＋任意alpha。全ペアの適用先・寸法を検証。テキスト側LoRA・DoRA・LyCORIS・独自拡張キーは未対応 |
 
-Qwen Image 2.1と旧Qwen Image／Image Editは別の構造です。旧世代は対応するForgeプリセットを使ってください。Qwenのローカル本体ではTurbo・Fun Acc・Outpaint専用処理を併用できません。追加LoRAには[既存の併用制限と学習時の量子化差](../extensions-builtin/qwen-image21-studio/README.md#追加lora複数対応)も適用します。
+Qwen Image 2.1と旧Qwen Image／Image Editは別の構造です。旧世代は対応するForgeプリセットを使ってください。Qwenのローカル互換本体でもFun Acc・Outpaint・画風LoRAを併用できます。構造・テンソルの形状と必要な共通部品を検証します。標準Turboの選択と外部モデルの同時指定は受け付けません。追加LoRAには[学習時の量子化差と組み合わせ](../extensions-builtin/qwen-image21-studio/README.md#追加lora複数対応)の確認も適用します。
 
 本体モデルやLoRAを変更すると必要に応じて再読み込みします。Qwenの量子化済みキャッシュは元ファイルの内容・精度ごとに分離し、元モデルには書き込みません。Ming／Qwenの結果には使用した絶対パス・SHA-256・強度を記録するため、生成条件を外部へ共有する際は保存場所も含まれます。
 

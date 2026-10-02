@@ -192,14 +192,13 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= 100:
         raise ValueError("steps must be an integer between 1 and 100.")
     request["steps"] = steps
+    from modules_forge.qwen_image21.capabilities import validate_sampling
+
+    validate_sampling(request)
     fun_acc = request.get("fun_acc", False)
     if not isinstance(fun_acc, bool):
         raise ValueError("fun_acc must be a boolean.")
     if fun_acc:
-        if operation != "generate" or request["precision"] != "int8" or steps != 4:
-            raise ValueError("Fun Acc requires regular INT8 and exactly 4 steps.")
-        if request.get("sparse_mode", "off") != "off" or request.get("control_kind", "off") != "off":
-            raise ValueError("Fun Acc requires Sparse Attention and Fun ControlNet to be off.")
         from modules_forge.qwen_image21.fun_acc_lora import installed
 
         installed(runtime_root(model_path, request))
@@ -259,16 +258,12 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     if control_inpaint and not control_image:
         raise ValueError("Inpainting + Control requires a ControlNet image.")
     if control_image:
-        if fun_acc:
-            raise ValueError("Fun Acc cannot be combined with Fun ControlNet.")
         if (
             not isinstance(control_image, str)
             or not Path(control_image).is_absolute()
             or not Path(control_image).is_file()
         ):
             raise ValueError("ControlNet requires an existing absolute local image path.")
-        if request["precision"] != "int8":
-            raise ValueError("Fun ControlNet INT8 requires the regular Qwen INT8 base model.")
         if request.get("sparse_mode", "off") != "off":
             raise ValueError("Fun ControlNet requires Sparse Attention to be off.")
     strength = request.get("control_strength", 1.0)
@@ -561,34 +556,11 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         use_safetensors=True,
         **components,
     )
-    style_lora_info = []
-    if request.get("style_loras"):
-        from modules_forge.qwen_image21.style_lora_runtime import load_adapters
+    from modules_forge.qwen_image21.adapter_stack import load_stack
 
-        _progress(job, "loading", "追加LoRAを読み込み中", 0.28)
-        style_lora_info = load_adapters(pipe.transformer, runtime_root(model_path, request), request)
-        pipe.transformer.eval()
-    fun_acc_info = None
-    fun_acc_config = None
-    outpaint_info = None
-    if request.get("outpaint_version") in {"v1", "v2"}:
-        from modules_forge.qwen_image21.outpaint_lora import installed
-        from modules_forge.qwen_image21.outpaint_runtime import load_adapter
-
-        outpaint_info = installed(runtime_root(model_path, request), request["outpaint_version"], verify=True)
-        _progress(job, "loading", "Outpaint LoRAを読み込み中", 0.28)
-        outpaint_info.update(load_adapter(pipe.transformer, outpaint_info["path"]))
-        pipe.transformer.eval()
-    if request.get("fun_acc", False):
-        from modules_forge.qwen_image21.fun_acc_lora import installed
-        from modules_forge.qwen_image21.pdd_vendor.qwenimage21_pdd import QwenImage21PDDScheduler, load_pdd_lora
-
-        fun_acc_info = installed(runtime_root(model_path, request))
-        _progress(job, "loading", "Fun Acc 4-step LoRAを読み込み中", 0.28)
-        fun_acc_config = load_pdd_lora(pipe.transformer, fun_acc_info["path"])
-        pipe.transformer.eval()
-        pipe.scheduler = QwenImage21PDDScheduler.from_config(pipe.scheduler.config)
-        pipe.scheduler.register_to_config(**fun_acc_config)
+    style_lora_info, fun_acc_info, fun_acc_config, outpaint_info = load_stack(
+        pipe, runtime_root(model_path, request), request, lambda message: _progress(job, "loading", message, 0.28)
+    )
     controlnet = None
     if request.get("control_image"):
         from modules_forge.qwen_image21.fun_controlnet import installed
@@ -649,6 +621,7 @@ def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -
         cache_key(runtime_root(model_path, request), request),
         json.dumps(request.get("local_source"), sort_keys=True),
         str(runtime_root(model_path, request)),
+        "sampling-outpaint-style-stack-v1",
     )
     if _RESIDENT_RUNTIME is not None and key == _RESIDENT_KEY:
         _progress(job, "loaded", "読み込み済みモデルを再利用", 0.30)

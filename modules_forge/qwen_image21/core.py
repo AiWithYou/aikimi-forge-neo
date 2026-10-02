@@ -155,10 +155,8 @@ class Request:
             raise QwenImage21Error("ローカルモデルのパスが不正です。")
         if self.local_components and not self.local_model:
             raise QwenImage21Error("共通部品の指定にはローカル本体モデルを選択してください。")
-        if self.local_model and (self.operation != "generate" or self.fun_acc or self.outpaint_version):
-            raise QwenImage21Error(
-                "ローカル本体では通常生成と追加LoRAを使用してください。Fun Acc・Outpaintは標準モデル専用です。"
-            )
+        if self.local_model and self.operation != "generate":
+            raise QwenImage21Error("ローカル本体の量子化は初回生成時に変換・保存します。")
         if self.operation not in {"generate", "prepare"}:
             raise QwenImage21Error("実行する操作が不正です。")
         if self.operation == "prepare" and self.precision not in {"int8", "w4a8"}:
@@ -171,20 +169,18 @@ class Request:
             raise QwenImage21Error("幅・高さは32の倍数、総画素数は約430万画素（2400×1792）以内で指定してください。")
         steps = integer(self.steps, "Steps", 1, 100)
         seed = integer(self.seed, "Seed", -1, 2**63 - 1)
-        if self.precision not in {"int8", "bf16", "w4a8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m"}:
-            raise QwenImage21Error("モデル・精度の指定が不正です。")
-        if self.precision.startswith("turbo_") and steps != 4:
-            raise QwenImage21Error("Viggle Turboは4 stepsで生成してください。")
-        if not isinstance(self.fun_acc, bool):
-            raise QwenImage21Error("Fun Accの指定が不正です。")
-        if self.fun_acc and (self.operation != "generate" or self.precision != "int8" or steps != 4):
-            raise QwenImage21Error("Fun Accは通常版INT8・4 stepsの画像生成で使用してください。")
-        if self.fun_acc and (self.sparse_mode != "off" or self.control_kind != "off"):
-            raise QwenImage21Error("Fun AccではSparse AttentionとFun ControlNetをOFFにしてください。")
-        if self.precision.startswith("turbo_") and self.sparse_mode != "off":
-            raise QwenImage21Error("Viggle TurboではSparse AttentionをOFFにしてください。")
-        if self.precision == "base_q4_k_m" and self.sparse_mode != "off":
-            raise QwenImage21Error("GGUF版ではSparse AttentionをOFFにしてください。")
+        from .capabilities import validate_sampling
+
+        try:
+            validate_sampling(
+                {
+                    **self.to_dict(),
+                    "steps": steps,
+                    "control_image": self.control_image if self.control_kind != "off" else "",
+                }
+            )
+        except ValueError as exc:
+            raise QwenImage21Error(str(exc)) from exc
         if self.memory_mode not in {"offload", "gpu"}:
             raise QwenImage21Error("メモリ設定が不正です。")
         if not isinstance(self.transparent, bool):
@@ -211,8 +207,8 @@ class Request:
             raise QwenImage21Error("Inpainting＋Controlには制御画像と種類を指定してください。")
         control_image = ""
         if self.control_kind != "off":
-            if self.operation != "generate" or self.precision != "int8":
-                raise QwenImage21Error("Fun ControlNetは通常版INT8の画像生成で使用してください。")
+            if self.operation != "generate":
+                raise QwenImage21Error("Fun ControlNetは画像生成で使用してください。")
             if self.sparse_mode != "off":
                 raise QwenImage21Error("Fun ControlNetではSparse AttentionをOFFにしてください。")
             if not self.control_image:
@@ -260,7 +256,11 @@ class Request:
         if not isinstance(self.edit_mask_path, (str, Path)):
             raise QwenImage21Error("編集マスクの形式が不正です。")
         mask_path = ""
-        if self.preserve_unmasked or self.control_inpaint:
+        if self.outpaint_version and self.control_inpaint:
+            # Outpaint owns the source rectangle; its expanded reference and
+            # outside-only mask are created atomically by the job snapshot.
+            mask_reference, mask_path = -1, ""
+        elif self.preserve_unmasked or self.control_inpaint:
             if not 0 <= mask_reference < len(inputs) or not self.edit_mask_path:
                 raise QwenImage21Error("マスク編集には編集元の参照画像と編集マスクを指定してください。")
             mask_path, _ = validate_edit_mask(

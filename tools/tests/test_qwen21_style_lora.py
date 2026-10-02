@@ -75,6 +75,15 @@ class StyleLoraTests(unittest.TestCase):
         for changes in ({"fun_acc": True}, {"precision": "turbo_bf16"}, {"sparse_mode": "static"}):
             with self.assertRaises(ValueError):
                 Request(prompt="test", **self.options(**changes)).resolved()
+        for changes in (
+            {"fun_acc": True, "steps": 4},
+            {"precision": "turbo_bf16", "steps": 4},
+            {"sparse_mode": "fixed"},
+        ):
+            with self.subTest(changes=changes):
+                self.assertEqual(
+                    Request(prompt="test", **self.options(**changes)).resolved().style_loras[0]["strength"], 1
+                )
         for strength in (float("nan"), float("inf"), 2.01, True, "1", None):
             with self.assertRaisesRegex(ValueError, self.path.name):
                 style_lora.validate_options(self.options(strength))

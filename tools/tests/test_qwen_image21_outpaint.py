@@ -14,6 +14,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
+import gradio as gr
 from PIL import Image
 
 from modules_forge.qwen_image21.outpaint import (
@@ -248,6 +249,8 @@ class UIContractTests(unittest.TestCase):
         path = ROOT / "extensions-builtin/qwen-image21-studio/scripts/qwen_image21_outpaint.py"
         spec = importlib.util.spec_from_file_location("aikimi_outpaint_ui_test", path)
         cls.ui = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.ui
+        cls.addClassCleanup(sys.modules.pop, spec.name, None)
         with patch.dict(sys.modules, {"modules": fake_modules}):
             spec.loader.exec_module(cls.ui)
 
@@ -297,10 +300,86 @@ class UIContractTests(unittest.TestCase):
         )
         browser = types.SimpleNamespace(session_hash="gui-owner", username=None)
         with patch.object(self.ui, "native_studio", return_value=studio):
-            result = self.ui.start_native(source, *pads, "none", "room", "base_q4_k_m", 0, 25, 42, "", browser)
+            result = self.ui.start_native(source, *pads, "none", "room", 0, 25, 42, "base_q4_k_m", "", browser)
         self.assertEqual(result[0], "job-gui")
         self.assertEqual(captured["request"].outpaint_margins, (192, 0, 64, 0))
         self.assertEqual((captured["request"].width, captured["request"].height), (992, 512))
+
+    def test_shared_profile_is_injected_after_request_and_frozen_per_generation(self):
+        from gradio.helpers import special_args
+
+        from modules_forge.qwen_image21.core import Request
+        from modules_forge.qwen_image21.outpaint_profile import FIELDS, resolve, summary
+
+        source = Image.new("RGB", (256, 256), "blue")
+        first = Request("test", precision="w4a8", fun_acc=True, steps=4).to_dict()
+        first["lora_strengths"] = [["a.safetensors", 0.65]]
+        first["style_loras"] = ["a.safetensors"]
+        values = [first[name] for name in FIELDS]
+        captured = {}
+        studio = types.SimpleNamespace(
+            start=lambda generation, owner: captured.update(request=generation, owner=owner) or "job-shared"
+        )
+        browser = gr.Request(session_hash="client-a")
+        inputs = [source, 32, 0, 32, 0, "v2", "room", 0, 25, 42, "base_q4_k_m", "", *values]
+        args, _, _, _ = special_args(self.ui.start_native, inputs, request=browser)
+        with patch.object(self.ui, "native_studio", return_value=studio):
+            result = self.ui.start_native(*args)
+        self.assertEqual(result[0], "job-shared", str(result[1]) + " " + str(self.ui.start_native.__annotations__))
+        request = captured["request"].resolved()
+        self.assertEqual((request.precision, request.steps, request.fun_acc), ("w4a8", 4, True))
+        self.assertEqual(request.style_loras, ({"name": "a.safetensors", "strength": 0.65},))
+        self.assertEqual(captured["owner"], ":client-a")
+        # A second client and edits to the first client's table cannot mutate a running job.
+        values[FIELDS.index("lora_strengths")][0][1] = 0.1
+        other = Request("other", precision="bf16").to_dict()
+        other["style_loras"], other["lora_strengths"] = [], []
+        other_profile = resolve([other[name] for name in FIELDS], 25)
+        self.assertEqual(other_profile["precision"], "bf16")
+        self.assertEqual(request.style_loras[0]["strength"], 0.65)
+        self.assertIn(
+            "0.65", summary(resolve([first[name] for name in FIELDS], 4) | {"style_loras": request.style_loras}, "v2")
+        )
+
+    def test_distilled_steps_restore_outpaint_steps_and_conflicts_are_visible(self):
+        fixed, remembered = self.ui.outpaint_step_settings("turbo_q4_k_m", False, 31, 25)
+        self.assertEqual(fixed["value"], 4)
+        self.assertFalse(fixed["interactive"])
+        restored, remembered = self.ui.outpaint_step_settings("bf16", False, 4, remembered)
+        self.assertEqual(restored["value"], 31)
+        self.assertTrue(restored["interactive"])
+
+    def test_control_readiness_uses_the_same_exif_orientation_as_job_copy(self):
+        from modules_forge.qwen_image21.core import Request, copy_control_image
+        from modules_forge.qwen_image21.outpaint_profile import FIELDS
+
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            source = Image.new("RGB", (512, 384), "blue")
+            control = Image.new("RGB", (384, 512), "white")
+            exif = control.getexif()
+            exif[274] = 6
+            path = directory / "portrait-control.jpg"
+            control.save(path, exif=exif)
+            copied = copy_control_image(str(path), directory)
+            with Image.open(copied) as normalized:
+                self.assertEqual(normalized.size, source.size)
+            profile = Request("test", control_kind="canny", control_image=str(path)).to_dict()
+            profile["lora_strengths"] = []
+            studio = types.SimpleNamespace(runtime=directory)
+            with patch.object(self.ui, "native_studio", return_value=studio):
+                button, _ = self.ui.native_readiness(
+                    source,
+                    64,
+                    32,
+                    96,
+                    64,
+                    "",
+                    gr.Request(session_hash="orientation"),
+                    25,
+                    *[profile[name] for name in FIELDS],
+                )
+            self.assertTrue(button["interactive"])
 
     def test_real_gradio_tab_build_and_private_callbacks(self):
         tabs = self.ui.on_ui_tabs()
@@ -374,17 +453,36 @@ class UIContractTests(unittest.TestCase):
         self.assertNotIn("value", result[6])
 
     def test_native_failed_poll_keeps_previous_download(self):
-        studio = types.SimpleNamespace(
-            status=lambda job, owner: {"done": True, "state": "failed", "message": "stopped", "elapsed": 1}
-        )
         browser = types.SimpleNamespace(session_hash="session", username=None)
+        for state in ("failed", "cancelled"):
+            with self.subTest(state=state):
+                studio = types.SimpleNamespace(
+                    status=lambda job, owner, state=state: {
+                        "done": True,
+                        "state": state,
+                        "message": "stopped",
+                        "elapsed": 1,
+                    }
+                )
+                with patch.object(self.ui, "native_studio", return_value=studio):
+                    result = self.ui.poll_native("job-1", "previous-job", True, browser)
+                self.assertTrue(result[1]["interactive"])
+                self.assertFalse(result[2]["interactive"])
+                self.assertFalse(result[3]["active"])
+                self.assertNotIn("value", result[4])
+                self.assertNotIn("value", result[5])
+                self.assertEqual(result[4]["label"], "前回の生成結果 · 開始時の設定")
+
+    def test_missing_job_resets_running_label_without_replacing_previous_image(self):
+        from modules_forge.qwen_image21.service import JobNotFound
+
+        browser = types.SimpleNamespace(session_hash="session", username=None)
+        studio = types.SimpleNamespace(status=lambda *args: (_ for _ in ()).throw(JobNotFound("gone")))
         with patch.object(self.ui, "native_studio", return_value=studio):
-            result = self.ui.poll_native("job-1", "previous-job", True, browser)
-        self.assertTrue(result[1]["interactive"])
-        self.assertFalse(result[2]["interactive"])
-        self.assertFalse(result[3]["active"])
+            result = self.ui.poll_native("missing-job", "previous-job", True, browser)
+        self.assertEqual(result[4]["label"], "前回の生成結果 · 開始時の設定")
         self.assertNotIn("value", result[4])
-        self.assertNotIn("value", result[5])
+        self.assertFalse(result[2]["interactive"])
 
     def test_preview_marks_extension_and_keeps_original_visible(self):
         source = Image.new("RGB", (256, 256), (10, 200, 30))

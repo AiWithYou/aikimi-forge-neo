@@ -211,7 +211,7 @@ class Studio:
                         request.mask_feather,
                         directory,
                     )
-                    if request.preserve_unmasked or request.control_inpaint
+                    if (request.preserve_unmasked or request.control_inpaint) and not request.outpaint_version
                     else {}
                 )
                 payload["edit_mask_path"] = payload["edit_mask"].get("mask_path", "")
@@ -390,6 +390,8 @@ class Studio:
                     rewrite_message = " · 編集のため書き換え省略"
                 preservation_message = " · 範囲外固定" if request.preserve_unmasked else ""
                 if request.outpaint_version:
+                    from .outpaint_profile import summary
+
                     adapter_label = "LoRAなし" if request.outpaint_version == "none" else request.outpaint_version
                     preservation_message = f" · Outpaint {adapter_label} · 境界 {request.outpaint_feather} px"
                 final = {
@@ -403,6 +405,9 @@ class Studio:
                     "seed": request.seed,
                     "progress": 1.0,
                     "effective_prompt": metadata.get("effective_prompt", request.prompt),
+                    "applied_profile": summary(request.to_dict(), request.outpaint_version)
+                    if request.outpaint_version
+                    else "",
                     "prompt_rewrite": rewrite,
                 }
                 job.completion_committed = True

@@ -16,23 +16,13 @@ def validate_options(values: dict) -> None:
         raise ValueError("Outpaint LoRAはなし・v1・v2を選んでください。")
     if not version:
         return
-    if values.get("operation", "generate") != "generate" or values.get("precision", "int8") not in {
-        "int8",
-        "base_q4_k_m",
-    }:
-        raise ValueError("Outpaintは通常版QwenのQ4_K_MまたはINT8を使用します。")
-    if (
-        values.get("fun_acc", False)
-        or values.get("sparse_mode", "off") != "off"
-        or values.get("control_kind", "off") != "off"
-        or values.get("control_image")
-        or values.get("annotation_layers")
-        or values.get("preserve_unmasked", False)
-        or values.get("rewrite_prompt", False)
-        or values.get("rewrite_edit_prompt", False)
-        or values.get("transparent", False)
-    ):
-        raise ValueError("Outpaintでは追加の制御・高速化・プロンプト書き換えをOFFにしてください。")
+    from .capabilities import validate_sampling
+
+    validate_sampling(values)
+    if values.get("operation", "generate") != "generate":
+        raise ValueError("Outpaintは画像生成で使用してください。")
+    if values.get("annotation_layers") or values.get("preserve_unmasked", False):
+        raise ValueError("Outpaintの編集範囲はキャンバスで指定します。通常編集の注釈・範囲外固定は併用できません。")
     if len(values.get("input_images", ())) != 1:
         raise ValueError("Outpaintの元画像を1枚指定してください。")
     pads = values.get("outpaint_margins")
@@ -51,6 +41,12 @@ def source_plan(source: str, values: dict):
     return original, canvas, plan
 
 
+def outside_mask(plan):
+    mask = Image.new("L", plan.size, 255)
+    mask.paste(0, (plan.left, plan.top, plan.left + plan.source_width, plan.top + plan.source_height))
+    return mask
+
+
 def snapshot(payload: dict, directory: Path) -> None:
     source = payload["clean_input_images"][0]
     original, canvas, plan = source_plan(source, payload)
@@ -59,6 +55,31 @@ def snapshot(payload: dict, directory: Path) -> None:
     canvas.save(reference, format="PNG")
     payload["input_images"] = [str(reference)]
     payload["outpaint"] = {"source": source, "plan": asdict(plan), "feather": payload["outpaint_feather"]}
+    control = payload.get("control_image")
+    if control:
+        if Path(control).resolve() != (directory / "control-source.png").resolve() or Path(control).is_symlink():
+            raise ValueError("Outpaintの制御画像はジョブ内へコピーしてから使用してください。")
+        with Image.open(control) as image:
+            image = image.convert("RGB")
+            if image.size == original.size:
+                expanded = Image.new("RGB", plan.size, "black")
+                expanded.paste(image, (plan.left, plan.top))
+                image = expanded
+            elif image.size != plan.size:
+                raise ValueError("Outpaintの制御画像は元画像または完成キャンバスと同じ寸法で指定してください。")
+            image.save(control, format="PNG")
+    if payload.get("control_inpaint"):
+        mask = outside_mask(plan)
+        mask_path = directory / "edit-mask.png"
+        mask.save(mask_path)
+        payload["edit_mask"] = {
+            "original_path": str(reference),
+            "mask_path": str(mask_path),
+            "reference": 0,
+            "feather": 0,
+        }
+        payload["edit_mask_path"] = str(mask_path)
+        payload["edit_mask_reference"] = 0
 
 
 def validate_snapshot(values: dict, job: Path) -> None:
@@ -81,6 +102,26 @@ def validate_snapshot(values: dict, job: Path) -> None:
     with Image.open(reference) as image:
         if image.mode != "RGB" or image.size != plan.size or image.tobytes() != expected.tobytes():
             raise ValueError("Outpaintの参照画像が元画像・余白と一致しません。")
+    control = values.get("control_image")
+    if control:
+        path = Path(control)
+        if path.resolve() != (job / "control-source.png").resolve() or path.is_symlink():
+            raise ValueError("Outpaintの制御画像はジョブ内の保存画像を使用してください。")
+        with Image.open(path) as image:
+            if image.mode != "RGB" or image.size != plan.size:
+                raise ValueError("Outpaintの制御画像が完成キャンバスの寸法と一致しません。")
+    if values.get("control_inpaint"):
+        info = values.get("edit_mask", {})
+        mask_path = job / "edit-mask.png"
+        if (
+            info.get("original_path") != str(reference)
+            or info.get("mask_path") != str(mask_path)
+            or mask_path.is_symlink()
+        ):
+            raise ValueError("OutpaintのInpaintマスクはジョブ内の参照・外側マスクを使用してください。")
+        with Image.open(mask_path) as mask:
+            if mask.mode != "L" or mask.size != plan.size or mask.tobytes() != outside_mask(plan).tobytes():
+                raise ValueError("OutpaintのInpaintマスクが元画像・余白と一致しません。")
 
 
 def finish(image: Image.Image, values: dict) -> Image.Image:

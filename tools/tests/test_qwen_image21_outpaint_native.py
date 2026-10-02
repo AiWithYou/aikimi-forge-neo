@@ -52,15 +52,22 @@ class SnapshotTests(unittest.TestCase):
             finished.crop((32, 0, 288, 256)).tobytes(), Image.new("RGBA", (256, 256), (11, 77, 133, 23)).tobytes()
         )
 
+    def test_snapshot_never_overwrites_a_control_upload_outside_job(self):
+        control = self.root / "external-control.png"
+        Image.new("RGB", (256, 256), "white").save(control)
+        original = control.read_bytes()
+        payload = self.request.resolved().to_dict()
+        payload["clean_input_images"] = copy_inputs(payload["input_images"], self.job)
+        payload["control_image"] = str(control)
+        with self.assertRaisesRegex(ValueError, "ジョブ内"):
+            outpaint_native.snapshot(payload, self.job)
+        self.assertEqual(control.read_bytes(), original)
+
     def test_rejects_unsupported_combinations_before_gpu(self):
         for fields in (
-            {"precision": "w4a8"},
-            {"precision": "bf16"},
-            {"fun_acc": True, "steps": 4},
-            {"sparse_mode": "fixed"},
-            {"rewrite_edit_prompt": True},
+            {"precision": "turbo_q4_k_m", "steps": 4, "fun_acc": True},
+            {"fun_acc": True, "steps": 4, "sparse_mode": "fixed"},
             {"preserve_unmasked": True},
-            {"transparent": True},
             {"outpaint_version": "unknown"},
             {"outpaint_version": True},
             {"input_images": ()},
@@ -75,6 +82,54 @@ class SnapshotTests(unittest.TestCase):
         resolved = replace(self.request, precision="base_q4_k_m").resolved()
         self.assertEqual(resolved.outpaint_version, "v2")
         self.assertEqual(resolved.outpaint_margins, (32, 0, 32, 0))
+
+    def test_all_model_profiles_preserve_outpaint_geometry_and_accept_style(self):
+        from modules_forge.qwen_image21.capabilities import PRECISIONS
+
+        for precision in PRECISIONS:
+            with self.subTest(precision=precision):
+                resolved = replace(
+                    self.request,
+                    precision=precision,
+                    steps=4 if precision.startswith("turbo_") else 25,
+                    style_loras=({"name": "style.safetensors", "strength": 0.75},),
+                    rewrite_edit_prompt=True,
+                    transparent=True,
+                ).resolved()
+                self.assertEqual((resolved.width, resolved.height), (320, 256))
+                self.assertEqual(resolved.style_loras[0]["strength"], 0.75)
+
+    def test_control_map_is_placed_without_resizing_and_outside_mask_is_exact(self):
+        control = self.root / "control.png"
+        Image.new("RGB", (256, 256), (1, 2, 3)).save(control)
+        self.request = replace(
+            self.request,
+            precision="base_q4_k_m",
+            control_kind="canny",
+            control_image=str(control),
+            control_inpaint=True,
+            fun_acc=True,
+            steps=4,
+        )
+        payload = self.request.resolved().to_dict()
+        payload["clean_input_images"] = copy_inputs(payload["input_images"], self.job)
+        from modules_forge.qwen_image21.core import copy_control_image
+
+        payload["control_image"] = copy_control_image(payload["control_image"], self.job)
+        outpaint_native.snapshot(payload, self.job)
+        outpaint_native.validate_snapshot(payload, self.job)
+        with Image.open(payload["control_image"]) as canvas:
+            self.assertEqual(canvas.size, (320, 256))
+            self.assertEqual(canvas.getpixel((0, 0)), (0, 0, 0))
+            self.assertEqual(canvas.getpixel((32, 0)), (1, 2, 3))
+        with Image.open(payload["edit_mask_path"]) as mask:
+            self.assertEqual(mask.getpixel((31, 0)), 255)
+            self.assertEqual(mask.getpixel((32, 0)), 0)
+            self.assertEqual(mask.getpixel((287, 255)), 0)
+            self.assertEqual(mask.getpixel((288, 255)), 255)
+        Image.new("L", (320, 256), 255).save(payload["edit_mask_path"])
+        with self.assertRaisesRegex(ValueError, "マスクが"):
+            outpaint_native.validate_snapshot(payload, self.job)
 
     def test_no_lora_uses_the_same_snapshot_validation_and_composition(self):
         self.request = replace(self.request, outpaint_version="none")

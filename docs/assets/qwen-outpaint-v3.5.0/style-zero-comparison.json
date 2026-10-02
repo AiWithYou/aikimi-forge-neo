@@ -1,0 +1,8 @@
+{
+  "active_case": "base_q4_k_m-acc-style-control",
+  "zero_case": "base_q4_k_m-acc-control-zero",
+  "outside_pixels": 125952,
+  "outside_pixels_changed": 113855,
+  "mean_outside_rgb_absolute_difference": 3.1799018673780486,
+  "zero_style_applied_layers": 0
+}

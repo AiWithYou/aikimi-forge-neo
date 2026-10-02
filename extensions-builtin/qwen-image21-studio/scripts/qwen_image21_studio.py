@@ -441,34 +441,42 @@ def model_save_status(precision, identifier, request: gr.Request, local_model=""
 
 
 def profile_settings(precision, previous_precision, fun_acc=False):
-    if fun_acc:
-        return gr.update(value=4, interactive=False), gr.update(value="off", interactive=False), precision
     turbo = precision in {"turbo_bf16", "turbo_q4_k_m"}
     if turbo:
-        return gr.update(value=4, interactive=False), gr.update(value="off", interactive=False), precision
+        return (
+            gr.update(value=4, interactive=False),
+            gr.update(interactive=True),
+            precision,
+            gr.update(value=False, interactive=False),
+        )
+    if fun_acc:
+        return (
+            gr.update(value=4, interactive=False),
+            gr.update(value="off", interactive=False),
+            precision,
+            gr.update(interactive=True),
+        )
     steps = (
         gr.update(value=40, interactive=True)
         if previous_precision.startswith("turbo_")
         else gr.update(interactive=True)
     )
-    if precision == "base_q4_k_m":
-        return steps, gr.update(value="off", interactive=False), precision
-    return steps, gr.update(interactive=True), precision
+    return steps, gr.update(interactive=True), precision, gr.update(interactive=True)
 
 
-def fun_acc_settings(enabled):
+def fun_acc_settings(enabled, precision="int8"):
     if enabled:
         return (
-            gr.update(value="int8", interactive=False),
+            gr.update(interactive=True),
             gr.update(value=4, interactive=False),
             gr.update(value="off", interactive=False),
-            gr.update(value="off", interactive=False),
-            gr.update(interactive=False),
-            gr.update(value=False, interactive=False),
+            gr.update(interactive=True),
+            gr.update(interactive=True),
+            gr.update(interactive=True),
         )
     return (
         gr.update(interactive=True),
-        gr.update(value=40, interactive=True),
+        gr.update(value=4 if precision.startswith("turbo_") else 40, interactive=not precision.startswith("turbo_")),
         gr.update(interactive=True),
         gr.update(interactive=True),
         gr.update(interactive=True),
@@ -741,7 +749,7 @@ def resolution_settings(resolution):
 
 def model_guidance(precision):
     return {
-        "base_q4_k_m": "4bit GGUF · 小さい重みで始める標準。Fun Acc / ControlNetはINT8を選択。",
+        "base_q4_k_m": "4bit GGUF · 小さい重みで始める標準。画風LoRA・Fun Acc・ControlNetに対応。",
         "w4a8": "重み4bit・演算8bit · INT8より重みを省メモリ化。速さは環境と設定によります。",
         "int8": "8bit · W4A8より重みは大きめ。Fun Acc / ControlNetに対応。",
         "bf16": "16bit · 量子化なし。通常版で最も多くメモリを使います。",
@@ -803,7 +811,7 @@ def lora_selection(names, rows):
     from modules_forge.local_assets import lora_rows
 
     names = names or []
-    table = gr.update(value=lora_rows(names, rows), visible=bool(names))
+    table = gr.update(value=lora_rows(names, rows), visible=True if names else "hidden")
     mismatched, errors = [], []
     for name in names:
         try:
@@ -818,7 +826,7 @@ def lora_selection(names, rows):
             + "学習時はConvRot INT8: "
             + ", ".join(lora_display_name(name).split(" / ")[0] for name in mismatched)
         )
-    return table, message, gr.update(visible=bool(mismatched), value=False)
+    return table, message, gr.update(visible=True if mismatched else "hidden", value=False)
 
 
 def lora_readiness(names, rows, allow_mismatch, identifier, request: gr.Request):
@@ -963,11 +971,6 @@ def on_ui_tabs():
                                 value=False,
                                 label="マスク範囲外を元画像に固定",
                                 elem_id="qwen21-preserve-unmasked",
-                            )
-                            control_inpaint = gr.Checkbox(
-                                value=False,
-                                label="ControlNetにもマスクを渡す",
-                                elem_id="qwen21-control-inpaint",
                             )
                         with gr.Column(min_width=0, elem_id="qwen21-canvas-stack"):
                             with gr.Column(min_width=0, elem_id="qwen21-guide-panel"):
@@ -1145,7 +1148,7 @@ def on_ui_tabs():
                             column_count=(2, "fixed"),
                             row_count=len(saved_loras),
                             interactive=True,
-                            visible=False,
+                            visible="hidden",
                             label="強度（−2〜2・0で無効）",
                             column_widths=["75%", "25%"],
                             max_chars=64,
@@ -1155,7 +1158,7 @@ def on_ui_tabs():
                         )
                         lora_info = gr.Markdown("")
                         allow_lora_base_mismatch = gr.Checkbox(
-                            value=False, label="異なる量子化で試す（実験）", visible=False
+                            value=False, label="異なる量子化で試す（実験）", visible="hidden"
                         )
                         with gr.Accordion("LoRAの追加方法", open=False):
                             gr.Markdown(
@@ -1166,7 +1169,7 @@ def on_ui_tabs():
                             [
                                 ("通常 · Q4_K_M · 4bit GGUF", "base_q4_k_m"),
                                 ("通常 · W4A8 · 省メモリ", "w4a8"),
-                                ("通常 · INT8 · 拡張対応", "int8"),
+                                ("通常 · INT8 · 8bit", "int8"),
                                 ("通常 · BF16 · メモリ大", "bf16"),
                                 ("Turbo · Q4_K_M · 4 steps", "turbo_q4_k_m"),
                                 ("Turbo · BF16 · 4 steps", "turbo_bf16"),
@@ -1215,7 +1218,7 @@ def on_ui_tabs():
                 with gr.Column(min_width=0, elem_id="qwen21-settings"):
                     fun_acc = gr.Checkbox(
                         value=False,
-                        label="Fun Acc · 4 steps（通常版INT8）",
+                        label="Fun Acc · 4 steps（通常モデル）",
                         info="4 stepsで高速生成。細部の再現性は下がる場合があります。",
                         elem_id="qwen21-fun-acc",
                     )
@@ -1237,11 +1240,17 @@ def on_ui_tabs():
                                 ("Scribble", "scribble"),
                             ],
                             value="off",
-                            label="ControlNet · 通常版INT8",
+                            label="ControlNet",
                             elem_id="qwen21-control-kind",
                         )
                         with gr.Group(visible="hidden", elem_id="qwen21-control-options") as control_options:
                             control_strength = gr.Slider(0, 2, value=1, step=0.05, label="制御の強さ")
+                            control_inpaint = gr.Checkbox(
+                                value=False,
+                                label="ControlNetにもマスクを渡す",
+                                info="Outpaintでは追加領域のマスクを自動で使用します。",
+                                elem_id="qwen21-control-inpaint",
+                            )
                             control_image = gr.Image(
                                 label="前処理済みの制御画像",
                                 type="filepath",
@@ -1270,8 +1279,7 @@ def on_ui_tabs():
                                 ("数値ルール · 通信なし", "rules"),
                                 ("Jev速度優先 · 集約統計を外部送信", "jev"),
                             ],
-                            value="off" if selected_precision == "base_q4_k_m" else sparse_defaults.mode,
-                            interactive=selected_precision != "base_q4_k_m",
+                            value=sparse_defaults.mode,
                             label="Sparse Attention",
                             elem_id="qwen21-sparse-mode",
                             info="Jevは保存済みのキーを使用します。画像・プロンプトは送信しません。方式の変更は次の生成から適用します。",
@@ -1282,10 +1290,10 @@ def on_ui_tabs():
                             value=sparse_defaults.keep_percent,
                             step=1,
                             label="固定Sparseの保持率 %",
-                            visible=selected_precision != "base_q4_k_m" and sparse_defaults.mode == "fixed",
+                            visible=True if sparse_defaults.mode == "fixed" else "hidden",
                         )
                         sparse_mode.change(
-                            lambda mode: gr.update(visible=mode == "fixed"),
+                            lambda mode: gr.update(visible=True if mode == "fixed" else "hidden"),
                             inputs=sparse_mode,
                             outputs=sparse_keep,
                             **PRIVATE,
@@ -1363,9 +1371,10 @@ def on_ui_tabs():
             lambda kind: (
                 gr.update(visible=True if kind != "off" else "hidden"),
                 gr.update(label=f"ControlNet · {kind.upper()}"),
+                gr.update(value=False) if kind == "off" else gr.skip(),
             ),
             inputs=control_kind,
-            outputs=[control_options, control_section],
+            outputs=[control_options, control_section, control_inpaint],
             **PRIVATE,
         )
         precision.change(model_guidance, inputs=precision, outputs=precision_help, **PRIVATE)
@@ -1418,12 +1427,12 @@ def on_ui_tabs():
         precision.change(
             profile_settings,
             inputs=[precision, profile_state, fun_acc],
-            outputs=[steps, sparse_mode, profile_state],
+            outputs=[steps, sparse_mode, profile_state, fun_acc],
             **PRIVATE,
         )
         fun_acc.change(
             fun_acc_settings,
-            inputs=fun_acc,
+            inputs=[fun_acc, precision],
             outputs=[precision, steps, sparse_mode, control_kind, control_image, control_inpaint],
             **PRIVATE,
         )
@@ -1646,7 +1655,31 @@ def on_ui_tabs():
             **PRIVATE,
         )
         check.click(check_runtime, outputs=environment, **PRIVATE)
-    return [(tab, "Qwen Image 2.1", "qwen_image21_studio")]
+    from modules_forge.qwen_image21.ui_shared import build_outpaint
+
+    controls = {
+        "precision": precision,
+        "memory_mode": memory_mode,
+        "style_loras": style_loras,
+        "lora_strengths": lora_strengths,
+        "allow_lora_base_mismatch": allow_lora_base_mismatch,
+        "fun_acc": fun_acc,
+        "sparse_mode": sparse_mode,
+        "sparse_keep_percent": sparse_keep,
+        "sparse_jev_cadence": sparse_cadence,
+        "sparse_jev_interval": sparse_interval,
+        "sparse_jev_max_calls": sparse_max_calls,
+        "sparse_jev_max_wait_seconds": sparse_max_wait,
+        "control_kind": control_kind,
+        "control_image": control_image,
+        "control_strength": control_strength,
+        "control_inpaint": control_inpaint,
+        "local_model": local_model,
+        "local_components": local_components,
+        "rewrite_edit_prompt": rewrite_edit_prompt,
+        "transparent": transparent,
+    }
+    return [(tab, "Qwen Image 2.1", "qwen_image21_studio"), *build_outpaint(controls)]
 
 
 script_callbacks.on_ui_tabs(on_ui_tabs)

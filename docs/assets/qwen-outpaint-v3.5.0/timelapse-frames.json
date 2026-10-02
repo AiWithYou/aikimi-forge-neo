@@ -1,0 +1,226 @@
+[
+  {
+    "frame": 0,
+    "captured_utc": "2026-10-02T13:28:26.269Z",
+    "seconds_from_start": 0.0,
+    "label": "開始前：Q4・画風0.65・Fun Acc・ControlNet",
+    "display_ms": 1100,
+    "screenshot_sha256": "c73e96ee5cc7a0ac2fa99219f9ba7e7ac0d710e1c482d5095d72e47e0bf69c26"
+  },
+  {
+    "frame": 1,
+    "captured_utc": "2026-10-02T13:28:27.929Z",
+    "seconds_from_start": 1.66,
+    "label": "生成ボタン押下",
+    "display_ms": 1100,
+    "screenshot_sha256": "65d2d201273341d3162ca68ee8315cd3fcc168d17e42ed0c9401c2ba08436f7e"
+  },
+  {
+    "frame": 2,
+    "captured_utc": "2026-10-02T13:28:35.159Z",
+    "seconds_from_start": 8.89,
+    "label": "開始リクエスト処理",
+    "display_ms": 1100,
+    "screenshot_sha256": "8cc1b8969c78aa443cfe6cad53201439a8945ffb82de5b4448c146f24d3703a1"
+  },
+  {
+    "frame": 3,
+    "captured_utc": "2026-10-02T13:30:00.694Z",
+    "seconds_from_start": 94.425,
+    "label": "次回条件：BF16・画風0.1",
+    "display_ms": 1100,
+    "screenshot_sha256": "ff4677a24989ede1d80988dd7ae52541e805d86d535b082fc41752a4030cbc43"
+  },
+  {
+    "frame": 4,
+    "captured_utc": "2026-10-02T13:30:02.699Z",
+    "seconds_from_start": 96.43,
+    "label": "生成中：次回条件はBF16・画風0.1",
+    "display_ms": 1100,
+    "screenshot_sha256": "107ecf1baa258400ecc83d6478ef2092f079e381920f67f1a0152d8473997e74"
+  },
+  {
+    "frame": 5,
+    "captured_utc": "2026-10-02T13:31:01.977Z",
+    "seconds_from_start": 155.708,
+    "label": "サンプリング中：開始条件Q4・0.65、次回条件BF16・0.1",
+    "display_ms": 1100,
+    "screenshot_sha256": "79888b1af89269a1373b6327710d17440914065dd9a6d11e451242370de48c9b"
+  },
+  {
+    "frame": 6,
+    "captured_utc": "2026-10-02T13:31:24.856Z",
+    "seconds_from_start": 178.587,
+    "label": "完了：次回条件BF16・0.1でも開始時のQ4・0.65で生成",
+    "display_ms": 2000,
+    "screenshot_sha256": "b2d758589995ec9f99cfd84899f2278154f4ae4dd31c117c56e0c2f2241c9cb4"
+  },
+  {
+    "frame": 7,
+    "captured_utc": "2026-10-02T13:31:30.962Z",
+    "seconds_from_start": 184.693,
+    "label": "生成情報：開始時Q4・0.65、次回BF16・0.1",
+    "display_ms": 2000,
+    "screenshot_sha256": "cc7e5ea3f66bf55ec9557b8bc9cd59bffbf3d9240dc593258bda6186b489a640"
+  },
+  {
+    "frame": 8,
+    "captured_utc": "2026-10-02T13:31:38.596Z",
+    "seconds_from_start": 192.327,
+    "label": "完成PNGをブラウザーから保存",
+    "display_ms": 1100,
+    "screenshot_sha256": "8bdbba09e9fad38681bb34876490b896dbe5da660954be8acda3c1a81bdf469a"
+  },
+  {
+    "frame": 9,
+    "captured_utc": "2026-10-02T13:32:44.818Z",
+    "seconds_from_start": 258.549,
+    "label": "次回条件をQ4・画風0.65へ復帰",
+    "display_ms": 1100,
+    "screenshot_sha256": "c0b016c9d9de64b7eb172f2b9454983aa56d5d9dc0e9b76769aea87d793d7f44"
+  },
+  {
+    "frame": 10,
+    "captured_utc": "2026-10-02T13:32:47.266Z",
+    "seconds_from_start": 260.997,
+    "label": "同条件の2回目を開始",
+    "display_ms": 1100,
+    "screenshot_sha256": "815b37af8d9fd349a5060c2b6d6a3b31339b6469a4a572e52c49997e73597c4b"
+  },
+  {
+    "frame": 11,
+    "captured_utc": "2026-10-02T13:33:07.536Z",
+    "seconds_from_start": 281.267,
+    "label": "2回目：読み込み済みモデルで生成",
+    "display_ms": 1100,
+    "screenshot_sha256": "b4f27455d0168b96a848110b427f86c16200ce0f83ca28f05af946c957dff799"
+  },
+  {
+    "frame": 12,
+    "captured_utc": "2026-10-02T13:33:21.040Z",
+    "seconds_from_start": 294.771,
+    "label": "再利用で2回目も完了",
+    "display_ms": 2000,
+    "screenshot_sha256": "544b265a00da5d7a7ec50fb6774df45ad957213603c1e53a8db0badaa9e8ad4d"
+  },
+  {
+    "frame": 13,
+    "captured_utc": "2026-10-02T13:33:41.030Z",
+    "seconds_from_start": 314.761,
+    "label": "停止テスト用の3回目開始",
+    "display_ms": 1100,
+    "screenshot_sha256": "6994265a18d71c983bb2f00e4719306856532f109d43d6198f2e96bb130e6d6d"
+  },
+  {
+    "frame": 14,
+    "captured_utc": "2026-10-02T13:33:51.579Z",
+    "seconds_from_start": 325.31,
+    "label": "3回目の進行：停止前",
+    "display_ms": 1100,
+    "screenshot_sha256": "29bc0ac4b528aeb3b01c46c9d91fd1ec9832f594fc5bda559b1a2586cb4e86e3"
+  },
+  {
+    "frame": 15,
+    "captured_utc": "2026-10-02T13:33:55.267Z",
+    "seconds_from_start": 328.998,
+    "label": "3回目に停止要求",
+    "display_ms": 1100,
+    "screenshot_sha256": "c01567e6c745554fd904732a3dedd79ad7997bbca4515a9105a2bc3bef61d4ad"
+  },
+  {
+    "frame": 16,
+    "captured_utc": "2026-10-02T13:34:09.940Z",
+    "seconds_from_start": 343.671,
+    "label": "停止後：画像ラベルに生成中が残る不具合を確認",
+    "display_ms": 2000,
+    "screenshot_sha256": "1c14cebe08ced3ed3cc429f3f20be2127ef0e5866d39cf33bcf2299e079aad83"
+  },
+  {
+    "frame": 17,
+    "captured_utc": "2026-10-02T13:42:48.425Z",
+    "seconds_from_start": 862.156,
+    "label": "修正後の最終UI：Q4・画風0.65・Fun Acc・ControlNet",
+    "display_ms": 1100,
+    "screenshot_sha256": "c073e8a9aef78a7f3856a0c684a8d9ff4f4e81ada0810822f821bf8ad34054c1"
+  },
+  {
+    "frame": 18,
+    "captured_utc": "2026-10-02T13:42:49.832Z",
+    "seconds_from_start": 863.563,
+    "label": "修正後：同条件の実生成開始",
+    "display_ms": 1100,
+    "screenshot_sha256": "77637d64a32d082a7b565f8774800cf276761ab051d64ee4b6268e3b8ef59957"
+  },
+  {
+    "frame": 19,
+    "captured_utc": "2026-10-02T13:43:38.320Z",
+    "seconds_from_start": 912.051,
+    "label": "修正後：同条件のモデル読み込み",
+    "display_ms": 1100,
+    "screenshot_sha256": "0c5924c225807c390b2016e031fb8a55affc2de57d03310910ff0b18b8a21c3b"
+  },
+  {
+    "frame": 20,
+    "captured_utc": "2026-10-02T13:45:12.971Z",
+    "seconds_from_start": 1006.702,
+    "label": "修正後：読み込みと生成の進行",
+    "display_ms": 1100,
+    "screenshot_sha256": "f5787948022a903cf3646c547606ae0afcb78080d140bd07e705b1dcaeb81ed4"
+  },
+  {
+    "frame": 21,
+    "captured_utc": "2026-10-02T13:47:22.189Z",
+    "seconds_from_start": 1135.92,
+    "label": "修正後：モデル読み込み後の入力処理",
+    "display_ms": 1100,
+    "screenshot_sha256": "823537a2a852be9dc2271b265e7364ad251b0de8991aa207834792b65e9be1fd"
+  },
+  {
+    "frame": 22,
+    "captured_utc": "2026-10-02T13:48:59.271Z",
+    "seconds_from_start": 1233.002,
+    "label": "修正後：画像へ変換中 · 経過 368 秒",
+    "display_ms": 1100,
+    "screenshot_sha256": "1be615f64cbf1b256086029ad256bb77e308ffcf3d55925226d5ba8b35f4c5f7"
+  },
+  {
+    "frame": 23,
+    "captured_utc": "2026-10-02T13:49:24.750Z",
+    "seconds_from_start": 1258.481,
+    "label": "修正後：同じ併用条件で完成",
+    "display_ms": 1100,
+    "screenshot_sha256": "5f630d41271a0ca84d483357e8fe8a807f27e03a95c987f2e10f44be72c154ec"
+  },
+  {
+    "frame": 24,
+    "captured_utc": "2026-10-02T13:49:28.855Z",
+    "seconds_from_start": 1262.586,
+    "label": "修正後：停止確認の再実行開始",
+    "display_ms": 1100,
+    "screenshot_sha256": "dd386dd1cfb5191c9deddcd937deb9d23f73174b737aa972f08b514c5866c98c"
+  },
+  {
+    "frame": 25,
+    "captured_utc": "2026-10-02T13:49:39.671Z",
+    "seconds_from_start": 1273.402,
+    "label": "修正後・停止前：プロンプトと参照画像を処理中 · 経過 9 秒",
+    "display_ms": 1100,
+    "screenshot_sha256": "09c60aca62cbd0932d1f76add133260af1822b0f201d8db6c62a911da326e071"
+  },
+  {
+    "frame": 26,
+    "captured_utc": "2026-10-02T13:49:42.917Z",
+    "seconds_from_start": 1276.648,
+    "label": "修正後：停止要求",
+    "display_ms": 1100,
+    "screenshot_sha256": "0348a32903a5e303c1e9e4a8941ab611a3f3738f3f69c09011c066e96b9fa6d4"
+  },
+  {
+    "frame": 27,
+    "captured_utc": "2026-10-02T13:50:01.609Z",
+    "seconds_from_start": 1295.34,
+    "label": "修正後：停止し前回の生成結果・開始時の設定へ復帰",
+    "display_ms": 1100,
+    "screenshot_sha256": "2910647533d2f29c7f9eb18bdac621b2f93c9e5d0fbc8e4c5369a817a1c85b27"
+  }
+]

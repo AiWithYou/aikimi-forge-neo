@@ -12,9 +12,9 @@ from pathlib import Path
 import gradio as gr
 from PIL import Image, ImageDraw
 
-from modules import script_callbacks
 from modules_forge.qwen_image21.outpaint import Plan, normalize_image, prepare, recipe, stitch
 from modules_forge.qwen_image21.outpaint_gui import canvas_markup, parse_canvas_commit
+from modules_forge.qwen_image21.ui_shared import register_outpaint
 
 PRIVATE = {"api_visibility": "private", "show_progress": "hidden", "queue": False}
 EMPTY = "元画像を選び、広げたい方向の余白を指定してください。"
@@ -416,20 +416,35 @@ def prepare_native(version, progress=gr.Progress()):  # noqa: B008
 
 
 def start_native(
-    source, left, top, right, bottom, version, scene, feather, steps, seed, precision, previous, request: gr.Request
+    source,
+    left,
+    top,
+    right,
+    bottom,
+    version,
+    scene,
+    feather,
+    steps,
+    seed,
+    precision,
+    previous,
+    request: gr.Request,
+    *shared,
 ):
     from modules_forge.qwen_image21.core import Request
 
     try:
         original, _, plan = prepare(source, left, top, right, bottom)
         settings = recipe(plan, version, scene)
+        from modules_forge.qwen_image21.outpaint_profile import resolve
+
+        profile = resolve(shared, steps) if shared else {"precision": precision, "steps": steps}
         generation = Request(
             prompt=settings["prompt"],
             width=plan.size[0],
             height=plan.size[1],
-            steps=steps,
             seed=seed,
-            precision=precision,
+            **profile,
             input_images=(save_png(original, "outpaint-source"),),
             outpaint_version=version,
             outpaint_margins=(left, top, right, bottom),
@@ -450,9 +465,16 @@ def start_native(
         return gr.update(), str(exc), *[gr.update() for _ in range(6)]
 
 
-def poll_native(identifier, completed, valid, request: gr.Request):
+def poll_native(identifier, completed, valid, request: gr.Request, *shared):
     if not identifier:
         return [gr.update()] * 11
+    if shared:
+        from modules_forge.qwen_image21.outpaint_profile import resolve
+
+        try:
+            resolve(shared[1:], shared[0])
+        except ValueError:
+            valid = False
     try:
         studio = native_studio()
         state = studio.status(identifier, native_owner(request))
@@ -461,6 +483,8 @@ def poll_native(identifier, completed, valid, request: gr.Request):
         completed_update, stage, details = gr.update(), gr.update(), gr.update()
         message = f"{state['message']} · 経過 {state['elapsed']:.0f} 秒"
         can_continue = bool(completed) and done
+        if can_continue:
+            result = gr.update(label="前回の生成結果 · 開始時の設定")
         if done and state["state"] == "complete":
             path = studio.artifact(identifier, native_owner(request))
             with Image.open(path) as image:
@@ -469,6 +493,8 @@ def poll_native(identifier, completed, valid, request: gr.Request):
             result = gr.update(value=str(path), visible=True, label=f"生成結果 · {size} · 開始時の設定")
             download = gr.update(value=export, visible=True, interactive=True, label="結果のPNGを保存")
             details = state["message"] + f" · 経過 {state['elapsed']:.0f} 秒"
+            if state.get("applied_profile"):
+                details += "\n\n" + state["applied_profile"]
             message = f"完了 · {size} · [結果を見る](#qwen21-outpaint-view)"
             completed_update, stage, can_continue = identifier, gr.update(selected="result"), True
         return (
@@ -493,7 +519,7 @@ def poll_native(identifier, completed, valid, request: gr.Request):
             gr.update(interactive=valid) if terminal else gr.update(),
             gr.update(interactive=False) if terminal else gr.update(),
             gr.update(active=False) if terminal else gr.update(),
-            gr.update(),
+            gr.update(label="前回の生成結果 · 開始時の設定") if terminal and completed else gr.update(),
             gr.update(),
             gr.update(),
             gr.update(),
@@ -515,7 +541,7 @@ def mark_native_draft(previous):
     return gr.update(label="前回の結果 · 設定の変更は次の生成に反映"), gr.update(label="結果のPNGを保存")
 
 
-def native_readiness(source, left, top, right, bottom, identifier, request: gr.Request):
+def native_readiness(source, left, top, right, bottom, identifier, request: gr.Request, *shared):
     if identifier and not native_studio().status(identifier, native_owner(request))["done"]:
         return gr.update(interactive=False), gr.update()
     try:
@@ -524,10 +550,46 @@ def native_readiness(source, left, top, right, bottom, identifier, request: gr.R
         return gr.update(
             interactive=False
         ), "元画像を選ぶと生成できます。" if source is None else "広げる範囲を調整してください。"
+    if shared:
+        from modules_forge.qwen_image21.outpaint_profile import resolve
+        from modules_forge.qwen_image21.style_lora import validate_installed
+
+        try:
+            profile = resolve(shared[1:], shared[0])
+            validate_installed(native_studio().runtime, profile)
+            if profile["control_kind"] != "off":
+                if not profile["control_image"] or not Path(profile["control_image"]).is_file():
+                    raise ValueError("画像生成のControlNetで制御画像を選んでください。")
+                with Image.open(profile["control_image"]) as control:
+                    _, _, plan = prepare(source, left, top, right, bottom)
+                    size = control.size[::-1] if control.getexif().get(274) in {5, 6, 7, 8} else control.size
+                    if size not in {(plan.source_width, plan.source_height), plan.size}:
+                        raise ValueError("制御画像は元画像または広げたキャンバスと同じサイズにしてください。")
+        except (OSError, ValueError) as exc:
+            return gr.update(interactive=False), str(exc)
     return gr.update(interactive=True), gr.update() if identifier else ""
 
 
-def on_ui_tabs():
+def shared_profile_summary(steps, version, *shared):
+    from modules_forge.qwen_image21.outpaint_profile import resolve, summary
+
+    try:
+        return summary(resolve(shared, steps), version)
+    except ValueError as exc:
+        return str(exc)
+
+
+def outpaint_step_settings(precision, fun_acc, steps, normal_steps):
+    fixed = precision.startswith("turbo_") or fun_acc
+    if fixed:
+        return gr.update(value=4, interactive=False), normal_steps if steps == 4 else steps
+    return gr.update(value=normal_steps, interactive=True), normal_steps
+
+
+def on_ui_tabs(profile_controls=None):
+    from modules_forge.qwen_image21.outpaint_profile import FIELDS
+
+    shared_inputs = [profile_controls[name] for name in FIELDS] if profile_controls else []
     with gr.Blocks() as tab:
         state = gr.State(None)
         dirty = gr.State(False)
@@ -654,12 +716,16 @@ def on_ui_tabs():
                             label="Outpaint LoRA",
                             elem_id="qwen21-outpaint-version",
                         )
-                        native_precision = gr.Dropdown(
-                            choices=[("Q4_K_M · 省メモリ", "base_q4_k_m"), ("INT8 · 通常版", "int8")],
-                            value="base_q4_k_m",
-                            label="Qwenモデル",
-                            elem_id="qwen21-outpaint-precision",
-                        )
+                        if profile_controls:
+                            native_precision = gr.State("base_q4_k_m")
+                            gr.Markdown("モデル・画風LoRA・高速化・制御は上の**画像生成**で選択します。")
+                        else:
+                            native_precision = gr.Dropdown(
+                                choices=["base_q4_k_m", "int8", "w4a8", "bf16", "turbo_q4_k_m", "turbo_bf16"],
+                                value="base_q4_k_m",
+                                label="Qwenモデル",
+                                elem_id="qwen21-outpaint-precision",
+                            )
                         native_feather = gr.Slider(
                             0,
                             128,
@@ -669,7 +735,10 @@ def on_ui_tabs():
                             info="元画像の内側も、広げた辺からこの幅だけ変化します。0なら元画像の全画素を保持します。",
                             elem_id="qwen21-outpaint-native-feather",
                         )
-                        native_steps = gr.Slider(1, 100, value=25, step=1, label="Steps")
+                        native_steps = gr.Slider(
+                            1, 100, value=25, step=1, label="Steps", elem_id="qwen21-outpaint-native-steps"
+                        )
+                        normal_steps = gr.State(25)
                         native_seed = gr.Number(value=-1, precision=0, label="Seed（-1でランダム）")
                     setup_status = gr.Markdown(adapter_status("v2"), elem_id="qwen21-outpaint-setup-status")
                     setup_button = gr.Button(
@@ -678,6 +747,12 @@ def on_ui_tabs():
                         elem_id="qwen21-outpaint-setup",
                     )
                     with gr.Column(elem_id="qwen21-outpaint-run-dock"):
+                        profile_summary = gr.Markdown(
+                            shared_profile_summary(25, "v2", *(component.value for component in shared_inputs))
+                            if shared_inputs
+                            else "",
+                            elem_id="qwen21-outpaint-profile-summary",
+                        )
                         with gr.Row(elem_id="qwen21-outpaint-actions"):
                             native_generate = gr.Button(
                                 "生成", variant="primary", interactive=False, elem_id="qwen21-outpaint-generate"
@@ -772,7 +847,7 @@ def on_ui_tabs():
         native_inputs = [*prepare_inputs, native_feather, native_steps, native_seed, native_precision]
         native_generate.click(
             start_native,
-            inputs=[*native_inputs, native_result],
+            inputs=[*native_inputs, native_result, *shared_inputs],
             outputs=[
                 native_job,
                 native_status,
@@ -787,7 +862,12 @@ def on_ui_tabs():
         )
         native_timer.tick(
             poll_native,
-            inputs=[native_job, completed_job, valid_canvas],
+            inputs=[
+                native_job,
+                completed_job,
+                valid_canvas,
+                *([native_steps, *shared_inputs] if shared_inputs else []),
+            ],
             outputs=[
                 native_status,
                 native_generate,
@@ -900,7 +980,15 @@ def on_ui_tabs():
                 **PRIVATE,
             ).then(
                 native_readiness,
-                inputs=[source, left, top, right, bottom, native_job],
+                inputs=[
+                    source,
+                    left,
+                    top,
+                    right,
+                    bottom,
+                    native_job,
+                    *([native_steps, *shared_inputs] if shared_inputs else []),
+                ],
                 outputs=[native_generate, native_status],
                 **PRIVATE,
             )
@@ -921,7 +1009,28 @@ def on_ui_tabs():
             **PRIVATE,
         )
         feather.change(feather_changed, inputs=[], outputs=[restored, final_download], **PRIVATE)
+        if shared_inputs:
+            for component in [*shared_inputs, native_steps, version]:
+                component.change(
+                    shared_profile_summary,
+                    inputs=[native_steps, version, *shared_inputs],
+                    outputs=profile_summary,
+                    **PRIVATE,
+                ).then(
+                    native_readiness,
+                    inputs=[source, left, top, right, bottom, native_job, native_steps, *shared_inputs],
+                    outputs=[native_generate, native_status],
+                    **PRIVATE,
+                )
+            for component in (profile_controls["precision"], profile_controls["fun_acc"]):
+                component.change(
+                    outpaint_step_settings,
+                    inputs=[profile_controls["precision"], profile_controls["fun_acc"], native_steps, normal_steps],
+                    outputs=[native_steps, normal_steps],
+                    **PRIVATE,
+                )
+            native_steps.input(lambda value: value, inputs=native_steps, outputs=normal_steps, **PRIVATE)
     return [(tab, "Qwen Outpaint", "qwen_image21_outpaint")]
 
 
-script_callbacks.on_ui_tabs(on_ui_tabs)
+register_outpaint(on_ui_tabs)

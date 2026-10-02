@@ -1,0 +1,645 @@
+{
+  "captured_utc": "2026-10-02T22:50:54.899360+09:00",
+  "jobs": [
+    {
+      "job": "07876423ecf94b0699181db0c35c66f3",
+      "state": "complete",
+      "worker_session": {
+        "reused": false,
+        "pid": 55420
+      },
+      "request": {
+        "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Extend the blue teapot, house plants and the room naturally.",
+        "precision": "base_q4_k_m",
+        "memory_mode": "offload",
+        "steps": 4,
+        "seed": 42,
+        "style_loras": [
+          {
+            "name": "celstk/20260926_193229_22397712_step_024000.safetensors",
+            "strength": 0.65
+          }
+        ],
+        "allow_lora_base_mismatch": true,
+        "fun_acc": true,
+        "sparse_mode": "off",
+        "control_kind": "canny",
+        "control_strength": 0.5,
+        "control_inpaint": true,
+        "outpaint_version": "v2",
+        "outpaint_margins": [
+          64,
+          32,
+          96,
+          64
+        ],
+        "outpaint_feather": 0
+      },
+      "output": "ui-pass-1.png",
+      "sha256": "826c9a41a61635dc02700747c3f90b179826961b14d2ce02434ce15a71ab7e54",
+      "original_rgba_exact": true,
+      "applied_profile": "通常版 Q4_K_M (Unsloth) · CPU退避 · 画風LoRA: 20260926_193229_22397712_step_024000 × 0.65 · Outpaint: v2 · 4 steps · Fun Acc · ControlNet canny × 0.5＋外側Inpaint · 追加LoRA・制御の併用は画質実験",
+      "metadata": {
+        "model": "unsloth/Qwen-Image-2.1-GGUF",
+        "model_revision": "2c31ccd392b367a6637841a143813320a02dff55",
+        "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+        "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Extend the blue teapot, house plants and the room naturally.",
+        "effective_prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Extend the blue teapot, house plants and the room naturally.",
+        "prompt_rewrite": {
+          "enabled": false,
+          "applied": false,
+          "reason": "disabled"
+        },
+        "fun_controlnet": {
+          "repository": "Kijai/QwenImage_experimental",
+          "revision": "04987755e10002ff33e4ea307a811487dddd79d9",
+          "sha256": "07aa961570ac0e03d4ca936aecd76854d077a33cde69b5092399afba01b3715d",
+          "blocks": 16,
+          "injection_layers": [
+            0,
+            2,
+            4,
+            6,
+            8,
+            10,
+            12,
+            14,
+            16,
+            18,
+            20,
+            22,
+            24,
+            26,
+            28,
+            30
+          ],
+          "quantized_linears": 113,
+          "kind": "canny",
+          "strength": 0.5,
+          "image": "control.png",
+          "inpaint": true,
+          "inpaint_source": "inpaint-source.png",
+          "inpaint_mask": "inpaint-mask.png"
+        },
+        "fun_acc": {
+          "repository": "alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs",
+          "revision": "f7545234760e1847cd8e89e52bd951cb0b7e327f",
+          "sha256": "764c56ae94f330b6d06ccc322f95e1b8ce46424ddde5899a15432f95f720d558",
+          "steps": 4,
+          "sigmas": [
+            1.0,
+            0.9169867038726807,
+            0.7861579060554504,
+            0.5494909882545471,
+            0.0
+          ]
+        },
+        "style_loras": [
+          {
+            "name": "celstk/20260926_193229_22397712_step_024000.safetensors",
+            "linear_layers": 128,
+            "training_only_keys": [
+              "qwen_partition_global_adapter.alpha",
+              "qwen_partition_global_adapter.key.weight",
+              "qwen_partition_global_adapter.out.weight",
+              "qwen_partition_global_adapter.query.weight",
+              "qwen_partition_global_adapter.summary_queries",
+              "qwen_partition_global_adapter.value.weight"
+            ],
+            "base_mismatch": true,
+            "source": "https://github.com/celll1/SushiUI/blob/69de838b18dbed8e8fc1e1294fb649a4f7dc5452/backend/core/pipeline_backends/qwen_image_21.py#L55-L78",
+            "strength": 0.65,
+            "sha256": "863b0495905dfd13bb6cfe328e6bd9d394d6818a1ab2d5dadd4c06efe4313ab8",
+            "applied_layers": 128,
+            "base_precision": "base_q4_k_m",
+            "experimental_base_mismatch": true
+          }
+        ],
+        "outpaint": {
+          "source": "{workspace}\\outputs\\qwen-image-2.1\\07876423ecf94b0699181db0c35c66f3\\reference-01.png",
+          "plan": {
+            "source_width": 512,
+            "source_height": 384,
+            "left": 64,
+            "top": 32,
+            "right": 96,
+            "bottom": 64
+          },
+          "feather": 0,
+          "adapter": {
+            "repository": "ausboss/Qwen-Image-2.1-Outpaint-LoRA",
+            "revision": "449336db42ff074aee970ba0facc0ac0feb77863",
+            "sha256": "3611a5ccae5f790405eeacf1dfb2c89285c1e4f2987b9abc88cd0161a60eca28",
+            "version": "v2",
+            "source_tensors": 384,
+            "linear_layers": 224,
+            "rank": 32,
+            "alpha": 32,
+            "scale": 1.0
+          }
+        },
+        "preservation": {},
+        "width": 672,
+        "height": 480,
+        "steps": 4,
+        "seed": 42,
+        "transparent": false,
+        "output_mode": "RGBA",
+        "precision": "base_q4_k_m",
+        "memory_mode": "offload",
+        "compute_dtype": "bfloat16",
+        "true_cfg_scale": 1.0,
+        "scheduler": "QwenImage21PDDScheduler",
+        "scheduler_config": {
+          "num_train_timesteps": 1000,
+          "shift": 1.0,
+          "use_dynamic_shifting": true,
+          "base_shift": 0.5,
+          "max_shift": 0.9,
+          "base_image_seq_len": 256,
+          "max_image_seq_len": 8192,
+          "invert_sigmas": false,
+          "shift_terminal": 0.02,
+          "use_karras_sigmas": false,
+          "use_exponential_sigmas": false,
+          "use_beta_sigmas": false,
+          "time_shift_type": "exponential",
+          "stochastic_sampling": false,
+          "_class_name": "QwenImage21PDDScheduler",
+          "_diffusers_version": "0.37.0.dev0",
+          "pdd_num_steps": 4,
+          "pdd_block_size": 1,
+          "lora_rank": 64,
+          "lora_alpha": 64.0,
+          "lora_targets": "img_in,modulation.1,norm_out.linear,time_text_embed.timestep_embedder.linear_1,time_text_embed.timestep_embedder.linear_2,transformer_blocks.0.attn.to_k,transformer_blocks.0.attn.to_out.0,transformer_blocks.0.attn.to_q,transformer_blocks.0.attn.to_v,transformer_blocks.0.img_mlp.gate_layer,transformer_blocks.0.img_mlp.out,transformer_blocks.0.img_mlp.proj,transformer_blocks.1.attn.to_k,transformer_blocks.1.attn.to_out.0,transformer_blocks.1.attn.to_q,transformer_blocks.1.attn.to_v,transformer_blocks.1.img_mlp.gate_layer,transformer_blocks.1.img_mlp.out,transformer_blocks.1.img_mlp.proj,transformer_blocks.10.attn.to_k,transformer_blocks.10.attn.to_out.0,transformer_blocks.10.attn.to_q,transformer_blocks.10.attn.to_v,transformer_blocks.10.img_mlp.gate_layer,transformer_blocks.10.img_mlp.out,transformer_blocks.10.img_mlp.proj,transformer_blocks.11.attn.to_k,transformer_blocks.11.attn.to_out.0,transformer_blocks.11.attn.to_q,transformer_blocks.11.attn.to_v,transformer_blocks.11.img_mlp.gate_layer,transformer_blocks.11.img_mlp.out,transformer_blocks.11.img_mlp.proj,transformer_blocks.12.attn.to_k,transformer_blocks.12.attn.to_out.0,transformer_blocks.12.attn.to_q,transformer_blocks.12.attn.to_v,transformer_blocks.12.img_mlp.gate_layer,transformer_blocks.12.img_mlp.out,transformer_blocks.12.img_mlp.proj,transformer_blocks.13.attn.to_k,transformer_blocks.13.attn.to_out.0,transformer_blocks.13.attn.to_q,transformer_blocks.13.attn.to_v,transformer_blocks.13.img_mlp.gate_layer,transformer_blocks.13.img_mlp.out,transformer_blocks.13.img_mlp.proj,transformer_blocks.14.attn.to_k,transformer_blocks.14.attn.to_out.0,transformer_blocks.14.attn.to_q,transformer_blocks.14.attn.to_v,transformer_blocks.14.img_mlp.gate_layer,transformer_blocks.14.img_mlp.out,transformer_blocks.14.img_mlp.proj,transformer_blocks.15.attn.to_k,transformer_blocks.15.attn.to_out.0,transformer_blocks.15.attn.to_q,transformer_blocks.15.attn.to_v,transformer_blocks.15.img_mlp.gate_layer,transformer_blocks.15.img_mlp.out,transformer_blocks.15.img_mlp.proj,transformer_blocks.16.attn.to_k,transformer_blocks.16.attn.to_out.0,transformer_blocks.16.attn.to_q,transformer_blocks.16.attn.to_v,transformer_blocks.16.img_mlp.gate_layer,transformer_blocks.16.img_mlp.out,transformer_blocks.16.img_mlp.proj,transformer_blocks.17.attn.to_k,transformer_blocks.17.attn.to_out.0,transformer_blocks.17.attn.to_q,transformer_blocks.17.attn.to_v,transformer_blocks.17.img_mlp.gate_layer,transformer_blocks.17.img_mlp.out,transformer_blocks.17.img_mlp.proj,transformer_blocks.18.attn.to_k,transformer_blocks.18.attn.to_out.0,transformer_blocks.18.attn.to_q,transformer_blocks.18.attn.to_v,transformer_blocks.18.img_mlp.gate_layer,transformer_blocks.18.img_mlp.out,transformer_blocks.18.img_mlp.proj,transformer_blocks.19.attn.to_k,transformer_blocks.19.attn.to_out.0,transformer_blocks.19.attn.to_q,transformer_blocks.19.attn.to_v,transformer_blocks.19.img_mlp.gate_layer,transformer_blocks.19.img_mlp.out,transformer_blocks.19.img_mlp.proj,transformer_blocks.2.attn.to_k,transformer_blocks.2.attn.to_out.0,transformer_blocks.2.attn.to_q,transformer_blocks.2.attn.to_v,transformer_blocks.2.img_mlp.gate_layer,transformer_blocks.2.img_mlp.out,transformer_blocks.2.img_mlp.proj,transformer_blocks.20.attn.to_k,transformer_blocks.20.attn.to_out.0,transformer_blocks.20.attn.to_q,transformer_blocks.20.attn.to_v,transformer_blocks.20.img_mlp.gate_layer,transformer_blocks.20.img_mlp.out,transformer_blocks.20.img_mlp.proj,transformer_blocks.21.attn.to_k,transformer_blocks.21.attn.to_out.0,transformer_blocks.21.attn.to_q,transformer_blocks.21.attn.to_v,transformer_blocks.21.img_mlp.gate_layer,transformer_blocks.21.img_mlp.out,transformer_blocks.21.img_mlp.proj,transformer_blocks.22.attn.to_k,transformer_blocks.22.attn.to_out.0,transformer_blocks.22.attn.to_q,transformer_blocks.22.attn.to_v,transformer_blocks.22.img_mlp.gate_layer,transformer_blocks.22.img_mlp.out,transformer_blocks.22.img_mlp.proj,transformer_blocks.23.attn.to_k,transformer_blocks.23.attn.to_out.0,transformer_blocks.23.attn.to_q,transformer_blocks.23.attn.to_v,transformer_blocks.23.img_mlp.gate_layer,transformer_blocks.23.img_mlp.out,transformer_blocks.23.img_mlp.proj,transformer_blocks.24.attn.to_k,transformer_blocks.24.attn.to_out.0,transformer_blocks.24.attn.to_q,transformer_blocks.24.attn.to_v,transformer_blocks.24.img_mlp.gate_layer,transformer_blocks.24.img_mlp.out,transformer_blocks.24.img_mlp.proj,transformer_blocks.25.attn.to_k,transformer_blocks.25.attn.to_out.0,transformer_blocks.25.attn.to_q,transformer_blocks.25.attn.to_v,transformer_blocks.25.img_mlp.gate_layer,transformer_blocks.25.img_mlp.out,transformer_blocks.25.img_mlp.proj,transformer_blocks.26.attn.to_k,transformer_blocks.26.attn.to_out.0,transformer_blocks.26.attn.to_q,transformer_blocks.26.attn.to_v,transformer_blocks.26.img_mlp.gate_layer,transformer_blocks.26.img_mlp.out,transformer_blocks.26.img_mlp.proj,transformer_blocks.27.attn.to_k,transformer_blocks.27.attn.to_out.0,transformer_blocks.27.attn.to_q,transformer_blocks.27.attn.to_v,transformer_blocks.27.img_mlp.gate_layer,transformer_blocks.27.img_mlp.out,transformer_blocks.27.img_mlp.proj,transformer_blocks.28.attn.to_k,transformer_blocks.28.attn.to_out.0,transformer_blocks.28.attn.to_q,transformer_blocks.28.attn.to_v,transformer_blocks.28.img_mlp.gate_layer,transformer_blocks.28.img_mlp.out,transformer_blocks.28.img_mlp.proj,transformer_blocks.29.attn.to_k,transformer_blocks.29.attn.to_out.0,transformer_blocks.29.attn.to_q,transformer_blocks.29.attn.to_v,transformer_blocks.29.img_mlp.gate_layer,transformer_blocks.29.img_mlp.out,transformer_blocks.29.img_mlp.proj,transformer_blocks.3.attn.to_k,transformer_blocks.3.attn.to_out.0,transformer_blocks.3.attn.to_q,transformer_blocks.3.attn.to_v,transformer_blocks.3.img_mlp.gate_layer,transformer_blocks.3.img_mlp.out,transformer_blocks.3.img_mlp.proj,transformer_blocks.30.attn.to_k,transformer_blocks.30.attn.to_out.0,transformer_blocks.30.attn.to_q,transformer_blocks.30.attn.to_v,transformer_blocks.30.img_mlp.gate_layer,transformer_blocks.30.img_mlp.out,transformer_blocks.30.img_mlp.proj,transformer_blocks.31.attn.to_k,transformer_blocks.31.attn.to_out.0,transformer_blocks.31.attn.to_q,transformer_blocks.31.attn.to_v,transformer_blocks.31.img_mlp.gate_layer,transformer_blocks.31.img_mlp.out,transformer_blocks.31.img_mlp.proj,transformer_blocks.4.attn.to_k,transformer_blocks.4.attn.to_out.0,transformer_blocks.4.attn.to_q,transformer_blocks.4.attn.to_v,transformer_blocks.4.img_mlp.gate_layer,transformer_blocks.4.img_mlp.out,transformer_blocks.4.img_mlp.proj,transformer_blocks.5.attn.to_k,transformer_blocks.5.attn.to_out.0,transformer_blocks.5.attn.to_q,transformer_blocks.5.attn.to_v,transformer_blocks.5.img_mlp.gate_layer,transformer_blocks.5.img_mlp.out,transformer_blocks.5.img_mlp.proj,transformer_blocks.6.attn.to_k,transformer_blocks.6.attn.to_out.0,transformer_blocks.6.attn.to_q,transformer_blocks.6.attn.to_v,transformer_blocks.6.img_mlp.gate_layer,transformer_blocks.6.img_mlp.out,transformer_blocks.6.img_mlp.proj,transformer_blocks.7.attn.to_k,transformer_blocks.7.attn.to_out.0,transformer_blocks.7.attn.to_q,transformer_blocks.7.attn.to_v,transformer_blocks.7.img_mlp.gate_layer,transformer_blocks.7.img_mlp.out,transformer_blocks.7.img_mlp.proj,transformer_blocks.8.attn.to_k,transformer_blocks.8.attn.to_out.0,transformer_blocks.8.attn.to_q,transformer_blocks.8.attn.to_v,transformer_blocks.8.img_mlp.gate_layer,transformer_blocks.8.img_mlp.out,transformer_blocks.8.img_mlp.proj,transformer_blocks.9.attn.to_k,transformer_blocks.9.attn.to_out.0,transformer_blocks.9.attn.to_q,transformer_blocks.9.attn.to_v,transformer_blocks.9.img_mlp.gate_layer,transformer_blocks.9.img_mlp.out,transformer_blocks.9.img_mlp.proj,txt_in.in_layer,txt_in.out_layer",
+          "pdd_export_format": "qwenimage21_extracted_prefused_v1",
+          "pdd_inference_only": true,
+          "pdd_sigmas": [
+            1.0,
+            0.9169867038726807,
+            0.7861579060554504,
+            0.5494909882545471,
+            0.0
+          ],
+          "pdd_full_parameters": [
+            "transformer_blocks.0.attn.norm_k.weight",
+            "transformer_blocks.0.attn.norm_q.weight",
+            "transformer_blocks.1.attn.norm_k.weight",
+            "transformer_blocks.1.attn.norm_q.weight",
+            "transformer_blocks.10.attn.norm_k.weight",
+            "transformer_blocks.10.attn.norm_q.weight",
+            "transformer_blocks.11.attn.norm_k.weight",
+            "transformer_blocks.11.attn.norm_q.weight",
+            "transformer_blocks.12.attn.norm_k.weight",
+            "transformer_blocks.12.attn.norm_q.weight",
+            "transformer_blocks.13.attn.norm_k.weight",
+            "transformer_blocks.13.attn.norm_q.weight",
+            "transformer_blocks.14.attn.norm_k.weight",
+            "transformer_blocks.14.attn.norm_q.weight",
+            "transformer_blocks.15.attn.norm_k.weight",
+            "transformer_blocks.15.attn.norm_q.weight",
+            "transformer_blocks.16.attn.norm_k.weight",
+            "transformer_blocks.16.attn.norm_q.weight",
+            "transformer_blocks.17.attn.norm_k.weight",
+            "transformer_blocks.17.attn.norm_q.weight",
+            "transformer_blocks.18.attn.norm_k.weight",
+            "transformer_blocks.18.attn.norm_q.weight",
+            "transformer_blocks.19.attn.norm_k.weight",
+            "transformer_blocks.19.attn.norm_q.weight",
+            "transformer_blocks.2.attn.norm_k.weight",
+            "transformer_blocks.2.attn.norm_q.weight",
+            "transformer_blocks.20.attn.norm_k.weight",
+            "transformer_blocks.20.attn.norm_q.weight",
+            "transformer_blocks.21.attn.norm_k.weight",
+            "transformer_blocks.21.attn.norm_q.weight",
+            "transformer_blocks.22.attn.norm_k.weight",
+            "transformer_blocks.22.attn.norm_q.weight",
+            "transformer_blocks.23.attn.norm_k.weight",
+            "transformer_blocks.23.attn.norm_q.weight",
+            "transformer_blocks.24.attn.norm_k.weight",
+            "transformer_blocks.24.attn.norm_q.weight",
+            "transformer_blocks.25.attn.norm_k.weight",
+            "transformer_blocks.25.attn.norm_q.weight",
+            "transformer_blocks.26.attn.norm_k.weight",
+            "transformer_blocks.26.attn.norm_q.weight",
+            "transformer_blocks.27.attn.norm_k.weight",
+            "transformer_blocks.27.attn.norm_q.weight",
+            "transformer_blocks.28.attn.norm_k.weight",
+            "transformer_blocks.28.attn.norm_q.weight",
+            "transformer_blocks.29.attn.norm_k.weight",
+            "transformer_blocks.29.attn.norm_q.weight",
+            "transformer_blocks.3.attn.norm_k.weight",
+            "transformer_blocks.3.attn.norm_q.weight",
+            "transformer_blocks.30.attn.norm_k.weight",
+            "transformer_blocks.30.attn.norm_q.weight",
+            "transformer_blocks.31.attn.norm_k.weight",
+            "transformer_blocks.31.attn.norm_q.weight",
+            "transformer_blocks.4.attn.norm_k.weight",
+            "transformer_blocks.4.attn.norm_q.weight",
+            "transformer_blocks.5.attn.norm_k.weight",
+            "transformer_blocks.5.attn.norm_q.weight",
+            "transformer_blocks.6.attn.norm_k.weight",
+            "transformer_blocks.6.attn.norm_q.weight",
+            "transformer_blocks.7.attn.norm_k.weight",
+            "transformer_blocks.7.attn.norm_q.weight",
+            "transformer_blocks.8.attn.norm_k.weight",
+            "transformer_blocks.8.attn.norm_q.weight",
+            "transformer_blocks.9.attn.norm_k.weight",
+            "transformer_blocks.9.attn.norm_q.weight",
+            "txt_in.text_norm.weight"
+          ],
+          "pdd_sampling_precision": "native_time_fp32_state",
+          "pdd_sample_size": [
+            2048,
+            2048
+          ]
+        },
+        "use_kv_cache": false,
+        "input_resolution": 567.9436591775632,
+        "input_image_count": 1,
+        "input_image_names": [
+          "outpaint-reference.png"
+        ],
+        "int8_layers": {
+          "text_encoder": 368
+        },
+        "w4a8": {},
+        "quantized_cache": {
+          "text_encoder": {
+            "status": "hit"
+          }
+        },
+        "int8_skip_modules": [],
+        "versions": {
+          "torch": "2.13.0+cu130",
+          "diffusers": "0.41.0.dev0",
+          "transformers": "5.17.0",
+          "accelerate": "1.15.0+aikimi.1",
+          "bitsandbytes": "0.50.2",
+          "gguf": "0.19.0"
+        },
+        "reused_model": false,
+        "memory": {
+          "peak_allocated_mib": 10885.1,
+          "peak_reserved_mib": 11528.0,
+          "idle_allocated_mib": 12.7,
+          "idle_reserved_before_mib": 632.0,
+          "idle_reserved_after_mib": 66.0,
+          "released_cache_mib": 566.0,
+          "note": "PyTorch allocator only; peak includes this request's model loading; not total device memory or system RAM."
+        },
+        "vae_tiling": false,
+        "vae_tiling_config": null,
+        "timings": {
+          "load_seconds": 28.296,
+          "sampling_seconds": 100.681
+        },
+        "elapsed_seconds": 154.314
+      }
+    },
+    {
+      "job": "9d5dfdd8226a4794b04d828d88c5d841",
+      "state": "complete",
+      "worker_session": {
+        "reused": true,
+        "pid": 55420
+      },
+      "request": {
+        "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Extend the blue teapot, house plants and the room naturally.",
+        "precision": "base_q4_k_m",
+        "memory_mode": "offload",
+        "steps": 4,
+        "seed": 42,
+        "style_loras": [
+          {
+            "name": "celstk/20260926_193229_22397712_step_024000.safetensors",
+            "strength": 0.65
+          }
+        ],
+        "allow_lora_base_mismatch": true,
+        "fun_acc": true,
+        "sparse_mode": "off",
+        "control_kind": "canny",
+        "control_strength": 0.5,
+        "control_inpaint": true,
+        "outpaint_version": "v2",
+        "outpaint_margins": [
+          64,
+          32,
+          96,
+          64
+        ],
+        "outpaint_feather": 0
+      },
+      "output": "ui-pass-2.png",
+      "sha256": "826c9a41a61635dc02700747c3f90b179826961b14d2ce02434ce15a71ab7e54",
+      "original_rgba_exact": true,
+      "applied_profile": "通常版 Q4_K_M (Unsloth) · CPU退避 · 画風LoRA: 20260926_193229_22397712_step_024000 × 0.65 · Outpaint: v2 · 4 steps · Fun Acc · ControlNet canny × 0.5＋外側Inpaint · 追加LoRA・制御の併用は画質実験",
+      "metadata": {
+        "model": "unsloth/Qwen-Image-2.1-GGUF",
+        "model_revision": "2c31ccd392b367a6637841a143813320a02dff55",
+        "diffusers_revision": "6256aa7666cedd47443adc8f82da9a10e110b09c",
+        "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Extend the blue teapot, house plants and the room naturally.",
+        "effective_prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Extend the blue teapot, house plants and the room naturally.",
+        "prompt_rewrite": {
+          "enabled": false,
+          "applied": false,
+          "reason": "disabled"
+        },
+        "fun_controlnet": {
+          "repository": "Kijai/QwenImage_experimental",
+          "revision": "04987755e10002ff33e4ea307a811487dddd79d9",
+          "sha256": "07aa961570ac0e03d4ca936aecd76854d077a33cde69b5092399afba01b3715d",
+          "blocks": 16,
+          "injection_layers": [
+            0,
+            2,
+            4,
+            6,
+            8,
+            10,
+            12,
+            14,
+            16,
+            18,
+            20,
+            22,
+            24,
+            26,
+            28,
+            30
+          ],
+          "quantized_linears": 113,
+          "kind": "canny",
+          "strength": 0.5,
+          "image": "control.png",
+          "inpaint": true,
+          "inpaint_source": "inpaint-source.png",
+          "inpaint_mask": "inpaint-mask.png"
+        },
+        "fun_acc": {
+          "repository": "alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs",
+          "revision": "f7545234760e1847cd8e89e52bd951cb0b7e327f",
+          "sha256": "764c56ae94f330b6d06ccc322f95e1b8ce46424ddde5899a15432f95f720d558",
+          "steps": 4,
+          "sigmas": [
+            1.0,
+            0.9169867038726807,
+            0.7861579060554504,
+            0.5494909882545471,
+            0.0
+          ]
+        },
+        "style_loras": [
+          {
+            "name": "celstk/20260926_193229_22397712_step_024000.safetensors",
+            "linear_layers": 128,
+            "training_only_keys": [
+              "qwen_partition_global_adapter.alpha",
+              "qwen_partition_global_adapter.key.weight",
+              "qwen_partition_global_adapter.out.weight",
+              "qwen_partition_global_adapter.query.weight",
+              "qwen_partition_global_adapter.summary_queries",
+              "qwen_partition_global_adapter.value.weight"
+            ],
+            "base_mismatch": true,
+            "source": "https://github.com/celll1/SushiUI/blob/69de838b18dbed8e8fc1e1294fb649a4f7dc5452/backend/core/pipeline_backends/qwen_image_21.py#L55-L78",
+            "strength": 0.65,
+            "sha256": "863b0495905dfd13bb6cfe328e6bd9d394d6818a1ab2d5dadd4c06efe4313ab8",
+            "applied_layers": 128,
+            "base_precision": "base_q4_k_m",
+            "experimental_base_mismatch": true
+          }
+        ],
+        "outpaint": {
+          "source": "{workspace}\\outputs\\qwen-image-2.1\\9d5dfdd8226a4794b04d828d88c5d841\\reference-01.png",
+          "plan": {
+            "source_width": 512,
+            "source_height": 384,
+            "left": 64,
+            "top": 32,
+            "right": 96,
+            "bottom": 64
+          },
+          "feather": 0,
+          "adapter": {
+            "repository": "ausboss/Qwen-Image-2.1-Outpaint-LoRA",
+            "revision": "449336db42ff074aee970ba0facc0ac0feb77863",
+            "sha256": "3611a5ccae5f790405eeacf1dfb2c89285c1e4f2987b9abc88cd0161a60eca28",
+            "version": "v2",
+            "source_tensors": 384,
+            "linear_layers": 224,
+            "rank": 32,
+            "alpha": 32,
+            "scale": 1.0
+          }
+        },
+        "preservation": {},
+        "width": 672,
+        "height": 480,
+        "steps": 4,
+        "seed": 42,
+        "transparent": false,
+        "output_mode": "RGBA",
+        "precision": "base_q4_k_m",
+        "memory_mode": "offload",
+        "compute_dtype": "bfloat16",
+        "true_cfg_scale": 1.0,
+        "scheduler": "QwenImage21PDDScheduler",
+        "scheduler_config": {
+          "num_train_timesteps": 1000,
+          "shift": 1.0,
+          "use_dynamic_shifting": true,
+          "base_shift": 0.5,
+          "max_shift": 0.9,
+          "base_image_seq_len": 256,
+          "max_image_seq_len": 8192,
+          "invert_sigmas": false,
+          "shift_terminal": 0.02,
+          "use_karras_sigmas": false,
+          "use_exponential_sigmas": false,
+          "use_beta_sigmas": false,
+          "time_shift_type": "exponential",
+          "stochastic_sampling": false,
+          "_class_name": "QwenImage21PDDScheduler",
+          "_diffusers_version": "0.37.0.dev0",
+          "pdd_num_steps": 4,
+          "pdd_block_size": 1,
+          "lora_rank": 64,
+          "lora_alpha": 64.0,
+          "lora_targets": "img_in,modulation.1,norm_out.linear,time_text_embed.timestep_embedder.linear_1,time_text_embed.timestep_embedder.linear_2,transformer_blocks.0.attn.to_k,transformer_blocks.0.attn.to_out.0,transformer_blocks.0.attn.to_q,transformer_blocks.0.attn.to_v,transformer_blocks.0.img_mlp.gate_layer,transformer_blocks.0.img_mlp.out,transformer_blocks.0.img_mlp.proj,transformer_blocks.1.attn.to_k,transformer_blocks.1.attn.to_out.0,transformer_blocks.1.attn.to_q,transformer_blocks.1.attn.to_v,transformer_blocks.1.img_mlp.gate_layer,transformer_blocks.1.img_mlp.out,transformer_blocks.1.img_mlp.proj,transformer_blocks.10.attn.to_k,transformer_blocks.10.attn.to_out.0,transformer_blocks.10.attn.to_q,transformer_blocks.10.attn.to_v,transformer_blocks.10.img_mlp.gate_layer,transformer_blocks.10.img_mlp.out,transformer_blocks.10.img_mlp.proj,transformer_blocks.11.attn.to_k,transformer_blocks.11.attn.to_out.0,transformer_blocks.11.attn.to_q,transformer_blocks.11.attn.to_v,transformer_blocks.11.img_mlp.gate_layer,transformer_blocks.11.img_mlp.out,transformer_blocks.11.img_mlp.proj,transformer_blocks.12.attn.to_k,transformer_blocks.12.attn.to_out.0,transformer_blocks.12.attn.to_q,transformer_blocks.12.attn.to_v,transformer_blocks.12.img_mlp.gate_layer,transformer_blocks.12.img_mlp.out,transformer_blocks.12.img_mlp.proj,transformer_blocks.13.attn.to_k,transformer_blocks.13.attn.to_out.0,transformer_blocks.13.attn.to_q,transformer_blocks.13.attn.to_v,transformer_blocks.13.img_mlp.gate_layer,transformer_blocks.13.img_mlp.out,transformer_blocks.13.img_mlp.proj,transformer_blocks.14.attn.to_k,transformer_blocks.14.attn.to_out.0,transformer_blocks.14.attn.to_q,transformer_blocks.14.attn.to_v,transformer_blocks.14.img_mlp.gate_layer,transformer_blocks.14.img_mlp.out,transformer_blocks.14.img_mlp.proj,transformer_blocks.15.attn.to_k,transformer_blocks.15.attn.to_out.0,transformer_blocks.15.attn.to_q,transformer_blocks.15.attn.to_v,transformer_blocks.15.img_mlp.gate_layer,transformer_blocks.15.img_mlp.out,transformer_blocks.15.img_mlp.proj,transformer_blocks.16.attn.to_k,transformer_blocks.16.attn.to_out.0,transformer_blocks.16.attn.to_q,transformer_blocks.16.attn.to_v,transformer_blocks.16.img_mlp.gate_layer,transformer_blocks.16.img_mlp.out,transformer_blocks.16.img_mlp.proj,transformer_blocks.17.attn.to_k,transformer_blocks.17.attn.to_out.0,transformer_blocks.17.attn.to_q,transformer_blocks.17.attn.to_v,transformer_blocks.17.img_mlp.gate_layer,transformer_blocks.17.img_mlp.out,transformer_blocks.17.img_mlp.proj,transformer_blocks.18.attn.to_k,transformer_blocks.18.attn.to_out.0,transformer_blocks.18.attn.to_q,transformer_blocks.18.attn.to_v,transformer_blocks.18.img_mlp.gate_layer,transformer_blocks.18.img_mlp.out,transformer_blocks.18.img_mlp.proj,transformer_blocks.19.attn.to_k,transformer_blocks.19.attn.to_out.0,transformer_blocks.19.attn.to_q,transformer_blocks.19.attn.to_v,transformer_blocks.19.img_mlp.gate_layer,transformer_blocks.19.img_mlp.out,transformer_blocks.19.img_mlp.proj,transformer_blocks.2.attn.to_k,transformer_blocks.2.attn.to_out.0,transformer_blocks.2.attn.to_q,transformer_blocks.2.attn.to_v,transformer_blocks.2.img_mlp.gate_layer,transformer_blocks.2.img_mlp.out,transformer_blocks.2.img_mlp.proj,transformer_blocks.20.attn.to_k,transformer_blocks.20.attn.to_out.0,transformer_blocks.20.attn.to_q,transformer_blocks.20.attn.to_v,transformer_blocks.20.img_mlp.gate_layer,transformer_blocks.20.img_mlp.out,transformer_blocks.20.img_mlp.proj,transformer_blocks.21.attn.to_k,transformer_blocks.21.attn.to_out.0,transformer_blocks.21.attn.to_q,transformer_blocks.21.attn.to_v,transformer_blocks.21.img_mlp.gate_layer,transformer_blocks.21.img_mlp.out,transformer_blocks.21.img_mlp.proj,transformer_blocks.22.attn.to_k,transformer_blocks.22.attn.to_out.0,transformer_blocks.22.attn.to_q,transformer_blocks.22.attn.to_v,transformer_blocks.22.img_mlp.gate_layer,transformer_blocks.22.img_mlp.out,transformer_blocks.22.img_mlp.proj,transformer_blocks.23.attn.to_k,transformer_blocks.23.attn.to_out.0,transformer_blocks.23.attn.to_q,transformer_blocks.23.attn.to_v,transformer_blocks.23.img_mlp.gate_layer,transformer_blocks.23.img_mlp.out,transformer_blocks.23.img_mlp.proj,transformer_blocks.24.attn.to_k,transformer_blocks.24.attn.to_out.0,transformer_blocks.24.attn.to_q,transformer_blocks.24.attn.to_v,transformer_blocks.24.img_mlp.gate_layer,transformer_blocks.24.img_mlp.out,transformer_blocks.24.img_mlp.proj,transformer_blocks.25.attn.to_k,transformer_blocks.25.attn.to_out.0,transformer_blocks.25.attn.to_q,transformer_blocks.25.attn.to_v,transformer_blocks.25.img_mlp.gate_layer,transformer_blocks.25.img_mlp.out,transformer_blocks.25.img_mlp.proj,transformer_blocks.26.attn.to_k,transformer_blocks.26.attn.to_out.0,transformer_blocks.26.attn.to_q,transformer_blocks.26.attn.to_v,transformer_blocks.26.img_mlp.gate_layer,transformer_blocks.26.img_mlp.out,transformer_blocks.26.img_mlp.proj,transformer_blocks.27.attn.to_k,transformer_blocks.27.attn.to_out.0,transformer_blocks.27.attn.to_q,transformer_blocks.27.attn.to_v,transformer_blocks.27.img_mlp.gate_layer,transformer_blocks.27.img_mlp.out,transformer_blocks.27.img_mlp.proj,transformer_blocks.28.attn.to_k,transformer_blocks.28.attn.to_out.0,transformer_blocks.28.attn.to_q,transformer_blocks.28.attn.to_v,transformer_blocks.28.img_mlp.gate_layer,transformer_blocks.28.img_mlp.out,transformer_blocks.28.img_mlp.proj,transformer_blocks.29.attn.to_k,transformer_blocks.29.attn.to_out.0,transformer_blocks.29.attn.to_q,transformer_blocks.29.attn.to_v,transformer_blocks.29.img_mlp.gate_layer,transformer_blocks.29.img_mlp.out,transformer_blocks.29.img_mlp.proj,transformer_blocks.3.attn.to_k,transformer_blocks.3.attn.to_out.0,transformer_blocks.3.attn.to_q,transformer_blocks.3.attn.to_v,transformer_blocks.3.img_mlp.gate_layer,transformer_blocks.3.img_mlp.out,transformer_blocks.3.img_mlp.proj,transformer_blocks.30.attn.to_k,transformer_blocks.30.attn.to_out.0,transformer_blocks.30.attn.to_q,transformer_blocks.30.attn.to_v,transformer_blocks.30.img_mlp.gate_layer,transformer_blocks.30.img_mlp.out,transformer_blocks.30.img_mlp.proj,transformer_blocks.31.attn.to_k,transformer_blocks.31.attn.to_out.0,transformer_blocks.31.attn.to_q,transformer_blocks.31.attn.to_v,transformer_blocks.31.img_mlp.gate_layer,transformer_blocks.31.img_mlp.out,transformer_blocks.31.img_mlp.proj,transformer_blocks.4.attn.to_k,transformer_blocks.4.attn.to_out.0,transformer_blocks.4.attn.to_q,transformer_blocks.4.attn.to_v,transformer_blocks.4.img_mlp.gate_layer,transformer_blocks.4.img_mlp.out,transformer_blocks.4.img_mlp.proj,transformer_blocks.5.attn.to_k,transformer_blocks.5.attn.to_out.0,transformer_blocks.5.attn.to_q,transformer_blocks.5.attn.to_v,transformer_blocks.5.img_mlp.gate_layer,transformer_blocks.5.img_mlp.out,transformer_blocks.5.img_mlp.proj,transformer_blocks.6.attn.to_k,transformer_blocks.6.attn.to_out.0,transformer_blocks.6.attn.to_q,transformer_blocks.6.attn.to_v,transformer_blocks.6.img_mlp.gate_layer,transformer_blocks.6.img_mlp.out,transformer_blocks.6.img_mlp.proj,transformer_blocks.7.attn.to_k,transformer_blocks.7.attn.to_out.0,transformer_blocks.7.attn.to_q,transformer_blocks.7.attn.to_v,transformer_blocks.7.img_mlp.gate_layer,transformer_blocks.7.img_mlp.out,transformer_blocks.7.img_mlp.proj,transformer_blocks.8.attn.to_k,transformer_blocks.8.attn.to_out.0,transformer_blocks.8.attn.to_q,transformer_blocks.8.attn.to_v,transformer_blocks.8.img_mlp.gate_layer,transformer_blocks.8.img_mlp.out,transformer_blocks.8.img_mlp.proj,transformer_blocks.9.attn.to_k,transformer_blocks.9.attn.to_out.0,transformer_blocks.9.attn.to_q,transformer_blocks.9.attn.to_v,transformer_blocks.9.img_mlp.gate_layer,transformer_blocks.9.img_mlp.out,transformer_blocks.9.img_mlp.proj,txt_in.in_layer,txt_in.out_layer",
+          "pdd_export_format": "qwenimage21_extracted_prefused_v1",
+          "pdd_inference_only": true,
+          "pdd_sigmas": [
+            1.0,
+            0.9169867038726807,
+            0.7861579060554504,
+            0.5494909882545471,
+            0.0
+          ],
+          "pdd_full_parameters": [
+            "transformer_blocks.0.attn.norm_k.weight",
+            "transformer_blocks.0.attn.norm_q.weight",
+            "transformer_blocks.1.attn.norm_k.weight",
+            "transformer_blocks.1.attn.norm_q.weight",
+            "transformer_blocks.10.attn.norm_k.weight",
+            "transformer_blocks.10.attn.norm_q.weight",
+            "transformer_blocks.11.attn.norm_k.weight",
+            "transformer_blocks.11.attn.norm_q.weight",
+            "transformer_blocks.12.attn.norm_k.weight",
+            "transformer_blocks.12.attn.norm_q.weight",
+            "transformer_blocks.13.attn.norm_k.weight",
+            "transformer_blocks.13.attn.norm_q.weight",
+            "transformer_blocks.14.attn.norm_k.weight",
+            "transformer_blocks.14.attn.norm_q.weight",
+            "transformer_blocks.15.attn.norm_k.weight",
+            "transformer_blocks.15.attn.norm_q.weight",
+            "transformer_blocks.16.attn.norm_k.weight",
+            "transformer_blocks.16.attn.norm_q.weight",
+            "transformer_blocks.17.attn.norm_k.weight",
+            "transformer_blocks.17.attn.norm_q.weight",
+            "transformer_blocks.18.attn.norm_k.weight",
+            "transformer_blocks.18.attn.norm_q.weight",
+            "transformer_blocks.19.attn.norm_k.weight",
+            "transformer_blocks.19.attn.norm_q.weight",
+            "transformer_blocks.2.attn.norm_k.weight",
+            "transformer_blocks.2.attn.norm_q.weight",
+            "transformer_blocks.20.attn.norm_k.weight",
+            "transformer_blocks.20.attn.norm_q.weight",
+            "transformer_blocks.21.attn.norm_k.weight",
+            "transformer_blocks.21.attn.norm_q.weight",
+            "transformer_blocks.22.attn.norm_k.weight",
+            "transformer_blocks.22.attn.norm_q.weight",
+            "transformer_blocks.23.attn.norm_k.weight",
+            "transformer_blocks.23.attn.norm_q.weight",
+            "transformer_blocks.24.attn.norm_k.weight",
+            "transformer_blocks.24.attn.norm_q.weight",
+            "transformer_blocks.25.attn.norm_k.weight",
+            "transformer_blocks.25.attn.norm_q.weight",
+            "transformer_blocks.26.attn.norm_k.weight",
+            "transformer_blocks.26.attn.norm_q.weight",
+            "transformer_blocks.27.attn.norm_k.weight",
+            "transformer_blocks.27.attn.norm_q.weight",
+            "transformer_blocks.28.attn.norm_k.weight",
+            "transformer_blocks.28.attn.norm_q.weight",
+            "transformer_blocks.29.attn.norm_k.weight",
+            "transformer_blocks.29.attn.norm_q.weight",
+            "transformer_blocks.3.attn.norm_k.weight",
+            "transformer_blocks.3.attn.norm_q.weight",
+            "transformer_blocks.30.attn.norm_k.weight",
+            "transformer_blocks.30.attn.norm_q.weight",
+            "transformer_blocks.31.attn.norm_k.weight",
+            "transformer_blocks.31.attn.norm_q.weight",
+            "transformer_blocks.4.attn.norm_k.weight",
+            "transformer_blocks.4.attn.norm_q.weight",
+            "transformer_blocks.5.attn.norm_k.weight",
+            "transformer_blocks.5.attn.norm_q.weight",
+            "transformer_blocks.6.attn.norm_k.weight",
+            "transformer_blocks.6.attn.norm_q.weight",
+            "transformer_blocks.7.attn.norm_k.weight",
+            "transformer_blocks.7.attn.norm_q.weight",
+            "transformer_blocks.8.attn.norm_k.weight",
+            "transformer_blocks.8.attn.norm_q.weight",
+            "transformer_blocks.9.attn.norm_k.weight",
+            "transformer_blocks.9.attn.norm_q.weight",
+            "txt_in.text_norm.weight"
+          ],
+          "pdd_sampling_precision": "native_time_fp32_state",
+          "pdd_sample_size": [
+            2048,
+            2048
+          ]
+        },
+        "use_kv_cache": false,
+        "input_resolution": 567.9436591775632,
+        "input_image_count": 1,
+        "input_image_names": [
+          "outpaint-reference.png"
+        ],
+        "int8_layers": {
+          "text_encoder": 368
+        },
+        "w4a8": {},
+        "quantized_cache": {
+          "text_encoder": {
+            "status": "hit"
+          }
+        },
+        "int8_skip_modules": [],
+        "versions": {
+          "torch": "2.13.0+cu130",
+          "diffusers": "0.41.0.dev0",
+          "transformers": "5.17.0",
+          "accelerate": "1.15.0+aikimi.1",
+          "bitsandbytes": "0.50.2",
+          "gguf": "0.19.0"
+        },
+        "reused_model": true,
+        "memory": {
+          "peak_allocated_mib": 10889.8,
+          "peak_reserved_mib": 11534.0,
+          "idle_allocated_mib": 12.7,
+          "idle_reserved_before_mib": 640.0,
+          "idle_reserved_after_mib": 66.0,
+          "released_cache_mib": 574.0,
+          "note": "PyTorch allocator only; peak includes this request's model loading; not total device memory or system RAM."
+        },
+        "vae_tiling": false,
+        "vae_tiling_config": null,
+        "timings": {
+          "load_seconds": 0.0,
+          "sampling_seconds": 21.211
+        },
+        "elapsed_seconds": 22.007
+      }
+    },
+    {
+      "job": "99976499c2124447bf2520658d2691bd",
+      "state": "cancelled",
+      "worker_session": {
+        "reused": true,
+        "pid": 55420
+      },
+      "request": {
+        "prompt": "Outpaint the image: replace the solid gray areas with a seamless continuation of the scene, keeping the existing picture unchanged.\nScene: Extend the blue teapot, house plants and the room naturally.",
+        "precision": "base_q4_k_m",
+        "memory_mode": "offload",
+        "steps": 4,
+        "seed": 42,
+        "style_loras": [
+          {
+            "name": "celstk/20260926_193229_22397712_step_024000.safetensors",
+            "strength": 0.65
+          }
+        ],
+        "allow_lora_base_mismatch": true,
+        "fun_acc": true,
+        "sparse_mode": "off",
+        "control_kind": "canny",
+        "control_strength": 0.5,
+        "control_inpaint": true,
+        "outpaint_version": "v2",
+        "outpaint_margins": [
+          64,
+          32,
+          96,
+          64
+        ],
+        "outpaint_feather": 0
+      },
+      "wrote_completed_png": false
+    }
+  ],
+  "browser_download_sha256_exact": true,
+  "changed_next_profile_during_first_job": {
+    "precision": "bf16",
+    "style_strength": 0.1
+  },
+  "cancelled_job_kept_previous_result": {
+    "visible_previous_job": "9d5dfdd8226a4794b04d828d88c5d841",
+    "save_enabled": true,
+    "reexpand_enabled": true,
+    "generate_enabled": true,
+    "stop_disabled": true
+  }
+}
