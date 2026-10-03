@@ -334,6 +334,7 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
 
     def test_backend_tab_visibility_update_is_observable(self):
         with cdp_page(self.chromium, self.url) as page:
+            page.send("Emulation.setCPUThrottlingRate", {"rate": 4})
             self.assertTrue(
                 page.evaluate(
                     _wait_expression(
@@ -344,7 +345,7 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
                 )
             )
             self.assertTrue(page.evaluate(_wait_expression("#compat-enable-toggle", "true")))
-            for mounted in (False, True):
+            for mounted in (False, True) * 3:
                 with self.subTest(mounted=mounted):
                     if mounted:
                         page.evaluate("document.querySelector('#compat-visible-toggle-button').click()")
@@ -365,6 +366,16 @@ class GradioFrontendCompatibilityChromiumTests(unittest.TestCase):
                             )
                         ),
                         "backend Tab.visible updates must remain observable",
+                    )
+                    self.assertTrue(
+                        page.evaluate(
+                            _wait_expression(
+                                "#compat-visible-always",
+                                "getComputedStyle(element).display === 'flex'",
+                                timeout_ms=5_000,
+                            )
+                        ),
+                        "hiding the selected tab must select the remaining visible tab",
                     )
                     page.evaluate("document.querySelector('#compat-show-toggle').click()")
                     self.assertTrue(page.evaluate(_wait_expression("#compat-visible-toggle-button", "true")))
