@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 import socket
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -19,6 +21,61 @@ from modules.aikimi_security.gradio_file_guard import install_gradio_file_url_gu
 
 
 class GradioFrontendCompatibilityTests(unittest.TestCase):
+    def test_tab_sync_preserves_registry_when_update_omits_initial_tabs(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node.js is required to execute the compiled tab synchronization")
+        module = gradio_frontend_compat
+        asset = module.build_patched_tabs_asset()
+        self.assertIn(module._STATIC_INITIAL_TAB_SYNC, asset.content)
+        self.assertIn(module._STATIC_TAB_REGISTRATION, asset.content)
+        script = (
+            """
+            import assert from 'node:assert/strict';
+            const current = { id: 'active', label: 'Renamed', visible: false, interactive: false };
+            const l = { value: [current] }, he = { value: [current] }, I = { value: [] };
+            const le = { value: false }, we = { value: false }, ae = new Set([0]);
+            const P = { value: 'active' }, X = { value: 0 };
+            const e = state => state.value, d = (state, value) => state.value = value;
+            const N = d, v = () => e(P);
+            const Ce = () => Promise.resolve();
+        """
+            + module._STATIC_INITIAL_TAB_SYNC.decode("utf-8")
+            + "\nconst registry = ({"
+            + module._STATIC_TAB_REGISTRATION.decode("utf-8")
+            + "});\n"
+            + """
+            Se(undefined);
+            Se(null);
+            await Promise.resolve();
+            assert.deepEqual(e(l), [current]);
+            assert.deepEqual(e(he), [current]);
+            const added = { id: 'new', label: 'New', visible: true, interactive: true };
+            Se([{ id: 'active', label: 'Old', visible: true, interactive: true }, added]);
+            await Promise.resolve();
+            assert.deepEqual(e(l), [current, added]);
+            assert.deepEqual(e(he), [current, added]);
+            registry.register_tab(current, 0);
+            assert.equal(e(P), 'new');
+            assert.equal(e(X), 1);
+            registry.register_tab({ ...added, visible: 'hidden' }, 1);
+            assert.equal(e(P), false);
+            assert.equal(e(X), -1);
+            registry.register_tab({ ...current, visible: true, interactive: false }, 0);
+            assert.equal(e(P), false);
+            registry.register_tab(added, 1);
+            assert.equal(e(P), 'new');
+            Se([]);
+            await Promise.resolve();
+            assert.deepEqual(e(l), []);
+            assert.deepEqual(e(he), []);
+        """
+        )
+        result = subprocess.run(  # noqa: S603 - execute the audited frontend snippet
+            [node, "--input-type=module", "-"], input=script, text=True, capture_output=True, timeout=10
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_apptree_visibility_patch_is_exact_served_and_keeps_the_wheel(self):
         module = gradio_frontend_compat
         path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.APPTREE_ASSET_NAME

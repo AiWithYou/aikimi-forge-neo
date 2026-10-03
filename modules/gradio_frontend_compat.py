@@ -17,7 +17,7 @@ from gradio.routes import App
 SUPPORTED_VERSION = "6.17.3"
 TABS_ASSET_NAME = "Walkthrough.svelte_svelte_type_style_lang-DBgsQkoF.js"
 ORIGINAL_ASSET_SHA256 = "e9be5d9fd700f1521287465e80c768ba326c8d274f094a7cea4ecb8bf4cdb8f5"
-PATCHED_ASSET_SHA256 = "2f16cdacd4bc2fa1518e3faa1adac92466b5c2b32fe8d9b4e1f807fd3117d41d"
+PATCHED_ASSET_SHA256 = "9922cc28a6e53f1d22d763cea5347a9d1e8de42811cd9f67fbb704106032f12e"
 PATCH_ROUTE_NAME = "aikimi_gradio_tabs_compat"
 DATAFRAME_ASSET_NAME = "Index-QH0sWW3Z.js"
 DATAFRAME_ORIGINAL_SHA256 = "7faf27d05cb82bea0f5d317748b2908870c3e966a646c459e370fe52890299b3"
@@ -59,7 +59,8 @@ _ORIGINAL_INITIAL_TAB_SYNC = (
     b"function Se(t){Ce().then(()=>{for(let s=0;s<t.length;s++)t[s]&&!ae.has(s)&&J(l,e(l)[s]=t[s])})}"
 )
 _STATIC_INITIAL_TAB_SYNC = (
-    b"function Se(t){Ce().then(()=>{const s=t.map((n,_)=>"
+    # Property-only updates can omit this list; keep the registered tab state.
+    b"function Se(t){if(!Array.isArray(t))return;Ce().then(()=>{const s=t.map((n,_)=>"
     b"ae.has(_)&&e(l)[_]?.id===n?.id?e(l)[_]:n);d(l,s),d(he,s),d(I,[]),d(le,!1),d(we,!1)})}"
 )
 
@@ -72,7 +73,9 @@ _ORIGINAL_TAB_REGISTRATION = (
 _STATIC_TAB_REGISTRATION = (
     b"register_tab:(t,s)=>{ae.add(s);const _=e(l)[s];"
     b"if(!_||Object.keys(t).some(n=>_[n]!==t[n])){const n=e(l).slice();n[s]=t;d(l,n),d(he,n)}"
-    b"return v()===!1&&t.visible!==!1&&t.interactive&&(N(P,t.id),N(X,s)),s},"
+    b'if(v()===t.id&&(t.visible===!1||t.visible==="hidden")){const n=e(l).findIndex(A=>'
+    b'A&&A.visible!==!1&&A.visible!=="hidden"&&A.interactive);N(P,n<0?!1:e(l)[n].id),N(X,n)}'
+    b'return v()===!1&&t.visible!==!1&&t.visible!=="hidden"&&t.interactive&&(N(P,t.id),N(X,s)),s},'
     b"unregister_tab:(t,s)=>{ae.delete(s),v()===t.id&&N(P,e(l)[0]?.id||!1);"
     b"if(e(l)[s]?.id===t.id){const _=e(l).slice();_[s]=null;d(l,_),d(he,_)}},"
     b"selected_tab:P,selected_tab_index:X"

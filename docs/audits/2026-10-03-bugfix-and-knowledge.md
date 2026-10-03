@@ -100,6 +100,12 @@ v3.5.1の初回公開前のWindows全体回帰は2,211件を313.414秒で実行�
 
 CodeQLの未初期化変数警告から、YuE2で例外の文字列化が失敗する条件を再現しました。修正前は`UnboundLocalError`で終了状態を保存できず、修正後は元の表示例外を保持しながら失敗状態とlog位置を保存します。新規と関連の29件、およびYuE2のpytest 44件成功・5件skipを確認しました。最新commitのCI結果は[GitHub Actions](https://github.com/AiWithYou/aikimi-forge-neo/actions)で確認できます。
 
+この追補後のWindows全体回帰は2,212件を276.268秒で実行し、失敗なし・52件skipでした。Linux CIも2,212件を190.056秒で実行し、失敗なし・70件skip。H3のpytestは89件と19 subtests、YuE2は45件・4件skip、Jevは245件成功しました。YuE2のCodeQL警告はGitHub側で`fixed`になったことも確認しています。
+
+Windows CIの次の試行は、608件中Gradioのタブ更新で2件失敗・5件skipでした。選択中のタブを隠す更新で`initial_tabs`が欠け、同期処理の`map`が例外になる条件を、実際のcompiled snippetとNodeで再現しました。現在の登録状態を保持する修正に加え、残るタブの内容も空になる条件を実Chromiumで再現し、最初の表示可能で操作できるタブへ切り替えるよう修正しています。hidden・disabled・空一覧、labelと操作可否の保持も検証しました。固定wheelのSHA-256検査を保ち、変更後の配信assetのSHA-256は`9922cc28a6e53f1d22d763cea5347a9d1e8de42811cd9f67fbb704106032f12e`です。
+
+このタブ修正の関連16件は成功。実Chromiumの900×800 viewportで4倍のCPU低速化を設定し、未選択・選択済みのタブを3往復ずつ非表示・再表示し、選択先の本文、名称、操作可否とJS例外・console errorがないことを確認しました。Browser pluginがないため、repositoryのCDP試験と専用のlocalhost fixtureを使用しています。
+
 初回の全体unittestは1,888件を実行し、52件skip・1件expected failure・1件失敗でした。失敗はFun Accの対応精度拡大後も「INT8へ変更して選択不可」を期待していたChromiumテストで、現行の「選択したモデルを維持して4 steps固定」へ修正し、実ブラウザで成功を確認しました。
 
 1回目の修正後の全体unittestは1,953件を実行し、失敗なしでした（52件skip、1件expected failure）。追加修正後の2回目は2,032件を実行し、常駐ワーカーの再利用で1件失敗しました。Windowsで存在する応答ファイルの読み取りが共有ロックにより拒否される同じ境界を再現し、9件の回帰と失敗した再利用テストは修正後に成功しました。3回目は2,083件を実行し、失敗なしでした（52件skip、1件expected failure）。4回目は2,167件を291.251秒、5回目は2,194件を296.195秒、6回目は2,204件を307.338秒で実行し、いずれも失敗なし・52件skip・expected failureなしです。統合試験時のロックを保持した主体は未特定です。

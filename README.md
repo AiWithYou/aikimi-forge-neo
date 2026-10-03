@@ -2,7 +2,7 @@
 
 **v3.5.1** · [変更履歴](CHANGELOG.md)
 
-**v3.5.1（2026-10-03）：** Qwen Outpaintの境界検証、画像・透過情報の保存、Windowsのモデルキャッシュ、マスク編集後の画像混入、小画像のアップスケールなどを修正しました。生成の中断・失敗後の復元、LoRA・量子化・Attention、タブ更新と拡張機能のバージョン表示も改善しています。CPUと実ブラウザーで回帰を確認し、今回のGPU実生成は未実施です。[修正内容・検証範囲・最新情報](docs/audits/2026-10-03-bugfix-and-knowledge.md)
+**v3.5.1（2026-10-03）：** Qwen Outpaintの境界検証、画像・透過情報の保存、Windowsのモデルキャッシュ、マスク編集後の画像混入、小画像のアップスケールなどを修正しました。生成の中断・失敗後の復元、LoRA・量子化・Attention、タブの更新・非表示後の切替と拡張機能のバージョン表示も改善しています。CPUと実ブラウザーで回帰を確認し、今回のGPU実生成は未実施です。[修正内容・検証範囲・最新情報](docs/audits/2026-10-03-bugfix-and-knowledge.md)
 
 以前の主な更新：**v3.5** [Qwen画像生成とOutpaintのモデル・LoRA共有](extensions-builtin/qwen-image21-studio/README.md#outpaint補助)、**v3.3** [手元の互換モデル・複数LoRAと標準本体なしの準備](docs/local-models.md)、**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 
