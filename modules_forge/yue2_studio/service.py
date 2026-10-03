@@ -178,6 +178,7 @@ class Studio:
         from modules_forge.resident_worker import ResidentWorker
 
         success = False
+        final = {"state": "failed", "message": "処理が異常終了しました。"}
         try:
             if job.cancel.is_set():
                 raise InterruptedError("開始前に停止しました。")

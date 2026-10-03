@@ -137,8 +137,8 @@ class QwenLocalSourceTests(unittest.TestCase):
             shared = qwen_fixture(root / "runtime/model", transformer=False)
             custom = qwen_transformer(root / "outside/fine-tune")
             result = local_source.resolve(root / "runtime", str(custom), "", "int8")
-            self.assertEqual(result["transformer"], str(custom))
-            self.assertEqual(result["model"], str(shared))
+            self.assertEqual(result["transformer"], str(custom.resolve()))
+            self.assertEqual(result["model"], str(shared.resolve()))
             self.assertFalse((shared / "transformer").exists())
             self.assertEqual(
                 sorted(p.name for p in custom.iterdir()), ["config.json", "diffusion_pytorch_model.safetensors"]
@@ -154,7 +154,7 @@ class QwenLocalSourceTests(unittest.TestCase):
             python.write_bytes(b"test")
             json_file(runtime / "runtime.json", {"schema": 1, "diffusers_revision": core.DIFFUSERS_REVISION})
             result = core.runtime_manifest(runtime, "bf16", str(pipeline))
-            self.assertEqual(result["model"], str(pipeline))
+            self.assertEqual(result["model"], str(pipeline.resolve()))
             self.assertFalse((runtime / "model").exists())
 
     def test_wrong_family_missing_shard_and_profile_rejected(self):
@@ -195,8 +195,8 @@ class QwenLocalSourceTests(unittest.TestCase):
                     "transformer_blocks.0.attn.to_q.lora_B.weight": [2, 1],
                 },
             )
-            self.assertEqual(style_lora.resolve(root, str(path)), path)
-            self.assertEqual(style_lora.resolve(root, f'"{path}"'), path)
+            self.assertEqual(style_lora.resolve(root, str(path)), path.resolve())
+            self.assertEqual(style_lora.resolve(root, f'"{path}"'), path.resolve())
             request = {
                 "style_loras": [{"name": "style.safetensors", "strength": 1}, {"name": str(path), "strength": 0.5}]
             }
@@ -308,7 +308,7 @@ class ForgeLocalSelectionTests(unittest.TestCase):
             external = tensor_file(root / "external/shared.safetensors")
             local_assets.remember("forge_module", [str(external)])
             ui._rebuild_module_registry([("VAE", str(installed.parent))])
-            self.assertEqual(set(ui.module_list.values()), {str(installed), str(external)})
+            self.assertEqual(set(ui.module_list.values()), {str(installed.resolve()), str(external.resolve())})
             self.assertEqual(len(ui.module_list), 2)
 
     def test_multiple_external_loras_keep_path_identity_and_zero_skips_missing_file(self):

@@ -11,6 +11,25 @@ from modules_forge.yue2_studio import service
 
 
 class YuE2StartupCleanupTests(unittest.TestCase):
+    def test_unprintable_exception_still_publishes_failed_job_status(self):
+        class UnprintableError(RuntimeError):
+            def __str__(self):
+                raise ValueError("invalid exception message")
+
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            studio = service.Studio(root / "runtime", root / "outputs")
+            job = service.Job("job", "owner", root)
+            lease = Mock()
+            with patch.object(service, "runtime_manifest", side_effect=UnprintableError()):
+                with self.assertRaisesRegex(ValueError, "invalid exception message"):
+                    studio._run(job, SimpleNamespace(engine="official"), lease, None, None)
+
+            self.assertTrue(job.done.is_set())
+            self.assertEqual(job.final["state"], "failed")
+            self.assertEqual(service.read_json(root / "status.json"), job.final)
+            lease.release.assert_called_once()
+
     def test_startup_failures_keep_gpu_until_worker_exit_is_confirmed(self):
         for boundary in ("startup", "session_metadata"):
             with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as root:

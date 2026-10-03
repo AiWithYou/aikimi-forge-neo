@@ -4,7 +4,7 @@
 
 - Qwen Outpaintの境界幅を生成前に検証し、失効した履歴の参照を回収。薄いalphaの変色、Canvasで遅れて読み込んだ旧画像による上書き、LoRA設定の再展開時のリセットを修正しました。
 - JPEG・WebP・PNGのmodeと透過情報、EXIFのOrientation補正後の日本語生成情報を保持。壊れた任意metadataを回収し、小画像のタイル処理での例外と端の暗化、Soft Inpaintingの次ジョブへの前画像混入を修正しました。
-- Windowsで更新時刻を保ったモデル書換え後も古いhash・LoRA情報を再利用する問題と、一時的なファイル共有ロックによる常駐workerの失敗を修正。中断・起動失敗後のプロセス回収とモデル設定の復元も改善しました。
+- Windowsで更新時刻を保ったモデル書換え後も古いhash・LoRA情報を再利用する問題と、一時的なファイル共有ロックによる常駐workerの失敗を修正。中断・起動失敗後のプロセス回収とモデル設定の復元も改善しました。YuE2の例外表示が失敗した場合も、終了状態とlog位置を保存します。
 - Attentionの軸・mask、T5系の長さとBREAK、AND Promptの行別強度と相殺、動画のRescale CFGとSDE noiseを修正。DDIM・PLMSのstrength 0は元のlatentを保持します。
 - VAEのclone・OOM再試行、LoRAの適用順序・DoRA・LoKr・OFT、量子化の保存と全精度演算、ControlNet・IPAdapterの条件再利用を修正しました。取得途中のローカルモデルと破損したQwen配布物の検査も強化しました。
 - Gradioタブの表示・名称・操作可否と動的更新、空の設定保存、Seed・履歴の復元、進捗APIを修正。プレビューとモデル情報の保存では、実際の保存先と拡張子を確認します。
