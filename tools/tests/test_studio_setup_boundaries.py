@@ -133,8 +133,9 @@ class StudioSetupBoundaryTests(unittest.TestCase):
                 patch.object(module.shutil, "which", return_value="git"),
                 patch.object(module.subprocess, "run", side_effect=git),
                 patch.object(module.sys, "platform", "win32"),
-                patch.object(module.Installer, "install", side_effect=SetupError("injected bootstrap failure")),
+                patch.object(module, "Installer") as installer,
             ):
+                installer.return_value.install.side_effect = SetupError("injected bootstrap failure")
                 self.assertFalse(module.runtime_ready(root))
                 with self.assertRaisesRegex(SetupError, "bootstrap failure"):
                     module.install_runtime(root)
