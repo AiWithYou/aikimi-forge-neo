@@ -413,7 +413,11 @@ def preset_checkpoint_selection(preset: str, *, warn: bool = False) -> dict:
     """Resolve saved aliases to dropdown values; only recover to a known preset default."""
     use_short = shared.opts.sd_checkpoint_dropdown_use_short
     choices = sorted(sd_models.checkpoint_tiles(use_short))
-    saved = getattr(shared.opts, f"forge_checkpoint_{preset}", None) or shared.opts.sd_model_checkpoint
+    saved = (
+        shared.opts.sd_model_checkpoint
+        if preset == shared.opts.forge_preset
+        else getattr(shared.opts, f"forge_checkpoint_{preset}", None) or shared.opts.sd_model_checkpoint
+    )
     info = sd_models.get_closet_checkpoint_match(saved)
     if info is None:
         default = next((value for arch, value in DEFAULT_CHECKPOINTS.items() if arch.name == preset), None)

@@ -1,8 +1,8 @@
 # Aikimi Forge Neo
 
-**v3.5.1** · [変更履歴](CHANGELOG.md)
+**v3.5.2** · [変更履歴](CHANGELOG.md)
 
-**v3.5.1（2026-10-03）：** Qwen Outpaintの境界検証、画像・透過情報の保存、Windowsのモデルキャッシュ、マスク編集後の画像混入、小画像のアップスケールなどを修正しました。生成の中断・失敗後の復元、LoRA・量子化・Attention、タブの更新・非表示後の切替と拡張機能のバージョン表示も改善しています。CPUと実ブラウザーで回帰を確認し、今回のGPU実生成は未実施です。
+**v3.5.2（2026-10-03、ローカル検証版）：** 起動時のCheckpoint表示を実際の選択モデルに合わせ、日本語Windowsのセットアップ回帰テストの出力文字コードも固定しました。公式CI構成と、既存Animaモデルの実起動・小画像生成・保存・再読込をそれぞれ5回連続で確認しています。本体の導入処理や外部依存は変更していません。
 
 以前の主な更新：**v3.5** [Qwen画像生成とOutpaintのモデル・LoRA共有](extensions-builtin/qwen-image21-studio/README.md#outpaint補助)、**v3.3** [手元の互換モデル・複数LoRAと標準本体なしの準備](docs/local-models.md)、**v3.1** Qwenの複数LoRA、**v3.0** Studioの寸法指定とQwen Outpaint、**v2.4** Nanosaur2、**v2.3** Qwen Fun Acc、**v2.1〜2.2** Qwen ControlNet、**v2.0** 依存関係修正。過去の詳細・作例は[変更履歴](CHANGELOG.md)と各機能ガイドに残しています。
 

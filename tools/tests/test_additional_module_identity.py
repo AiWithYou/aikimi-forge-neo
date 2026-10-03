@@ -620,6 +620,26 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
             self.main_entry._load_presets(update["value"], [], "Automatic", "krea")
         self.assertEqual(self.opts.data, before)
 
+    def test_active_preset_checkpoint_display_matches_the_actual_model(self):
+        self.opts.forge_preset = "krea"
+        self.opts.data["forge_checkpoint_krea"] = "other.safetensors"
+        before = dict(self.opts.data)
+
+        update = self.main_entry.on_preset_change("krea")[0]
+
+        self.assertEqual(update["value"], "model.safetensors")
+        self.assertEqual(self.opts.data, before)
+        self.assertEqual(self.opts.set_calls, [])
+
+    def test_switching_preset_still_displays_its_saved_checkpoint(self):
+        self.opts.forge_preset = "sd"
+        self.opts.data["forge_checkpoint_krea"] = "other.safetensors"
+
+        update = self.main_entry.on_preset_change("krea")[0]
+
+        self.assertEqual(update["value"], "other.safetensors")
+        self.assertEqual(self.opts.set_calls, [])
+
     def test_checkpoint_selection_saves_the_preset_when_active_model_is_unchanged(self):
         self.opts.data["forge_checkpoint_krea"] = "deleted.safetensors"
         with mock.patch.object(self.main_entry, "refresh_model_loading_parameters") as refresh:

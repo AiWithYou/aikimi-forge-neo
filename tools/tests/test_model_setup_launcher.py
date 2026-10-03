@@ -33,7 +33,12 @@ class ModelSetupLauncherTests(unittest.TestCase):
 
     def run_ps(self, code: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603 - 固定のテストスクリプトだけを実行する。
-            [PWSH, "-NoProfile", "-Command", code],
+            [
+                PWSH,
+                "-NoProfile",
+                "-Command",
+                "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); " + code,
+            ],
             capture_output=True,
             text=True,
             encoding="utf-8",
