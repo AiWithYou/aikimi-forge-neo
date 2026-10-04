@@ -1778,7 +1778,11 @@ def _cleanup_after_terminal(
         while deadline is None or time.monotonic() < deadline:
             try:
                 if _is_cancelled_job(prompt_id) and not _cancel_confirmed(prompt_id):
-                    client.cancel(prompt_id)
+                    try:
+                        client.cancel(prompt_id)
+                    except (H3BridgeError, OSError) as exc:
+                        # A failed cancel must not hide a naturally completed job.
+                        _LOG.warning("ComfyUI cancellation retry failed for job %s: %s", prompt_id, exc)
                 status = str(client.job(prompt_id).get("status") or "").lower()
                 if status in _TERMINAL_JOB_STATUSES:
                     try:

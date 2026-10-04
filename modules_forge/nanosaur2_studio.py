@@ -301,16 +301,16 @@ def run_generation(
             bridge._mark_active_generation(prompt_id)
             with bridge._ACTIVE_GENERATION_LOCK:
                 bridge._GPU_OWNERSHIPS[prompt_id] = ownership
+            # Once sending starts, any failure requires terminal reconciliation.
+            submitted = True
             try:
                 client.submit(graph, prompt_id)
                 bridge.pending_jobs.update(prompt_id, state="submitted")
-                submitted = True
             except bridge.H3SubmissionRejected:
                 terminal = True
                 raise
             except bridge.H3BridgeError:
                 _LOG.warning("Nanosaur2 submission response missing; reconciling the same job ID.")
-                submitted = True
         started = time.monotonic()
         yield {"stage": "queued", "message": "生成をキューに追加しました。", "prompt_id": prompt_id, "seed": seed}
         failures = 0
@@ -367,7 +367,7 @@ def run_generation(
             if client is not None and submitted and not terminal:
                 try:
                     client.cancel(prompt_id)
-                except bridge.H3BridgeError:
+                except (bridge.H3BridgeError, OSError):
                     _LOG.warning("Nanosaur2 cancellation request failed.")
                 bridge._schedule_deferred_cleanup(client, prompt_id, {}, runtime_root())
                 client = None

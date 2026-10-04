@@ -1,6 +1,6 @@
 # Aikimi Forge Neo
 
-**v3.5.2（ローカル検証版）** · [変更履歴](CHANGELOG.md)
+**v3.5.3** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 

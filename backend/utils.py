@@ -75,8 +75,8 @@ def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=F
                     sd[k] = tensor
                 if return_metadata:
                     metadata = f.metadata()
-        except Exception:
-            raise ValueError(f'\nModel "{ckpt}" is corrupt or invalid...\nPlease download the model again\n') from None
+        except safetensors.SafetensorError as error:
+            raise ValueError(f'Cannot load model "{ckpt}": {error}') from error
 
     elif ckpt.lower().endswith(".gguf"):
         reader = gguf.GGUFReader(ckpt)

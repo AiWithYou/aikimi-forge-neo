@@ -164,6 +164,8 @@ def encode_pil_to_base64(image):
         elif opts.samples_format.lower() in ("jpg", "jpeg", "webp"):
             if image.mode in ("RGBA", "LA", "P") and opts.samples_format.lower() in ("jpg", "jpeg"):
                 image = image.convert("RGB")
+            elif image.mode == "I;16":
+                image = image.point(lambda p: p / 257).convert("RGB" if opts.samples_format.lower() == "webp" else "L")
             elif image.mode == "P":
                 image = image.convert("RGBA")
             parameters = image.info.get("parameters", None)
