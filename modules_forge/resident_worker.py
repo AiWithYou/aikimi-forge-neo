@@ -164,10 +164,41 @@ class ResidentWorker:
             self._temporary = None
 
 
+class _LogStream:
+    """Keep the stream captured by library handlers alive across job logs."""
+
+    def __init__(self, destination):
+        self.destination = destination
+
+    def write(self, text):
+        return self.destination.write(text)
+
+    def flush(self):
+        return self.destination.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.destination, name)
+
+    @contextlib.contextmanager
+    def to(self, destination):
+        previous = self.destination
+        self.destination = destination
+        try:
+            yield
+        finally:
+            self.destination = previous
+
+
 def serve(script, directory):
     from modules_forge.yue2_studio.worker import parent_guard
 
     parent_guard()
+    stdout, stderr = _LogStream(sys.stdout), _LogStream(sys.stderr)
+    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        _serve_commands(script, directory, stdout, stderr)
+
+
+def _serve_commands(script, directory, stdout, stderr):
     spec = importlib.util.spec_from_file_location("aikimi_resident_engine", script)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -185,7 +216,7 @@ def serve(script, directory):
         last = command["id"]
         result = {"id": last, "ok": False}
         with Path(command["log"]).open("a", encoding="utf-8", buffering=1) as log:
-            with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+            with stdout.to(log), stderr.to(log):
                 try:
                     module.resident_run(command["payload"])
                     torch = sys.modules.get("torch")

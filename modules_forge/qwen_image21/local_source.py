@@ -57,12 +57,12 @@ def weight_files(folder: Path) -> list[Path]:
     return paths
 
 
-def validate_transformer(path: Path) -> None:
+def validate_transformer(path: Path) -> str:
     if path.suffix.lower() == ".gguf":
         with path.open("rb") as stream:
             if stream.read(4) != b"GGUF":
                 raise ValueError("GGUFファイルが不正です。")
-        return  # The worker validates the complete converted tensor set against the model.
+        return "gguf"  # The worker validates the complete converted tensor set against the model.
     files = [path] if path.is_file() else weight_files(path)
     if path.is_dir():
         config = read_json(path / "config.json")
@@ -83,6 +83,10 @@ def validate_transformer(path: Path) -> None:
     blocks = {int(m[1]) for k in keys if (m := re.match(r"transformer_blocks\.(\d+)\.", k))}
     if blocks != set(range(32)) or not {"img_in.weight", "txt_in.in_layer.weight"}.issubset(keys):
         raise ValueError("Qwen Image 2.1本体の32ブロック構成を確認できません。LoRA・旧Qwen用モデルは指定できません。")
+    if path.is_file() and any(key.endswith(".comfy_quant") for key in headers[0]):
+        from .convrot_int8 import inspect_checkpoint
+
+        return inspect_checkpoint(path, header=headers[0])["format"]
     if any(
         item.get("dtype") not in {"BF16", "F16", "F32"}
         for h in headers
@@ -90,8 +94,17 @@ def validate_transformer(path: Path) -> None:
         if key != "__metadata__"
     ):
         raise ValueError(
-            "単一safetensors／DiffusersフォルダーはBF16・FP16・FP32に対応します。ConvRot等の事前量子化は未対応です。"
+            "単一safetensorsはBF16・FP16・FP32またはQwen 2.1のINT8 ConvRotに対応します。その他の事前量子化は未対応です。"
         )
+    return "float"
+
+
+def preferred_precision(path: Path) -> str:
+    if path.suffix.lower() == ".gguf":
+        return "base_q4_k_m"
+    if path.suffix.lower() == ".safetensors":
+        return "int8" if validate_transformer(path) == "int8_convrot" else "bf16"
+    return "int8"
 
 
 def resolve(runtime: Path, model: str, components: str, precision: str) -> dict:
@@ -120,14 +133,19 @@ def resolve(runtime: Path, model: str, components: str, precision: str) -> dict:
     gguf = transformer.suffix.lower() == ".gguf"
     if gguf != (precision == "base_q4_k_m"):
         raise ValueError("GGUFにはQ4の設定、safetensors／フォルダーにはBF16・INT8・W4A8を選んでください。")
-    if transformer.is_file() and not gguf and precision != "bf16":
-        raise ValueError(
-            "単一safetensorsはBF16設定で使用します。INT8／W4A8にはDiffusers Transformerフォルダーを指定してください。"
-        )
-    validate_transformer(transformer)
+    format_name = validate_transformer(transformer)
+    if transformer.is_file() and not gguf:
+        required = "int8" if format_name == "int8_convrot" else "bf16"
+        if precision != required:
+            raise ValueError(
+                "INT8 ConvRot本体はINT8設定で使用してください。"
+                if format_name == "int8_convrot"
+                else "単一safetensorsはBF16設定で使用します。INT8／W4A8にはDiffusers Transformerフォルダーを指定してください。"
+            )
     return {
         "model": str(base),
         "transformer": str(transformer),
+        "format": format_name,
         "identity": local_assets.identity(transformer),
         "components": {
             name: local_assets.identity(base / name) for name in ("text_encoder", "vae", "processor", "scheduler")
@@ -178,10 +196,6 @@ def load_single(path: Path, model_class, runtime: Path):
                 state[name.replace("gate_up", "gate_layer")] = a
                 state[name.replace("gate_up", "proj")] = b
             else:
-                if name == "txt_in.text_norm.weight" and hasattr(weight, "quant_type"):
-                    from diffusers.quantizers.gguf.utils import dequantize_gguf_tensor
-
-                    weight = dequantize_gguf_tensor(weight).to(torch.bfloat16)
                 state[name] = weight
         if set(state) != set(expected):
             raise ValueError("ローカル本体のテンソル構成がQwen Image 2.1と一致しません。部分読み込みは行いません。")
@@ -200,6 +214,8 @@ def load_single(path: Path, model_class, runtime: Path):
     from diffusers import GGUFQuantizationConfig
     from diffusers.loaders import single_file_model
 
+    from .gguf import restore_non_linear_weights
+
     config_root = runtime / "local-config"
     folder = config_root / "transformer"
     folder.mkdir(parents=True, exist_ok=True)
@@ -208,7 +224,7 @@ def load_single(path: Path, model_class, runtime: Path):
     previous = mapping.get("QwenImage21Transformer2DModel")
     mapping["QwenImage21Transformer2DModel"] = {"checkpoint_mapping_fn": convert, "default_subfolder": "transformer"}
     try:
-        return model_class.from_single_file(
+        model = model_class.from_single_file(
             str(path),
             config=str(config_root),
             subfolder="transformer",
@@ -216,6 +232,7 @@ def load_single(path: Path, model_class, runtime: Path):
             torch_dtype=torch.bfloat16,
             local_files_only=True,
         )
+        return restore_non_linear_weights(model)
     finally:
         if previous is None:
             mapping.pop("QwenImage21Transformer2DModel", None)

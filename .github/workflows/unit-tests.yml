@@ -5,6 +5,7 @@ on:
     paths:
       - "**/*.css"
       - "**/*.js"
+      - "**/*.mjs"
       - "**/*.py"
       - "pyproject.toml"
       - "requirements.txt"
@@ -15,6 +16,7 @@ on:
     paths:
       - "**/*.css"
       - "**/*.js"
+      - "**/*.mjs"
       - "**/*.py"
       - "pyproject.toml"
       - "requirements.txt"
@@ -73,6 +75,10 @@ jobs:
           tools/tests/test_h3_union2_installers.py -q
       - name: Run H3 workflow and Outpaint canvas contracts
         run: node --test tools/tests/h3_handoff_core.test.mjs tools/tests/qwen_outpaint_canvas.test.mjs
+      - name: Run Clef clipboard contracts
+        run: node --test tools/tests/clef_clipboard.test.mjs
+      - name: Run Clef contracts without model downloads
+        run: python tools/run_ci_tests.py --pytest tools/tests/test_clef*.py -q
       - name: Run YuE2 contracts without model downloads
         run: python tools/run_ci_tests.py --pytest tests/yue2 -q
       - name: Run Jev contracts without API calls or models

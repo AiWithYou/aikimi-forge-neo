@@ -162,6 +162,32 @@ class WorkerJobTests(unittest.TestCase):
         self.assertIsNone(self.pipe.calls[0]["image"])
         self.assertEqual(result["metadata"]["output_mode"], "RGBA")
 
+    def test_consistency_single_reference_keeps_source_area_in_sampling_and_metadata(self):
+        source = self.root / "native.png"
+        Image.new("RGBA", (256, 320), (12, 37, 91, 255)).save(source)
+        self.request["input_images"] = [str(source)]
+        self.runtime["style_loras"] = [{"consistency_version": "1500", "strength": 1.0}]
+        self.write_request()
+        result, _ = self.run_job()
+        self.assertAlmostEqual(self.pipe.calls[0]["output_resolution"] ** 2, 256 * 320)
+        self.assertAlmostEqual(result["metadata"]["input_resolution"] ** 2, 256 * 320)
+
+    def test_consistency_unselected_multiple_or_different_size_keep_existing_reference_recipe(self):
+        source = self.root / "native.png"
+        Image.new("RGBA", (256, 320), (12, 37, 91, 255)).save(source)
+        for adapters, references, width in (
+            ([], [str(source)], 256),
+            ([{"consistency_version": "1500", "strength": 1.0}], [str(source), str(source)], 256),
+            ([{"consistency_version": "1500", "strength": 1.0}], [str(source)], 320),
+        ):
+            with self.subTest(adapters=adapters, references=len(references), width=width):
+                self.runtime["style_loras"] = adapters
+                self.request.update(input_images=references, width=width)
+                self.write_request()
+                result, _ = self.run_job()
+                self.assertEqual(self.pipe.calls[-1]["output_resolution"], 1024)
+                self.assertEqual(result["metadata"]["input_resolution"], 1024)
+
     def test_outpaint_keeps_reference_geometry_and_saves_stitched_canonical_png(self):
         from modules_forge.qwen_image21.outpaint_native import snapshot
 

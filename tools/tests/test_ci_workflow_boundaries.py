@@ -7,6 +7,56 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CiWorkflowBoundaryTests(unittest.TestCase):
+    def test_clef_and_qwen_release_code_is_linted_and_clipboard_is_tested(self):
+        lint = self.workflow("lint.yml")
+        paths = (
+            "modules_forge/clef/**",
+            "extensions-builtin/clef-studio/**",
+            "tools/*clef*.py",
+            "tools/tests/test_clef*.py",
+            "tools/prepare_qwen21_consistency_lora.py",
+            "tools/tests/test_qwen21_consistency*.py",
+            "tools/tests/test_qwen_int8_convrot.py",
+            "tools/tests/test_qwen_gguf_normalization.py",
+            "tools/tests/test_resident_worker_logging.py",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertEqual(lint.count(f'"{path}"'), 2)
+        for path in (
+            "modules_forge/clef",
+            "extensions-builtin/clef-studio/scripts",
+            "tools/*clef*.py",
+            "tools/tests/test_clef*.py",
+            "tools/prepare_qwen21_consistency_lora.py",
+            "tools/tests/test_qwen21_consistency*.py",
+            "tools/tests/test_qwen_int8_convrot.py",
+            "tools/tests/test_qwen_gguf_normalization.py",
+            "tools/tests/test_resident_worker_logging.py",
+        ):
+            with self.subTest(linted=path):
+                self.assertTrue(f"            {path}\n" in lint, f"Missing lint target: {path}")
+        self.assertTrue(
+            "node --test tools/tests/clef_clipboard.test.mjs" in self.workflow("unit-tests.yml"),
+            "Clef clipboard JavaScript tests must run in CI",
+        )
+        self.assertTrue(
+            "python tools/run_ci_tests.py --pytest tools/tests/test_clef*.py -q" in self.workflow("unit-tests.yml"),
+            "Clef pytest functions must run independently of unittest discovery",
+        )
+        self.assertEqual(self.workflow("unit-tests.yml").count('"**/*.mjs"'), 2)
+
+    def test_clef_dependency_audit_runs_independently_without_ignores(self):
+        security = self.workflow("security.yml")
+        self.assertTrue("  clef-pip-audit:" in security, "Clef needs its own runtime audit")
+        job = security.split("  clef-pip-audit:", 1)[1].split("  gitleaks-full-history:", 1)[0]
+        self.assertIn("inputs: tools/requirements-clef.txt", job)
+        self.assertIn("vulnerability-service: OSV", job)
+        self.assertIn("internal-be-careful-extra-flags: --strict", job)
+        self.assertIn("extra-index-urls: https://download.pytorch.org/whl/cu130", job)
+        for bypass in ("ignore-vulns:", "no-deps:", "needs:", "continue-on-error:"):
+            self.assertNotIn(bypass, job)
+
     def workflow(self, name: str) -> str:
         return (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
 

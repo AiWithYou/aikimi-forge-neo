@@ -60,9 +60,11 @@ GGUFは画像生成本体だけです。共通のテキストエンコーダー�
 
 ## 追加LoRA（複数対応）
 
+編集時の位置ずれを抑える **[Consistency LoRA](../../docs/qwen21-consistency-lora.md)** は、LoRAの追加方法にある準備ボタンから取得できます。通常版1500を強度1.0で追加し、既存のモデル・Steps・他のLoRAは保持します。ポーズ変更を抑える場合があるため、選択時に用途と制限を表示します。
+
 Qwen Image 2.1用の `.safetensors` を `models/Qwen-Image-2.1/loras/` に置き、**LoRA → 一覧更新**。サブフォルダーも読めます。v3.3.0からは選択欄へ外部ファイルのフルパスを貼り付けてEnterを押す方法も使えます。複数選択し、表の「強度」を各LoRAごとに設定します（−2〜2、初期値1、0は読み込み省略）。選択を追加・削除しても残ったLoRAの強度は保持されます。×で外したものを再選択すると1に戻ります。
 
-**本体モデル**では互換モデルのファイル／Diffusersフォルダーも指定できます。**環境・共通部品を準備（標準本体なし）**を使えば、標準の本体をダウンロードする必要はありません。単一safetensorsはBF16、TransformerフォルダーはBF16／INT8／W4A8、対応GGUFは通常版Q4で使用します。[導入手順と対応範囲](../../docs/local-models.md)
+**本体モデル**では互換モデルのファイル／Diffusersフォルダーも指定できます。**環境・共通部品を準備（標準本体なし）**を使えば、標準の本体をダウンロードする必要はありません。単一safetensorsはBF16またはINT8 ConvRot、TransformerフォルダーはBF16／実行時INT8／W4A8、対応GGUFは通常版Q4で使用します。[導入手順と対応範囲](../../docs/local-models.md)
 
 通常版Q4_K_M・W4A8・INT8・BF16とTurboで使用できます。SushiUIの `lora_unet_...__...`、Diffusers/Comfy系の `transformer.` / `diffusion_model.` 配下の線形LoRA（A/Bまたはdown/up、alpha/rank）を読み込みます。Qwen Imageの別バージョン、DoRA、独自ヘッドなど、すべての形式への対応ではありません。未対応キー・不足ペア・寸法不一致があれば部分適用せずエラーにします。Fun Acc・Outpaint・Sparseとの併用も受け付けますが、高速化モデルへの画風の適用は実験扱いです。
 
@@ -72,7 +74,7 @@ Hugging Faceからファイル名を指定して取得する補助コマンド�
 .\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_style_lora.py owner/repo --file model.safetensors
 ```
 
-検証に使用した [celstk/qwen2.1_lora](https://huggingface.co/celstk/qwen2.1_lora) の重みは同梱しません。必要な場合は配布元から取得してください。[SushiUIの実装](https://github.com/celll1/SushiUI/blob/69de838b18dbed8e8fc1e1294fb649a4f7dc5452/backend/core/pipeline_backends/qwen_image_21.py#L55-L78)に従い、通常の全面生成では学習専用global adapterを除外します。ただしこのLoRAはConvRot INT8で学習され、ForgeのINT8はbitsandbytes、Q4はGGUFです。**同一再現ではないため「異なる量子化で試す（実験）」を明示的にONにした場合のみ適用**します。選択を変えるとOFFへ戻ります。
+検証に使用した [celstk/qwen2.1_lora](https://huggingface.co/celstk/qwen2.1_lora) の重みは同梱しません。必要な場合は配布元から取得してください。[SushiUIの実装](https://github.com/celll1/SushiUI/blob/69de838b18dbed8e8fc1e1294fb649a4f7dc5452/backend/core/pipeline_backends/qwen_image_21.py#L55-L78)に従い、通常の全面生成では学習専用global adapterを除外します。ただしこのLoRAはConvRot INT8で学習され、標準のINT8はbitsandbytes、Q4はGGUFです。ローカルConvRot本体も学習元重みとの一致を確認していないため、**「異なる量子化で試す（実験）」を明示的にONにした場合のみ適用**します。選択を変えるとOFFへ戻ります。
 
 各LoRAのファイル名・SHA-256・強度・適用層数・量子化の差を生成情報へ保存します。LoRAや強度を変えた場合はモデルを再読み込みします。元のモデルの重みには書き込みません。
 
@@ -233,7 +235,7 @@ aikimi-qwen-image21-setup.bat --edit-prompt-rewriter-only
 
 | 設定 | 動作 |
 |---|---|
-| INT8 | 生成TransformerとQwen3-VLテキストエンコーダーの対応Linear層をbitsandbytes LLM.int8()で読み込みます。小さな入出力・正規化などの層とVAEは浮動小数点のままです。bitsandbytes内部では入力をFP16へ変換するため、全演算がBF16になる設定ではありません。 |
+| INT8 | 標準本体／未量子化Transformerフォルダーとテキストエンコーダーにはbitsandbytes LLM.int8()を使用します。ローカルINT8 ConvRotファイルの本体はConvRotカーネルで実行します。小さな入出力・正規化などの層とVAEは浮動小数点のままです。bitsandbytes内部では入力をFP16へ変換するため、全演算がBF16になる設定ではありません。 |
 | BF16 | 公式のBF16構成を読み込みます。INT8より多くのメモリを使います。 |
 | CPU退避 | 各部品を使うタイミングでGPUへ転送します。CPU RAMと転送時間を使ってVRAM使用量を抑えます。 |
 | GPU常駐 | パイプライン全体をGPUへ置きます。十分なVRAMがある場合に選んでください。 |
@@ -246,7 +248,7 @@ CPU退避では、PNG保存後に未使用のPyTorch GPUキャッシュを解放
 
 上記の実INT8編集では、保存後のPyTorch予約メモリを2,794→88MiB、再実行時は2,716→88MiBへ減らせました。2回の実行で観測したGPU総使用量の最大は15,741MiB（デスクトップ等を含む）、workerのRSS最大は約21.9GiBです。INT8でもCPU退避先のRAMにはモデルが残ります。この検証では上部の**GPU・モデル保持 → 今すぐモデルを解放**でworkerの終了を確認し、PC全体のRAMはピーク約44.9GiBから約22.7GiBへ戻りました。共通設定には**自動（5分後に解放）**もあります。**毎回解放**を選ぶとRAMを保持しない代わりに、次の生成で初回読み込みが再び必要です。
 
-**Qwen本体のINT8はbitsandbytes形式です。Comfy-Org配布のQwen本体INT8 ConvRotや従来のForge用単体チェックポイントは、このタブでは読み込めません。** 上記のFun ControlNetだけは別のINT8 ConvRotパッチとして読み込みます。量子化後の画質・速度・メモリ使用量は設定に依存します。BF16と同じ画像になるとは限りません。
+**標準本体のINT8はbitsandbytes形式です。ローカル本体にはQwen Image 2.1のINT8 ConvRot safetensorsも指定できます。** [abenzerps UC版の導入方法と検証状況](../../docs/local-models.md#abenzerpsのqwen-image-21-uc版)を参照してください。ファイル内の量子化設定・224線形層・全テンソルの寸法を確認し、配布時のINT8重みとFP32スケールを保持します。本体を選ぶと精度はINT8に切り替わり、テキストエンコーダーには従来のbitsandbytes INT8を使います。ConvRot以外の事前量子化形式や旧Qwen Imageのチェックポイントは未対応です。Fun ControlNetは別のINT8 ConvRotパッチとして読み込みます。量子化後の画質・速度・メモリ使用量は設定に依存します。BF16と同じ画像になるとは限りません。UC版は2026-10-07にRTX 3090で256×256・2 stepsのRGBA生成とCPU退避を確認しました。通常ステップ数での画質・速度は未評価です。
 
 1024角は試作向けの初期設定です。公式の2Kサイズも選べます。大きな画像や多数の参照はVRAMを多く使うため、参照を少なくして試してください。参照画像は公式パイプラインで約1MPを基準に前処理します。マスクはFun ControlNetのInpaintingと生成後の範囲外固定に使えます。denoise strength、Forge本体のLoRA・ControlNet・追加スクリプトはこのタブには接続していません。Qwen専用のFun ControlNetは上記の経路を使います。
 

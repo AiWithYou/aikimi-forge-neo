@@ -1,5 +1,15 @@
 # 変更履歴
 
+## v3.6.0 — 2026-10-07
+
+- Clef / Clef-Flashの専用環境と判定画面を追加。上部のClefから画像・文章・JSONを選択式・段階式・真偽式で判定し、項目ごとの確率を確認できます。画像の絞り込み・採用・コピー、実行記録の比較、JSON／CSV／ZIP保存にも対応します。[使い方・検証範囲](docs/clef-studio.md)
+- Clefのセットアップは量子化済みの[Flash INT8](https://huggingface.co/Aikimi/clef-flash-int8)と[Clef NF4](https://huggingface.co/Aikimi/clef-nf4)を検証済みcommitから取得します。通常27Bの24GB・16GB配置は同じNF4配布を使います。
+- Qwen Image 2.1の追加LoRA欄にConsistency 1500の準備ボタンを追加。固定revisionの重みをサイズ・SHA-256で検証し、既存の選択・強度を保持します。2000はコマンドから追加できます。
+- 配布重みの内容を識別し、参照1枚・元画像と同じ寸法の編集では参照と出力の縮尺を揃えます。推奨条件とポーズ変更の制限は[使い方・検証範囲](docs/qwen21-consistency-lora.md)を参照してください。
+- Qwenのローカル本体にINT8 ConvRot形式を追加し、GGUFのBF16正規化重みを実行時の精度へ揃えました。画風LoRAとControlNetにもConvRot実装を共用します。[対応形式・実生成の記録](docs/local-models.md)
+- 常駐workerで前回ジョブの閉じたログへ出力し続ける問題を修正しました。
+- Clef専用環境のpip・setuptoolsを既知の脆弱性を修正した版へ固定し、Accelerateは本体と同じ修正版を使用します。導入済みの場合はWebUIを終了して`.\aikimi-clef-setup.bat --runtime-only`を実行してください。
+
 ## v3.5.3 — 2026-10-05
 
 - img2imgなどでLA・パレット・PNG透過色の背景合成が抜ける問題と、APIの16bit JPEG例外・WebP階調飽和を修正しました。

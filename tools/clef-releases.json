@@ -1,0 +1,10 @@
+{
+  "clef-flash": {
+    "repo": "Aikimi/clef-flash-int8",
+    "revision": "be2e0831d1e50b7c04cc0f4a8eea665281f18c2f"
+  },
+  "clef": {
+    "repo": "Aikimi/clef-nf4",
+    "revision": "8296a671b4547b16b490139b6754c2b4569ef386"
+  }
+}

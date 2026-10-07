@@ -1,10 +1,10 @@
 # Aikimi Forge Neo
 
-**v3.5.3** · [変更履歴](CHANGELOG.md)
+**v3.6.0** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
-**画像の生成・編集、音声付き動画、作曲を、ひとつのWebUIから使えるWindows向けのForge Neo派生版です。** モデルの導入、高解像度処理、画像の仕上げも支援します。
+**画像の生成・編集、音声付き動画、作曲、画像や文章の評価を、ひとつのWebUIから使えるWindows向けのForge Neo派生版です。** モデルの導入、高解像度処理、画像の仕上げも支援します。
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 
@@ -35,7 +35,7 @@ cd aikimi-forge-neo
 
 ### モデルを選んで導入する
 
-Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニュー番号（1〜6）を選びます。QwenとYuE2は表にある専用BATを実行してください。
+Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニュー番号（1〜6）を選びます。Qwen・YuE2・Clefは表にある専用BATを実行してください。
 
 ```powershell
 .\aikimi-setup.bat
@@ -51,6 +51,7 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 | [Ming Image Design](extensions-builtin/ming-image-studio/README.md) | ポスター・UI案・透過素材の生成。専用Studioを使用 | `.\aikimi-setup.bat` → **6**（INT8／W4A8選択） |
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | 画像生成・編集・透過PNG・拡張。専用画面を使用 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | 作曲・ABC楽譜編集。**YuE2 Music** タブを使用 | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1：公式Python** |
+| [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
 
 初回はモデルと必要な実行環境のダウンロード・変換に時間がかかります。Qwenの既定モデルは通常版Q4_K_Mです。
 
@@ -151,6 +152,10 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 
 強度は−2〜2で指定します。0は無効、×は選択解除です。同じLoRAを選択欄とプロンプトの両方へ指定しないでください。モデルの世代や形式が異なると使えません。[対応形式と外部モデルの指定方法](docs/local-models.md) · [Qwen追加LoRAガイド](extensions-builtin/qwen-image21-studio/README.md#追加lora)
 
+Qwenの画風・色・照明の編集で構図を保ちたい場合は、[Consistency LoRA](docs/qwen21-consistency-lora.md)をLoRA欄から準備できます。通常版1500を取得し、既存の選択と強度を保って追加します。新しいポーズへの変更を抑える場合があります。
+
+手元のQwen Image 2.1用GGUFやINT8 ConvRot本体は、**本体モデル**から選択できます。対応形式・共通部品・実生成の確認範囲は[ローカルモデルの使い方](docs/local-models.md)を参照してください。
+
 <details>
 <summary>タグ入力補助・高速化・詳細設定</summary>
 
@@ -192,6 +197,8 @@ git pull --ff-only origin neo
 ```
 
 必要な更新が終わったら`aikimi-launch.bat`で起動します。本体の依存環境は起動時に準備します。`TORCH_COMMAND`や`TORCH_INDEX_URL`を指定している場合は、その設定が優先されます。個別の注意事項は[変更履歴](CHANGELOG.md)を参照してください。
+
+v3.6.0より前の開発版でClefを導入した場合は、WebUIを終了して`.\aikimi-clef-setup.bat --runtime-only`を実行し、専用環境を更新してください。取得済みの量子化モデルをそのまま使えます。
 
 <a id="troubleshooting"></a>
 

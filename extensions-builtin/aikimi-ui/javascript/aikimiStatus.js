@@ -333,6 +333,7 @@
             ming_image: "Ming Image",
             minimax_h3_image: "MiniMax H3 Image",
             yue2: "YuE2 Music",
+            clef: "Clef",
             nanosaur2: "Nanosaur2",
             forge: "Forge",
         }[feature] || "Aikimi";
@@ -708,7 +709,7 @@
         const progressPercent = Number.isFinite(progress) ? Math.round(Math.min(Math.max(progress, 0), 1) * 100) : null;
         const stateMessage = candidate.message || stateConfig.message || STATUS_LABELS[state] || state;
         const portraitDescriptor = resolvePortrait(state);
-        const nativeFeature = ["qwen_image21", "ming_image", "sensenova", "minimax_h3", "minimax_h3_image", "nanosaur2", "yue2"].includes(activeFeature);
+        const nativeFeature = ["qwen_image21", "ming_image", "sensenova", "minimax_h3", "minimax_h3_image", "nanosaur2", "yue2", "clef"].includes(activeFeature);
         const modelName = candidate.modelName || (nativeFeature ? featureLabel(activeFeature) : model.loaded_name || model.selected_name) || "未選択";
         const modelLabel =
             !candidate.modelName && !nativeFeature && model.loaded_name && model.reload_pending && model.selected_name
@@ -987,6 +988,7 @@
         const feature = tabs?.getActiveFeature?.() ?? eventFeature ?? {
             tab_minimax_h3_image_studio: "minimax_h3_image",
             tab_aikimi_yue2_studio: "yue2",
+            tab_clef_studio: "clef",
             tab_txt2img: "forge", tab_img2img: "forge",
         }[container?.id];
         return {

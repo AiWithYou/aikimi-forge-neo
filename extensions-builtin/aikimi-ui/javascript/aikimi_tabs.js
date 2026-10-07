@@ -72,6 +72,12 @@
             label: "YuE2 Music",
             kind: "native",
         }),
+        clef: Object.freeze({
+            buttonId: "aikimi-tab-clef",
+            containerId: "tab_clef_studio",
+            label: "Clef",
+            kind: "native",
+        }),
     });
     const FEATURE_ORDER = Object.freeze([
         "krea2",
@@ -83,6 +89,7 @@
         "nanosaur2",
         "minimax_h3",
         "yue2",
+        "clef",
     ]);
 
     if (window.AikimiTabs?.apiVersion === API_VERSION) {

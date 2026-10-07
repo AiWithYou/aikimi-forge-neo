@@ -29,17 +29,25 @@ def map_unsloth_checkpoint(checkpoint: dict, **_kwargs) -> dict:
             result[name.replace("gate_up", "proj")] = projection
             fused += 1
         else:
-            if name == "txt_in.text_norm.weight" and hasattr(weight, "quant_type"):
-                # Diffusers wraps GGUF BF16 as raw uint8; RMSNorm is not a
-                # GGUFLinear and otherwise multiplies by its 8192 bytes.
-                import torch
-                from diffusers.quantizers.gguf.utils import dequantize_gguf_tensor
-
-                weight = dequantize_gguf_tensor(weight).to(torch.bfloat16)
             result[name] = weight
     if fused != 32 or len(result) != 297:
         raise ValueError(f"Unsloth GGUFの重み構成が一致しません: {fused} fused / {len(result)} tensors")
     return result
+
+
+def restore_non_linear_weights(model):
+    """Norms need floating values even when Diffusers skips name conversion."""
+    import torch
+    from diffusers.quantizers.gguf.utils import dequantize_gguf_tensor
+
+    for module in model.modules():
+        if isinstance(module, torch.nn.Linear):
+            continue
+        for name, weight in list(module.named_parameters(recurse=False)):
+            if hasattr(weight, "quant_type"):
+                value = dequantize_gguf_tensor(weight).to(torch.bfloat16)
+                module.register_parameter(name, torch.nn.Parameter(value, requires_grad=weight.requires_grad))
+    return model
 
 
 def load_transformer(model_path: Path, gguf_path: Path, *, unsloth: bool = False):
@@ -55,7 +63,7 @@ def load_transformer(model_path: Path, gguf_path: Path, *, unsloth: bool = False
         "default_subfolder": "transformer",
     }
     try:
-        return QwenImage21Transformer2DModel.from_single_file(
+        model = QwenImage21Transformer2DModel.from_single_file(
             str(gguf_path),
             config=str(model_path),
             subfolder="transformer",
@@ -63,6 +71,7 @@ def load_transformer(model_path: Path, gguf_path: Path, *, unsloth: bool = False
             torch_dtype=torch.bfloat16,
             local_files_only=True,
         )
+        return restore_non_linear_weights(model)
     finally:
         if previous is None:
             mappings.pop("QwenImage21Transformer2DModel", None)

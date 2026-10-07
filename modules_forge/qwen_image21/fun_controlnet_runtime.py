@@ -19,29 +19,7 @@ from safetensors.torch import load_file
 from torch import nn
 from torch.nn import functional as F
 
-
-class ConvRotLinear(nn.Module):
-    def __init__(self, out_features: int, in_features: int, bias: bool = False):
-        super().__init__()
-        self.register_buffer("weight", torch.empty(out_features, in_features, dtype=torch.int8, device="meta"))
-        self.register_buffer("weight_scale", torch.empty(out_features, 1, dtype=torch.float32, device="meta"))
-        if bias:
-            self.register_buffer("bias", torch.empty(out_features, dtype=torch.bfloat16, device="meta"))
-        else:
-            self.bias = None
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        from comfy_kitchen import int8_linear
-
-        return int8_linear(
-            x,
-            self.weight,
-            self.weight_scale,
-            self.bias,
-            out_dtype=x.dtype,
-            convrot=True,
-            convrot_groupsize=256,
-        )
+from .convrot_int8_runtime import ConvRotLinear
 
 
 class FusedControlMLP(nn.Module):

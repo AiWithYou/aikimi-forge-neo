@@ -78,6 +78,7 @@ class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
             ("sensenova_u15_studio", "SenseNova U1.5"),
             ("minimax_h3_studio", "H3 Studio"),
             ("qwen_image21_studio", "Qwen Image 2.1"),
+            ("clef_studio", "Clef"),
             ("settings", "Settings"),
             ("extensions", "Extensions"),
         ]
@@ -472,7 +473,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 9
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 10
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -705,6 +706,14 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
     const qwenActiveAfterRemount = Boolean(await waitFor(() =>
         window.AikimiTabs.getActiveFeature() === "qwen_image21"
     ));
+    document.querySelector("#aikimi-tab-clef").click();
+    await waitFor(() => window.AikimiTabs.getActiveFeature() === "clef");
+    const clefResult = {{
+        active: window.AikimiTabs.getActiveFeature(),
+        container: window.AikimiTabs.getActiveContainer()?.id || null,
+        presetUnchanged: (presetInput?.value || null) === presetBeforeQwen,
+        presetEventsUnchanged: window.fixturePresetEvents.selectedValues.length === presetEventsBeforeQwen
+    }};
     const narrowNav = document.querySelector("#aikimi-feature-nav");
     narrowNav.style.width = "320px";
     const narrowNavFits = narrowNav.scrollWidth === narrowNav.clientWidth;
@@ -759,6 +768,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         qwenHiddenAfterRemoval,
         qwenVisibleAfterRemount,
         qwenActiveAfterRemount,
+        clefResult,
         narrowNavFits,
         tabListClass: tabList.className,
         mutationRepairCount: repairedRow ? document.querySelectorAll("#aikimi-feature-nav").length : 0,
@@ -774,7 +784,8 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         nativeStudioButtonsHidden: {{
             sensenova: getComputedStyle(fixtureNativeButton("tab_sensenova_u15_studio")).display === "none",
             minimax: getComputedStyle(fixtureNativeButton("tab_minimax_h3_studio")).display === "none",
-            qwen: getComputedStyle(fixtureNativeButton("tab_qwen_image21_studio")).display === "none"
+            qwen: getComputedStyle(fixtureNativeButton("tab_qwen_image21_studio")).display === "none",
+            clef: getComputedStyle(fixtureNativeButton("tab_clef_studio")).display === "none"
         }},
         ariaTargetsExist: Array.from(
             document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button:not([hidden])")
@@ -854,6 +865,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "Nanosaur2",
                 "MiniMax H3",
                 "YuE2 Music",
+                "Clef",
             ],
         )
         self.assertTrue(result["externalRowBeforeTabs"])
@@ -863,7 +875,16 @@ class AikimiTabsChromiumTests(unittest.TestCase):
         self.assertFalse(result["nativeContainsAikimiButtons"])
         self.assertEqual(
             result["nativeStudioButtonsHidden"],
-            {"sensenova": True, "minimax": True, "qwen": True},
+            {"sensenova": True, "minimax": True, "qwen": True, "clef": True},
+        )
+        self.assertEqual(
+            result["clefResult"],
+            {
+                "active": "clef",
+                "container": "tab_clef_studio",
+                "presetUnchanged": True,
+                "presetEventsUnchanged": True,
+            },
         )
         self.assertTrue(result["ariaTargetsExist"])
         self.assertTrue(result["qwenHiddenAfterRemoval"])
@@ -1042,6 +1063,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "Nanosaur2",
                 "MiniMax H3",
                 "YuE2 Music",
+                "Clef",
             ],
         )
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])

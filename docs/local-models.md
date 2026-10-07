@@ -41,7 +41,7 @@ Animaの既存4枠・プロンプトの`<lora:...>`も利用できます。同�
 | エンジン | 本体 | LoRA・制限 |
 |---|---|---|
 | Forge | 既存のForgeローダーが対応するアーキテクチャ／safetensors・GGUF | 既存のForge LoRAローダーを使用。すべての世代・量子化実装の互換を保証するものではない |
-| Qwen Image **2.1** | 完全なDiffusersフォルダー、`config.json`と重みのあるTransformerフォルダー、Comfy／Diffusers系の単一safetensors、対応テンソル構成のGGUF | 線形A/B・down/up＋alpha。単一safetensorsはBF16、フォルダーはBF16／実行時INT8・W4A8、GGUFは通常版Q4の設定。外部の事前量子化safetensors／Diffusersフォルダーは未対応 |
+| Qwen Image **2.1** | 完全なDiffusersフォルダー、`config.json`と重みのあるTransformerフォルダー、Comfy／Diffusers系の単一safetensors、対応テンソル構成のGGUF | 線形A/B・down/up＋alpha。単一safetensorsはBF16またはINT8 ConvRot、フォルダーはBF16／実行時INT8・W4A8、GGUFは通常版Q4の設定。ConvRot以外の外部事前量子化と事前量子化Diffusersフォルダーは未対応 |
 | Ming Image | ComfyUI形式の単一safetensors（本体、テキスト、VAEを個別に指定） | 本体の線形A/B・down/up＋任意alpha。全ペアの適用先・寸法を検証。テキスト側LoRA・DoRA・LyCORIS・独自拡張キーは未対応 |
 
 Qwen Image 2.1と旧Qwen Image／Image Editは別の構造です。旧世代は対応するForgeプリセットを使ってください。Qwenのローカル互換本体でもFun Acc・Outpaint・画風LoRAを併用できます。構造・テンソルの形状と必要な共通部品を検証します。標準Turboの選択と外部モデルの同時指定は受け付けません。追加LoRAには[学習時の量子化差と組み合わせ](../extensions-builtin/qwen-image21-studio/README.md#追加lora複数対応)の確認も適用します。
@@ -49,6 +49,48 @@ Qwen Image 2.1と旧Qwen Image／Image Editは別の構造です。旧世代は�
 本体モデルやLoRAを変更すると必要に応じて再読み込みします。Qwenの量子化済みキャッシュは元ファイルの内容・精度ごとに分離し、元モデルには書き込みません。Ming／Qwenの結果には使用した絶対パス・SHA-256・強度を記録するため、生成条件を外部へ共有する際は保存場所も含まれます。
 
 H3・YuE2など、他の専用Studioの任意モデル・LoRA指定はこの変更には含みません。外部で微調整された全モデルの画質や、異なるLoRA間の相性まで確認したものではありません。
+
+## abenzerpsのQwen Image 2.1 UC版
+
+[abenzerps/Qwen-Image-2.1-Uncensored-GGUF](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF/tree/6b34e59458d3eb7ba6a6f86a116aed5253dc02c3)の`qwen-image-2.1-UC-Q4_K_M.gguf`と`qwen-image-2.1-UC-int8_convrot.safetensors`を、Qwen Studioのローカル本体として追加できます。既存の専用環境・テキストエンコーダー・VAE・processor・schedulerを共用します。
+
+2026-10-07に配布元の固定revisionと`SHA256SUMS`を確認しました。取得対象は4,604,558,112 bytes（約4.60 GB）、SHA-256は`e79c8a009f2ecbdb6c70fd663d9aea9ee304a0d91f347e4169a756b8ad141b41`です。ライセンスは配布元記載のQwen Research Licenseです。「Uncensored」は配布元の名称であり、通常版との出力の差を保証するものではありません。
+
+INT8 ConvRotは同じrevisionの7,256,796,840 bytes（約7.26 GB）で、HubのLFSメタデータに記載されたSHA-256は`5bc5a6c007eff1e0d4004344a24c4af966b9d2c83d142e613b0d456ccceb19ae`です。ファイル内の`comfy_quant`設定・INT8重み・FP32スケール・層の寸法を検証し、32ブロックの224線形層を`comfy-kitchen==0.2.31`のConvRot（groupsize 256）で実行します。正規化層と未量子化の線形層はBF16です。本体は配布時のINT8を保持し、テキストエンコーダーは従来のbitsandbytes INT8を使用します。
+
+```powershell
+.\models\Qwen-Image-2.1\worker-env\Scripts\hf.exe download abenzerps/Qwen-Image-2.1-Uncensored-GGUF qwen-image-2.1-UC-Q4_K_M.gguf README.md SHA256SUMS --revision 6b34e59458d3eb7ba6a6f86a116aed5253dc02c3 --local-dir models/Qwen-Image-2.1/checkpoints/abenzerps--Qwen-Image-2.1-Uncensored-GGUF
+.\models\Qwen-Image-2.1\worker-env\Scripts\hf.exe download abenzerps/Qwen-Image-2.1-Uncensored-GGUF qwen-image-2.1-UC-int8_convrot.safetensors --revision 6b34e59458d3eb7ba6a6f86a116aed5253dc02c3 --local-dir models/Qwen-Image-2.1/checkpoints/abenzerps--Qwen-Image-2.1-Uncensored-GGUF
+.\models\Qwen-Image-2.1\worker-env\Scripts\hf.exe cache verify abenzerps/Qwen-Image-2.1-Uncensored-GGUF --revision 6b34e59458d3eb7ba6a6f86a116aed5253dc02c3 --local-dir models/Qwen-Image-2.1/checkpoints/abenzerps--Qwen-Image-2.1-Uncensored-GGUF
+```
+
+Qwenタブの**本体モデル → 更新**で再検索し、`qwen-image-2.1-UC-Q4_K_M.gguf`を選びます。精度は通常版の`Q4_K_M`へ自動で切り替わります。共通部品フォルダーは空欄のままで、導入済みの`models/Qwen-Image-2.1/model`を使えます。標準モデルへ戻す場合は**標準モデル**を選択します。
+
+INT8対応コードを反映するためNeoを再起動し、**本体モデル → 更新**から`qwen-image-2.1-UC-int8_convrot.safetensors`を選びます。ファイル内の量子化構成から精度を`INT8`へ切り替え、ConvRot専用ローダーで読み込みます。ファイル名だけでは判定しません。BF16／W4A8指定での読み込みや、ConvRot以外の事前量子化は受け付けません。生成情報の`convrot_int8`に方式と適用層数を記録します。学習元モデルが指定されたLoRAの組み合わせ確認は引き続き必要です。
+
+GGUFのBF16正規化重みは、読み込み後に通常のBF16パラメーターへ復元します。Diffusers形式の名前を持つGGUFは変換コールバックが省略されるため、この復元は名前変換から独立して行います。線形層のGGUF重みは量子化されたまま使います。この処理はローカル本体・標準GGUF・Turbo GGUFで共通です。
+
+2026-10-07にWindows・Python 3.13.14・RTX 3090 24GBでQ4_K_M版の導入を確認しました。実ファイルのサイズ・SHA-256、一覧への検出、既存共通部品での受け付けを確認し、通常版Q4設定・CPU退避・256×256・2 stepsでRGBA PNGを生成しました。生成記録の本体パス・SHA-256も配布版と一致しています。この実行では読み込み約420秒、生成約13.5秒でした。低ステップ数での動作確認であり、画質や通常版との出力差は比較していません。
+
+INT8の配布ファイルは2026-10-07に取得し、サイズとファイル全体のSHA-256が上記の固定値に一致することを確認しました。同日にWindows・Python 3.13.14・RTX 3090 24GBで、専用ワーカーによる256×256・2 steps・seed 20261007・CPU退避の実生成が完了し、RGBA PNGを保存しました。実際のConvRot呼び出しは448回で、全224層のINT8重み・FP32スケールがCPUに戻ったことを確認しました。代表の`transformer_blocks.0.attn.to_q`はFP32スケールが元ファイルと完全一致しています。生成情報にも本体のSHA-256・224層・ConvRot方式が記録されています。
+
+この実行の読み込みは293.239秒、生成処理は200.883秒でした。生成処理にはプロンプト処理やCPU退避からの転送も含まれます。PyTorchの確保メモリのピークは9,697.4 MiB、予約ピークは9,798.0 MiBです（モデル読み込みを含む、このワーカーの値。GPU総使用量ではありません）。生成後の重みを保持した状態でCPU退避を確認し、確認プロセスは終了しています。
+
+生成後に実ファイルのAttention・MLPの3種類の線形層を単体で測定し、`comfy_kitchen.backends.cuda`が選ばれることと非有限値が出ないことを確認しました。入力はBF16・257トークンで、2回目以降の単体呼び出しは約0.30〜0.40 msでした。これは生成全体の速度測定ではなく、初回201秒の原因や通常ステップ数の所要時間を確定するものではありません。2 stepsの画像は赤い物体がぼけた状態で、画質・通常版との出力差は比較していません。
+
+単体・回帰テストは84件中80件成功・GPU専用4件スキップに加え、ConvRotにLoRA残差を適用してINT8重み・FP32スケールを保つ追加ケース1件も成功しました（合計85件中81件成功・4件スキップ）。Ruff静的チェックも通過しています。実生成の結果・使用重み・メモリ・所要時間は`tmp/qwen21-uc-int8-smoke-20261007/result.json`、224層のCPU退避と代表スケールの一致は`gpu-verification.json`、単体CUDA測定は`kernel-probe.json`に保存しています。
+
+Q4対応時の関連テストは65件中61件成功、GPU専用4件はスキップ。正規化層の実際の順伝播、量子化された線形層の保持、ローカル指定・標準GGUF・既存ワーカーを確認しています。
+
+```powershell
+.\venv\Scripts\python.exe tools\run_ci_tests.py --module tools.tests.test_qwen_gguf_normalization --module tools.tests.test_local_model_sources --module tools.tests.test_qwen_image21_gguf --module tools.tests.test_qwen_image21_worker
+```
+
+追加したINT8契約テストは次で確認できます。
+
+```powershell
+.\venv\Scripts\python.exe tools\run_ci_tests.py --module tools.tests.test_qwen_int8_convrot --module tools.tests.test_local_model_sources --module tools.tests.test_qwen_image21_worker --module tools.tests.test_qwen21_fun_controlnet --module tools.tests.test_qwen_gguf_normalization --module tools.tests.test_qwen_image21_gguf --module tools.tests.test_qwen21_style_lora
+```
 
 ## 検証記録（2026-09-30）
 

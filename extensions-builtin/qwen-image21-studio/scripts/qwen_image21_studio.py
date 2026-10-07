@@ -784,6 +784,11 @@ def lora_choices():
 
 def lora_display_name(name):
     path = Path(name)
+    from modules_forge.qwen_image21.consistency_lora import WEIGHTS
+
+    for version, filename in WEIGHTS.items():
+        if path.name == filename:
+            return f"Consistency · {version}"
     step = re.search(r"step_([0-9]+)$", path.stem)
     if step:
         return f"step {step[1]} · {path.parent.as_posix()} / {path.stem.split('_step_')[0]}"
@@ -807,16 +812,45 @@ def refresh_loras(current):
     return gr.update(choices=choices, value=current or [])
 
 
+def prepare_consistency(names, rows):
+    from modules_forge.local_assets import lora_rows
+    from modules_forge.qwen_image21.consistency_lora import install
+
+    try:
+        info = install(RUNTIME)
+    except (OSError, ValueError) as exc:
+        raise gr.Error(f"Consistency LoRAの準備に失敗しました: {exc}") from exc
+    names = list(names or [])
+    if info["name"] not in names:
+        path = Path(info["path"]).resolve()
+        for name in names:
+            try:
+                if lora_library.resolve(RUNTIME, name) == path:
+                    break
+            except (OSError, ValueError):
+                continue
+        else:
+            names.append(info["name"])
+    return (
+        refresh_loras(names),
+        gr.update(value=lora_rows(names, rows), visible=True),
+        "Consistency 1500を準備しました。モデル・Stepsは現在の設定を使います。",
+    )
+
+
 def lora_selection(names, rows, allow_mismatch=False):
     from modules_forge.local_assets import lora_rows
 
     names = names or []
     table = gr.update(value=lora_rows(names, rows), visible=True if names else "hidden")
-    mismatched, errors = [], []
+    mismatched, errors, consistency = [], [], []
     for name in names:
         try:
-            if lora_library.inspect(RUNTIME, name)["base_mismatch"]:
+            info = lora_library.inspect(RUNTIME, name)
+            if info["base_mismatch"]:
                 mismatched.append(name)
+            if info.get("consistency_version"):
+                consistency.append(info["consistency_version"])
         except (OSError, ValueError, KeyError, TypeError) as exc:
             errors.append(f"{name}: {exc}")
     message = "\n\n".join(errors)
@@ -825,6 +859,15 @@ def lora_selection(names, rows, allow_mismatch=False):
             ("\n\n" if message else "")
             + "学習時はConvRot INT8: "
             + ", ".join(lora_display_name(name).split(" / ")[0] for name in mismatched)
+        )
+    if consistency:
+        message += (
+            ("\n\n" if message else "")
+            + "Consistency · "
+            + " / ".join(consistency)
+            + "：画風・色・照明の編集向け。参照1枚・編集元と同じサイズ・通常版Q4_K_M・25 steps・強度1.0から比較。"
+            "新しいポーズや顔の向きへの変更を抑える場合があります。"
+            "作者の学習元はComfy-Org ConvRot INT8です。ローカル本体も含め学習元重みとの一致や、Turboなどとの併用画質は未検証です。"
         )
     return (
         table,
@@ -875,11 +918,19 @@ def model_choices():
 def local_model_selected(value, precision):
     if not value:
         return gr.update(), "標準モデルを使用します。"
-    path = Path(value.strip().strip('"'))
-    selected = (
-        "base_q4_k_m" if path.suffix.lower() == ".gguf" else "bf16" if path.suffix.lower() == ".safetensors" else "int8"
+    path = Path(value.strip().strip('"')).expanduser()
+    if not path.is_absolute():
+        path = Path(script_path) / path
+    from modules_forge.qwen_image21.local_source import preferred_precision
+
+    try:
+        selected = preferred_precision(path)
+    except (OSError, ValueError) as exc:
+        return gr.update(), f"ローカルモデルを確認できません: {exc}"
+    label = (
+        "ローカルINT8 ConvRot本体" if path.suffix.lower() == ".safetensors" and selected == "int8" else "ローカルモデル"
     )
-    return gr.update(value=selected), "ローカルモデルを使用します。共通部品が揃っていれば標準本体の取得は不要です。"
+    return gr.update(value=selected), f"{label}を使用します。共通部品が揃っていれば標準本体の取得は不要です。"
 
 
 def prepare_local_environment(model, components):
@@ -1167,6 +1218,9 @@ def on_ui_tabs():
                         with gr.Accordion("LoRAの追加方法", open=False):
                             gr.Markdown(
                                 "`models/Qwen-Image-2.1/loras/` に Qwen Image 2.1 用の `.safetensors` を置き、一覧更新。サブフォルダーも使えます。"
+                            )
+                            consistency_prepare = gr.Button(
+                                "Consistency LoRAを準備（約160 MB）", size="sm", elem_id="qwen21-consistency-prepare"
                             )
                     with gr.Column(min_width=0, elem_id="qwen21-basics"):
                         precision = gr.Dropdown(
@@ -1466,6 +1520,22 @@ def on_ui_tabs():
             **PRIVATE,
         )
         lora_refresh.click(refresh_loras, inputs=style_loras, outputs=style_loras, **PRIVATE)
+        consistency_prepare.click(
+            prepare_consistency,
+            inputs=[style_loras, lora_strengths],
+            outputs=[style_loras, lora_strengths, lora_info],
+            **PRIVATE,
+        ).then(
+            lora_selection,
+            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch],
+            outputs=[lora_strengths, lora_info, allow_lora_base_mismatch],
+            **PRIVATE,
+        ).then(
+            lora_readiness,
+            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch, job],
+            outputs=[lora_section, lora_gate, generate],
+            **PRIVATE,
+        )
         lora_section.expand(
             lora_selection,
             inputs=[style_loras, lora_strengths, allow_lora_base_mismatch],
@@ -1474,7 +1544,7 @@ def on_ui_tabs():
         )
         style_loras.change(
             lora_selection,
-            inputs=[style_loras, lora_strengths],
+            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch],
             outputs=[lora_strengths, lora_info, allow_lora_base_mismatch],
             **PRIVATE,
         ).then(

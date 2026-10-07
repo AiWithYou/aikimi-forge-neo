@@ -120,7 +120,10 @@ def inspect(runtime: Path, name: str) -> dict:
     base_forward = metadata.get("qwen_base_forward", "")
     if base_forward and base_forward != "convrot_int8_bf16_backward_v1":
         raise ValueError(f"未対応の学習時モデルです: {base_forward}")
-    return {
+    from . import consistency_lora
+
+    consistency_version = consistency_lora.identify(path, metadata)
+    info = {
         "name": name,
         "path": str(path),
         "groups": groups,
@@ -130,6 +133,9 @@ def inspect(runtime: Path, name: str) -> dict:
         "base_mismatch": bool(base_forward),
         "source": SUSHI_SOURCE if ignored or base_forward else None,
     }
+    if consistency_version:
+        info.update(consistency_version=consistency_version, source=consistency_lora.SOURCE)
+    return info
 
 
 def validate_options(values: dict) -> None:

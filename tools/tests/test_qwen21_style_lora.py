@@ -47,6 +47,22 @@ class StyleLoraTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ペア"):
             style_lora.inspect(self.root, self.path.name)
 
+    def test_consistency_is_identified_by_content_after_rename_or_external_path(self):
+        from modules_forge.qwen_image21 import consistency_lora
+
+        self.write({"ss_output_name": "qwen21_consistency_v1"})
+        digest = style_lora.fingerprint(self.path)
+        external = self.root / "renamed.safetensors"
+        external.write_bytes(self.path.read_bytes())
+        with patch.dict(consistency_lora.HASHES, {"1500": digest}):
+            for name in (self.path.name, str(external)):
+                info = style_lora.inspect(self.root, name)
+                self.assertEqual(info["consistency_version"], "1500")
+                self.assertIn("ausboss", info["source"])
+                self.assertFalse(info["base_mismatch"])
+        self.write({"ss_output_name": "qwen21_consistency_v1"})
+        self.assertNotIn("consistency_version", style_lora.inspect(self.root, self.path.name))
+
     def test_training_auxiliaries_require_known_metadata(self):
         self.tensors["qwen_partition_global_adapter.alpha"] = torch.tensor(1.0)
         self.write()

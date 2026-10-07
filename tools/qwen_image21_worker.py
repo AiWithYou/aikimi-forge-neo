@@ -375,6 +375,8 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     cache_base = runtime_root(model_path, request) / "model" if local else model_path
     counts: dict[str, int] = {}
     w4a8_stats: dict[str, dict] = {}
+    convrot_stats: dict = {}
+    convrot = local and (request.get("local_source") or {}).get("format") == "int8_convrot"
     disk_cache: dict[str, dict] = {}
     from modules_forge.qwen_image21.quantized_cache import (
         InvalidQuantizedCheckpoint,
@@ -386,7 +388,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         loaders = [
             ("text_encoder", Qwen3VLForConditionalGeneration, TransformersBitsAndBytesConfig(load_in_8bit=True)),
         ]
-        if request["precision"] == "int8":
+        if request["precision"] == "int8" and not convrot:
             loaders.insert(
                 0,
                 (
@@ -450,6 +452,13 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             )
             components[name] = component
             torch.cuda.empty_cache()
+            _check_cancel(job)
+        if convrot:
+            from modules_forge.qwen_image21.convrot_int8_runtime import load_model
+
+            _progress(job, "loading", "ローカルINT8 ConvRot本体を読み込み中", 0.27)
+            components["transformer"], convrot_stats = load_model(selected_transformer, QwenImage21Transformer2DModel)
+            counts["transformer"] = convrot_stats["quantized_linears"]
             _check_cancel(job)
         if request["precision"] in {"base_q4_k_m", "turbo_q4_k_m"}:
             if request["precision"] == "base_q4_k_m":
@@ -588,7 +597,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     versions = _versions()
     if request["precision"] in {"base_q4_k_m", "turbo_q4_k_m"}:
         versions["gguf"] = importlib.metadata.version("gguf")
-    if w4a8_stats:
+    if w4a8_stats or convrot_stats:
         versions["comfy-kitchen"] = importlib.metadata.version("comfy-kitchen")
     return {
         "pipe": pipe,
@@ -599,6 +608,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         "outpaint": outpaint_info,
         "int8_layers": counts,
         "w4a8": w4a8_stats,
+        "convrot_int8": convrot_stats,
         "disk_cache": disk_cache,
         "versions": versions,
         "load_seconds": time.monotonic() - started,
@@ -806,6 +816,16 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             runtime["pipe"].vae.disable_tiling()
 
         images = _load_images(request["input_images"])
+        input_resolution = 1024
+        same_size_consistency = (
+            len(images) == 1
+            and images[0].size == (request["width"], request["height"])
+            and any(info.get("consistency_version") for info in runtime.get("style_loras", []))
+        )
+        if request.get("outpaint_version") or same_size_consistency:
+            # The native pipeline resizes references separately from output
+            # latents. Keep their geometry aligned for source-preserving edits.
+            input_resolution = math.sqrt(request["width"] * request["height"])
         controlnet = runtime.get("controlnet")
         control_info = None
         if controlnet is not None:
@@ -899,11 +919,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 num_inference_steps=request["steps"],
                 true_cfg_scale=1.0,
                 use_kv_cache=controlnet is None and pdd_callback is None,
-                # Match the reference's area exactly. The native pipeline's
-                # round-to-32 calculation then preserves the padded geometry.
-                output_resolution=math.sqrt(request["width"] * request["height"])
-                if request.get("outpaint_version")
-                else 1024,
+                output_resolution=input_resolution,
                 generator=generator,
                 num_images_per_prompt=1,
                 output_type="pil",
@@ -977,13 +993,12 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "scheduler": runtime["pipe"].scheduler.__class__.__name__,
             "scheduler_config": dict(runtime["pipe"].scheduler.config),
             "use_kv_cache": controlnet is None and pdd_callback is None,
-            "input_resolution": math.sqrt(request["width"] * request["height"])
-            if request.get("outpaint_version")
-            else 1024,
+            "input_resolution": input_resolution,
             "input_image_count": len(images),
             "input_image_names": [Path(path).name for path in request["input_images"]],
             "int8_layers": runtime["int8_layers"],
             "w4a8": runtime.get("w4a8", {}),
+            "convrot_int8": runtime.get("convrot_int8", {}),
             "quantized_cache": runtime.get("disk_cache", {}),
             "int8_skip_modules": list(INT8_SKIP_MODULES) if request["precision"] == "int8" else [],
             "versions": runtime["versions"],
