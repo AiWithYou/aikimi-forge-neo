@@ -8,11 +8,10 @@ storage by exposing the same tensor under each corresponding target key.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
-import re
 from typing import TypeVar
-
 
 ANIMA_BASE_BLOCKS = 28
 ANIMA_29B_BLOCKS = 40
@@ -73,6 +72,18 @@ ANIMA_38B_TO_29B = tuple(
     )
     for expanded in range(ANIMA_38B_BLOCKS)
 )
+
+
+def anima_control_block_layout(source_blocks: int, target_blocks: int) -> tuple[int, ...]:
+    """Map each ControlLLLite block to its original position, without duplication."""
+
+    if (source_blocks, target_blocks) == (ANIMA_BASE_BLOCKS, ANIMA_29B_BLOCKS):
+        return ANIMA_BASE_TO_29B
+    if (source_blocks, target_blocks) == (ANIMA_29B_BLOCKS, ANIMA_38B_BLOCKS):
+        return ANIMA_29B_TO_38B
+    if (source_blocks, target_blocks) == (ANIMA_BASE_BLOCKS, ANIMA_38B_BLOCKS):
+        return tuple(ANIMA_29B_TO_38B[block] for block in ANIMA_BASE_TO_29B)
+    raise ValueError(f"Unsupported Anima ControlLLLite blocks: {source_blocks} to {target_blocks}")
 
 
 def _target_to_source_blocks(

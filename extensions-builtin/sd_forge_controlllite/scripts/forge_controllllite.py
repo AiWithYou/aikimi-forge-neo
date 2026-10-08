@@ -5,6 +5,7 @@ from lib_controllllite.lib_controllllite_anima import (
     ControlNetLLLiteDiT,
     infer_anima_config,
     load_lllite_weights_from_dict,
+    map_blocks,
 )
 
 from backend.utils import load_torch_file
@@ -27,6 +28,7 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
         self.state_dict = state_dict
         self._is_inpaint = inpaint
         self._lllite_net: ControlNetLLLiteDiT = None
+        self._dit_key = None
 
     @staticmethod
     def _is_black_on_white(image: torch.Tensor) -> bool:
@@ -38,13 +40,18 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
         unet = process.sd_model.forge_objects.unet
         device, dtype = unet.load_device, unet.model.computation_dtype
 
-        if self._lllite_net is None:
-            dit = unet.model.diffusion_model
+        dit = unet.model.diffusion_model
+        dit_key = (id(dit), len(dit.blocks))
+        if self._lllite_net is None or self._dit_key != dit_key:
+            if self._lllite_net is not None:
+                self._lllite_net.restore()
             cfg = infer_anima_config(self.state_dict)
-            self._lllite_net = ControlNetLLLiteDiT(dit, **cfg)
-            load_lllite_weights_from_dict(self._lllite_net, self.state_dict)
-            self._lllite_net = self._lllite_net.eval().to(device=device, dtype=dtype)
-            del self.state_dict
+            net = ControlNetLLLiteDiT(map_blocks(dit, self.state_dict), **cfg)
+            load_lllite_weights_from_dict(net, self.state_dict)
+            self._lllite_net = net.eval().to(device=device, dtype=dtype)
+            self._dit_key = dit_key
+        else:
+            self._lllite_net.to(device=device, dtype=dtype)
 
         if mask is not None and getattr(process, "inpainting_mask_invert", False):
             mask = 1.0 - mask

@@ -95,7 +95,7 @@ class SpectrumNode:
 
     @staticmethod
     def patch(model, steps: int, w: float, m: int, lam: float, window_size: int, flex_window: float, warmup_steps: int, stop_caching_step: float):
-        state = {"forecaster": None, "cnt": 0, "num_cached": 0, "curr_ws": float(window_size), "last_t": -1, "total_runs": 0, "estimated_total_steps": steps}
+        state = {"forecaster": None, "cnt": 0, "num_cached": 0, "curr_ws": float(window_size), "last_t": -1, "total_runs": 0, "estimated_total_steps": steps, "cache_disabled": False, "condition_layout": None}
 
         def spectrum_unet_wrapper(model_function, kwargs):
             x, timestep, c = kwargs["input"], kwargs["timestep"], kwargs["c"]
@@ -108,9 +108,25 @@ class SpectrumNode:
                 state["num_cached"] = 0
                 state["curr_ws"] = float(window_size)
                 state["forecaster"] = None
+                state["cache_disabled"] = False
+                state["condition_layout"] = None
                 state["total_runs"] += 1
 
+            if c.get("transformer_options", {}).get("split_conditions", False) or t_scalar == state["last_t"]:
+                # Split CFG, AND, and low-memory batches cannot share a prediction.
+                state["cache_disabled"] = True
+                state["forecaster"] = None
             state["last_t"] = t_scalar
+
+            if state["cache_disabled"]:
+                return model_function(x, timestep, **c)
+
+            layout = tuple(kwargs.get("cond_or_uncond", ()))
+            if state["condition_layout"] != layout or (state["forecaster"] is not None and state["forecaster"].shape != x.shape):
+                state["forecaster"] = None
+                state["curr_ws"] = float(window_size)
+                state["num_cached"] = 0
+            state["condition_layout"] = layout
 
             is_micro_final = False
             auto_stop = int(state["estimated_total_steps"] * stop_caching_step)
@@ -118,7 +134,7 @@ class SpectrumNode:
                 is_micro_final = True
 
             do_actual = True
-            if state["cnt"] >= warmup_steps and not is_micro_final:
+            if state["forecaster"] is not None and state["cnt"] >= warmup_steps and not is_micro_final:
                 do_actual = (state["num_cached"] + 1) % math.floor(state["curr_ws"]) == 0
 
             if do_actual:

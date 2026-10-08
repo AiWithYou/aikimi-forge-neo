@@ -361,6 +361,7 @@ jobs:
             tools/tests/test_studio_css_boundaries.py
             tools/tests/test_ui_tempdir_security.py
             tools/tests/test_upstream_neo_regressions.py
+            tools/tests/test_upstream_20261008.py
           )
           python -m ruff check "${files[@]}"
           python -m ruff format --check "${files[@]}"

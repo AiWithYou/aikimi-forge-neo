@@ -2,6 +2,7 @@
 
 import logging
 import math
+import re
 from contextlib import ExitStack
 from typing import Final, Optional
 
@@ -10,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from backend.args import dynamic_args
-from backend.state_dict import load_state_dict
+from modules_forge.anima_lora import anima_control_block_layout
 
 from .lib_controllllite import get_tiled_cond_image
 
@@ -43,6 +44,7 @@ _INTERNAL_MODULES_PREFIX = "lllite_modules."
 _INTERNAL_COND_PREFIX = "conditioning1."
 _INTERNAL_DEPTH_KEY = "depth_embeds"
 _SAVED_COND_PREFIX = "lllite_conditioning1."
+_SAVED_BLOCK_RE = re.compile(r"^lllite_dit_blocks_(\d+)_")
 _SAVED_DEPTH_SUFFIX = ".depth_embed"
 
 
@@ -397,7 +399,32 @@ class ControlNetLLLiteDiT(nn.Module):
             self.set_cond_image(None)
 
 
-# region Weight Loading (v2)
+class _MappedBlocks:
+    """A view of original blocks; never register the backbone on the adapter."""
+
+    def __init__(self, dit, indices):
+        self.blocks = tuple(dit.blocks[index] for index in indices)
+
+    def named_modules(self):
+        for index, block in enumerate(self.blocks):
+            for name, module in block.named_modules():
+                yield f"blocks.{index}" + (f".{name}" if name else ""), module
+
+
+def map_blocks(dit, state_dict):
+    indices = {int(match.group(1)) for key in state_dict if (match := _SAVED_BLOCK_RE.match(key))}
+    trained = len(indices)
+    if trained not in (28, 40, 52) or indices != set(range(trained)):
+        raise ValueError("Anima ControlLLLite requires a complete 28, 40, or 52 block layout")
+    target = len(dit.blocks)
+    if trained == target:
+        return dit
+    layout = anima_control_block_layout(trained, target)
+    logger.info("Mapping Anima ControlLLLite original blocks (%s to %s)", trained, target)
+    return _MappedBlocks(dit, layout)
+
+
+# region Weight Loading
 
 
 def _from_saved_state_dict(lllite: ControlNetLLLiteDiT, weights_sd: dict[str, torch.Tensor]) -> dict:
@@ -432,7 +459,12 @@ def _from_saved_state_dict(lllite: ControlNetLLLiteDiT, weights_sd: dict[str, to
 def load_lllite_weights_from_dict(lllite: ControlNetLLLiteDiT, state_dict: dict[str, torch.Tensor]):
     assert not any(k.startswith(_INTERNAL_MODULES_PREFIX) for k in state_dict)
     converted = _from_saved_state_dict(lllite, state_dict)
-    load_state_dict(lllite, converted)
+    expected = lllite.state_dict()
+    missing = sorted(expected.keys() - converted.keys())
+    unexpected = sorted(converted.keys() - expected.keys())
+    if missing or unexpected:
+        raise RuntimeError(f"Invalid Anima ControlLLLite weights; Missing: {missing}; Unexpected: {unexpected}")
+    lllite.load_state_dict(converted, strict=True)
 
 
 def infer_anima_config(state_dict: dict[str, torch.Tensor]) -> dict:

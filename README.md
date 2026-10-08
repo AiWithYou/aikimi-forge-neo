@@ -1,6 +1,6 @@
 # Aikimi Forge Neo
 
-**v3.6.0** · [変更履歴](CHANGELOG.md)
+**v3.7.0** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -205,6 +205,8 @@ v3.6.0より前の開発版でClefを導入した場合は、WebUIを終了し�
 ## トラブルシューティング
 
 起動できない、モデルを読み込めない、GPUメモリが足りない場合は[トラブルシューティング](docs/troubleshooting.md)を参照してください。Settingsの **Diagnostics** から環境状態を確認できます。
+
+通常のtxt2img／img2imgでは、Settings → Optimizationsの **Batch Cond/Uncond** をOFFにすると、画像枚数を保ったまま正・負の条件を順に処理します。初期値はONです。
 
 ログや生成条件を共有する前に、パスワード、個人用のフォルダーパス、プロンプトが含まれていないか確認してください。
 

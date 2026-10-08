@@ -436,6 +436,10 @@ else:
 # region VAE
 
 
+def _is_vae_attention_memory_error(error, device):
+    return memory_management.is_oom(error) or (memory_management.is_device_mps(device) and "INT_MAX" in str(error))
+
+
 def slice_attention_vae(q, k, v):
     r1 = torch.zeros_like(k, device=q.device)
     scale = int(q.shape[-1]) ** (-0.5)
@@ -447,12 +451,20 @@ def slice_attention_vae(q, k, v):
     mem_required = tensor_size * modifier
     steps = 1
 
-    if mem_required > mem_free_total:
-        steps = 2 ** (math.ceil(math.log(mem_required / mem_free_total, 2)))
+    if mem_free_total <= 0:
+        steps = q.shape[1]
+    elif mem_required > mem_free_total:
+        steps = 2 ** math.ceil(math.log2(mem_required / mem_free_total))
+
+    max_slice = q.shape[1]
+    if memory_management.is_device_mps(q.device):
+        max_slice = min(max_slice, (2**31 - 1) // (q.shape[0] * k.shape[2]))
+        if max_slice < 1:
+            raise RuntimeError("MPS VAE Attention exceeds INT_MAX even with one query row")
 
     while True:
+        slice_size = min(max_slice, max(1, math.ceil(q.shape[1] / steps)))
         try:
-            slice_size = max(1, math.ceil(q.shape[1] / steps))
             for i in range(0, q.shape[1], slice_size):
                 end = i + slice_size
                 s1 = torch.bmm(q[:, i:end], k) * scale
@@ -464,14 +476,12 @@ def slice_attention_vae(q, k, v):
                 del s2
             break
         except Exception as e:
-            if not memory_management.is_oom(e):
-                raise e
-            if steps > 128:
-                raise e
+            if not _is_vae_attention_memory_error(e, q.device) or slice_size == 1:
+                raise
 
-        logger.warning("Out of Memory Error; retrying with higher steps...")
+        logger.warning("VAE Attention memory limit; retrying with smaller slices...")
         memory_management.soft_empty_cache()
-        steps *= 2
+        steps = max(steps * 2, math.ceil(q.shape[1] / max(1, (slice_size + 1) // 2)))
 
     return r1
 
@@ -528,9 +538,9 @@ def pytorch_attention_vae(q, k, v):
         out = out.transpose(2, 3).reshape(orig_shape)
         _fallback = False
     except Exception as e:
-        if not memory_management.is_oom(e):
+        if not _is_vae_attention_memory_error(e, q.device):
             raise e
-        logger.warning("Out of Memory Error; retrying with Slice Attention")
+        logger.warning("VAE Attention memory limit; retrying with Slice Attention")
         _fallback = True
 
     if _fallback:

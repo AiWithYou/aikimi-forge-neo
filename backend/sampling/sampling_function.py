@@ -20,6 +20,7 @@ from backend.sampling.condition import (
     compile_conditions,
     compile_weighted_conditions,
 )
+from modules import shared
 
 
 def get_area_and_mult(conds, x_in, timestep_in):
@@ -95,6 +96,8 @@ def cond_equal_size(c1, c2):
 
 
 def can_concat_cond(c1, c2):
+    if not shared.batch_cond_uncond:
+        return False
     if c1.input_x.shape != c2.input_x.shape:
         return False
 
@@ -186,8 +189,8 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options, *
     while len(to_run) > 0:
         first = to_run[0]
         first_shape = first[0][0].shape
-        to_batch_temp = []
-        for x in range(len(to_run)):
+        to_batch_temp = [0]
+        for x in range(1, len(to_run)):
             if can_concat_cond(to_run[x][0], first[0]):
                 to_batch_temp += [x]
 
@@ -217,6 +220,7 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options, *
                 to_batch = batch_amount
                 break
 
+        split_conditions = len(to_batch) < len(to_run)
         input_x = []
         mult = []
         c = []
@@ -256,6 +260,7 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options, *
                 transformer_options["patches"] = patches
 
         transformer_options["cond_or_uncond"] = cond_or_uncond[:]
+        transformer_options["split_conditions"] = split_conditions
         transformer_options["sigmas"] = timestep
 
         transformer_options["cond_mark"] = compute_cond_mark(cond_or_uncond=cond_or_uncond, sigmas=timestep)
@@ -406,9 +411,10 @@ def sampling_function(self, denoiser_params, cond_scale, cond_composition, extra
 
 def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor):
     shape = list(x.shape)
-    mem_shape = [2 * shape[0]] + shape[1:]
+    mem_shape = [(2 if shared.batch_cond_uncond else 1) * shape[0]] + shape[1:]
 
     unet_inference_memory = unet.memory_required(mem_shape)
+    minimum_inference_memory = unet.memory_required(shape)
     additional_inference_memory = unet.extra_preserved_memory_during_sampling
     additional_model_patchers = unet.extra_model_patchers_during_sampling.copy()
 
@@ -420,7 +426,7 @@ def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor):
         lora_memory = utils.nested_compute_size(unet.weight_wrapper_patches, element_size=utils.dtype_to_element_size(unet.model.computation_dtype))
         additional_inference_memory += lora_memory
 
-    memory_management.load_models_gpu(models=[unet] + additional_model_patchers, memory_required=unet_inference_memory + additional_inference_memory, minimum_memory_required=unet_inference_memory // 2 + additional_inference_memory)
+    memory_management.load_models_gpu(models=[unet] + additional_model_patchers, memory_required=unet_inference_memory + additional_inference_memory, minimum_memory_required=minimum_inference_memory + additional_inference_memory)
 
     real_model = unet.model
 

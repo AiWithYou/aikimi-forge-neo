@@ -6,7 +6,13 @@ import gradio as gr
 
 from backend import memory_management
 from modules import options, shared_cmd_options, shared_gradio_themes, shared_items, util
-from modules.paths_internal import data_path, extensions_builtin_dir, extensions_dir, models_path, script_path  # noqa: F401
+from modules.paths_internal import (  # noqa: F401
+    data_path,
+    extensions_builtin_dir,
+    extensions_dir,
+    models_path,
+    script_path,
+)
 
 if TYPE_CHECKING:
     from backend.diffusion_engine.base import ForgeDiffusionEngine
@@ -15,7 +21,6 @@ if TYPE_CHECKING:
 cmd_opts = shared_cmd_options.cmd_opts
 parser = shared_cmd_options.parser
 
-batch_cond_uncond = True  # old field, unused now in favor of shared.opts.batch_cond_uncond
 parallel_processing_allowed = True
 styles_filename = cmd_opts.styles_file = cmd_opts.styles_file if len(cmd_opts.styles_file) > 0 else [os.path.join(data_path, "styles.csv"), os.path.join(data_path, "styles_integrated.csv")]
 config_filename = cmd_opts.ui_settings_file
