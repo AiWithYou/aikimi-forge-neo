@@ -118,3 +118,26 @@ GPU live testを実行していない機能は、成功と記載しません。G
 - [ ] required workflowがすべて成功した
 - [ ] 公開README、SECURITY、download commandをGitHub上で確認した
 - [ ] release archiveにsecret、local config、model、outputがない
+
+## 8. GitHub Releases
+
+GitHub Releasesは版ごとの変更点とソースを確認する入口として維持します。VUpは版番号・文書の更新、push、CI成功、同じ版のtagとReleaseの公開までを完了条件とします。版番号を変えない文書修正では、新しいReleaseを作りません。
+
+- [ ] `modules/aikimi_version.py`、README、CHANGELOGの版番号が一致する
+- [ ] READMEの版番号リンクが同じ版のReleaseを指す
+- [ ] CIが成功した公開commitへ`v<版番号>`のtagを付ける。既存tagは移動しない
+- [ ] 前回のRelease以降の変更、必要な更新手順、検証記録をRelease本文へ記載する
+- [ ] Releaseを公開し、最新の正式版をLatestにする
+- [ ] 公開後にLatest、tagのcommit、READMEの版番号が一致することを確認する
+
+新しい版の本文をGit管理外の`work/release-notes.md`へ用意し、対象commitのCI成功を確認してから実行します。
+
+```powershell
+$releaseVersion = & .\venv\Scripts\python.exe -c "from modules.aikimi_version import VERSION; print(VERSION)"
+$releaseTag = "v$releaseVersion"
+$releaseCommit = git rev-parse HEAD
+git tag -a $releaseTag $releaseCommit -m "Aikimi Forge Neo $releaseVersion"
+git push origin $releaseTag
+gh release create $releaseTag --repo AiWithYou/aikimi-forge-neo --verify-tag `
+  --title "Aikimi Forge Neo $releaseVersion" --notes-file .\work\release-notes.md --latest
+```
