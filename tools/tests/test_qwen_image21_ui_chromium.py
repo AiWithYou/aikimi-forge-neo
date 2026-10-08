@@ -11,12 +11,11 @@ from unittest.mock import patch
 
 import gradio as gr
 import numpy as np
-import psutil
 from PIL import Image
 
 from modules import ui_tempdir
 from modules.gradio_frontend_compat import build_patched_tabs_asset, create_gradio_compatibility_app
-from tools.tests.chromium_helpers import find_chromium, reserve_local_port
+from tools.tests.chromium_helpers import chromium_memory_usage, find_chromium, reserve_local_port
 from tools.tests.test_gradio_frontend_compat_chromium import _wait_expression, cdp_page
 from tools.tests.test_qwen_image21_service import load_ui
 
@@ -348,21 +347,16 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                             ),
                             "Reordering a selected reference did not restore upload controls",
                         )
-                    owned = psutil.Process(page.process.pid)
-                    rss = private = 0
-                    for process in [owned, *owned.children(recursive=True)]:
-                        try:
-                            memory = process.memory_full_info()
-                        except psutil.NoSuchProcess:
-                            continue
-                        rss += memory.rss
-                        private += memory.uss
-                    peak_rss = max(peak_rss, rss)
-                    peak_private = max(peak_private, private)
+                    rss, private = chromium_memory_usage(page.process.pid)
+                    peak_rss = max(peak_rss, rss) if peak_rss is not None and rss is not None else None
+                    peak_private = (
+                        max(peak_private, private) if peak_private is not None and private is not None else None
+                    )
                     # Summed RSS double-counts shared Chromium pages differently
                     # on Linux and Windows. Gate on unique resident pages (USS)
                     # and retain RSS as the locally comparable benchmark value.
-                    self.assertLess(private, 1536 * 2**20, "Drawing UI consumed excessive private resident memory")
+                    if private is not None:
+                        self.assertLess(private, 1536 * 2**20, "Drawing UI consumed excessive private resident memory")
                     if generation:
                         # Opening a new result must never resurrect the guide
                         # drawn on the previous source, even through Undo.
@@ -408,8 +402,9 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                         )
             self.assertEqual(self.submitted[1][0], 0)
             self.assertIsNotNone(self.submitted[1][1])
-            print(f"Isolated drawing browser peak RSS: {peak_rss / 2**20:.1f} MiB")  # noqa: T201 - regression measurement
-            print(f"Isolated drawing browser peak USS: {peak_private / 2**20:.1f} MiB")  # noqa: T201
+            for label, value in (("RSS", peak_rss), ("USS", peak_private)):
+                measured = f"{value / 2**20:.1f} MiB" if value is not None else "unavailable"
+                print(f"Isolated drawing browser peak {label}: {measured}")  # noqa: T201 - regression measurement
 
 
 if __name__ == "__main__":

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import subprocess
 import unittest
-from unittest.mock import call, patch
+from types import SimpleNamespace
+from unittest.mock import Mock, call, patch
 
+import psutil
 from websockets.exceptions import ConnectionClosedOK
 
 from tools.tests import chromium_helpers
@@ -42,6 +44,51 @@ class FakeWebSocket:
         self.closed = True
         if self.error is not None:
             raise self.error
+
+
+class ChromiumMemoryTests(unittest.TestCase):
+    def snapshot(self, root, children):
+        root.children.return_value = children
+        with patch.object(psutil, "Process", return_value=root):
+            return chromium_helpers.chromium_memory_usage(root.pid)
+
+    def test_complete_tree_keeps_rss_and_uss_separate(self):
+        root, child = Mock(pid=1), Mock(pid=2)
+        root.memory_full_info.return_value = SimpleNamespace(rss=10, uss=4)
+        child.memory_full_info.return_value = SimpleNamespace(rss=20, uss=7)
+        self.assertEqual(self.snapshot(root, [child]), (30, 11))
+
+    def test_denied_uss_can_keep_rss_but_never_reports_partial_uss(self):
+        root, child = Mock(pid=1), Mock(pid=2)
+        root.memory_full_info.return_value = SimpleNamespace(rss=10, uss=4)
+        child.memory_full_info.side_effect = psutil.AccessDenied(pid=2)
+        child.memory_info.return_value = SimpleNamespace(rss=20)
+        self.assertEqual(self.snapshot(root, [child]), (30, None))
+
+    def test_denied_rss_never_reports_partial_tree_memory(self):
+        root, child = Mock(pid=1), Mock(pid=2)
+        root.memory_full_info.return_value = SimpleNamespace(rss=10, uss=4)
+        child.memory_full_info.side_effect = psutil.AccessDenied(pid=2)
+        child.memory_info.side_effect = psutil.AccessDenied(pid=2)
+        self.assertEqual(self.snapshot(root, [child]), (None, None))
+
+    def test_a_child_that_exited_is_no_longer_counted(self):
+        root, child = Mock(pid=1), Mock(pid=2)
+        root.memory_full_info.return_value = SimpleNamespace(rss=10, uss=4)
+        child.memory_full_info.side_effect = psutil.NoSuchProcess(pid=2)
+        self.assertEqual(self.snapshot(root, [child]), (10, 4))
+
+    def test_denied_tree_enumeration_is_unavailable(self):
+        root = Mock(pid=1)
+        root.children.side_effect = psutil.AccessDenied(pid=1)
+        with patch.object(psutil, "Process", return_value=root):
+            self.assertEqual(chromium_helpers.chromium_memory_usage(1), (None, None))
+
+    def test_unexpected_measurement_errors_are_not_hidden(self):
+        root = Mock(pid=1)
+        root.memory_full_info.side_effect = RuntimeError("unexpected")
+        with self.assertRaisesRegex(RuntimeError, "unexpected"):
+            self.snapshot(root, [])
 
 
 class ChromiumCleanupTests(unittest.TestCase):

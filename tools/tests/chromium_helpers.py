@@ -38,6 +38,38 @@ def reserve_local_port() -> int:
         return listener.getsockname()[1]
 
 
+def chromium_memory_usage(pid: int) -> tuple[int | None, int | None]:
+    """Return total RSS/USS, using None for metrics with unreadable processes."""
+    import psutil
+
+    try:
+        owned = psutil.Process(pid)
+        processes = [owned, *owned.children(recursive=True)]
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return None, None
+
+    rss = private = 0
+    for process in processes:
+        try:
+            memory = process.memory_full_info()
+        except psutil.NoSuchProcess:
+            continue
+        except psutil.AccessDenied:
+            private = None
+            try:
+                memory = process.memory_info()
+            except psutil.NoSuchProcess:
+                continue
+            except psutil.AccessDenied:
+                rss = None
+                continue
+        if rss is not None:
+            rss += memory.rss
+        if private is not None:
+            private += memory.uss
+    return rss, private
+
+
 def _wait_for_exit(process: subprocess.Popen[Any], timeout: float) -> bool:
     try:
         process.wait(timeout=timeout)
