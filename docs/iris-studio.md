@@ -1,6 +1,6 @@
 # Iris Studio
 
-Iris-3Bの画像生成、相対深度推定、復元・4倍拡大をForge Neoから使用するための実装仕様です。
+Iris-3Bの画像生成、相対深度推定、復元・4倍拡大をAikimi Forge Neoから使用するための実装仕様です。
 
 ## 実装と検証の条件
 
@@ -95,7 +95,7 @@ W4A8はRTX 3090のPyTorch allocatorを12GiBへ制限して生成2例・深度2�
 
 ## INT8配布と容量
 
-配布先は[Aikimi/iris-3b-int8](https://huggingface.co/Aikimi/iris-3b-int8)です。`iris-rowwise-int8-v1`形式で、Linearの重みを出力行ごとのINT8とFP32スケールで保存し、演算時はBF16へ戻します。整数GEMMカーネルによる高速化ではありません。共有modulationなどの重みは通常形式を保ちます。Forge Neoの専用ローダーで使用します。
+配布先は[Aikimi/iris-3b-int8](https://huggingface.co/Aikimi/iris-3b-int8)です。`iris-rowwise-int8-v1`形式で、Linearの重みを出力行ごとのINT8とFP32スケールで保存し、演算時はBF16へ戻します。整数GEMMカーネルによる高速化ではありません。共有modulationなどの重みは通常形式を保ちます。Aikimi Forge Neoの専用ローダーで使用します。
 
 | 重み | 通常版バイト数 | INT8バイト数 | W4A8バイト数 |
 |---|---:|---:|---:|
