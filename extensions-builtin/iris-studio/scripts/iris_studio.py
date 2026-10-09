@@ -195,7 +195,9 @@ def on_ui_tabs():
                     negative = gr.Textbox(label="ネガティブプロンプト（英語）", lines=2)
                 with gr.Accordion("モデルの準備", open=False):
                     gr.Markdown(
-                        "選択した処理・モデルに必要なファイルを取得します。INT8は[Hugging Face](https://huggingface.co/Aikimi/iris-3b-int8)から取得します。"
+                        "選択した処理・モデルに必要なファイルを取得します。"
+                        "量子化モデルはHugging Faceの[INT8](https://huggingface.co/Aikimi/iris-3b-int8)・"
+                        "[W4A8](https://huggingface.co/Aikimi/iris-3b-w4a8)から取得します。"
                     )
                     refresh = gr.Button("準備状態を再確認")
             with gr.Column(scale=7, min_width=360):

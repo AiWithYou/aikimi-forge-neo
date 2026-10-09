@@ -18,11 +18,15 @@ from modules_forge.iris.core import (  # noqa: E402
     INT8_REPO,
     INT8_REVISION,
     PACKAGING_REVISION,
+    PRECISIONS,
     RUNTIME,
     SOURCE_REPO,
     SOURCE_REVISION,
     TEXT_REPO,
     TEXT_REVISION,
+    W4A8_REPO,
+    W4A8_REVISION,
+    W4A8_TEXT_FILES,
     atomic_json,
     environment_ready,
     model_directory,
@@ -36,13 +40,15 @@ def download_plan(precision, task):
     files = [folder + "config.yaml", folder + "model.safetensors"]
     if task != "generate":
         files.append(folder + "empty_prompt.safetensors")
-    if precision == "int8":
+    if precision != "normal":
         files.append(folder + "manifest.json")
+    if precision == "w4a8" and task == "generate":
+        files.extend("text-encoder/" + name for name in W4A8_TEXT_FILES)
     return {
-        "repo": INT8_REPO if precision == "int8" else SOURCE_REPO,
-        "revision": INT8_REVISION if precision == "int8" else SOURCE_REVISION,
+        "repo": {"int8": INT8_REPO, "w4a8": W4A8_REPO, "normal": SOURCE_REPO}[precision],
+        "revision": {"int8": INT8_REVISION, "w4a8": W4A8_REVISION, "normal": SOURCE_REVISION}[precision],
         "files": files,
-        "text_encoder": task == "generate",
+        "text_encoder": task == "generate" and precision != "w4a8",
     }
 
 
@@ -89,7 +95,7 @@ def install_environment(root):
         [
             python,
             "-c",
-            "from iris3b.models.dit import IrisDiT; from iris3b.downstream.depth import DepthPredictor; from transformers import Qwen3VLForConditionalGeneration; import torch; assert torch.cuda.is_available(); print('Iris CUDA imports OK')",
+            "from iris3b.models.dit import IrisDiT; from iris3b.downstream.depth import DepthPredictor; from transformers import Qwen3VLForConditionalGeneration; import torch, comfy_kitchen as ck; assert torch.cuda.is_available(); assert ck.list_backends()['cuda']['available']; print('Iris CUDA imports OK')",
         ]
     )
     frozen = execute([python, "-m", "pip", "freeze"], capture_output=True, text=True).stdout
@@ -115,8 +121,8 @@ def fetch_model(root, precision, task):
 
     plan = download_plan(precision, task)
     if len(plan["revision"]) != 40:
-        raise ValueError("INT8配布の検証済み公開commitがまだ設定されていません。")
-    destination = Path(root) / ("int8" if precision == "int8" else "official")
+        raise ValueError("モデル配布の検証済み公開commitがまだ設定されていません。")
+    destination = model_directory(root, precision, "generate")
     info = HfApi().model_info(plan["repo"], revision=plan["revision"], files_metadata=True)
     snapshot_download(
         plan["repo"], revision=plan["revision"], local_dir=destination, allow_patterns=plan["files"], max_workers=3
@@ -145,6 +151,8 @@ def fetch_model(root, precision, task):
         )
     else:
         verify_manifest(directory)
+        if precision == "w4a8" and task == "generate":
+            verify_manifest(destination / "text-encoder")
     if plan["text_encoder"]:
         patterns = ["*.json", "*.safetensors", "*.txt", "*.model", "*.jinja"]
         info = HfApi().model_info(TEXT_REPO, revision=TEXT_REVISION, files_metadata=True)
@@ -171,7 +179,7 @@ def fetch_model(root, precision, task):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=RUNTIME)
-    parser.add_argument("--precision", choices=["normal", "int8"], default="int8")
+    parser.add_argument("--precision", choices=list(PRECISIONS), default="int8")
     parser.add_argument("--task", choices=["generate", "depth", "upscale", "all"], default="generate")
     parser.add_argument("--runtime-only", action="store_true")
     parser.add_argument("--download-only", action="store_true")

@@ -13,13 +13,25 @@ RUNTIME = ROOT / "models" / "Iris-3B"
 SOURCE_REPO = "speridlabs/iris-3b"
 SOURCE_REVISION = "7445443349bc9abe3c96f01ff793e2098ca012b3"
 CODE_REVISION = "a8d15239dea469aba042cfa56ca3bb4e450d5ebc"
-PACKAGING_REVISION = "inference-training-extra-v1"
+PACKAGING_REVISION = "inference-w4a8-v1"
 INT8_REPO = "Aikimi/iris-3b-int8"
 INT8_REVISION = "6231647d02bb538b401a675061c11c7a64bba81f"
+W4A8_REPO = "Aikimi/iris-3b-w4a8"
+W4A8_REVISION = "f316f1f997410bf79fac569c3a9190013ede67f7"
+W4A8_TEXT_FILES = (
+    "config.json",
+    "chat_template.json",
+    "merges.txt",
+    "tokenizer_config.json",
+    "tokenizer.json",
+    "vocab.json",
+    "model.safetensors",
+    "manifest.json",
+)
 TEXT_REPO = "Qwen/Qwen3-VL-4B-Instruct"
 TEXT_REVISION = "ebb281ec70b05090aa6165b016eac8ec08e71b17"
 TASKS = {"generate": "画像生成", "depth": "深度推定", "upscale": "復元・4倍拡大"}
-PRECISIONS = {"int8": "INT8", "normal": "通常版"}
+PRECISIONS = {"int8": "INT8", "w4a8": "W4A8", "normal": "通常版"}
 GENERATION_SIZES = {
     "1024×1024": (1024, 1024),
     "1344×768": (1344, 768),
@@ -99,7 +111,7 @@ def validate_request(value):
 
 
 def model_directory(root, precision, task):
-    directory = Path(root) / ("int8" if precision == "int8" else "official")
+    directory = Path(root) / {"int8": "int8", "w4a8": "w4a8", "normal": "official"}[precision]
     return directory / {"generate": "", "depth": "depth", "upscale": "upscaler"}[task]
 
 
@@ -147,6 +159,14 @@ def model_ready(root, precision, task):
         ):
             return False
         if task == "generate":
+            if precision == "w4a8":
+                encoder = Path(root) / "w4a8/text-encoder"
+                marker = json.loads((encoder / "manifest.json").read_text(encoding="utf-8"))
+                return (
+                    marker["source_revision"] == TEXT_REVISION
+                    and set(W4A8_TEXT_FILES) - {"manifest.json"} <= {record["path"] for record in marker["files"]}
+                    and files_ready(encoder, marker)
+                )
             encoder = Path(root) / "text-encoder"
             marker = json.loads((encoder / "download.json").read_text(encoding="utf-8"))
             return (

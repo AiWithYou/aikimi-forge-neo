@@ -56,6 +56,10 @@ def load_model(root, precision, task):
             model = IrisDiT(cfg.model)
     if precision == "int8":
         model = load_int8(model, directory / "model.safetensors")
+    elif precision == "w4a8":
+        from .w4a8 import load_w4a8
+
+        model = load_w4a8(model, directory / "model.safetensors")
     else:
         model.load_state_dict(load_file(directory / "model.safetensors"), strict=True, assign=True)
     model.eval().requires_grad_(False)
@@ -64,6 +68,10 @@ def load_model(root, precision, task):
 
 class Runner:
     def __init__(self, root, precision, task):
+        if precision == "w4a8":
+            from .w4a8 import require_native_cuda
+
+            require_native_cuda()
         self.root, self.precision, self.task = Path(root), precision, task
         self.model, self.cfg, self.settings = load_model(root, precision, task)
         self.encoder = None
@@ -95,7 +103,12 @@ class Runner:
         cfg.pretrained = str(self.root / "text-encoder")
         cfg.null_embed_dir = str(self.root / "text-cache")
         if self.encoder is None:
-            self.encoder = Qwen3VLTextEncoder(cfg, device="cpu")
+            if self.precision == "w4a8":
+                from .text import load_text_encoder
+
+                self.encoder = load_text_encoder(self.root, cfg)
+            else:
+                self.encoder = Qwen3VLTextEncoder(cfg, device="cpu")
         self.encoder.to("cuda")
         try:
             positive = self.encoder.encode([request["prompt"]])

@@ -11,6 +11,17 @@ from tools.setup_iris import download_plan, inference_project
 
 
 class SetupTests(unittest.TestCase):
+    def test_w4a8_fetches_packed_text_with_generation_only(self):
+        plan = download_plan("w4a8", "generate")
+        self.assertEqual(plan["repo"], "Aikimi/iris-3b-w4a8")
+        self.assertRegex(plan["revision"], r"^[0-9a-f]{40}$", "Use the actual validated public W4A8 commit")
+        self.assertIn("text-encoder/model.safetensors", plan["files"])
+        self.assertIn("text-encoder/manifest.json", plan["files"])
+        self.assertFalse(plan["text_encoder"], "W4A8 must not download a BF16 encoder")
+        depth = download_plan("w4a8", "depth")
+        self.assertEqual(depth["repo"], plan["repo"])
+        self.assertFalse(any(name.startswith("text-encoder/") for name in depth["files"]))
+
     def test_bootstrap_download_runs_in_isolated_python_without_caller_hub(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

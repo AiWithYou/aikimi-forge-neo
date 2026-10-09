@@ -24,6 +24,11 @@ class IrisUITests(unittest.TestCase):
         components = blocks.get_config_file()["components"]
         task = next(x for x in components if x.get("props", {}).get("elem_id") == "iris-task")
         self.assertEqual(len(task["props"]["choices"]), 3)
+        precision = next(x for x in components if x.get("props", {}).get("label") == "モデル")
+        self.assertEqual(precision["props"]["choices"], [("INT8", "int8"), ("W4A8", "w4a8"), ("通常版", "normal")])
+        self.assertEqual(precision["props"]["value"], "int8")
+        preparation = "\n".join(x.get("props", {}).get("value", "") for x in components if x["type"] == "markdown")
+        self.assertIn("https://huggingface.co/Aikimi/iris-3b-w4a8", preparation)
         labels = [x.get("props", {}).get("label", "") for x in components]
         image_input = next(x for x in components if x.get("props", {}).get("label") == "入力画像")
         self.assertEqual(image_input["props"]["type"], "pil", "Callbacks must receive decoded pixels, not client paths")
@@ -45,6 +50,12 @@ class IrisUITests(unittest.TestCase):
             module.start({}, "generate", "int8", "a fox", None, 1, "1344×768", 100, 3, "")
         request = start.call_args.args[0]
         self.assertEqual((request["width"], request["height"]), (1344, 768))
+        with (
+            patch.object(module, "ready", return_value=True),
+            patch.object(module.SERVICE, "start", return_value="w4-job") as start,
+        ):
+            module.start({}, "generate", "w4a8", "a fox", None, 1, "1024×1024", 100, 3, "")
+        self.assertEqual(start.call_args.args[0]["precision"], "w4a8")
 
     def test_navigation_entry_is_visible_for_the_native_panel(self):
         source = (ROOT / "extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js").read_text(encoding="utf-8")
