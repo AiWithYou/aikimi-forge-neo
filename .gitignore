@@ -68,3 +68,7 @@ notification.mp3
 
 /vendor/*/build/
 /vendor/*/src/*.egg-info/
+
+/docs/CODEX_HANDOFF.md
+
+/docs/note_*.md

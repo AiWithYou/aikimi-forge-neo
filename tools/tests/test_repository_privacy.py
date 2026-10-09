@@ -9,6 +9,7 @@ WINDOWS_USER_PATH = re.compile(r"(?i)\b[a-z]:\\users\\(?!<)[^\\\s`\"']+")
 PRIVATE_DIRECTORIES = ("docs/audits/", "docs/articles/", ".playwright-cli/")
 PRIVATE_ASSET_DIRECTORIES = ("docs/assets/h3-orbit-editorial/", "docs/assets/h3-orbit-chibi-aikimi/")
 PRIVATE_DOCUMENTS = (
+    "docs/CODEX_HANDOFF.md",
     "docs/jev-sparse-validation.md",
     "docs/model-retention-validation.md",
     "docs/minimax-h3-union2-vae-benchmark.md",
@@ -30,6 +31,7 @@ def private_record(path):
         path.startswith(PRIVATE_DIRECTORIES)
         or path.startswith(PRIVATE_ASSET_DIRECTORIES)
         or path in PRIVATE_DOCUMENTS
+        or (path.startswith("docs/note_") and path.endswith(".md"))
         or (
             path.startswith("docs/assets/")
             and (any("note" in part for part in path.split("/")) or path.endswith((".json", ".csv")))
@@ -68,6 +70,7 @@ class RepositoryPrivacyTests(unittest.TestCase):
             *PRIVATE_DOCUMENTS,
             "docs/audits/local-check.md",
             "docs/articles/local-draft.md",
+            "docs/note_local_draft.md",
             ".playwright-cli/local-session.yml",
             "docs/assets/clef-note/draft.png",
             "docs/assets/h3-orbit-note/draft.png",
