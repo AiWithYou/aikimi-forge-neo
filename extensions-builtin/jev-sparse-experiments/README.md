@@ -3,6 +3,7 @@
 Krea2・H3・Anima・Qwen Image 2.1の任意の高速化・比較機能です。通常生成はOFFが既定です。
 
 - [使い方・キーの登録](../../docs/jev-sparse.md)
+- [ベンチマークの実行方法](../../docs/sparse-benchmark-suite.md)
 - [Qwen 2.1の適用範囲](../../docs/qwen21-sparse.md)
 - [Krea2の固定率スライダー・4K/8Kタイル配分](../../docs/krea2-jev.md)
 

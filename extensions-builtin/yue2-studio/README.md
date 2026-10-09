@@ -101,7 +101,7 @@ python -m pytest tests/yue2 -q
 
 2026-09-16、Linux・Python 3.13.5・Gradio 6.5.1で**45件のCPUテストに合格**しました。入力境界、Seed精度、保存、所有者を限定した停止、実worker＋模擬CLIのプロセス連携、後続候補失敗時の保持、親パイプ切断時の終了、公式段階APIの模擬契約、Gradio画面構築・コールバック引数を確認しています。
 
-模擬CLIの音声はテスト用の無音WAVであり、YuE2の実生成成功を示しません。公式段階APIテストもモデルを模擬しています。追加のWindows・ブラウザー・GPU検証結果は、再確認の項目は[HARDWARE_TEST.md](HARDWARE_TEST.md)を参照してください。YuE2のテストはGitHubのCPU／Windowsワークフローでも実行します。
+模擬CLIの音声はテスト用の無音WAVであり、YuE2の実生成成功を示しません。公式段階APIテストもモデルを模擬しています。YuE2のテストはGitHubのCPU／Windowsワークフローでも実行します。
 
 ## 利用条件・出典
 

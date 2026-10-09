@@ -133,7 +133,6 @@ MLSDは直線を抽出するため、曲面の大きな輪は条件画像にほ�
 
 ControlNetの初回推論には各プロセスのウォームアップが含まれます。生成処理を単純に比較してControlNetの速度差とみなさないでください。
 
-
 ## 素材と再現条件
 
 - [人物参照](anime-character-reference.jpg)はユーザーがこの作例用に提供した画像です。[人物Lineart](anime-pose-lineart.png)はそれを参照してImageGenで新たな片足立ちの構図を生成しました。[建築Lineart](ring-observatory-lineart.png)と[3D原画](ring-observatory-render-source.png)もImageGenで新規生成しました。Scribble・Canny・Gray・Pose・Inpaintingマスクは元画像から抽出または手作業で作成し、Depth・HED・MLSDは各前処理モデルを適用しました。

@@ -17,7 +17,6 @@ RTX 3090 24GiB / RAM 64GB、2026-09-29。本体INT8 ConvRot＋テキストエン
 <img src="poster-1024.png" alt="Mingで生成した1024pxのBOTANICAポスター" width="440">
 <img src="poster-2048.png" alt="同じ条件で再生成した2048pxのポスター。副題が重複している" width="440">
 
-
 ## 透過素材
 
 英語のイチョウ指示、Seed 20260931、2048×2048で約50秒。RGBAのalphaは0〜255、alpha16以下の面積は約92%です。同じ指示・Seedの1024出力はほぼ不透明だったため、透過指示を出したことと実際の出力を区別しています。

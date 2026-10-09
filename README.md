@@ -228,7 +228,6 @@ Krea2・Animaの基本対応や量子化モデルの読み込みはForgeから�
 - [API・セキュリティモデル](docs/security-model.md)
 - [セキュリティ問題の報告](SECURITY.md)
 - [リリース確認項目](docs/release-checklist.md)
-- [変更履歴](CHANGELOG.md)
 
 </details>
 

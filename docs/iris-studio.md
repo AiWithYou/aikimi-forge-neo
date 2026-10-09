@@ -22,7 +22,6 @@ Iris-3Bの画像生成、相対深度推定、復元・4倍拡大をForge Neoか
 - INT8は通常版との同一入力・条件の実生成、有限値、画質、VRAMと所要時間を確認してから公開します。
 - UIは入力・実行・結果を主にし、準備操作と詳細設定をまとめます。
 - Irisを選択中は、Irisが使用しないForge共通のCheckpoint・VAE設定を隠し、GPU解放と機能切替を残します。
-- リリースでは対象外のH3変更を保ち、README・CHANGELOG・配布バージョンを同期して検証・pushします。
 
 ## 公式資料
 
@@ -81,6 +80,5 @@ Windows・Python 3.13・NVIDIA GPUで使用します。Irisは専用の`models/I
 画像生成では別途、未量子化のテキストエンコーダー重み約8.88GBを使います。モデル重みの合計は、画像生成のみで通常版約20.8GB／INT8約12.1GB、全3処理で約44.8GB／18.7GBです。実行環境の保存容量は別途必要です。
 
 公式重みは`7445443349bc9abe3c96f01ff793e2098ca012b3`、テキストエンコーダーは`ebb281ec70b05090aa6165b016eac8ec08e71b17`に固定します。取得時はHubのサイズ・SHA-256とINT8のmanifestを照合します。
-
 
 INT8配布commit: [`6231647d02bb538b401a675061c11c7a64bba81f`](https://huggingface.co/Aikimi/iris-3b-int8/tree/6231647d02bb538b401a675061c11c7a64bba81f)。

@@ -4,8 +4,6 @@ Aikimi Studio Neo v1.3.0のQwen Image 2.1新規生成を、2026年9月21日に�
 
 ![INT8とW4A8の実画像・実測比較](comparison.png)
 
-[比較画像を原寸で開く](comparison.png) · [INT8の原画像](int8.png) · [W4A8の原画像](w4a8.png)
-
 ## 条件と数値の意味
 
 - RTX 3090 24GB、Windows、1024×1024、40 steps、CPU退避、Seed `9212026`。プロンプト書き換えはOFF。

@@ -16,5 +16,4 @@
 models/Qwen-Image-2.1/worker-env/Scripts/python.exe tools/compare_qwen21_outpaint.py
 ```
 
-
 ![青いティーポットの比較](street-comparison.png)

@@ -37,7 +37,7 @@ OutpaintでControlNetを使う場合、前処理済み画像は**元画像と同
 
 元画像は拡縮せず、指定した方向の余白だけを32 px単位へ調整し、調整量をプレビューに表示します。完成寸法は各辺256〜4096 px、合計約2 MPまで。余白がすべて0、上限超過などの場合は理由を表示して生成を無効にします。再拡張でも上限は同じです。開始時の元画像・余白・Seed・LoRA情報をジョブへ保存するので、途中で入力を変更しても開始済みの生成には混ざりません。結果のSeedなどは**この結果の生成情報**にまとまっています。
 
-保存先は`outputs/qwen-image-2.1/<job>/`。`output.png`が元画像を合成した完成画像、`output-generated.png`が合成前の生成画像、`outpaint-reference.png`が灰色余白付きの参照です。通常のQwenタブとGPUの実行管理・停止・モデル保持を共有します。・[3画像のLoRA有無比較](../../docs/assets/qwen-outpaint-comparison/README.md)
+保存先は`outputs/qwen-image-2.1/<job>/`。`output.png`が元画像を合成した完成画像、`output-generated.png`が合成前の生成画像、`outpaint-reference.png`が灰色余白付きの参照です。通常のQwenタブとGPUの実行管理・停止・モデル保持を共有します。
 
 外部ツールとの受け渡しが必要な場合は「参照PNGの書き出し・外部画像の合成」を開けます。この補助欄の設定JSONは説明用メモです。
 

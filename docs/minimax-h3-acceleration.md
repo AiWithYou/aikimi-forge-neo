@@ -62,4 +62,4 @@ Generation JSON schema 2 records the selected acceleration settings, model filen
 
 Recorded acceleration values are **requested settings**, not measurements of effective sparsity or the Fast VAE's final OOM fallback batch. Use backend logs for those details. Compare the same prompt, input media, seed, size, duration and sampler; compare motion, fine detail, speech and synchronized audio as well as elapsed time and peak memory.
 
-No model weights or third-party implementation code are vendored. Follow the source models' and node pack's license terms. Context-IR, 2K Regenerate and arbitrary-time guides are outside these controls; no paid API is invoked.
+No model weights or third-party implementation code are vendored. Follow the source models' and node pack's license terms. CPU/Gradio tests do not measure GPU quality or end-to-end speed. Context-IR, 2K Regenerate and arbitrary-time guides are outside these controls; no paid API is invoked.
