@@ -64,6 +64,7 @@ def validate_request(value):
         if not request.get("image"):
             raise IrisError("入力画像を選んでください。")
         return {"task": task, "precision": precision, "image": request["image"]}
+    request.pop("image", None)
     prompt = str(request.get("prompt", "")).strip()
     if not prompt or len(prompt) > 12000:
         raise IrisError("プロンプトを1〜12000文字で入力してください。")

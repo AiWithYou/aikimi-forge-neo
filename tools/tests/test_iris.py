@@ -22,6 +22,10 @@ from modules_forge.iris.quantization import Int8Linear, convert_linears, load_in
 
 
 class RequestTests(unittest.TestCase):
+    def test_generation_ignores_image_retained_when_switching_tasks(self):
+        request = validate_request({"task": "generate", "prompt": "a cat", "image": object()})
+        self.assertNotIn("image", request)
+
     def test_official_generation_defaults(self):
         request = validate_request({"task": "generate", "precision": "int8", "prompt": "a red fox"})
         self.assertEqual(

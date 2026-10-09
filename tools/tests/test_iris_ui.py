@@ -25,6 +25,8 @@ class IrisUITests(unittest.TestCase):
         task = next(x for x in components if x.get("props", {}).get("elem_id") == "iris-task")
         self.assertEqual(len(task["props"]["choices"]), 3)
         labels = [x.get("props", {}).get("label", "") for x in components]
+        image_input = next(x for x in components if x.get("props", {}).get("label") == "入力画像")
+        self.assertEqual(image_input["props"]["type"], "pil", "Callbacks must receive decoded pixels, not client paths")
         sizes = [x for x in components if x.get("props", {}).get("label") == "生成サイズ"]
         self.assertEqual(len(sizes), 1, "One trained-size selector is required")
         self.assertEqual(sizes[0]["type"], "dropdown")

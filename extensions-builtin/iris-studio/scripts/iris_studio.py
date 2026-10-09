@@ -176,7 +176,7 @@ def on_ui_tabs():
                     )
                     seed = gr.Number(label="Seed（-1でランダム）", value=-1, precision=0)
                 with gr.Group(visible=False) as image_input:
-                    image = gr.Image(label="入力画像", type="filepath", height=320)
+                    image = gr.Image(label="入力画像", type="pil", height=320)
                     upscale_limit = gr.Markdown("入力を短辺512・長辺1024以内に収めてから4倍にします。", visible=False)
                 with gr.Row():
                     run = gr.Button(

@@ -37,15 +37,14 @@ class Service:
         try:
             directory.mkdir(parents=True)
             if request["task"] != "generate":
-                source = Path(request["image"])
-                if not source.is_file() or source.stat().st_size > 32 * 1024**2:
-                    raise IrisError("入力画像がないか、32MBを超えています。")
-                with Image.open(source) as image:
-                    if image.width * image.height > 40_000_000:
-                        raise IrisError("入力画像は40メガピクセルまでです。")
-                    image = ImageOps.exif_transpose(image).convert("RGBA")
-                    background = Image.new("RGBA", image.size, "white")
-                    Image.alpha_composite(background, image).convert("RGB").save(directory / "input.png")
+                image = request["image"]
+                if not isinstance(image, Image.Image):
+                    raise IrisError("入力画像をアップロードしてください。")
+                if image.width * image.height > 40_000_000:
+                    raise IrisError("入力画像は40メガピクセルまでです。")
+                image = ImageOps.exif_transpose(image).convert("RGBA")
+                background = Image.new("RGBA", image.size, "white")
+                Image.alpha_composite(background, image).convert("RGB").save(directory / "input.png")
                 request["image"] = str(directory / "input.png")
             atomic_json(directory / "request.json", request)
             job = {"id": identifier, "directory": str(directory), "status": "running", "error": ""}
