@@ -917,14 +917,18 @@ class WorkerLoaderTests(unittest.TestCase):
         ):
             runtime = self.load(precision="turbo_official_int8")
         self.assertEqual(runtime["int8_layers"], {"transformer": 2, "text_encoder": 2})
-        self.assertEqual(Path(self.events[0][2]), official / "transformer")
-        self.assertEqual(Path(self.events[2][2]), self.job)
+        self.assertEqual(Path(self.events[0][2]).resolve(), (official / "transformer").resolve())
+        self.assertEqual(Path(self.events[2][2]).resolve(), self.job.resolve())
         self.assertEqual(self.events[2][3]["subfolder"], "text_encoder")
-        self.assertEqual(identities.call_args_list[0].kwargs["source_path"], official / "transformer")
+        self.assertEqual(
+            Path(identities.call_args_list[0].kwargs["source_path"]).resolve(), (official / "transformer").resolve()
+        )
         self.assertEqual(identities.call_args_list[0].kwargs["source_record"], record)
         self.assertEqual(identities.call_args_list[1].kwargs, {"skip_modules": ()})
         scheduler = next(event for event in self.events if event[:2] == ("scheduler", "load"))
-        self.assertEqual(Path(scheduler[2]) / scheduler[3].get("subfolder", ""), official / "scheduler")
+        self.assertEqual(
+            (Path(scheduler[2]) / scheduler[3].get("subfolder", "")).resolve(), (official / "scheduler").resolve()
+        )
 
     def test_official_bf16_uses_official_transformer_with_shared_pipeline(self):
         runtime = self.load(precision="turbo_official_bf16")
@@ -934,10 +938,10 @@ class WorkerLoaderTests(unittest.TestCase):
         )
         transformer = self.events[0]
         self.assertEqual(
-            Path(transformer[2]) / transformer[3].get("subfolder", ""),
-            self.job.parent / "turbo" / "official" / "transformer",
+            (Path(transformer[2]) / transformer[3].get("subfolder", "")).resolve(),
+            (self.job.parent / "turbo" / "official" / "transformer").resolve(),
         )
-        self.assertEqual(Path(self.events[1][2]), self.job)
+        self.assertEqual(Path(self.events[1][2]).resolve(), self.job.resolve())
         self.assertIs(self.events[1][3]["transformer"], self.components["transformer"])
         self.assertEqual(runtime["int8_layers"], {})
 
@@ -966,8 +970,10 @@ class WorkerLoaderTests(unittest.TestCase):
             runtime = self.load(precision="turbo_official_w4a8")
         self.assertEqual(runtime["w4a8"], {"transformer": {"layers": 2}, "text_encoder": {"layers": 2}})
         calls = converter.load_model.call_args_list
-        self.assertEqual(calls[0].args[0], self.job.parent / "turbo" / "official" / "transformer")
-        self.assertEqual(calls[1].args[0], self.job / "text_encoder")
+        self.assertEqual(
+            Path(calls[0].args[0]).resolve(), (self.job.parent / "turbo" / "official" / "transformer").resolve()
+        )
+        self.assertEqual(Path(calls[1].args[0]).resolve(), (self.job / "text_encoder").resolve())
 
     def test_turbo_q4_loads_gguf_transformer_and_int8_encoder(self):
         gguf = object()

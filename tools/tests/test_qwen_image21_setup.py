@@ -102,26 +102,28 @@ class QwenSetupTests(unittest.TestCase):
             self.assertFalse(root.exists())
 
     def test_official_turbo_install_reuses_ready_environment_and_shared_components(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            python = root / "worker-env/Scripts/python.exe"
-            with (
-                mock.patch("builtins.print"),
-                mock.patch("modules_forge.qwen_image21.core.runtime_lock"),
-                mock.patch("modules_forge.qwen_image21.core.runtime_manifest", return_value={}),
-                mock.patch.object(environment, "environment_status", return_value=(True, "ready")),
-                mock.patch.object(setup, "install_environment") as install,
-                mock.patch.object(setup, "download_model") as download,
-                mock.patch.object(setup, "execute") as execute,
-            ):
-                self.assertEqual(setup.main(["--root", str(root), "--official-turbo-only"]), 0)
-            install.assert_not_called()
-            download.assert_not_called()
-            execute.assert_called_once()
-            arguments = execute.call_args.args[0]
-            self.assertEqual(arguments[0], python)
-            self.assertIn("--download-turbo-profile", arguments)
-            self.assertIn("turbo_official_int8", arguments)
+        for platform in ("nt", "posix"):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                python = root / "worker-env" / ("Scripts/python.exe" if platform == "nt" else "bin/python")
+                with (
+                    mock.patch("builtins.print"),
+                    mock.patch.object(setup, "os", SimpleNamespace(name=platform)),
+                    mock.patch("modules_forge.qwen_image21.core.runtime_lock"),
+                    mock.patch("modules_forge.qwen_image21.core.runtime_manifest", return_value={}),
+                    mock.patch.object(environment, "environment_status", return_value=(True, "ready")),
+                    mock.patch.object(setup, "install_environment") as install,
+                    mock.patch.object(setup, "download_model") as download,
+                    mock.patch.object(setup, "execute") as execute,
+                ):
+                    self.assertEqual(setup.main(["--root", str(root), "--official-turbo-only"]), 0)
+                install.assert_not_called()
+                download.assert_not_called()
+                execute.assert_called_once()
+                arguments = execute.call_args.args[0]
+                self.assertEqual(arguments[0], python)
+                self.assertIn("--download-turbo-profile", arguments)
+                self.assertIn("turbo_official_int8", arguments)
 
     def test_runtime_only_registers_environment_without_downloading_model(self):
         with tempfile.TemporaryDirectory() as directory:
