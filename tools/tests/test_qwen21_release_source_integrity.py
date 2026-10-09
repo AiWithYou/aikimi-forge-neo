@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import io
 import json
-import shutil
+import os
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
+from modules_forge.qwen_image21.quantized_cache import cache_path
 from tools import qwen21_hub_release as release
 from tools.tests import test_qwen21_hub_release as fixtures
 
@@ -20,14 +21,31 @@ class QwenReleaseSourceIntegrityTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             self.fixture.setUp()
 
+    def source_file(self, component, filename):
+        return cache_path(self.fixture.source / "model", self.fixture.identities[component]) / filename
+
+    def stage(self, output):
+        with patch.object(
+            release, "_identity", side_effect=lambda _root, component, _profile: self.fixture.identities[component]
+        ):
+            release.stage(self.fixture.source, "int8", output)
+
     def test_stage_rejects_same_size_tensor_mutation_after_completion(self):
-        source = self.fixture.source / "quantized/int8/test-key/transformer/model.safetensors"
+        source = self.source_file("transformer", "model.safetensors")
         original = source.read_bytes()
-        source.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+        stat = source.stat()
+        source.write_bytes(original[:-1] + bytes([original[-1] ^ 1]))
+        os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns))
         self.assertEqual(source.stat().st_size, len(original))
         output = self.fixture.root / "corrupt-release"
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()), self.assertRaises(ValueError):
-            release.stage(self.fixture.source, "int8", output)
+        with (
+            patch.object(release, "_export_safetensors", wraps=release._export_safetensors) as export,
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()),
+            self.assertRaisesRegex(ValueError, "Source file missing or changed"),
+        ):
+            self.stage(output)
+        export.assert_called_once()
         self.assertFalse((output / "release_manifest.json").exists())
 
     def test_staged_manifest_hashes_match_the_actual_files(self):
@@ -39,30 +57,38 @@ class QwenReleaseSourceIntegrityTests(unittest.TestCase):
                 self.assertEqual(release.sha256(path), record["sha256"])
 
     def test_stage_rejects_same_size_config_mutation_after_completion(self):
-        source = self.fixture.source / "quantized/int8/test-key/text_encoder/config.json"
+        source = self.source_file("text_encoder", "config.json")
         original = source.read_bytes()
+        stat = source.stat()
         source.write_bytes(original.replace(b"test", b"best"))
+        os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns))
         self.assertEqual(source.stat().st_size, len(original))
         output = self.fixture.root / "corrupt-config-release"
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()), self.assertRaises(ValueError):
-            release.stage(self.fixture.source, "int8", output)
+        with (
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()),
+            self.assertRaisesRegex(ValueError, "Source file missing or changed"),
+        ):
+            self.stage(output)
         self.assertFalse((output / "release_manifest.json").exists())
 
-    def test_stage_rechecks_tensor_bytes_after_copy(self):
-        def changed_copy(source, destination):
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, destination)
-            data = destination.read_bytes()
-            destination.write_bytes(bytes([data[0] ^ 1]) + data[1:])
+    def test_stage_rejects_tensor_mutation_between_inventory_check_and_stream(self):
+        original_export = release._export_safetensors
+
+        def changed_source(source, destination, notice, expected_hash):
+            data = source.read_bytes()
+            source.write_bytes(data[:-1] + bytes([data[-1] ^ 1]))
+            return original_export(source, destination, notice, expected_hash)
 
         output = self.fixture.root / "changed-copy-release"
         with (
-            patch.object(release, "link_or_copy", side_effect=changed_copy),
+            patch.object(release, "_export_safetensors", side_effect=changed_source) as export,
             redirect_stdout(io.StringIO()),
             redirect_stderr(io.StringIO()),
-            self.assertRaises(ValueError),
+            self.assertRaisesRegex(ValueError, "Source file missing or changed"),
         ):
-            release.stage(self.fixture.source, "int8", output)
+            self.stage(output)
+        export.assert_called_once()
         self.assertFalse((output / "release_manifest.json").exists())
 
 
