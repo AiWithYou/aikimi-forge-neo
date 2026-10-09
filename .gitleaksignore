@@ -1,8 +1,8 @@
 # False positive in the vendored, minified Forge Canvas JavaScript identifier table.
-e26abf87ecd1eefd9ab0a198eee56f9c643e4001:modules_forge/forge_canvas/canvas.min.js:generic-api-key:1
+c6335e14db609392b4d655b8af299a42a759145f:modules_forge/forge_canvas/canvas.min.js:generic-api-key:1
 
 # False positive in the upstream Italian translation text ("tasto su").
-0b028c84ab8a8edcf9648622ed3fe4b8ca013334:localizations/it_IT.json:generic-api-key:307
+fa337ae97667b5595ea9e92403305fc412e94f02:localizations/it_IT.json:generic-api-key:307
 
 # Synthetic credential-shaped value used only to verify frontend redaction.
-c444b8f44e3e77e3f594c07215d03b139c72b346:tools/tests/test_aikimi_chromium.py:generic-api-key:304
+039ee14cfd55f14c81c718b8fea8649dab1104ac:tools/tests/test_aikimi_chromium.py:generic-api-key:304
