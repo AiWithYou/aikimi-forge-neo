@@ -24,6 +24,8 @@ tags:
 
 This repository contains the quantized generation Transformer and shared Qwen3-VL text encoder, plus an integrity manifest and importer. It is not a complete image pipeline. The VAE, processor, official sampling configuration, and original BF16 model files are supplied by Neo's setup.
 
+Model weights use the Qwen Research [LICENSE](LICENSE). The included importer source code uses AGPLv3; see [CODE_LICENSE](CODE_LICENSE).
+
 - Transformer source: Qwen/Qwen-Image-2.1-Turbo revision d65dbc9a7e8f6b5479e33dee6030eaab2a906509.
 - Shared encoder source: Qwen/Qwen-Image-2.1 revision b3179ad355be050328e483a9dfdd9e60cd62adfa. Its source tensor values match the encoder bundled with the official Turbo checkpoint.
 - Sampling: the official eight sigma values, CFG 1, and FlowMatchEulerDiscreteScheduler with dynamic shifting disabled.

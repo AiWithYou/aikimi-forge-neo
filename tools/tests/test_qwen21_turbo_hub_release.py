@@ -60,6 +60,7 @@ class Qwen21TurboHubReleaseTests(unittest.TestCase):
                 (docs / name).write_text(f"Official Turbo {profile}\n", encoding="utf-8")
             for component in release.COMPONENTS:
                 self.write_cache(self.source, component, profile)
+        (self.checkout / "LICENSE").write_bytes(b"AGPLv3 synthetic code license\r\n")
         for patcher in (
             patch.object(release, "ROOT", self.checkout),
             patch.object(release, "_identity", side_effect=self.identity, create=True),
@@ -183,6 +184,15 @@ class Qwen21TurboHubReleaseTests(unittest.TestCase):
                     0,
                 )
                 stage.assert_called_once_with(self.source.resolve(), profile, output.resolve())
+
+    def test_stage_includes_code_license_and_keeps_weights_license_separate(self):
+        for profile in PROFILES:
+            with self.subTest(profile=profile):
+                output = self.root / f"licensed-{profile}"
+                release.stage(self.source, profile, output)
+                self.assertEqual((output / "CODE_LICENSE").read_bytes(), (self.checkout / "LICENSE").read_bytes())
+                self.assertEqual((output / "LICENSE").read_bytes(), (self.source / "model" / "LICENSE").read_bytes())
+                self.assertNotEqual((output / "CODE_LICENSE").read_bytes(), (output / "LICENSE").read_bytes())
 
     def test_stage_selects_exact_cache_and_exports_portable_source_identity(self):
         for profile in PROFILES:

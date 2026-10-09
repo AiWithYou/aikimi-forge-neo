@@ -1,7 +1,12 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Stage and import Neo's saved Qwen Image 2.1 quantized components.
 
 Staging never changes the local quantized cache. Importing requires the pinned
 official model and the same isolated runtime versions used for conversion.
+
+Modified 2026-10-10 by Aikimi for official Turbo provenance, portable
+export/import, and per-file modification notices. Importer code: AGPLv3
+(see CODE_LICENSE in a release); model weights: Qwen Research (LICENSE).
 """
 
 from __future__ import annotations
@@ -276,6 +281,7 @@ def stage(model_root: Path, precision: str, output: Path) -> None:
         for name in ("README.md", "NOTICE.md"):
             shutil.copyfile(source_docs / name, output / name)
         shutil.copyfile(model_root / "model" / "LICENSE", output / "LICENSE")
+        shutil.copyfile(ROOT / "LICENSE", output / "CODE_LICENSE")
         shutil.copyfile(Path(__file__), output / "install.py")
         _assert_portable(release)
         (output / "release_manifest.json").write_text(
