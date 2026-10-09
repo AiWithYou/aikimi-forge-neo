@@ -1,0 +1,8 @@
+/* Iris owns its models; keep the shared GPU controls and navigation visible. */
+body:has(#aikimi-feature-nav[data-active-feature="iris"]) #quicksettings {
+    display: none !important;
+}
+
+#tab_iris_studio {
+    padding-top: 12px;
+}

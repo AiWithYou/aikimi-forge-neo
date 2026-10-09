@@ -79,6 +79,7 @@ class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
             ("minimax_h3_studio", "H3 Studio"),
             ("qwen_image21_studio", "Qwen Image 2.1"),
             ("clef_studio", "Clef"),
+            ("iris_studio", "Iris"),
             ("settings", "Settings"),
             ("extensions", "Extensions"),
         ]
@@ -473,7 +474,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 10
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 11
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -866,6 +867,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "MiniMax H3",
                 "YuE2 Music",
                 "Clef",
+                "Iris",
             ],
         )
         self.assertTrue(result["externalRowBeforeTabs"])
@@ -1064,6 +1066,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "MiniMax H3",
                 "YuE2 Music",
                 "Clef",
+                "Iris",
             ],
         )
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])

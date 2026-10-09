@@ -14,6 +14,10 @@ on:
       - "extensions-builtin/clef-studio/**"
       - "tools/*clef*.py"
       - "tools/tests/test_clef*.py"
+      - "modules_forge/iris/**"
+      - "extensions-builtin/iris-studio/**"
+      - "tools/*iris*.py"
+      - "tools/tests/test_iris*.py"
       - "tools/prepare_qwen21_consistency_lora.py"
       - "tools/tests/test_qwen21_consistency*.py"
       - "tools/tests/test_qwen_int8_convrot.py"
@@ -121,6 +125,10 @@ on:
       - "extensions-builtin/clef-studio/**"
       - "tools/*clef*.py"
       - "tools/tests/test_clef*.py"
+      - "modules_forge/iris/**"
+      - "extensions-builtin/iris-studio/**"
+      - "tools/*iris*.py"
+      - "tools/tests/test_iris*.py"
       - "tools/prepare_qwen21_consistency_lora.py"
       - "tools/tests/test_qwen21_consistency*.py"
       - "tools/tests/test_qwen_int8_convrot.py"
@@ -248,6 +256,10 @@ jobs:
             extensions-builtin/clef-studio/scripts
             tools/*clef*.py
             tools/tests/test_clef*.py
+            modules_forge/iris
+            extensions-builtin/iris-studio/scripts
+            tools/*iris*.py
+            tools/tests/test_iris*.py
             tools/prepare_qwen21_consistency_lora.py
             tools/tests/test_qwen21_consistency*.py
             tools/tests/test_qwen_int8_convrot.py

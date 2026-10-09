@@ -78,6 +78,12 @@
             label: "Clef",
             kind: "native",
         }),
+        iris: Object.freeze({
+            buttonId: "aikimi-tab-iris",
+            containerId: "tab_iris_studio",
+            label: "Iris",
+            kind: "native",
+        }),
     });
     const FEATURE_ORDER = Object.freeze([
         "krea2",
@@ -90,6 +96,7 @@
         "minimax_h3",
         "yue2",
         "clef",
+        "iris",
     ]);
 
     if (window.AikimiTabs?.apiVersion === API_VERSION) {

@@ -1,0 +1,14 @@
+# Inference only: upstream training, Dion, WandB and hosted demo are unnecessary.
+torch==2.13.0
+torchvision==0.28.0
+transformers==5.10.4
+./vendor/accelerate
+huggingface_hub==1.5.0
+safetensors==0.8.0
+omegaconf==2.3.1
+Pillow==12.3.0
+numpy==2.3.5
+matplotlib==3.11.0
+psutil==7.2.2
+pip==26.2.1
+setuptools==83.0.0

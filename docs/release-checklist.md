@@ -87,8 +87,8 @@ findingがある場合は、単語だけを置換せず、対象文全体を書�
 
 - [ ] Local SafeでWebUIとAPIを起動した
 - [ ] browserから`127.0.0.1`だけで開ける
-- [ ] Forge由来の上部タブとQuick Settingsが常に表示される
-- [ ] Aikimiの4入口が`#tabs`直前の小型1行にあり、Gradio所有tablistのchild、順序、label、ARIAを変更しない
+- [ ] Forge由来の上部タブが表示され、Quick SettingsはIris以外で表示される。Iris内では使用しないCheckpoint・VAE設定を隠し、GPU解放と機能切替を残す
+- [ ] Aikimiの11入口が`#tabs`直前にあり、Gradio所有tablistのchild、順序、label、ARIAを変更しない
 - [ ] `Krea2`がUI Presetの`krea`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持する
 - [ ] `Krea2`を別のタブから開くと`txt2img`へ移動し、`Krea2 2-Stage Upscale`を自動選択しない
 - [ ] `Anima`がUI Presetの`anima`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持する
