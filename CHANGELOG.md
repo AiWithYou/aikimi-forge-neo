@@ -4,6 +4,7 @@
 
 - 公式Qwen Image 2.1 Turboの画像生成・参照編集を追加。公式の8 steps・sigma列・スケジューラを使い、Viggleの4 stepsと区別して選択できます。[導入と使い方](docs/qwen21-official-turbo.md)
 - 公式TurboのW4A8／INT8／BF16を追加。通常版の共通部品を再利用し、変換済み本体は配布元・revision・量子化条件ごとに保存します。Outpaintにも選択モデルと8 stepsを引き継ぎます。
+- 公式Turboの変換済みINT8・W4A8をHugging Faceで配布。導入時にモデルの出典・revision・量子化条件・実行環境とファイルのSHA-256を照合します。
 
 ## v3.8.1 — 2026-10-09
 

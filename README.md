@@ -82,6 +82,8 @@ Qwen公式フルモデル（INT8／W4A8／BF16）は `.\aikimi-qwen-image21-setu
 
 [公式Qwen Image 2.1 Turbo（8 steps）](docs/qwen21-official-turbo.md)は `.\aikimi-qwen-image21-setup.bat --official-turbo-only` で追加し、Qwen画面で**公式Turbo · W4A8／INT8／BF16**を選びます。既存のViggle Turboは4 stepsの別モデルとして選択できます。
 
+公式Turboの変換済み[INT8](https://huggingface.co/Aikimi/Forge-Neo-Image-2.1-Turbo-INT8)・[W4A8](https://huggingface.co/Aikimi/Forge-Neo-Image-2.1-Turbo-W4A8)はHugging Faceから導入できます。必要な共通部品・対応環境・導入コマンドは[公式Turboガイド](docs/qwen21-official-turbo.md)を参照してください。
+
 </details>
 
 ### 起動して生成する

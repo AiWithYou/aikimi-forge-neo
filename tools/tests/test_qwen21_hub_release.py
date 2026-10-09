@@ -1,10 +1,12 @@
 import json
 import shutil
+import struct
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from modules_forge.qwen_image21.quantized_cache import cache_path
 from tools import qwen21_hub_release as release
 
 
@@ -23,11 +25,18 @@ class Qwen21HubReleaseTests(unittest.TestCase):
             folder.mkdir(parents=True)
             config = {"_name_or_path": r"H:\private\source"} if component == "transformer" else {"model_type": "test"}
             (folder / "config.json").write_text(json.dumps(config), encoding="utf-8")
-            (folder / "model.safetensors").write_bytes((component + "-weights").encode())
+            header = json.dumps(
+                {"__metadata__": {"format": "pt"}, "weight": {"dtype": "F32", "shape": [2], "data_offsets": [0, 8]}}
+            ).encode()
+            header += b" " * (-len(header) % 8)
+            (folder / "model.safetensors").write_bytes(
+                struct.pack("<Q", len(header)) + header + struct.pack("<2f", 1.0, 2.0)
+            )
             files = [
                 {
                     "path": path.name,
                     "size": path.stat().st_size,
+                    "mtime_ns": path.stat().st_mtime_ns,
                     "sha256": release.sha256(path),
                 }
                 for path in folder.iterdir()
@@ -44,9 +53,16 @@ class Qwen21HubReleaseTests(unittest.TestCase):
                 "source_files": [],
             }
             self.identities[component] = identity
+            destination = cache_path(self.source / "model", identity)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            folder.rename(destination)
+            folder = destination
             (folder / "complete.json").write_text(json.dumps({"identity": identity, "files": files}), encoding="utf-8")
         self.staged = self.root / "staged"
-        release.stage(self.source, "int8", self.staged)
+        with patch.object(
+            release, "_identity", side_effect=lambda _root, component, _profile: self.identities[component]
+        ):
+            release.stage(self.source, "int8", self.staged)
 
     def _target(self, name):
         target = self.root / name

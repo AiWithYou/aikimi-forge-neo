@@ -14,6 +14,19 @@ Neoを終了して、ルートで実行します。
 
 導入内容の表示は`--official-turbo-only --dry-run`、取得後の再検証は`--official-turbo-only --verify`を使います。通常版のフル本体を追加する必要はありません。公式TurboのGGUFはこの導入には含めません。
 
+### 保存済みINT8／W4A8を取得する
+
+変換済みコンポーネントを[AikimiのINT8](https://huggingface.co/Aikimi/Forge-Neo-Image-2.1-Turbo-INT8)と[W4A8](https://huggingface.co/Aikimi/Forge-Neo-Image-2.1-Turbo-W4A8)から取得できます。Qwen公式の量子化配布物ではなく、Neo用の生成Transformerと共通テキストエンコーダーです。VAE・processor・元モデルと専用環境は上のセットアップで準備してください。元のBF16モデルを置き換える操作ではありません。
+
+Neoを終了してルートで実行します。W4A8はrepo名・精度・取得先のINT8部分をそれぞれW4A8・`turbo_official_w4a8`・`official-turbo-w4a8`に変えます。
+
+```powershell
+& .\models\Qwen-Image-2.1\worker-env\Scripts\hf.exe download Aikimi/Forge-Neo-Image-2.1-Turbo-INT8 --local-dir .\work\hf-models\official-turbo-int8
+& .\models\Qwen-Image-2.1\worker-env\Scripts\python.exe -X utf8 tools\qwen21_hub_release.py install --precision turbo_official_int8 --release-dir .\work\hf-models\official-turbo-int8
+```
+
+配布ファイルのサイズ・SHA-256、元モデルのrevision、量子化条件、専用環境の版を照合してから保存先へ取り込みます。条件が異なる環境には取り込めません。専用環境と元モデルを確認するか、その環境で変換してください。INT8はbitsandbytesの保存形式、W4A8はNeoの専用ローダーで読む圧縮形式です。取得後は同じ精度を選んで生成してください。
+
 ## 使い方
 
 1. Neoを起動し、**Qwen Image 2.1**のモデル欄で**公式Turbo · W4A8／INT8／BF16 · 8 steps**を選びます。24GB GPUではまずINT8・CPU退避で試してください。
