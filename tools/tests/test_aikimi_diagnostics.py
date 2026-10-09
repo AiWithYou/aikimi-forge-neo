@@ -53,11 +53,23 @@ class AikimiDiagnosticsTests(unittest.TestCase):
             paths = self.paths(Path(directory))
             with mock.patch("modules_forge.qwen_image21.core.runtime_manifest", return_value={}) as inspect_setup:
                 check = capabilities._qwen_image21_check(paths)
-        inspect_setup.assert_called_once_with(paths.models_root / "Qwen-Image-2.1")
+        inspect_setup.assert_called_once_with(paths.models_root / "Qwen-Image-2.1", "base_q4_k_m")
         self.assertEqual(check.id, "qwen_image21")
         self.assertEqual(check.state, diagnostics.CheckState.READY)
         self.assertTrue(check.available)
         self.assertIn("No generation was run", check.summary)
+
+    def test_qwen_capability_accepts_fresh_shared_and_official_only_install(self):
+        from modules_forge.qwen_image21 import turbo
+        from tools.tests.test_qwen_image21_service import installed_official_runtime
+
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self.paths(Path(directory))
+            specs = installed_official_runtime(paths.models_root / "Qwen-Image-2.1")
+            with mock.patch.object(turbo, "OFFICIAL_FILES", specs):
+                check = capabilities._qwen_image21_check(paths)
+            self.assertEqual(check.state, diagnostics.CheckState.READY)
+            self.assertTrue(check.available)
 
     def test_qwen_capability_fails_closed_without_leaking_setup_errors(self):
         with tempfile.TemporaryDirectory() as directory:

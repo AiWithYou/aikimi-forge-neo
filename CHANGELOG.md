@@ -1,5 +1,10 @@
 # 変更履歴
 
+## v3.9.0 — 2026-10-10
+
+- 公式Qwen Image 2.1 Turboの画像生成・参照編集を追加。公式の8 steps・sigma列・スケジューラを使い、Viggleの4 stepsと区別して選択できます。[導入と使い方](docs/qwen21-official-turbo.md)
+- 公式TurboのW4A8／INT8／BF16を追加。通常版の共通部品を再利用し、変換済み本体は配布元・revision・量子化条件ごとに保存します。Outpaintにも選択モデルと8 stepsを引き継ぎます。
+
 ## v3.8.1 — 2026-10-09
 
 - IrisにW4A8を追加。本体3処理と画像生成用Qwen言語decoderをpacked 4bit重み・動的8bit activationで実行し、変換済み配布を取得します。既定はINT8を維持します。

@@ -322,9 +322,10 @@ def _minimax_h3_check(paths: DiagnosticPaths) -> DiagnosticCheck:
 
 def _qwen_image21_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     try:
-        from modules_forge.qwen_image21.core import runtime_manifest
+        from modules_forge.qwen_image21.core import installed_precision
 
-        runtime_manifest(paths.models_root / "Qwen-Image-2.1")
+        if installed_precision(paths.models_root / "Qwen-Image-2.1") is None:
+            raise ValueError("No installed Qwen Image 2.1 model.")
     except Exception:
         return DiagnosticCheck(
             "qwen_image21",

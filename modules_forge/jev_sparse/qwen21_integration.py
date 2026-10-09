@@ -12,8 +12,8 @@ from .credentials import read_saved_key
 from .qwen21 import OPTIONS_ENV, Options
 
 ROOT = Path(__file__).resolve().parents[2]
-# Reviewed 2026-09-23 Turbo BF16/GGUF, persistent quantization, I2I rewrite and mask-output worker.
-WORKER_BLOB = "01cfc1df769839c13b19c9a91ac1cad3640ee5e8"
+# Reviewed 2026-10-09 official 8-step Turbo, persistent quantization and existing edit paths.
+WORKER_BLOB = "1621c10cfcf569b1be083d5e6fa96e1a15e11c65"
 
 
 def launch_defaults() -> Options:

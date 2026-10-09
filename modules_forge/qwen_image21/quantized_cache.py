@@ -27,7 +27,9 @@ def file_hash(path, check_cancel=lambda: None):
     return digest.hexdigest()
 
 
-def component_identity(model_path, component, precision, *, skip_modules=(), versions=None, source_path=None):
+def component_identity(
+    model_path, component, precision, *, skip_modules=(), versions=None, source_path=None, source_record=None
+):
     """Bind artifacts to the source revision, actual files, recipe and runtime."""
     model_path = Path(model_path).resolve()
     folder = Path(source_path).resolve() if source_path else model_path / component
@@ -56,7 +58,13 @@ def component_identity(model_path, component, precision, *, skip_modules=(), ver
             if path.is_file() and ".cache" not in path.relative_to(folder).parts
         ],
     }
-    if source_path is not None:
+    if source_record is not None:
+        result["source_path"] = str(folder)
+        result["source_model"] = source_record["model"]
+        result["revision"] = source_record["revision"]
+        result["source_record"] = source_record
+        result["source_inventory"] = []
+    elif source_path is not None:
         from modules_forge.local_assets import identity
 
         result["local_source"] = identity(folder)
@@ -70,8 +78,19 @@ def cache_path(model_path, identity):
     return Path(model_path).resolve().parent / "quantized" / identity["precision"] / key / identity["component"]
 
 
-def saved_components(model_path, precision, *, versions=None, check_cancel=lambda: None):
+def saved_components(model_path, precision, *, versions=None, verify_hashes=False, check_cancel=lambda: None):
     """Validate both components using the same identity as the inference loader."""
+    from .capabilities import quantization_precision
+    from .turbo import OFFICIAL_PRECISIONS, transformer_directory, turbo_manifest
+
+    source = {}
+    if precision in OFFICIAL_PRECISIONS:
+        root = Path(model_path).resolve().parent
+        source = {
+            "source_path": transformer_directory(root, precision),
+            "source_record": turbo_manifest(root, precision),
+        }
+    precision = quantization_precision(precision)
     result = {}
     for name in ("transformer", "text_encoder"):
         identity = component_identity(
@@ -80,25 +99,29 @@ def saved_components(model_path, precision, *, versions=None, check_cancel=lambd
             precision,
             versions=versions,
             skip_modules=INT8_SKIP_MODULES if precision == "int8" and name == "transformer" else (),
+            **(source if name == "transformer" else {}),
         )
         path = cache_path(model_path, identity)
-        manifest(path, identity, check_cancel=check_cancel)
+        manifest(path, identity, verify_hashes=verify_hashes, check_cancel=check_cancel)
         result[name] = {"status": "hit", "path": str(path)}
     return result
 
 
 def saved_status(runtime, precision):
     """Inspect the dedicated runtime without importing its GPU libraries."""
+    from .core import precision_label
+
     if precision == "base_q4_k_m":
         from .regular_gguf import regular_status
 
         return regular_status(Path(runtime))
-    if precision.startswith("turbo_"):
+    if precision.startswith("turbo_") and precision not in {"turbo_official_int8", "turbo_official_w4a8"}:
         from .turbo import turbo_status
 
         return turbo_status(Path(runtime), precision)
     if precision == "bf16":
         return "BF16は元のモデルを使用します。"
+    label = precision_label(precision)
     try:
         environment = Path(runtime) / "worker-env"
         paths = (
@@ -113,8 +136,8 @@ def saved_status(runtime, precision):
         }
         saved_components(Path(runtime) / "model", precision, versions=versions)
     except (OSError, ValueError, KeyError, TypeError):
-        return f"{precision.upper()} · 未保存。生成時にも自動保存します。"
-    return f"{precision.upper()} · 保存済み。次回からこのモデルを使います。"
+        return f"{label} · 未保存。生成時にも自動保存します。"
+    return f"{label} · 保存済み。次回からこのモデルを使います。"
 
 
 def manifest(path, identity, *, verify_hashes=False, check_cancel=lambda: None):

@@ -27,6 +27,9 @@ SETUP_COMMAND = "aikimi-qwen-image21-setup.bat"
 def precision_label(precision: str) -> str:
     return {
         "base_q4_k_m": "通常版 Q4_K_M (Unsloth)",
+        "turbo_official_int8": "公式Turbo INT8",
+        "turbo_official_w4a8": "公式Turbo W4A8",
+        "turbo_official_bf16": "公式Turbo BF16",
         "turbo_bf16": "Viggle Turbo BF16",
         "turbo_q4_k_m": "Viggle Turbo Q4_K_M",
     }.get(precision, precision.upper())
@@ -148,6 +151,7 @@ class Request:
     local_components: str = ""
 
     def resolved(self) -> Request:
+        from .capabilities import fixed_steps, quantization_precision, validate_sampling
         from .style_lora import validate_options
 
         validate_options(self.to_dict())
@@ -159,7 +163,7 @@ class Request:
             raise QwenImage21Error("ローカル本体の量子化は初回生成時に変換・保存します。")
         if self.operation not in {"generate", "prepare"}:
             raise QwenImage21Error("実行する操作が不正です。")
-        if self.operation == "prepare" and self.precision not in {"int8", "w4a8"}:
+        if self.operation == "prepare" and quantization_precision(self.precision) not in {"int8", "w4a8"}:
             raise QwenImage21Error("保存する精度はINT8またはW4A8を選んでください。")
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 12000:
             raise QwenImage21Error("プロンプトを1〜12000文字で入力してください。")
@@ -168,8 +172,9 @@ class Request:
         if width % 32 or height % 32 or width * height > MAX_OUTPUT_PIXELS:
             raise QwenImage21Error("幅・高さは32の倍数、総画素数は約430万画素（2400×1792）以内で指定してください。")
         steps = integer(self.steps, "Steps", 1, 100)
+        if self.operation == "prepare":
+            steps = fixed_steps(self.precision) or steps
         seed = integer(self.seed, "Seed", -1, 2**63 - 1)
-        from .capabilities import validate_sampling
 
         try:
             validate_sampling(
@@ -376,6 +381,17 @@ def runtime_manifest(root: Path, precision: str = "int8", local_model: str = "",
     return {**manifest, "python": str(python.absolute()), "model": str(model.resolve())}
 
 
+def installed_precision(root: Path) -> str | None:
+    """Prefer the normal model, then an installed Turbo without loading weights."""
+    for precision in ("base_q4_k_m", "int8", "turbo_official_int8", "turbo_q4_k_m", "turbo_bf16"):
+        try:
+            runtime_manifest(root, precision)
+        except QwenImage21Error:
+            continue
+        return precision
+    return None
+
+
 def runtime_status(root: Path) -> str:
     from .regular_gguf import regular_status
     from .turbo import turbo_status
@@ -387,7 +403,17 @@ def runtime_status(root: Path) -> str:
     else:
         base = "公式フルモデルを導入済み。INT8 / W4A8 / BF16を選べます。"
 
-    return "\n".join((regular_status(root), base, turbo_status(root, "turbo_bf16"), turbo_status(root, "turbo_q4_k_m")))
+    return "\n".join(
+        (
+            regular_status(root),
+            base,
+            turbo_status(root, "turbo_official_int8"),
+            turbo_status(root, "turbo_official_w4a8"),
+            turbo_status(root, "turbo_official_bf16"),
+            turbo_status(root, "turbo_bf16"),
+            turbo_status(root, "turbo_q4_k_m"),
+        )
+    )
 
 
 def runtime_lock(root: Path):

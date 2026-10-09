@@ -49,6 +49,17 @@ def installed_runtime(root):
     )
 
 
+def installed_official_runtime(root):
+    from tools.tests.test_qwen21_official_turbo_assets import OfficialTurboAssetTests
+
+    installed_runtime(root)
+    (root / "model/transformer/weights.safetensors").unlink()
+    inventory = core.read_json(root / "model-files.json")
+    inventory["files"] = [item for item in inventory["files"] if not item["path"].startswith("transformer/")]
+    core.atomic_json(root / "model-files.json", inventory)
+    return OfficialTurboAssetTests().installed(root)[0]
+
+
 def isolate_local_assets(test_case, directory):
     from modules_forge import local_assets
 
@@ -129,6 +140,30 @@ class FakeResident:
 
 
 class QwenCoreTests(unittest.TestCase):
+    def test_official_turbo_sampling_and_prepare_contract(self):
+        from modules_forge.qwen_image21.capabilities import fixed_steps, quantization_precision
+
+        for quantization in ("int8", "w4a8", "bf16"):
+            precision = f"turbo_official_{quantization}"
+            with self.subTest(precision=precision):
+                self.assertEqual(fixed_steps(precision), 8)
+                self.assertEqual(quantization_precision(precision), quantization)
+                self.assertEqual(core.Request("test", precision=precision, steps=8).resolved().steps, 8)
+                for changes in ({"steps": 4}, {"steps": 40}, {"fun_acc": True}):
+                    with self.assertRaises(core.QwenImage21Error):
+                        core.Request("test", **({"precision": precision, "steps": 8} | changes)).resolved()
+                if quantization == "bf16":
+                    with self.assertRaisesRegex(core.QwenImage21Error, "INT8.*W4A8"):
+                        core.Request("prepare", precision=precision, steps=8, operation="prepare").resolved()
+                else:
+                    prepared = core.Request("prepare", precision=precision, operation="prepare").resolved()
+                    self.assertEqual((prepared.operation, prepared.steps), ("prepare", 8))
+        self.assertEqual(fixed_steps("turbo_bf16"), 4)
+        self.assertEqual(fixed_steps("turbo_q4_k_m"), 4)
+        self.assertEqual(fixed_steps("int8", fun_acc=True), 4)
+        self.assertIsNone(fixed_steps("int8"))
+        self.assertEqual(quantization_precision("base_q4_k_m"), "base_q4_k_m")
+
     def test_rgba_reference_snapshots_preserve_pixels_and_order(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -586,6 +621,35 @@ class QwenUiTests(unittest.TestCase):
             self.assertIn("完了", updates[-1][0])
             self.assertTrue(updates[-1][1]["interactive"])
 
+    def test_fresh_official_only_install_is_selected_without_changing_normal_preference(self):
+        from modules_forge.qwen_image21 import turbo
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            specs = installed_official_runtime(root)
+            with patch.object(turbo, "OFFICIAL_FILES", specs), patch.object(self.ui, "RUNTIME", root):
+                with self.subTest(source="official-only"):
+                    self.assertEqual(self.ui.default_precision(), "turbo_official_int8")
+                    with (
+                        patch("modules_forge.local_assets.selection", return_value={}),
+                        patch.object(self.ui, "saved_status", return_value="installed"),
+                    ):
+                        tab = self.ui.on_ui_tabs()[0][0]
+                    props = {
+                        item["props"].get("elem_id"): item["props"] for item in tab.get_config_file()["components"]
+                    }
+                    self.assertEqual(props["qwen21-precision"]["value"], "turbo_official_int8")
+                    self.assertEqual((props["qwen21-steps"]["value"], props["qwen21-steps"]["interactive"]), (8, False))
+                with self.subTest(source="normal-full-added"):
+                    weights = root / "model/transformer/weights.safetensors"
+                    weights.write_bytes(b"test weights")
+                    inventory = core.read_json(root / "model-files.json")
+                    inventory["files"].append(
+                        {"path": "transformer/weights.safetensors", "size": weights.stat().st_size}
+                    )
+                    core.atomic_json(root / "model-files.json", inventory)
+                    self.assertEqual(self.ui.default_precision(), "int8")
+
     def test_real_ui_builds_and_all_callbacks_are_private(self):
         tab, label, identifier = self.ui.on_ui_tabs()[0]
         self.assertEqual((label, identifier), ("Qwen Image 2.1", "qwen_image21_studio"))
@@ -602,8 +666,24 @@ class QwenUiTests(unittest.TestCase):
         self.assertFalse(props["qwen21-rewrite-prompt"]["value"])
         self.assertEqual(
             [value for _, value in props["qwen21-precision"]["choices"]],
-            ["base_q4_k_m", "w4a8", "int8", "bf16", "turbo_q4_k_m", "turbo_bf16"],
+            [
+                "base_q4_k_m",
+                "w4a8",
+                "int8",
+                "bf16",
+                "turbo_official_w4a8",
+                "turbo_official_int8",
+                "turbo_official_bf16",
+                "turbo_q4_k_m",
+                "turbo_bf16",
+            ],
         )
+        labels = dict((value, label) for label, value in props["qwen21-precision"]["choices"])
+        for precision in ("turbo_official_w4a8", "turbo_official_int8", "turbo_official_bf16"):
+            self.assertIn("公式Turbo", labels[precision])
+            self.assertIn("8 steps", labels[precision])
+        self.assertIn("Viggle Turbo", labels["turbo_bf16"])
+        self.assertIn("Viggle Turbo", labels["turbo_q4_k_m"])
         self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8")[0]["value"], 4)
         self.assertTrue(self.ui.profile_settings("turbo_q4_k_m", "int8")[1]["interactive"])
         self.assertFalse(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[3]["value"])
@@ -617,10 +697,48 @@ class QwenUiTests(unittest.TestCase):
         links = "\n".join(item["props"].get("value", "") for item in config["components"] if item["type"] == "markdown")
         self.assertIn("https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo", links)
         self.assertIn("https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF", links)
+        self.assertIn("https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo", links)
         self.assertFalse(props["qwen21-effective-prompt"]["interactive"])
         self.assertEqual(gr.utils.get_type_hints(self.ui.start)["request"], gr.Request)
         files = next(component for component in tab.blocks.values() if isinstance(component, gr.File))
         self.assertEqual(files.visible, "hidden")
+
+    def test_official_turbo_callbacks_keep_eight_steps_and_quantization_save(self):
+        browser = gr.Request(session_hash="official-turbo")
+        for quantization in ("int8", "w4a8", "bf16"):
+            precision = f"turbo_official_{quantization}"
+            with self.subTest(precision=precision):
+                steps, _, _, fun_acc = self.ui.profile_settings(precision, "int8", True)
+                self.assertEqual(steps["value"], 8)
+                self.assertFalse(steps["interactive"])
+                self.assertFalse(fun_acc["value"])
+                self.assertFalse(fun_acc["interactive"])
+                self.assertEqual(self.ui.fun_acc_settings(False, precision)[1]["value"], 8)
+                self.assertEqual(self.ui.profile_settings("int8", precision)[0]["value"], 40)
+                with patch.object(self.ui, "saved_status", return_value="saved"):
+                    _, button = self.ui.model_save_status(precision, "", browser)
+                self.assertEqual(button["interactive"], quantization != "bf16")
+        with (
+            patch("modules_forge.local_assets.selection", return_value={"precision": "turbo_official_int8"}),
+            patch.object(self.ui, "saved_status", return_value="saved"),
+        ):
+            tab = self.ui.on_ui_tabs()[0][0]
+        props = {item["props"].get("elem_id"): item["props"] for item in tab.get_config_file()["components"]}
+        self.assertEqual((props["qwen21-steps"]["value"], props["qwen21-steps"]["interactive"]), (8, False))
+        self.assertFalse(props["qwen21-fun-acc"]["interactive"])
+
+    def test_generation_summary_uses_selected_schedule_when_steps_change_is_pending(self):
+        for precision, steps in (
+            ("turbo_official_int8", 8),
+            ("turbo_official_w4a8", 8),
+            ("turbo_official_bf16", 8),
+            ("turbo_bf16", 4),
+            ("turbo_q4_k_m", 4),
+        ):
+            with self.subTest(precision=precision):
+                self.assertIn(f"{steps} steps", self.ui.generation_summary(precision, 40, "1024x1024"))
+        self.assertIn("4 steps", self.ui.generation_summary("int8", 40, "1024x1024", fun_acc=True))
+        self.assertIn("31 steps", self.ui.generation_summary("int8", 31, "1024x1024"))
 
     def test_reorder_remove_and_owner_bound_result_reuse(self):
         gallery = [("first.png", None), ("second.png", None)]

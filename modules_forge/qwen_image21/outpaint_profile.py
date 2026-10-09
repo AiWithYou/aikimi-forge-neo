@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from .capabilities import validate_sampling
+from .capabilities import fixed_steps, validate_sampling
 from .core import integer, precision_label
 from .style_lora import validate_options
 
@@ -45,9 +45,7 @@ def resolve(values, steps):
         profile["control_inpaint"] = False
     else:
         profile["control_image"] = str(profile["control_image"] or "")
-    profile["steps"] = (
-        4 if profile["precision"].startswith("turbo_") or profile["fun_acc"] else integer(steps, "Steps", 1, 100)
-    )
+    profile["steps"] = fixed_steps(profile["precision"], profile["fun_acc"]) or integer(steps, "Steps", 1, 100)
     validate_options(profile)
     validate_sampling(profile)
     return profile

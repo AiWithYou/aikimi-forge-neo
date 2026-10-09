@@ -357,6 +357,34 @@ class UIContractTests(unittest.TestCase):
         self.assertEqual(restored["value"], 31)
         self.assertTrue(restored["interactive"])
 
+    def test_official_turbo_outpaint_keeps_eight_steps_and_restores_normal_steps(self):
+        from modules_forge.qwen_image21.core import Request
+        from modules_forge.qwen_image21.outpaint_profile import FIELDS, resolve, summary
+
+        for quantization in ("int8", "w4a8", "bf16"):
+            precision = f"turbo_official_{quantization}"
+            with self.subTest(precision=precision):
+                fixed, remembered = self.ui.outpaint_step_settings(precision, False, 31, 25)
+                self.assertEqual((fixed["value"], fixed["interactive"], remembered), (8, False, 31))
+                # Switching from another fixed schedule must not overwrite the remembered normal count.
+                _, remembered = self.ui.outpaint_step_settings("turbo_q4_k_m", False, 8, remembered)
+                restored, _ = self.ui.outpaint_step_settings("bf16", False, 4, remembered)
+                self.assertEqual((restored["value"], restored["interactive"]), (31, True))
+                values = Request("test", precision=precision).to_dict()
+                values["style_loras"], values["lora_strengths"] = [], []
+                profile = resolve([values[name] for name in FIELDS], 31)
+                self.assertEqual(profile["steps"], 8)
+                self.assertIn("公式Turbo", summary(profile, "none"))
+                self.assertIn("8 steps", summary(profile, "none"))
+        with gr.Blocks() as tab:
+            controls = {name: gr.State(values[name]) for name in FIELDS}
+            self.ui.on_ui_tabs(controls)[0][0].render()
+        props = {item["props"].get("elem_id"): item["props"] for item in tab.get_config_file()["components"]}
+        self.assertEqual(
+            (props["qwen21-outpaint-native-steps"]["value"], props["qwen21-outpaint-native-steps"]["interactive"]),
+            (8, False),
+        )
+
     def test_control_readiness_uses_the_same_exif_orientation_as_job_copy(self):
         from modules_forge.qwen_image21.core import Request, copy_control_image
         from modules_forge.qwen_image21.outpaint_profile import FIELDS

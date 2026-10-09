@@ -1,6 +1,6 @@
 # Aikimi Forge Neo
 
-**[v3.8.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.8.1)** · [変更履歴](CHANGELOG.md)
+**[v3.9.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.9.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -79,6 +79,8 @@ AnimaはGPUでINT8へ変換し、検証成功後にBF16変換元を削除しま�
 Animaの個別取得・変換には準備済みのNeo環境とNVIDIA GPUが必要です。SenseNovaとH3の個別BATは専用実行環境を導入しません。
 
 Qwen公式フルモデル（INT8／W4A8／BF16）は `.\aikimi-qwen-image21-setup.bat --official-full`、任意のプロンプト書き換えは `.\aikimi-qwen-image21-setup.bat --prompt-rewriter-only` で追加します。[Qwenガイド](extensions-builtin/qwen-image21-studio/README.md) · [量子化導入ガイド](docs/w4a8.md) · [モデル導入ガイド](docs/model-installation.md)
+
+[公式Qwen Image 2.1 Turbo（8 steps）](docs/qwen21-official-turbo.md)は `.\aikimi-qwen-image21-setup.bat --official-turbo-only` で追加し、Qwen画面で**公式Turbo · W4A8／INT8／BF16**を選びます。既存のViggle Turboは4 stepsの別モデルとして選択できます。
 
 </details>
 

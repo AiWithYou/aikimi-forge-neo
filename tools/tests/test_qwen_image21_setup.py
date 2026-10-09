@@ -86,6 +86,43 @@ class QwenSetupTests(unittest.TestCase):
                     self.assertGreater(plan["shared_model_bytes"], 18_000_000_000)
             self.assertFalse(root.exists())
 
+    def test_official_turbo_dry_run_reports_one_pinned_install_for_three_precisions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "not-created"
+            with mock.patch("builtins.print") as printed:
+                self.assertEqual(setup.main(["--root", str(root), "--official-turbo-only", "--dry-run"]), 0)
+                plan = json.loads(printed.call_args.args[0])
+            self.assertEqual(plan["model"], "Qwen/Qwen-Image-2.1-Turbo")
+            self.assertEqual(plan["model_revision"], "d65dbc9a7e8f6b5479e33dee6030eaab2a906509")
+            self.assertEqual(plan["model_bytes"], 14_230_316_125)
+            self.assertEqual(plan["precision"], ["turbo_official_int8", "turbo_official_w4a8", "turbo_official_bf16"])
+            self.assertIn(
+                "Qwen/Qwen-Image-2.1-Turbo/blob/d65dbc9a7e8f6b5479e33dee6030eaab2a906509/LICENSE", plan["license"]
+            )
+            self.assertFalse(root.exists())
+
+    def test_official_turbo_install_reuses_ready_environment_and_shared_components(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            python = root / "worker-env/Scripts/python.exe"
+            with (
+                mock.patch("builtins.print"),
+                mock.patch("modules_forge.qwen_image21.core.runtime_lock"),
+                mock.patch("modules_forge.qwen_image21.core.runtime_manifest", return_value={}),
+                mock.patch.object(environment, "environment_status", return_value=(True, "ready")),
+                mock.patch.object(setup, "install_environment") as install,
+                mock.patch.object(setup, "download_model") as download,
+                mock.patch.object(setup, "execute") as execute,
+            ):
+                self.assertEqual(setup.main(["--root", str(root), "--official-turbo-only"]), 0)
+            install.assert_not_called()
+            download.assert_not_called()
+            execute.assert_called_once()
+            arguments = execute.call_args.args[0]
+            self.assertEqual(arguments[0], python)
+            self.assertIn("--download-turbo-profile", arguments)
+            self.assertIn("turbo_official_int8", arguments)
+
     def test_runtime_only_registers_environment_without_downloading_model(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
@@ -112,7 +149,7 @@ class QwenSetupTests(unittest.TestCase):
                 mock.patch("modules_forge.qwen_image21.core.runtime_lock") as lock,
                 mock.patch(
                     "modules_forge.qwen_image21.core.runtime_manifest",
-                    side_effect=[*[QwenImage21Error("missing")] * 4, {}],
+                    side_effect=[*[QwenImage21Error("missing")] * 7, {}],
                 ) as manifest,
                 mock.patch.object(setup, "install_environment", return_value=python),
                 mock.patch.object(setup, "download_model") as download,
@@ -123,6 +160,35 @@ class QwenSetupTests(unittest.TestCase):
             self.assertIn("--download-regular-gguf", execute.call_args.args[0])
             self.assertEqual(manifest.call_args.args, (root, "base_q4_k_m"))
             lock.return_value.close.assert_called_once()
+
+    def test_regular_gguf_addition_reuses_official_turbo_shared_components(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            python = root / "worker-env/Scripts/python.exe"
+            regular_added = False
+
+            def installed(_root, precision):
+                if precision == "turbo_official_int8" or precision == "base_q4_k_m" and regular_added:
+                    return {}
+                raise QwenImage21Error("not installed")
+
+            def execute(arguments):
+                nonlocal regular_added
+                self.assertIn("--download-regular-gguf", arguments)
+                regular_added = True
+
+            with (
+                mock.patch("builtins.print"),
+                mock.patch("modules_forge.qwen_image21.core.runtime_lock"),
+                mock.patch("modules_forge.qwen_image21.core.runtime_manifest", side_effect=installed),
+                mock.patch.object(setup, "install_environment", return_value=python),
+                mock.patch.object(setup, "download_model") as download,
+                mock.patch.object(setup, "execute", side_effect=execute) as run,
+            ):
+                self.assertEqual(setup.main(["--root", str(root)]), 0)
+            download.assert_not_called()
+            run.assert_called_once()
+            self.assertTrue(regular_added)
 
     def test_corrupt_download_does_not_publish_an_install_record(self):
         with tempfile.TemporaryDirectory() as directory:

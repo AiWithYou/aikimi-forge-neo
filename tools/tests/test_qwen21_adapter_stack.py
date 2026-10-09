@@ -11,7 +11,7 @@ from safetensors.torch import save_file
 from torch import nn
 
 from modules_forge.qwen_image21.adapter_stack import materialize_pdd_projection
-from modules_forge.qwen_image21.capabilities import PRECISIONS, validate_sampling
+from modules_forge.qwen_image21.capabilities import PRECISIONS, fixed_steps, validate_sampling
 from modules_forge.qwen_image21.core import Request
 from modules_forge.qwen_image21.outpaint_runtime import load_adapter
 from modules_forge.qwen_image21.pdd_vendor.lora_utils_pdd import PDDLoRALinear
@@ -67,12 +67,12 @@ def test_pdd_outpaint_and_multiple_style_residuals_add_without_changing_base(tmp
 def test_sampling_matrix_rejects_only_scheduler_or_kv_conflicts(precision, fun_acc, control, sparse):
     values = {
         "precision": precision,
-        "steps": 4,
+        "steps": fixed_steps(precision, fun_acc) or 4,
         "fun_acc": fun_acc,
         "control_kind": "canny" if control else "off",
         "sparse_mode": "fixed" if sparse else "off",
     }
-    conflict = (precision.startswith("turbo_") and fun_acc) or (sparse and (fun_acc or control))
+    conflict = (fixed_steps(precision) is not None and fun_acc) or (sparse and (fun_acc or control))
     if conflict:
         with pytest.raises(ValueError):
             validate_sampling(values)
@@ -123,9 +123,9 @@ def test_local_model_sampling_contract_preserves_selected_file_and_rejects_turbo
         ).resolved()
         assert request.local_model == model
         assert request.precision == precision
-    for precision in ("turbo_q4_k_m", "turbo_bf16"):
+    for precision in sorted(item for item in PRECISIONS if fixed_steps(item) is not None):
         with pytest.raises(ValueError, match="外部モデル"):
-            Request("extend", local_model=model, precision=precision, steps=4).resolved()
+            Request("extend", local_model=model, precision=precision, steps=fixed_steps(precision)).resolved()
 
 
 def test_turning_control_off_does_not_keep_a_hidden_upload_active_for_sparse(tmp_path):

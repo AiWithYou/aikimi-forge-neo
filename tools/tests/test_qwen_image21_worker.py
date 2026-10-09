@@ -6,11 +6,12 @@ import inspect
 import io
 import json
 import os
+import struct
 import sys
 import tempfile
 import types
 import unittest
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -21,6 +22,26 @@ SPEC = importlib.util.spec_from_file_location("qwen_image21_worker", ROOT / "too
 worker = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(worker)
+
+OFFICIAL_ID = "Qwen/Qwen-Image-2.1-Turbo"
+OFFICIAL_REVISION = "d65dbc9a7e8f6b5479e33dee6030eaab2a906509"
+OFFICIAL_SIGMAS = [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568]
+
+
+@contextmanager
+def patched_modules(values):
+    """Restore only the mocked modules; NumPy C extensions cannot be reloaded."""
+    missing = object()
+    previous = {name: sys.modules.get(name, missing) for name in values}
+    sys.modules.update(values)
+    try:
+        yield
+    finally:
+        for name, module in previous.items():
+            if module is missing:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 class FakeGenerator:
@@ -51,6 +72,7 @@ class FakePipe:
     def __init__(self):
         self.calls = []
         self.before_callback = None
+        self.timesteps = None
         self.fail = False
         self.scheduler = types.SimpleNamespace(config={})
         self.vae = mock.Mock(use_tiling=False)
@@ -64,9 +86,13 @@ class FakePipe:
         if self.before_callback:
             self.before_callback()
         callback_kwargs = {"sentinel": object()}
-        returned = kwargs["callback_on_step_end"](self, 0, None, callback_kwargs)
-        if returned is not callback_kwargs:
-            raise AssertionError("callback must preserve pipeline state")
+        timesteps = self.timesteps
+        if timesteps is None:
+            timesteps = [1000 * sigma for sigma in kwargs["sigmas"]] if "sigmas" in kwargs else [None]
+        for step, timestep in enumerate(timesteps):
+            returned = kwargs["callback_on_step_end"](self, step, timestep, callback_kwargs)
+            if returned is not callback_kwargs:
+                raise AssertionError("callback must preserve pipeline state")
         return types.SimpleNamespace(images=[Image.new("RGBA", (kwargs["width"], kwargs["height"]), (1, 2, 3, 47))])
 
 
@@ -106,9 +132,9 @@ class WorkerJobTests(unittest.TestCase):
             "load_seconds": 1.2,
         }
         self.fake_torch = fake_torch()
-        self.torch_patch = mock.patch.dict(sys.modules, {"torch": self.fake_torch})
-        self.torch_patch.start()
-        self.addCleanup(self.torch_patch.stop)
+        self.torch_patch = patched_modules({"torch": self.fake_torch})
+        self.torch_patch.__enter__()
+        self.addCleanup(self.torch_patch.__exit__, None, None, None)
         self.output = redirect_stdout(io.StringIO())
         self.output.__enter__()
         self.addCleanup(self.output.__exit__, None, None, None)
@@ -134,6 +160,7 @@ class WorkerJobTests(unittest.TestCase):
         self.assertEqual(actual["width"], 256)
         self.assertEqual(actual["height"], 320)
         self.assertEqual(actual["num_inference_steps"], 40)
+        self.assertNotIn("sigmas", actual)
         self.assertEqual(actual["true_cfg_scale"], 1.0)
         self.assertIs(actual["use_kv_cache"], True)
         self.assertEqual(actual["output_resolution"], 1024)
@@ -152,6 +179,8 @@ class WorkerJobTests(unittest.TestCase):
         self.assertEqual(json.loads((self.job / "result.json").read_text(encoding="utf-8")), result)
         self.assertEqual(result["metadata"]["int8_layers"], self.runtime["int8_layers"])
         self.assertEqual(result["metadata"]["versions"], self.runtime["versions"])
+        self.assertNotIn("sampling_timesteps", result["metadata"])
+        self.assertNotIn("actual_steps", result["metadata"])
         self.assertEqual(json.loads((self.job / "progress.json").read_text(encoding="utf-8"))["stage"], "complete")
 
     def test_opaque_request_keeps_original_prompt_and_t2i_uses_no_image(self):
@@ -325,6 +354,114 @@ class WorkerJobTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "29.6 GiB"):
                 worker.run_request(self.payload)
             loader.assert_not_called()
+
+    def test_official_turbo_generates_with_explicit_sigmas_and_records_the_source(self):
+        official = self.model.parent / "turbo" / "official"
+        official.mkdir(parents=True)
+        (official / "model_index.json").write_text(json.dumps({"sample_sigmas": OFFICIAL_SIGMAS}), encoding="utf-8")
+        self.request["steps"] = 8
+        self.write_request()
+        for precision in ("turbo_official_int8", "turbo_official_w4a8", "turbo_official_bf16"):
+            with (
+                self.subTest(precision=precision),
+                mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+                mock.patch.object(worker, "sampling_sigmas", return_value=OFFICIAL_SIGMAS),
+            ):
+                self.payload["precision"] = precision
+                result, _ = self.run_job()
+                self.assertEqual(self.pipe.calls[-1]["sigmas"], OFFICIAL_SIGMAS)
+                self.assertEqual(self.pipe.calls[-1]["num_inference_steps"], 8)
+                self.assertEqual(self.pipe.calls[-1]["true_cfg_scale"], 1.0)
+                self.assertEqual(result["metadata"]["sampling_sigmas"], OFFICIAL_SIGMAS)
+                self.assertEqual(result["metadata"]["sampling_timesteps"], [1000 * sigma for sigma in OFFICIAL_SIGMAS])
+                self.assertEqual(result["metadata"]["actual_steps"], 8)
+                self.assertEqual(result["metadata"]["model"], OFFICIAL_ID)
+                self.assertEqual(result["metadata"]["model_revision"], OFFICIAL_REVISION)
+
+    def test_official_turbo_rejects_missing_extra_or_shifted_timesteps_before_saving_output(self):
+        expected = [1000 * sigma for sigma in OFFICIAL_SIGMAS]
+        self.payload["precision"] = "turbo_official_int8"
+        self.request["steps"] = 8
+        self.write_request()
+        for trace in (
+            expected[:4],
+            expected + [0.0],
+            [expected[0] - 1.0, *expected[1:]],
+            list(reversed(expected)),
+            [float("nan"), *expected[1:]],
+        ):
+            with (
+                self.subTest(trace=trace),
+                mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+                mock.patch.object(worker, "sampling_sigmas", return_value=OFFICIAL_SIGMAS),
+                mock.patch.object(worker, "_load_runtime", return_value=self.runtime),
+            ):
+                self.pipe.timesteps = trace
+                with self.assertRaisesRegex(RuntimeError, "Official Turbo.*(timestep|steps)"):
+                    worker.run_request(self.payload)
+                self.assertFalse((self.job / "output.png").exists())
+                self.assertFalse((self.job / "output-generated.png").exists())
+                self.assertFalse((self.job / "metadata.json").exists())
+                self.assertFalse((self.job / "result.json").exists())
+
+    def test_official_turbo_accepts_fp32_timestep_roundoff_and_records_actual_values(self):
+        self.payload["precision"] = "turbo_official_int8"
+        self.request["steps"] = 8
+        self.write_request()
+        self.pipe.timesteps = [struct.unpack("f", struct.pack("f", 1000 * sigma))[0] for sigma in OFFICIAL_SIGMAS]
+        with (
+            mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+            mock.patch.object(worker, "sampling_sigmas", return_value=OFFICIAL_SIGMAS),
+        ):
+            result, _ = self.run_job()
+        self.assertEqual(result["metadata"]["sampling_timesteps"], self.pipe.timesteps)
+        self.assertEqual(result["metadata"]["actual_steps"], 8)
+
+    def test_official_turbo_prepare_accepts_quantized_profiles_and_uses_the_same_precision(self):
+        official = self.model.parent / "turbo" / "official"
+        official.mkdir(parents=True)
+        (official / "model_index.json").write_text(json.dumps({"sample_sigmas": OFFICIAL_SIGMAS}), encoding="utf-8")
+        self.request.update(operation="prepare", steps=8)
+        self.write_request()
+        for precision in ("turbo_official_int8", "turbo_official_w4a8"):
+            with (
+                self.subTest(precision=precision),
+                mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+                mock.patch.object(worker, "sampling_sigmas", return_value=OFFICIAL_SIGMAS),
+                mock.patch("modules_forge.qwen_image21.quantized_cache.saved_components", return_value={}) as saved,
+                mock.patch.object(worker, "_load_runtime") as loader,
+            ):
+                self.payload["precision"] = precision
+                result = worker.run_request(self.payload)
+                self.assertEqual(result["precision"], precision)
+                self.assertEqual(saved.call_args.args, (self.model.resolve(), precision))
+                loader.assert_not_called()
+
+    def test_official_bf16_capacity_uses_official_shards_before_loading(self):
+        for folder, name, size in (
+            (
+                self.model.parent / "turbo" / "official" / "transformer",
+                "diffusion_pytorch_model.safetensors.index.json",
+                14_230_249_472,
+            ),
+            (self.model / "text_encoder", "model.safetensors.index.json", 17_534_247_392),
+        ):
+            folder.mkdir(parents=True)
+            (folder / name).write_text(json.dumps({"metadata": {"total_size": size}}), encoding="utf-8")
+        (self.model.parent / "turbo" / "official" / "model_index.json").write_text(
+            json.dumps({"sample_sigmas": OFFICIAL_SIGMAS}), encoding="utf-8"
+        )
+        self.payload.update(precision="turbo_official_bf16", memory_mode="gpu")
+        self.request["steps"] = 8
+        self.write_request()
+        with (
+            mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+            mock.patch.object(worker, "sampling_sigmas", return_value=OFFICIAL_SIGMAS),
+            mock.patch.object(worker, "_load_runtime") as loader,
+            self.assertRaisesRegex(RuntimeError, "29.6 GiB"),
+        ):
+            worker.run_request(self.payload)
+        loader.assert_not_called()
 
     def test_single_file_size_accounts_for_bf16_conversion(self):
         checkpoint = self.root / "weights.safetensors"
@@ -538,6 +675,17 @@ class WorkerJobTests(unittest.TestCase):
         loader.assert_called_once()
         self.assertEqual(result["metadata"]["model_revision"], "second_revision")
 
+    def test_official_asset_changes_invalidate_resident_cache(self):
+        previous = worker._cache_key(self.model, "turbo_official_int8", "offload")
+        for name in ("model_index.json", "scheduler/scheduler_config.json", "transformer/weights.safetensors"):
+            with self.subTest(asset=name):
+                path = self.model.parent / "turbo" / "official" / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"changed official asset")
+                current = worker._cache_key(self.model, "turbo_official_int8", "offload")
+                self.assertNotEqual(previous, current)
+                previous = current
+
     def test_cancel_before_loading_discards_previous_cache_and_success_marker(self):
         self.run_job()
         (self.job / "cancel").touch()
@@ -637,7 +785,7 @@ class WorkerLoaderTests(unittest.TestCase):
 
             @classmethod
             def from_pretrained(cls, path, **kwargs):
-                name = kwargs["subfolder"]
+                name = kwargs.get("subfolder", Path(path).name)
                 events.append((name, "load", path, kwargs))
                 component = cls(name)
                 components[name] = component
@@ -678,9 +826,9 @@ class WorkerLoaderTests(unittest.TestCase):
             "bitsandbytes.nn": types.SimpleNamespace(Linear8bitLt=Linear8bitLt),
             "modules_forge.qwen_image21_environment": types.SimpleNamespace(validate_running_versions=self.validator),
         }
-        patcher = mock.patch.dict(sys.modules, self.modules)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        patcher = patched_modules(self.modules)
+        patcher.__enter__()
+        self.addCleanup(patcher.__exit__, None, None, None)
         environment = mock.patch.dict(os.environ, {})
         environment.start()
         self.addCleanup(environment.stop)
@@ -756,6 +904,70 @@ class WorkerLoaderTests(unittest.TestCase):
         self.assertEqual(self.events[0][3]["subfolder"], "transformer")
         self.assertIs(self.events[1][3]["transformer"], self.components["transformer"])
         self.assertIsNone(runtime["pipe"].scheduler.config.shift_terminal)
+
+    def test_official_int8_uses_official_transformer_and_shared_encoder(self):
+        official = self.job.parent / "turbo" / "official"
+        record = {"model": OFFICIAL_ID, "revision": OFFICIAL_REVISION, "files": {}}
+        with (
+            mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest", return_value=record),
+            mock.patch(
+                "modules_forge.qwen_image21.quantized_cache.component_identity",
+                side_effect=lambda _p, n, p, **_k: {"component": n, "precision": p},
+            ) as identities,
+        ):
+            runtime = self.load(precision="turbo_official_int8")
+        self.assertEqual(runtime["int8_layers"], {"transformer": 2, "text_encoder": 2})
+        self.assertEqual(Path(self.events[0][2]), official / "transformer")
+        self.assertEqual(Path(self.events[2][2]), self.job)
+        self.assertEqual(self.events[2][3]["subfolder"], "text_encoder")
+        self.assertEqual(identities.call_args_list[0].kwargs["source_path"], official / "transformer")
+        self.assertEqual(identities.call_args_list[0].kwargs["source_record"], record)
+        self.assertEqual(identities.call_args_list[1].kwargs, {"skip_modules": ()})
+        scheduler = next(event for event in self.events if event[:2] == ("scheduler", "load"))
+        self.assertEqual(Path(scheduler[2]) / scheduler[3].get("subfolder", ""), official / "scheduler")
+
+    def test_official_bf16_uses_official_transformer_with_shared_pipeline(self):
+        runtime = self.load(precision="turbo_official_bf16")
+        self.assertEqual(
+            [event[:2] for event in self.events],
+            [("transformer", "load"), ("pipeline", "load"), ("scheduler", "load"), ("pipeline", "offload")],
+        )
+        transformer = self.events[0]
+        self.assertEqual(
+            Path(transformer[2]) / transformer[3].get("subfolder", ""),
+            self.job.parent / "turbo" / "official" / "transformer",
+        )
+        self.assertEqual(Path(self.events[1][2]), self.job)
+        self.assertIs(self.events[1][3]["transformer"], self.components["transformer"])
+        self.assertEqual(runtime["int8_layers"], {})
+
+    def test_official_w4a8_packs_official_transformer_and_shared_encoder(self):
+        converter = types.SimpleNamespace(
+            validate_dependency=mock.Mock(),
+            load_model=mock.Mock(
+                side_effect=lambda _folder, name, _factory, **_k: (self.Component(name), {"layers": 2})
+            ),
+            load_saved_model=mock.Mock(),
+            save_model=mock.Mock(),
+        )
+        record = {"model": OFFICIAL_ID, "revision": OFFICIAL_REVISION, "files": {}}
+        with (
+            patched_modules({"modules_forge.qwen_image21.w4a8": converter}),
+            mock.patch.object(self.Component, "load_config", create=True, return_value={}),
+            mock.patch.object(self.Component, "from_config", create=True),
+            mock.patch.object(
+                self.Component,
+                "config_class",
+                create=True,
+                new=types.SimpleNamespace(from_pretrained=lambda *_a, **_k: {}),
+            ),
+            mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest", return_value=record),
+        ):
+            runtime = self.load(precision="turbo_official_w4a8")
+        self.assertEqual(runtime["w4a8"], {"transformer": {"layers": 2}, "text_encoder": {"layers": 2}})
+        calls = converter.load_model.call_args_list
+        self.assertEqual(calls[0].args[0], self.job.parent / "turbo" / "official" / "transformer")
+        self.assertEqual(calls[1].args[0], self.job / "text_encoder")
 
     def test_turbo_q4_loads_gguf_transformer_and_int8_encoder(self):
         gguf = object()

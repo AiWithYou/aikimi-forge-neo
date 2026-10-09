@@ -1,13 +1,19 @@
 """Persistence must bypass quantization and preserve every packed scale."""
 
+import io
 import json
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
 from modules_forge.qwen_image21 import quantized_cache as cache
+
+VERSIONS = dict.fromkeys(
+    ("torch", "diffusers", "transformers", "bitsandbytes", "accelerate", "safetensors", "comfy-kitchen"), "test"
+)
 
 
 class CacheTests(unittest.TestCase):
@@ -58,6 +64,109 @@ class CacheTests(unittest.TestCase):
         for key in ("precision", "revision"):
             changed = {**self.identity, key: "different"}
             self.assertNotEqual(cache.cache_path(self.model, self.identity), cache.cache_path(self.model, changed))
+
+    def test_official_transformer_identity_retains_source_manifest_and_separates_base(self):
+        base = self.model / "transformer"
+        official = self.model.parent / "turbo" / "official" / "transformer"
+        for folder in (base, official):
+            folder.mkdir(parents=True)
+            (folder / "config.json").write_text("{}", encoding="utf-8")
+            (folder / "weights.safetensors").write_bytes(b"same-fixture-weights")
+        record = {
+            "model": "Qwen/Qwen-Image-2.1-Turbo",
+            "revision": "d65dbc9a7e8f6b5479e33dee6030eaab2a906509",
+            "files": {"official/transformer/weights.safetensors": {"size": 20, "sha256": "pinned"}},
+        }
+        normal = cache.component_identity(self.model, "transformer", "int8", versions=VERSIONS)
+        identity = cache.component_identity(
+            self.model, "transformer", "int8", source_path=official, source_record=record, versions=VERSIONS
+        )
+        self.assertEqual(identity["revision"], record["revision"])
+        self.assertEqual(identity["source_record"], record)
+        self.assertNotEqual(cache.cache_path(self.model, normal), cache.cache_path(self.model, identity))
+        changed = cache.component_identity(
+            self.model,
+            "transformer",
+            "int8",
+            source_path=official,
+            source_record={**record, "revision": "different"},
+            versions=VERSIONS,
+        )
+        self.assertNotEqual(cache.cache_path(self.model, identity), cache.cache_path(self.model, changed))
+
+    def test_official_saved_components_reuses_normal_encoder_identity(self):
+        record = {"model": "Qwen/Qwen-Image-2.1-Turbo", "revision": "pinned", "files": {}}
+        for selected, underlying in (("turbo_official_int8", "int8"), ("turbo_official_w4a8", "w4a8")):
+            with (
+                self.subTest(precision=selected),
+                mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest", return_value=record),
+                mock.patch.object(
+                    cache, "component_identity", side_effect=lambda _p, n, p, **_k: {"component": n, "precision": p}
+                ) as identity,
+                mock.patch.object(cache, "manifest") as validate,
+            ):
+                result = cache.saved_components(self.model, selected, versions=VERSIONS)
+                transformer, encoder = identity.call_args_list
+                self.assertEqual(transformer.args[2], underlying)
+                self.assertEqual(
+                    transformer.kwargs["source_path"], self.model.parent / "turbo" / "official" / "transformer"
+                )
+                self.assertEqual(transformer.kwargs["source_record"], record)
+                self.assertEqual(encoder.args[2], underlying)
+                self.assertNotIn("source_path", encoder.kwargs)
+                self.assertNotIn("source_record", encoder.kwargs)
+                self.assertEqual(validate.call_count, 2)
+                self.assertEqual(set(result), {"transformer", "text_encoder"})
+
+    def test_prepare_cli_accepts_official_quantized_profiles_without_loading_for_dry_run(self):
+        from tools.prepare_qwen21_quantized import main
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(
+                main(
+                    [
+                        "--root",
+                        str(self.model.parent),
+                        "--precision",
+                        "turbo_official_int8",
+                        "turbo_official_w4a8",
+                        "--dry-run",
+                    ]
+                ),
+                0,
+            )
+        self.assertEqual(json.loads(output.getvalue())["precision"], ["turbo_official_int8", "turbo_official_w4a8"])
+
+    def test_prepare_cli_validates_selected_source_for_each_precision(self):
+        from tools.prepare_qwen21_quantized import main
+
+        root = self.model.parent.resolve()
+        with (
+            redirect_stdout(io.StringIO()),
+            mock.patch("modules_forge.qwen_image21.core.runtime_lock"),
+            mock.patch("modules_forge.qwen_image21.core.runtime_manifest") as validate,
+            mock.patch.object(cache, "saved_components", return_value={"transformer": {"path": "saved"}}) as saved,
+            mock.patch("tools.qwen_image21_worker.clear_runtime"),
+        ):
+            self.assertEqual(main(["--root", str(root), "--precision", "int8", "turbo_official_w4a8", "--verify"]), 0)
+        self.assertEqual(validate.call_args_list, [mock.call(root, "int8"), mock.call(root, "turbo_official_w4a8")])
+        self.assertEqual(
+            saved.call_args_list,
+            [
+                mock.call(root / "model", "int8", verify_hashes=True),
+                mock.call(root / "model", "turbo_official_w4a8", verify_hashes=True),
+            ],
+        )
+
+    def test_official_saved_status_checks_quantized_cache_instead_of_only_installation(self):
+        for selected in ("turbo_official_int8", "turbo_official_w4a8"):
+            with self.subTest(precision=selected), mock.patch.object(cache, "saved_components") as saved:
+                saved.side_effect = FileNotFoundError("missing converted weights")
+                self.assertIn("未保存", cache.saved_status(self.model.parent, selected))
+                saved.side_effect = None
+                self.assertIn("保存済み", cache.saved_status(self.model.parent, selected))
+                self.assertEqual(saved.call_args.args, (self.model, selected))
 
     def test_device_or_memory_failure_keeps_healthy_checkpoint(self):
         _, info = cache.load_or_create(self.model, self.identity, mock.Mock(), lambda: {}, self.save)

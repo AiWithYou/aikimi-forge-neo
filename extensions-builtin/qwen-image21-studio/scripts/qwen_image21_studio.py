@@ -16,13 +16,14 @@ from modules import gradio_compat, script_callbacks
 from modules.paths import data_path, script_path
 from modules_forge.qwen_image21 import style_lora as lora_library
 from modules_forge.qwen_image21.annotations import annotation_preview, reference_index, resolve_annotation
+from modules_forge.qwen_image21.capabilities import fixed_steps, quantization_precision
 from modules_forge.qwen_image21.core import (
     MAX_OUTPUT_PIXELS,
     MAX_REFERENCE_IMAGES,
     QwenImage21Error,
     Request,
+    installed_precision,
     precision_label,
-    runtime_manifest,
     runtime_status,
 )
 from modules_forge.qwen_image21.quantized_cache import saved_status
@@ -291,9 +292,11 @@ def poll(identifier, request: gr.Request, variant="preferred"):
             output, usable = (
                 gr.update(
                     value=str(path),
-                    label=("生成そのまま" if variant == "original" else "範囲外固定")
-                    if state.get("preserved_output_path")
-                    else "生成結果",
+                    label=(
+                        ("生成そのまま" if variant == "original" else "範囲外固定")
+                        if state.get("preserved_output_path")
+                        else "生成結果"
+                    ),
                 ),
                 True,
             )
@@ -392,7 +395,7 @@ def save_quantized(precision, request: gr.Request, local_model=""):
         identifier = STUDIO.prepare(precision, owner(request))
         return (
             identifier,
-            f"{precision.upper()}モデルを準備しています。",
+            f"{precision_label(precision)}モデルを準備しています。",
             gr.update(interactive=False),
             gr.update(visible=True, interactive=True),
             gr.update(active=True),
@@ -413,7 +416,7 @@ def poll_save(identifier, precision, request: gr.Request, local_model=""):
             text += f" · 経過 {state['elapsed']:.0f} 秒"
         return (
             text,
-            gr.update(interactive=done and not local_model and precision in {"int8", "w4a8"}),
+            gr.update(interactive=done and not local_model and quantization_precision(precision) in {"int8", "w4a8"}),
             gr.update(visible=not done, interactive=not done),
             gr.update(active=not done),
             gr.update(interactive=done),
@@ -421,7 +424,7 @@ def poll_save(identifier, precision, request: gr.Request, local_model=""):
     except JobNotFound as exc:
         return (
             str(exc),
-            gr.update(interactive=not local_model and precision in {"int8", "w4a8"}),
+            gr.update(interactive=not local_model and quantization_precision(precision) in {"int8", "w4a8"}),
             gr.update(visible=False),
             gr.update(active=False),
             gr.update(interactive=True),
@@ -437,14 +440,16 @@ def model_save_status(precision, identifier, request: gr.Request, local_model=""
                 return gr.update(), gr.update(interactive=False)
         except JobNotFound:
             pass
-    return saved_status(RUNTIME, precision), gr.update(interactive=precision in {"int8", "w4a8"})
+    return saved_status(RUNTIME, precision), gr.update(
+        interactive=quantization_precision(precision) in {"int8", "w4a8"}
+    )
 
 
 def profile_settings(precision, previous_precision, fun_acc=False):
-    turbo = precision in {"turbo_bf16", "turbo_q4_k_m"}
-    if turbo:
+    fixed = fixed_steps(precision)
+    if fixed is not None:
         return (
-            gr.update(value=4, interactive=False),
+            gr.update(value=fixed, interactive=False),
             gr.update(interactive=True),
             precision,
             gr.update(value=False, interactive=False),
@@ -458,14 +463,15 @@ def profile_settings(precision, previous_precision, fun_acc=False):
         )
     steps = (
         gr.update(value=40, interactive=True)
-        if previous_precision.startswith("turbo_")
+        if fixed_steps(previous_precision) is not None
         else gr.update(interactive=True)
     )
     return steps, gr.update(interactive=True), precision, gr.update(interactive=True)
 
 
 def fun_acc_settings(enabled, precision="int8"):
-    if enabled:
+    fixed = fixed_steps(precision)
+    if enabled and fixed is None:
         return (
             gr.update(interactive=True),
             gr.update(value=4, interactive=False),
@@ -476,7 +482,7 @@ def fun_acc_settings(enabled, precision="int8"):
         )
     return (
         gr.update(interactive=True),
-        gr.update(value=4 if precision.startswith("turbo_") else 40, interactive=not precision.startswith("turbo_")),
+        gr.update(value=fixed or 40, interactive=fixed is None),
         gr.update(interactive=True),
         gr.update(interactive=True),
         gr.update(interactive=True),
@@ -485,15 +491,7 @@ def fun_acc_settings(enabled, precision="int8"):
 
 
 def default_precision():
-    try:
-        runtime_manifest(RUNTIME, "base_q4_k_m")
-    except QwenImage21Error:
-        try:
-            runtime_manifest(RUNTIME, "int8")
-        except QwenImage21Error:
-            return "base_q4_k_m"
-        return "int8"
-    return "base_q4_k_m"
+    return installed_precision(RUNTIME) or "base_q4_k_m"
 
 
 def refresh_saved_after_generation(identifier, precision, request: gr.Request):
@@ -524,9 +522,11 @@ def assistant_status(identifier, request: gr.Request):
         html.escape(str(state.get("progress", 0)), quote=True),
         html.escape(label, quote=True),
         html.escape(f"Qwen Image 2.1 · {precision}", quote=True),
-        "qwen21-output"
-        if state.get("operation") != "prepare" and state["done"] and state["state"] == "complete"
-        else "",
+        (
+            "qwen21-output"
+            if state.get("operation") != "prepare" and state["done"] and state["state"] == "complete"
+            else ""
+        ),
         html.escape(identifier, quote=True),
     )
 
@@ -753,19 +753,25 @@ def model_guidance(precision):
         "w4a8": "重み4bit・演算8bit · INT8より重みを省メモリ化。速さは環境と設定によります。",
         "int8": "8bit · W4A8より重みは大きめ。Fun Acc / ControlNetに対応。",
         "bf16": "16bit · 量子化なし。通常版で最も多くメモリを使います。",
-        "turbo_q4_k_m": "4bit GGUF · 4 steps固定の高速モデル。通常版とは画質・編集特性が異なります。",
-        "turbo_bf16": "16bit · 4 steps固定の高速モデル。Turbo Q4より重みは大きめ。",
+        "turbo_official_w4a8": "公式Turbo · 重み4bit・演算8bit · 8 steps固定。",
+        "turbo_official_int8": "公式Turbo · 8bit · 8 steps固定。",
+        "turbo_official_bf16": "公式Turbo · 16bit · 8 steps固定。",
+        "turbo_q4_k_m": "Viggle Turbo · 4bit GGUF · 4 steps固定。通常版とは画質・編集特性が異なります。",
+        "turbo_bf16": "Viggle Turbo · 16bit · 4 steps固定。Turbo Q4より重みは大きめ。",
     }.get(precision, "")
 
 
-def generation_summary(precision, steps, resolution, width=1024, height=1024):
+def generation_summary(precision, steps, resolution, width=1024, height=1024, fun_acc=False):
     models = {
         "base_q4_k_m": "Q4_K_M",
         "int8": "INT8",
         "w4a8": "W4A8",
         "bf16": "BF16",
-        "turbo_bf16": "Turbo BF16",
-        "turbo_q4_k_m": "Turbo Q4_K_M",
+        "turbo_official_w4a8": "公式Turbo W4A8",
+        "turbo_official_int8": "公式Turbo INT8",
+        "turbo_official_bf16": "公式Turbo BF16",
+        "turbo_bf16": "Viggle Turbo BF16",
+        "turbo_q4_k_m": "Viggle Turbo Q4_K_M",
     }
     if resolution == "custom":
         try:
@@ -775,7 +781,7 @@ def generation_summary(precision, steps, resolution, width=1024, height=1024):
             return str(exc)
     else:
         size = "編集元と同じサイズ" if resolution == "reference" else resolution.replace("x", "×")
-    return f"{models.get(precision, precision)} · {int(steps)} steps · {size}"
+    return f"{models.get(precision, precision)} · {fixed_steps(precision, fun_acc) or int(steps)} steps · {size}"
 
 
 def lora_choices():
@@ -1229,8 +1235,11 @@ def on_ui_tabs():
                                 ("通常 · W4A8 · 省メモリ", "w4a8"),
                                 ("通常 · INT8 · 8bit", "int8"),
                                 ("通常 · BF16 · メモリ大", "bf16"),
-                                ("Turbo · Q4_K_M · 4 steps", "turbo_q4_k_m"),
-                                ("Turbo · BF16 · 4 steps", "turbo_bf16"),
+                                ("公式Turbo · W4A8 · 8 steps", "turbo_official_w4a8"),
+                                ("公式Turbo · INT8 · 8 steps", "turbo_official_int8"),
+                                ("公式Turbo · BF16 · 8 steps", "turbo_official_bf16"),
+                                ("Viggle Turbo · Q4_K_M · 4 steps", "turbo_q4_k_m"),
+                                ("Viggle Turbo · BF16 · 4 steps", "turbo_bf16"),
                             ],
                             value=selected_precision,
                             label="モデル・精度",
@@ -1277,10 +1286,19 @@ def on_ui_tabs():
                     fun_acc = gr.Checkbox(
                         value=False,
                         label="Fun Acc · 4 steps（通常モデル）",
+                        interactive=fixed_steps(selected_precision) is None,
                         info="4 stepsで高速生成。細部の再現性は下がる場合があります。",
                         elem_id="qwen21-fun-acc",
                     )
-                    steps = gr.Slider(1, 100, value=40, step=1, label="Steps", elem_id="qwen21-steps")
+                    steps = gr.Slider(
+                        1,
+                        100,
+                        value=fixed_steps(selected_precision) or 40,
+                        step=1,
+                        label="Steps",
+                        interactive=fixed_steps(selected_precision) is None,
+                        elem_id="qwen21-steps",
+                    )
                     transparent = gr.Checkbox(value=False, label="透過背景を指示（RGBA PNG）")
                     with gr.Accordion(
                         "ControlNet · OFF", open=False, elem_id="qwen21-control-section"
@@ -1369,14 +1387,15 @@ def on_ui_tabs():
                     with gr.Accordion("実行環境・初回準備", open=False, elem_id="qwen21-environment"):
                         gr.Markdown(
                             "通常版: [Unsloth Q4_K_M](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF)"
-                            " · Turbo: [Viggle BF16](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo)"
+                            " · [公式Turbo](https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo)"
+                            " · Viggle Turbo: [BF16](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo)"
                             " · [Q4_K_M GGUF](https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF)"
                         )
                         with gr.Row():
                             save_model = gr.Button(
                                 "変換モデルを保存",
                                 size="sm",
-                                interactive=selected_precision in {"int8", "w4a8"},
+                                interactive=quantization_precision(selected_precision) in {"int8", "w4a8"},
                                 elem_id="qwen21-save-model",
                             )
                             stop_save = gr.Button("保存を停止", size="sm", visible=False, elem_id="qwen21-stop-save")
@@ -1393,8 +1412,9 @@ def on_ui_tabs():
                         credential_controls("qwen21")
                         gr.Markdown("初回は `aikimi-qwen-image21-setup.bat` で専用環境とモデルを準備します。")
                         gr.Markdown("公式フル版 (INT8 / W4A8 / BF16): `aikimi-qwen-image21-setup.bat --official-full`")
-                        gr.Markdown("Turbo BF16: `aikimi-qwen-image21-setup.bat --turbo-bf16-only`")
-                        gr.Markdown("Turbo Q4_K_M: `aikimi-qwen-image21-setup.bat --turbo-q4-only`")
+                        gr.Markdown("公式Turbo: `aikimi-qwen-image21-setup.bat --official-turbo-only`")
+                        gr.Markdown("Viggle Turbo BF16: `aikimi-qwen-image21-setup.bat --turbo-bf16-only`")
+                        gr.Markdown("Viggle Turbo Q4_K_M: `aikimi-qwen-image21-setup.bat --turbo-q4-only`")
                         gr.Markdown("書き換えを追加: `aikimi-qwen-image21-setup.bat --prompt-rewriter-only`")
                         gr.Markdown(
                             "編集用の書き換えを追加: `aikimi-qwen-image21-setup.bat --edit-prompt-rewriter-only`"
@@ -1410,7 +1430,8 @@ def on_ui_tabs():
                 with gr.Column(scale=0, min_width=0, elem_id="qwen21-run-dock"):
                     lora_gate = gr.Markdown("", elem_id="qwen21-lora-gate")
                     settings_summary = gr.Markdown(
-                        generation_summary(selected_precision, 40, "1024x1024"), elem_id="qwen21-settings-summary"
+                        generation_summary(selected_precision, fixed_steps(selected_precision) or 40, "1024x1024"),
+                        elem_id="qwen21-settings-summary",
                     )
                     with gr.Row(elem_id="qwen21-actions"):
                         generate = gr.Button("生成・編集", variant="primary", elem_id="qwen21-generate")
@@ -1442,10 +1463,10 @@ def on_ui_tabs():
         swap_size.click(
             lambda w, h: (h, w, "custom"), inputs=[width, height], outputs=[width, height, resolution], **PRIVATE
         )
-        for component in (precision, steps, resolution, width, height):
+        for component in (precision, steps, resolution, width, height, fun_acc):
             component.change(
                 generation_summary,
-                inputs=[precision, steps, resolution, width, height],
+                inputs=[precision, steps, resolution, width, height, fun_acc],
                 outputs=settings_summary,
                 **PRIVATE,
             )

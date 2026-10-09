@@ -84,14 +84,14 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(resolved.outpaint_margins, (32, 0, 32, 0))
 
     def test_all_model_profiles_preserve_outpaint_geometry_and_accept_style(self):
-        from modules_forge.qwen_image21.capabilities import PRECISIONS
+        from modules_forge.qwen_image21.capabilities import PRECISIONS, fixed_steps
 
         for precision in PRECISIONS:
             with self.subTest(precision=precision):
                 resolved = replace(
                     self.request,
                     precision=precision,
-                    steps=4 if precision.startswith("turbo_") else 25,
+                    steps=fixed_steps(precision) or 25,
                     style_loras=({"name": "style.safetensors", "strength": 0.75},),
                     rewrite_edit_prompt=True,
                     transparent=True,

@@ -24,9 +24,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from modules_forge.qwen_image21.capabilities import PRECISIONS, fixed_steps, quantization_precision  # noqa: E402
 from modules_forge.qwen_image21.quantized_cache import INT8_SKIP_MODULES  # noqa: E402
 from modules_forge.qwen_image21.regular_gguf import MODEL_ID as REGULAR_MODEL_ID  # noqa: E402
 from modules_forge.qwen_image21.regular_gguf import REVISION as REGULAR_REVISION  # noqa: E402
+from modules_forge.qwen_image21.turbo import (  # noqa: E402
+    OFFICIAL_PRECISIONS,
+    OFFICIAL_SIGMAS,
+    sampling_sigmas,
+    scheduler_directory,
+    transformer_directory,
+)
 from modules_forge.qwen_image21.turbo import PROFILES as TURBO_PROFILES  # noqa: E402
 
 DIFFUSERS_REVISION = "6256aa7666cedd47443adc8f82da9a10e110b09c"
@@ -151,7 +159,7 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
     if operation not in {"generate", "prepare"}:
         raise ValueError("Unsupported operation")
     for key, default, allowed in (
-        ("precision", "int8", {"int8", "bf16", "w4a8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m"}),
+        ("precision", "int8", PRECISIONS),
         ("memory_mode", "offload", {"offload", "gpu"}),
     ):
         value = payload.get(key, request.get(key, default))
@@ -212,8 +220,8 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         if [file_identity(Path(item["path"])) for item in lora_infos] != request["lora_sources"]:
             raise ValueError("The selected LoRA changed after submission. Select it again.")
     if request["precision"].startswith("turbo_"):
-        if steps != 4:
-            raise ValueError("Viggle Turbo requires exactly 4 steps.")
+        if steps != fixed_steps(request["precision"]):
+            raise ValueError(f"Turbo requires exactly {fixed_steps(request['precision'])} steps.")
         from modules_forge.qwen_image21.turbo import turbo_manifest
 
         turbo_manifest(runtime_root(model_path, request), request["precision"])
@@ -287,7 +295,7 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         if not all(isinstance(path, str) and Path(path).is_absolute() for path in (source_path, mask_path)):
             raise ValueError("Inpainting + Control requires absolute edit source and mask paths.")
         validate_edit_mask(source_path, mask_path, output_size=(request["width"], request["height"]))
-    if operation == "prepare" and request["precision"] not in {"int8", "w4a8"}:
+    if operation == "prepare" and quantization_precision(request["precision"]) not in {"int8", "w4a8"}:
         raise ValueError("Only INT8 and W4A8 models need conversion")
     return job, model_path, request
 
@@ -367,7 +375,20 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     started = time.monotonic()
     components: dict[str, Any] = {}
     local = bool(request.get("local_model"))
-    selected_transformer = transformer_path(model_path, request)
+    official = request["precision"] in OFFICIAL_PRECISIONS
+    precision = quantization_precision(request["precision"])
+    root = runtime_root(model_path, request)
+    selected_transformer = (
+        transformer_directory(root, request["precision"]) if official else transformer_path(model_path, request)
+    )
+    official_source = {}
+    if official and precision in {"int8", "w4a8"}:
+        from modules_forge.qwen_image21.turbo import turbo_manifest
+
+        official_source = {
+            "source_path": selected_transformer,
+            "source_record": turbo_manifest(root, request["precision"]),
+        }
     if local and selected_transformer.is_dir():
         from modules_forge.qwen_image21.local_source import validate_folder_tensors
 
@@ -384,11 +405,11 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         load_or_create,
     )
 
-    if request["precision"] in {"int8", "base_q4_k_m", "turbo_q4_k_m"}:
+    if precision in {"int8", "base_q4_k_m", "turbo_q4_k_m"}:
         loaders = [
             ("text_encoder", Qwen3VLForConditionalGeneration, TransformersBitsAndBytesConfig(load_in_8bit=True)),
         ]
-        if request["precision"] == "int8" and not convrot:
+        if precision == "int8" and not convrot:
             loaders.insert(
                 0,
                 (
@@ -409,7 +430,9 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
                 "int8",
                 skip_modules=INT8_SKIP_MODULES if name == "transformer" else (),
                 **(
-                    {"source_path": selected_transformer if name == "transformer" else model_path / name}
+                    official_source
+                    if official and name == "transformer"
+                    else {"source_path": selected_transformer if name == "transformer" else model_path / name}
                     if local and (name == "transformer" or model_path != cache_base)
                     else {}
                 ),
@@ -417,12 +440,18 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
 
             def load_int8(folder, *, cached=False, model_class=model_class, name=name, quantization=quantization):
                 loaded = model_class.from_pretrained(
-                    str(folder if cached else selected_transformer if local and name == "transformer" else folder),
+                    str(
+                        folder
+                        if cached
+                        else selected_transformer
+                        if (local or official) and name == "transformer"
+                        else folder
+                    ),
                     **(
                         {}
                         if cached
                         else {"quantization_config": quantization}
-                        if local and name == "transformer"
+                        if (local or official) and name == "transformer"
                         else {"subfolder": name, "quantization_config": quantization}
                     ),
                     torch_dtype=torch.bfloat16,
@@ -479,7 +508,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             else:
                 components["transformer"] = load_gguf_transformer(model_path)
             _check_cancel(job)
-    elif request["precision"] == "w4a8":
+    elif precision == "w4a8":
         from modules_forge.qwen_image21.w4a8 import load_model, load_saved_model, save_model, validate_dependency
 
         validate_dependency()
@@ -490,7 +519,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             _check_cancel(job)
             component_progress = 0.08 if name == "transformer" else 0.18
             _progress(job, "loading", f"{name} の W4A8 モデルを確認中", component_progress)
-            folder = selected_transformer if local and name == "transformer" else model_path / name
+            folder = selected_transformer if (local or official) and name == "transformer" else model_path / name
             if name == "transformer":
                 config = model_class.load_config(str(folder), local_files_only=True)
                 factory = partial(model_class.from_config, config)
@@ -513,7 +542,13 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
                 model_path,
                 name,
                 "w4a8",
-                **({"source_path": folder} if local and (name == "transformer" or model_path != cache_base) else {}),
+                **(
+                    official_source
+                    if official and name == "transformer"
+                    else {"source_path": folder}
+                    if local and (name == "transformer" or model_path != cache_base)
+                    else {}
+                ),
             )
             saved, disk_cache[name] = load_or_create(
                 cache_base,
@@ -530,10 +565,10 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             components[name] = component
             torch.cuda.empty_cache()
             _check_cancel(job)
-    elif request["precision"] == "turbo_bf16":
+    elif request["precision"] == "turbo_bf16" or official and precision == "bf16":
         _progress(job, "loading", "Turbo BF16 Transformerを読み込み中", 0.10)
         components["transformer"] = QwenImage21Transformer2DModel.from_pretrained(
-            str(runtime_root(model_path, request) / "turbo" / "bf16"),
+            str(transformer_directory(root, request["precision"]).parent),
             subfolder="transformer",
             torch_dtype=torch.bfloat16,
             local_files_only=True,
@@ -583,7 +618,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         from diffusers import FlowMatchEulerDiscreteScheduler
 
         pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
-            str(runtime_root(model_path, request) / "turbo"), subfolder="scheduler", local_files_only=True
+            str(scheduler_directory(root, request["precision"])), local_files_only=True
         )
         if pipe.scheduler.config.shift_terminal is not None:
             raise RuntimeError("Turbo scheduler must have shift_terminal=null.")
@@ -738,11 +773,11 @@ def _check_bf16_gpu_capacity(model_path: Path, request: dict[str, Any], torch) -
     Use total capacity so a resident pipeline's own allocation is not counted
     against it again when processing the next request.
     """
-    if request["memory_mode"] != "gpu" or request["precision"] not in {"bf16", "turbo_bf16"}:
+    if request["memory_mode"] != "gpu" or quantization_precision(request["precision"]) not in {"bf16", "turbo_bf16"}:
         return
     transformer = transformer_path(model_path, request)
-    if request["precision"] == "turbo_bf16":
-        transformer = model_path.parent / "turbo" / "bf16" / "transformer"
+    if request["precision"] == "turbo_bf16" or request["precision"] in OFFICIAL_PRECISIONS:
+        transformer = transformer_directory(runtime_root(model_path, request), request["precision"])
     indexes = (
         transformer / "diffusion_pytorch_model.safetensors.index.json",
         model_path / "text_encoder" / "model.safetensors.index.json",
@@ -774,6 +809,13 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         job, model_path, request = _read_request(payload)
         _check_cancel(job)
+        sigmas = (
+            sampling_sigmas(runtime_root(model_path, request), request["precision"])
+            if request["precision"] in OFFICIAL_PRECISIONS
+            else None
+        )
+        if request["precision"] in OFFICIAL_PRECISIONS and sigmas is None:
+            raise ValueError("Official Turbo sampling sigmas are missing.")
         if request.get("operation") == "prepare":
             from modules_forge.qwen_image21.quantized_cache import saved_components
 
@@ -892,9 +934,22 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 torch.tensor(config["pdd_sigmas"], dtype=torch.float32),
                 config["pdd_block_size"],
             )
+        sampling_timesteps = [] if request["precision"] in OFFICIAL_PRECISIONS else None
+        expected_timesteps = [1000 * sigma for sigma in OFFICIAL_SIGMAS]
 
         def on_step(_pipe, step: int, _timestep, callback_kwargs: dict) -> dict:
             _check_cancel(job)
+            if sampling_timesteps is not None:
+                position = len(sampling_timesteps)
+                timestep = float(_timestep)
+                # The scheduler's FP32 timesteps have small scalar roundoff.
+                if (
+                    step != position
+                    or position >= len(expected_timesteps)
+                    or not math.isclose(timestep, expected_timesteps[position], rel_tol=0.0, abs_tol=0.001)
+                ):
+                    raise RuntimeError(f"Official Turbo sampling timestep mismatch at step {step + 1}.")
+                sampling_timesteps.append(timestep)
             if pdd_callback is not None:
                 pdd_callback(_pipe, step, _timestep, callback_kwargs)
             if step + 1 == request["steps"]:
@@ -926,12 +981,17 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 return_dict=True,
                 callback_on_step_end=on_step,
                 callback_on_step_end_tensor_inputs=[],
+                **({"sigmas": sigmas} if sigmas is not None else {}),
             )
         finally:
             if controlnet is not None:
                 controlnet.clear_control()
         sampling_seconds = time.monotonic() - sampling_started
         _check_cancel(job)
+        if sampling_timesteps is not None and len(sampling_timesteps) != len(expected_timesteps):
+            raise RuntimeError(
+                f"Official Turbo must execute {len(expected_timesteps)} sampling steps; received {len(sampling_timesteps)}."
+            )
         image = output.images[0]
         if image.size != (request["width"], request["height"]):
             raise RuntimeError(
@@ -992,6 +1052,12 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "true_cfg_scale": 1.0,
             "scheduler": runtime["pipe"].scheduler.__class__.__name__,
             "scheduler_config": dict(runtime["pipe"].scheduler.config),
+            "sampling_sigmas": sigmas,
+            **(
+                {"sampling_timesteps": sampling_timesteps, "actual_steps": len(sampling_timesteps)}
+                if sampling_timesteps is not None
+                else {}
+            ),
             "use_kv_cache": controlnet is None and pdd_callback is None,
             "input_resolution": input_resolution,
             "input_image_count": len(images),
@@ -1000,7 +1066,9 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "w4a8": runtime.get("w4a8", {}),
             "convrot_int8": runtime.get("convrot_int8", {}),
             "quantized_cache": runtime.get("disk_cache", {}),
-            "int8_skip_modules": list(INT8_SKIP_MODULES) if request["precision"] == "int8" else [],
+            "int8_skip_modules": list(INT8_SKIP_MODULES)
+            if quantization_precision(request["precision"]) == "int8"
+            else [],
             "versions": runtime["versions"],
             "reused_model": reused,
             "memory": memory,

@@ -265,6 +265,8 @@ def prepare_rewriter(root, *, editing=False):
 
 
 def main(argv=None):
+    from modules_forge.qwen_image21.turbo import OFFICIAL_FILES, OFFICIAL_PRECISIONS, PROFILES
+
     parser = argparse.ArgumentParser(description="Qwen Image 2.1専用環境とモデルを準備")
     parser.add_argument("--root", type=Path, default=RUNTIME)
     parser.add_argument("--runtime-only", action="store_true", help="依存環境のみ導入。モデルは取得しません")
@@ -273,13 +275,16 @@ def main(argv=None):
     parser.add_argument("--download-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--shared-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--download-regular-gguf", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--download-turbo-profile", choices=["turbo_bf16", "turbo_q4_k_m"], help=argparse.SUPPRESS)
+    parser.add_argument("--download-turbo-profile", choices=list(PROFILES), help=argparse.SUPPRESS)
     model_group = parser.add_mutually_exclusive_group()
     model_group.add_argument(
         "--components-only", action="store_true", help="実行環境・共通部品のみ。本体モデルは取得しません"
     )
     model_group.add_argument(
         "--official-full", action="store_true", help="公式フルモデルを導入（INT8 / W4A8 / BF16用）"
+    )
+    model_group.add_argument(
+        "--official-turbo-only", action="store_true", help="公式8-step Turboを導入（INT8 / W4A8 / BF16用）"
     )
     model_group.add_argument("--turbo-bf16-only", action="store_true", help="Viggle Turbo BF16と共通部品を導入")
     model_group.add_argument(
@@ -304,7 +309,15 @@ def main(argv=None):
     parser.add_argument("--prepare-rewriter", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--prepare-edit-rewriter", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
-    turbo_profile = "turbo_bf16" if args.turbo_bf16_only else "turbo_q4_k_m" if args.turbo_q4_only else None
+    turbo_profile = (
+        OFFICIAL_PRECISIONS[0]
+        if args.official_turbo_only
+        else "turbo_bf16"
+        if args.turbo_bf16_only
+        else "turbo_q4_k_m"
+        if args.turbo_q4_only
+        else None
+    )
     only_rewriters = args.prompt_rewriter_only or args.edit_prompt_rewriter_only
     include_rewriter = args.prompt_rewriter_only or args.with_prompt_rewriter
     include_edit_rewriter = args.edit_prompt_rewriter_only or args.with_edit_prompt_rewriter
@@ -337,8 +350,6 @@ def main(argv=None):
 
         selected_model, selected_revision, _ = rewriter.profile(args.edit_prompt_rewriter_only)
         if turbo_profile:
-            from modules_forge.qwen_image21.turbo import PROFILES
-
             selected_model, selected_revision, _ = PROFILES[turbo_profile]
         elif not args.official_full and not only_rewriters:
             from modules_forge.qwen_image21.regular_gguf import MODEL_ID as GGUF_MODEL_ID
@@ -357,6 +368,8 @@ def main(argv=None):
                     "model_bytes": (
                         None
                         if only_rewriters
+                        else sum(entry["size"] for entry in OFFICIAL_FILES.values())
+                        if args.official_turbo_only
                         else 14_230_284_584
                         if turbo_profile == "turbo_bf16"
                         else 4_189_346_592
@@ -370,6 +383,8 @@ def main(argv=None):
                     else None,
                     "precision": ["nf4-double"]
                     if only_rewriters
+                    else list(OFFICIAL_PRECISIONS)
+                    if args.official_turbo_only
                     else [turbo_profile]
                     if turbo_profile
                     else ["int8", "w4a8", "bf16"]
@@ -377,7 +392,7 @@ def main(argv=None):
                     else ["base_q4_k_m"],
                     "license": (
                         f"https://huggingface.co/{selected_model}/blob/{selected_revision}/LICENSE"
-                        if only_rewriters
+                        if only_rewriters or args.official_turbo_only
                         else "https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo/blob/bafc91e4cc934f5fb1406b22496a0bed9b99c548/LICENSE"
                         if turbo_profile
                         else TERMS
@@ -467,6 +482,9 @@ def main(argv=None):
                 from modules_forge.qwen_image21.turbo import turbo_manifest
 
                 turbo_manifest(root, turbo_profile, verify_hashes=True)
+                if args.official_turbo_only:
+                    for precision in OFFICIAL_PRECISIONS[1:]:
+                        turbo_manifest(root, precision)
             elif not args.official_full:
                 from modules_forge.qwen_image21.regular_gguf import regular_manifest
 
@@ -481,8 +499,21 @@ def main(argv=None):
                     rewriter_manifest(root, verify_hashes=True, editing=True)
                 print("書き換え4bitモデルのSHA-256を確認しました。")  # noqa: T201
             return 0
-        print(f"Qwen Image 2.1の利用条件: {TERMS}")  # noqa: T201
-        python = install_environment(root)
+        terms = (
+            f"https://huggingface.co/{PROFILES[turbo_profile][0]}/blob/{PROFILES[turbo_profile][1]}/LICENSE"
+            if args.official_turbo_only
+            else TERMS
+        )
+        print(f"Qwen Image 2.1の利用条件: {terms}")  # noqa: T201
+        if args.official_turbo_only:
+            from modules_forge.qwen_image21_environment import environment_status
+
+            ready, _ = environment_status(root)
+            python = root / "worker-env" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            if not ready:
+                python = install_environment(root)
+        else:
+            python = install_environment(root)
         if args.runtime_only:
             atomic_json(
                 root / "runtime.json",
@@ -498,7 +529,7 @@ def main(argv=None):
             if args.components_only:
                 download_model(root, python, shared_only=True)
             elif turbo_profile:
-                for existing in ("int8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m"):
+                for existing in ("int8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m", *OFFICIAL_PRECISIONS):
                     try:
                         runtime_manifest(root, existing)
                     except QwenImage21Error:
@@ -509,7 +540,7 @@ def main(argv=None):
             elif args.official_full:
                 download_model(root, python)
             else:
-                for existing in ("int8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m"):
+                for existing in ("int8", "base_q4_k_m", "turbo_bf16", "turbo_q4_k_m", *OFFICIAL_PRECISIONS):
                     try:
                         runtime_manifest(root, existing)
                     except QwenImage21Error:

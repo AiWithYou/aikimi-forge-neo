@@ -12,6 +12,7 @@ from pathlib import Path
 import gradio as gr
 from PIL import Image, ImageDraw
 
+from modules_forge.qwen_image21.capabilities import PRECISIONS, fixed_steps
 from modules_forge.qwen_image21.outpaint import Plan, normalize_image, prepare, recipe, stitch
 from modules_forge.qwen_image21.outpaint_gui import canvas_markup, parse_canvas_commit
 from modules_forge.qwen_image21.ui_shared import register_outpaint
@@ -249,9 +250,11 @@ def draft_changed(source, left, top, right, bottom, version, scene, state, bindi
         "未反映の変更があります。[参照PNGの作成へ戻る ↑](#qwen21-outpaint-source)。"
         "入力を作成時の値に戻すと、前回の生成画像のまま完成画像を作れます。"
         if changed
-        else generated_status(state, generated, False)[1]
-        if valid_binding
-        else "今回の参照から生成した画像を選んでください。"
+        else (
+            generated_status(state, generated, False)[1]
+            if valid_binding
+            else "今回の参照から生成した画像を選んでください。"
+        )
     )
     return (
         changed,
@@ -553,9 +556,9 @@ def native_readiness(source, left, top, right, bottom, identifier, request: gr.R
     try:
         prepare(source, left, top, right, bottom)
     except (OSError, ValueError):
-        return gr.update(
-            interactive=False
-        ), "元画像を選ぶと生成できます。" if source is None else "広げる範囲を調整してください。"
+        return gr.update(interactive=False), (
+            "元画像を選ぶと生成できます。" if source is None else "広げる範囲を調整してください。"
+        )
     if shared:
         from modules_forge.qwen_image21.outpaint_profile import resolve
         from modules_forge.qwen_image21.style_lora import validate_installed
@@ -586,9 +589,10 @@ def shared_profile_summary(steps, version, *shared):
 
 
 def outpaint_step_settings(precision, fun_acc, steps, normal_steps):
-    fixed = precision.startswith("turbo_") or fun_acc
-    if fixed:
-        return gr.update(value=4, interactive=False), normal_steps if steps == 4 else steps
+    fixed = fixed_steps(precision, fun_acc)
+    if fixed is not None:
+        previous_fixed = {fixed_steps(item) for item in PRECISIONS} - {None}
+        return gr.update(value=fixed, interactive=False), normal_steps if steps in previous_fixed else steps
     return gr.update(value=normal_steps, interactive=True), normal_steps
 
 
@@ -602,9 +606,15 @@ def native_feather_settings(source, feather):
 
 
 def on_ui_tabs(profile_controls=None):
+    from modules_forge.qwen_image21.core import precision_label
     from modules_forge.qwen_image21.outpaint_profile import FIELDS
 
     shared_inputs = [profile_controls[name] for name in FIELDS] if profile_controls else []
+    initial_fixed = (
+        fixed_steps(profile_controls["precision"].value, profile_controls["fun_acc"].value)
+        if profile_controls
+        else None
+    )
     with gr.Blocks() as tab:
         state = gr.State(None)
         dirty = gr.State(False)
@@ -736,7 +746,20 @@ def on_ui_tabs(profile_controls=None):
                             gr.Markdown("モデル・画風LoRA・高速化・制御は上の**画像生成**で選択します。")
                         else:
                             native_precision = gr.Dropdown(
-                                choices=["base_q4_k_m", "int8", "w4a8", "bf16", "turbo_q4_k_m", "turbo_bf16"],
+                                choices=[
+                                    (precision_label(precision), precision)
+                                    for precision in (
+                                        "base_q4_k_m",
+                                        "int8",
+                                        "w4a8",
+                                        "bf16",
+                                        "turbo_official_w4a8",
+                                        "turbo_official_int8",
+                                        "turbo_official_bf16",
+                                        "turbo_q4_k_m",
+                                        "turbo_bf16",
+                                    )
+                                ],
                                 value="base_q4_k_m",
                                 label="Qwenモデル",
                                 elem_id="qwen21-outpaint-precision",
@@ -751,7 +774,13 @@ def on_ui_tabs(profile_controls=None):
                             elem_id="qwen21-outpaint-native-feather",
                         )
                         native_steps = gr.Slider(
-                            1, 100, value=25, step=1, label="Steps", elem_id="qwen21-outpaint-native-steps"
+                            1,
+                            100,
+                            value=initial_fixed or 25,
+                            step=1,
+                            label="Steps",
+                            interactive=initial_fixed is None,
+                            elem_id="qwen21-outpaint-native-steps",
                         )
                         normal_steps = gr.State(25)
                         native_seed = gr.Number(value=-1, precision=0, label="Seed（-1でランダム）")
@@ -763,9 +792,13 @@ def on_ui_tabs(profile_controls=None):
                     )
                     with gr.Column(elem_id="qwen21-outpaint-run-dock"):
                         profile_summary = gr.Markdown(
-                            shared_profile_summary(25, "v2", *(component.value for component in shared_inputs))
-                            if shared_inputs
-                            else "",
+                            (
+                                shared_profile_summary(
+                                    initial_fixed or 25, "v2", *(component.value for component in shared_inputs)
+                                )
+                                if shared_inputs
+                                else ""
+                            ),
                             elem_id="qwen21-outpaint-profile-summary",
                         )
                         with gr.Row(elem_id="qwen21-outpaint-actions"):
@@ -1045,7 +1078,14 @@ def on_ui_tabs(profile_controls=None):
                     outputs=[native_steps, normal_steps],
                     **PRIVATE,
                 )
-            native_steps.input(lambda value: value, inputs=native_steps, outputs=normal_steps, **PRIVATE)
+        else:
+            native_precision.change(
+                lambda precision, steps, normal: outpaint_step_settings(precision, False, steps, normal),
+                inputs=[native_precision, native_steps, normal_steps],
+                outputs=[native_steps, normal_steps],
+                **PRIVATE,
+            )
+        native_steps.input(lambda value: value, inputs=native_steps, outputs=normal_steps, **PRIVATE)
     return [(tab, "Qwen Outpaint", "qwen_image21_outpaint")]
 
 

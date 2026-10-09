@@ -1,12 +1,12 @@
 # Qwen Image 2.1
 
-QwenのDiffusersパイプラインを専用環境で実行する画像生成・編集タブです。通常版はUnslothのQ4_K_M GGUFを既定で導入し、Viggleの4ステップTurbo重みも選べます。Neo本体の依存関係は変更しません。
+QwenのDiffusersパイプラインを専用環境で実行する画像生成・編集タブです。通常版はUnslothのQ4_K_M GGUFを既定で導入し、[公式Turboの8 steps](../../docs/qwen21-official-turbo.md)とViggle Turboの4 stepsも選べます。Neo本体の依存関係は変更しません。
 
 ## v3.0.0の操作
 
 解像度プリセットを選んでから、**幅 px／高さ px**を直接変更できます。手入力すると「カスタム」に切り替わり、**縦横入替**で向きを変えられます。各辺256〜4096 px・32の倍数・合計約4.30 MPが上限です。端数を勝手に丸めません。「編集元と同じサイズ」を選ぶと数値欄が無効になり、実際の参照画像の寸法を使います。マスク外固定もこの元サイズを使います。
 
-通常版は **Q4_K_M → W4A8 → INT8 → BF16** の順で表示します。W4A8はINT8より重みのメモリを節約しますが、速度の順位を示すものではありません。Fun Accは通常版4精度、ControlNetは通常版とTurboで使用できます。Turboは別の4 stepsモデルとして区別します。必要VRAMは解像度、参照画像、CPU退避でも変わります。
+通常版は **Q4_K_M → W4A8 → INT8 → BF16** の順で表示します。W4A8はINT8より重みのメモリを節約しますが、速度の順位を示すものではありません。公式TurboはW4A8／INT8／BF16・8 steps、Viggle TurboはQ4_K_M／BF16・4 stepsとして区別します。Fun Accは通常版4精度、ControlNetは通常版とTurboで使用できます。必要VRAMは解像度、参照画像、CPU退避でも変わります。
 
 <a id="outpaint補助"></a>
 
@@ -19,17 +19,18 @@ QwenのDiffusersパイプラインを専用環境で実行する画像生成・�
 3. 必要なら描き足す内容を入力し、**生成**。同じ画像領域が**生成結果**に切り替わり、**結果のPNGを保存**できます。Qwenが余白を生成し、元画像の合成まで自動で行います。生成中は停止でき、前回の結果は残ります。
 4. **生成結果をさらに広げる**で、完成PNGを次の元画像にできます。余白と説明は引き継ぎます。生成は自動で始まりません。**最初の元画像に戻す**で直前にアップロードした画像へ戻れます。画像を差し替える場合は、プレビュー上の**元画像 … · 変更**を開きます。
 
-**モデル・画風LoRA・高速化・制御は「画像生成」で設定し、Outpaintへ引き継ぎます。** 通常版Q4_K_M／INT8／W4A8／BF16、Turbo BF16／Q4_K_M、複数の画風LoRAと強度、Fun Acc、Sparse、ControlNet、ローカル互換本体が共通です。生成ボタン上に次の生成の条件を表示し、結果の生成情報には開始時の条件を残します。元画像・余白・描き足す内容はOutpaint側の入力を使います。通常の編集マスクや描き込みは引き継ぎません。
+**モデル・画風LoRA・高速化・制御は「画像生成」で設定し、Outpaintへ引き継ぎます。** 通常版Q4_K_M／INT8／W4A8／BF16、公式Turbo W4A8／INT8／BF16、Viggle Turbo BF16／Q4_K_M、複数の画風LoRAと強度、Fun Acc、Sparse、ControlNet、ローカル互換本体が共通です。生成ボタン上に次の生成の条件を表示し、結果の生成情報には開始時の条件を残します。元画像・余白・描き足す内容はOutpaint側の入力を使います。通常の編集マスクや描き込みは引き継ぎません。
 
-Outpaintの「生成設定」でLoRA v2／v1／なし、Steps（通常版の初期値25）、Seed、境界幅を変更できます。Turbo／Fun Accでは4 stepsに固定し、通常版へ戻すとOutpaintのStepsを戻します。「なし」は追加Outpaint LoRAの準備が不要で、画風LoRAの選択はそのまま使えます。LoRAの有無を比較するときは同じSeed・Steps・余白・境界幅を指定してください。境界幅0では元画像の全画素を保持し、初期値32では広げた辺から元画像の内側32 pxも生成画像となじませます。再拡張時の「元画像」は直前の生成結果です。
+Outpaintの「生成設定」でLoRA v2／v1／なし、Steps（通常版の初期値25）、Seed、境界幅を変更できます。公式Turboは8 steps、Viggle Turbo／Fun Accは4 stepsに固定し、通常版へ戻すとOutpaintのStepsを戻します。「なし」は追加Outpaint LoRAの準備が不要で、画風LoRAの選択はそのまま使えます。LoRAの有無を比較するときは同じSeed・Steps・余白・境界幅を指定してください。境界幅0では元画像の全画素を保持し、初期値32では広げた辺から元画像の内側32 pxも生成画像となじませます。再拡張時の「元画像」は直前の生成結果です。
 
 | 組み合わせ | 対応範囲 |
 | --- | --- |
 | 通常版4精度＋Outpaint v1／v2／なし＋画風LoRA | 対応。LoRA形式・形状・学習時の量子化差の確認は共通です。 |
 | 通常版＋Fun Acc＋Outpaint／画風LoRA／ControlNet | 対応。4 steps・PDDスケジューラ・KVキャッシュOFF。追加LoRA・制御との画質は実験扱いです。 |
-| Turbo＋Outpaint／画風LoRA／ControlNet | 対応。4 steps・Viggleスケジューラ。追加LoRA・制御との画質は実験扱いです。 |
+| 公式Turbo＋Outpaint／画風LoRA／ControlNet | 対応。8 steps・公式sigma列とスケジューラ。追加LoRA・制御との画質は実験扱いです。 |
+| Viggle Turbo＋Outpaint／画風LoRA／ControlNet | 対応。4 steps・Viggleスケジューラ。追加LoRA・制御との画質は実験扱いです。 |
 | Sparse＋通常版／Turbo＋Outpaint／画風LoRA | 対応。KVキャッシュが必要です。短い入力ではdenseへ戻る場合があります。 |
-| Turbo＋Fun Acc | 非対応。異なる4-step方式が衝突します。 |
+| Turbo＋Fun Acc | 非対応。異なる高速化方式が衝突します。 |
 | Sparse＋Fun Acc／ControlNet | 非対応。Fun Acc／ControlNetはKVキャッシュを無効にします。 |
 | ローカル互換本体＋Outpaint／Fun Acc／画風LoRA | 対応。構造・形状・必要な共通部品を検証します。Turbo選択との同時指定は受け付けません。 |
 
@@ -258,7 +259,7 @@ CPU退避では、PNG保存後に未使用のPyTorch GPUキャッシュを解放
 - 通常版GGUF: `unsloth/Qwen-Image-2.1-GGUF`、revision `2c31ccd392b367a6637841a143813320a02dff55`、`qwen-image-2.1-Q4_K_M.gguf`
 - Diffusers: `6256aa7666cedd47443adc8f82da9a10e110b09c`（Qwen Image 2.1対応の公式コミット）
 - Transformers 5.17.0、bitsandbytes 0.50.2、comfy-kitchen 0.2.31、Accelerate 1.15.0
-- PyTorch 2.11.0 / CUDA 13.0。対応するNVIDIAドライバーとBF16対応GPUが必要です。
+- PyTorch 2.13.0 / CUDA 13.0。対応するNVIDIAドライバーとBF16対応GPUが必要です。
 
 導入内容の表示だけなら`aikimi-qwen-image21-setup.bat --dry-run`、環境だけの準備は`--runtime-only`、モデルの完全性の再検証は`--verify`を付けて実行します。生成時にはモデルを自動取得しません。不足があればセットアップ方法を表示します。
 

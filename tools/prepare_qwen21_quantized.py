@@ -16,7 +16,12 @@ if str(ROOT) not in sys.path:
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT / "models/Qwen-Image-2.1")
-    parser.add_argument("--precision", nargs="+", choices=("int8", "w4a8"), default=["w4a8", "int8"])
+    parser.add_argument(
+        "--precision",
+        nargs="+",
+        choices=("int8", "w4a8", "turbo_official_int8", "turbo_official_w4a8"),
+        default=["w4a8", "int8"],
+    )
     parser.add_argument("--verify", action="store_true", help="Verify all saved component SHA-256 values")
     parser.add_argument(
         "--reload", action="store_true", help="Release RAM and confirm the second load uses saved weights"
@@ -28,7 +33,7 @@ def main(argv=None):
         print(json.dumps({"root": str(root), "precision": args.precision, "save": str(root / "quantized")}, indent=2))  # noqa: T201
         return 0
     from modules_forge.qwen_image21.core import runtime_lock, runtime_manifest
-    from modules_forge.qwen_image21.quantized_cache import cache_path, component_identity, manifest
+    from modules_forge.qwen_image21.quantized_cache import saved_components
     from tools import qwen_image21_worker as worker
 
     lease = runtime_lock(root)
@@ -36,21 +41,12 @@ def main(argv=None):
     job = root / "quantized" / "preparation"
     job.mkdir(parents=True, exist_ok=True)
     try:
-        runtime_manifest(root)
         for precision in dict.fromkeys(args.precision):
+            runtime_manifest(root, precision)
             if args.verify:
-                for component in ("transformer", "text_encoder"):
-                    identity = component_identity(
-                        root / "model",
-                        component,
-                        precision,
-                        skip_modules=worker.INT8_SKIP_MODULES
-                        if precision == "int8" and component == "transformer"
-                        else (),
-                    )
-                    path = cache_path(root / "model", identity)
-                    manifest(path, identity, verify_hashes=True)
-                    report["runs"].append({"precision": precision, "component": component, "verified": str(path)})
+                saved = saved_components(root / "model", precision, verify_hashes=True)
+                for component, info in saved.items():
+                    report["runs"].append({"precision": precision, "component": component, "verified": info["path"]})
                 continue
             for attempt in range(2 if args.reload else 1):
                 runtime = worker._load_runtime(root / "model", {"precision": precision, "memory_mode": "offload"}, job)
