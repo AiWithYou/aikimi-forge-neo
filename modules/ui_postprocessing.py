@@ -49,13 +49,16 @@ def create_ui():
     submit_click_inputs = [dummy_component, tab_index, extras_image, image_batch, extras_batch_input_dir, extras_batch_output_dir, show_extras_results, extras_video_input, *script_inputs]
 
     submit.click(
-        fn=call_queue.wrap_gradio_gpu_call(postprocessing.run_postprocessing_webui, extra_outputs=[None, ""]),
+        fn=ui_common.wrap_gradio_gallery_paths(
+            call_queue.wrap_gradio_gpu_call(postprocessing.run_postprocessing_webui, extra_outputs=[None, ""])
+        ),
         _js="submit_extras",
         inputs=submit_click_inputs,
         outputs=[
             output_panel.gallery,
             output_panel.generation_info,
             output_panel.html_log,
+            output_panel.saved_paths,
         ],
         show_progress=False,
     )

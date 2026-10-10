@@ -9,7 +9,7 @@ import torch
 from safetensors.torch import load_file
 
 from .outpaint_runtime import OutpaintLinear
-from .style_lora import fingerprint, validate_installed
+from .style_lora import cache_key, fingerprint, validate_installed, validate_options
 
 
 class StyleLinear(OutpaintLinear):
@@ -33,6 +33,7 @@ def load_adapters(transformer, runtime: Path, request: dict) -> list[dict]:
     # Stage every adapter before mutating the model, including shared targets.
     for info in infos:
         state = load_file(info["path"], device="cpu")
+        adapter_key = (str(Path(info["path"]).resolve()), fingerprint(Path(info["path"])))
         targets_seen = set()
         for name, group in info["groups"].items():
             down, up = state[group["down"]], state[group["up"]]
@@ -66,11 +67,14 @@ def load_adapters(transformer, runtime: Path, request: dict) -> list[dict]:
                 # Quantized weight storage can have packed dimensions (GGUF/W4A8).
                 if (base.out_features, base.in_features) != (target_up.shape[0], down.shape[1]):
                     raise ValueError(f"{info['name']}: LoRAとモデルの形状が一致しません: {target}")
-                replacements[target] = StyleLinear(base, down, target_up, scale)
+                replacement = StyleLinear(base, down, target_up, scale)
+                replacement.adapter_key = adapter_key
+                replacement.scale_per_strength = alpha / rank
+                replacements[target] = replacement
         applied.append(
             {key: value for key, value in info.items() if key not in {"groups", "metadata"}}
             | {
-                "sha256": fingerprint(Path(info["path"])),
+                "sha256": adapter_key[1],
                 "applied_layers": len(targets_seen),
                 "base_precision": request["precision"],
                 "experimental_base_mismatch": info["base_mismatch"],
@@ -80,3 +84,23 @@ def load_adapters(transformer, runtime: Path, request: dict) -> list[dict]:
         parent, attribute = target.rsplit(".", 1)
         setattr(transformer.get_submodule(parent), attribute, module)
     return applied
+
+
+def update_strengths(transformer, loaded: list[dict], runtime: Path, request: dict) -> list[dict]:
+    """Update resident residuals atomically; leave disabled adapters ready to reuse."""
+    validate_options(request)
+    keys, _ = cache_key(runtime, request)
+    active = [item for item in request.get("style_loras", ()) if item["strength"] != 0]
+    available = {(str(Path(info["path"]).resolve()), info["sha256"]): info for info in loaded}
+    if any(key not in available for key in keys):
+        raise ValueError("追加LoRAの読み込み状態が変わりました。モデルを読み込み直してください。")
+    if not request.get("allow_lora_base_mismatch", False) and any(available[key]["base_mismatch"] for key in keys):
+        raise ValueError("ConvRot INT8用です。「異なる量子化で試す」をONにした実験のみ可能です。")
+    strengths = {key: item["strength"] for key, item in zip(keys, active, strict=True)}
+    for module in transformer.modules():
+        if isinstance(module, StyleLinear) and hasattr(module, "adapter_key"):
+            module.scale = strengths.get(module.adapter_key, 0) * module.scale_per_strength
+    return [
+        {**available[key], "name": item["name"], "strength": item["strength"]}
+        for key, item in zip(keys, active, strict=True)
+    ]

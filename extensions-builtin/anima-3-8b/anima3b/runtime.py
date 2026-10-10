@@ -575,6 +575,8 @@ class Anima3BRuntime:
                 self._unload_patchers(native_clip.patcher)
             return result
 
+        sd_model.prepare_reference_latents(prompt)
+
         if self._active_bundle_metadata is not None:
             return self._encode_v2(native_engine, native_clip, prompt)
 

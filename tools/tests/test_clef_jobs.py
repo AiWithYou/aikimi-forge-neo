@@ -65,6 +65,116 @@ def test_batch_stop_keeps_first_result_and_marks_remaining(tmp_path):
     assert (directory / "results.csv").is_file()
 
 
+def test_batch_publishes_each_item_without_serializing_the_full_batch_again(tmp_path, monkeypatch):
+    import modules_forge.clef.service as service
+    import tools.clef_worker as worker
+    from modules_forge.clef.collection import parse_records
+
+    directory = tmp_path / "run"
+    count = 32
+    items = snapshot_inputs(parse_records("\n".join(f"record {index}" for index in range(count)), "lines"), directory)
+    atomic_json(directory / "request.json", request())
+    atomic_json(directory / "result.json", {"request": request(), "items": items, "status": "running"})
+    studio = Studio(tmp_path / "runtime", tmp_path / "outputs")
+    studio.jobs["run"] = service.Job("owner", directory, Mock())
+    serialized_items = []
+    original = worker.atomic_json
+    calls = []
+
+    def save(path, value):
+        serialized_items.append(len(value.get("items", [])))
+        return original(path, value)
+
+    def decide(value):
+        visible = studio.status("run", "owner")["result"]
+        assert sum(item["status"] == "done" for item in visible["items"]) == len(calls)
+        calls.append(value["state"])
+        return {"answers": {}, "usage": {"input_tokens": 2}}
+
+    monkeypatch.setattr(worker, "atomic_json", save)
+    result = process_run(directory, SimpleNamespace(decide=decide))
+    assert result["status"] == "complete" and len(calls) == count
+    assert sum(serialized_items) == count, "Only the final aggregate may serialize all items"
+    assert len((directory / "results.jsonl").read_text(encoding="utf-8").splitlines()) == count
+    assert json.loads((directory / "result.json").read_text(encoding="utf-8")) == result
+    studio.jobs.clear()
+
+
+def test_partial_result_reader_ignores_an_unfinished_utf8_journal_tail(tmp_path):
+    from modules_forge.clef.core import read_result
+
+    directory = tmp_path / "run"
+    atomic_json(directory / "result.json", {"status": "running", "items": [{"id": "0", "status": "pending"}]})
+    completed = {"item": {"id": "0", "status": "done", "answers": {}}, "seconds": 0.5}
+    (directory / "results.jsonl").write_bytes(json.dumps(completed).encode() + b"\n" + b'{"name":"\xe6\x97')
+    result = read_result(directory)
+    assert result["items"][0]["status"] == "done" and result["seconds"] == 0.5
+
+
+def test_resume_recovers_journal_results_and_does_not_repeat_completed_inference(tmp_path, monkeypatch):
+    import modules_forge.clef.service as service
+    from modules_forge.clef.core import PREPROCESSING_VERSION, fingerprint
+
+    identifier = "20261011T120000-12345678"
+    directory = tmp_path / "outputs" / identifier
+    items = snapshot_inputs([image(tmp_path, "one.png"), image(tmp_path, "two.png")], directory)
+    result = {
+        "id": identifier,
+        "status": "running",
+        "request": request(),
+        "items": items,
+        "preprocessing": PREPROCESSING_VERSION,
+        "fingerprint": fingerprint(request(), items),
+    }
+    atomic_json(directory / "result.json", result)
+    completed = {"item": {**items[0], "status": "done", "answers": {}, "usage": {}}, "seconds": 0.5}
+    (directory / "results.jsonl").write_bytes(json.dumps(completed).encode() + b"\n" + b'{"unfinished":')
+    calls = []
+    runner = SimpleNamespace(decide=lambda *args: calls.append(args) or {"answers": {}, "usage": {}})
+    worker = Mock(result=Mock(return_value={"ok": True}))
+    worker.start.side_effect = lambda python, script, env, payload, log: process_run(payload["job_dir"], runner)
+    lease = Mock(acquire=Mock(return_value=True))
+    studio = Studio(
+        tmp_path / "runtime", tmp_path / "outputs", ownership_factory=lambda: lease, worker_factory=lambda *a: worker
+    )
+    studio._installed = lambda _: "python"
+    monkeypatch.setattr(service, "execution_stopped", lambda _: True)
+    assert studio.resume(identifier, "owner") == identifier
+    assert studio.jobs[identifier].done.wait(5)
+    assert len(calls) == 1 and studio.status(identifier, "owner")["result"]["status"] == "complete"
+    assert len((directory / "results.jsonl").read_text(encoding="utf-8").splitlines()) == 1
+    studio.shutdown()
+
+
+def test_worker_failure_aggregates_previously_published_items_before_releasing_gpu(tmp_path):
+    count = []
+
+    def decide(*args):
+        count.append(True)
+        if len(count) == 2:
+            raise SystemExit("worker exited")
+        return {"answers": {"text": {"type": "noul", "noul": 0.8}}, "usage": {"input_tokens": 2}}
+
+    worker = Mock()
+    worker.start.side_effect = lambda python, script, env, payload, log: process_run(
+        payload["job_dir"], SimpleNamespace(decide=decide)
+    )
+    lease = Mock(acquire=Mock(return_value=True))
+    studio = Studio(
+        tmp_path / "runtime", tmp_path / "outputs", ownership_factory=lambda: lease, worker_factory=lambda *a: worker
+    )
+    studio._installed = lambda _: "python"
+    identifier = studio.start(request(), [image(tmp_path, "one.png"), image(tmp_path, "two.png")], "owner")
+    assert studio.jobs[identifier].done.wait(5)
+    result = studio.status(identifier, "owner")["result"]
+    assert result["status"] == "partial"
+    assert [item["status"] for item in result["items"]] == ["done", "failed"]
+    assert result["items"][0]["answers"]["text"]["noul"] == 0.8
+    assert (studio.jobs[identifier].directory / "results.csv").is_file()
+    lease.release.assert_called_once()
+    studio.shutdown()
+
+
 def test_item_error_does_not_mark_success_or_lose_following_items(tmp_path):
     directory = tmp_path / "run"
     items = snapshot_inputs([image(tmp_path, "one.png"), image(tmp_path, "two.png")], directory)

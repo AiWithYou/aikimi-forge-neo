@@ -75,7 +75,7 @@ class FunUnion(nn.Module):
         transformer.fun_union = self
 
         def before_first(_block, args, kwargs):
-            if self.context is None:
+            if self.context is None or self.strength == 0:
                 self._hints = []
                 return
             x = kwargs.get("hidden_states", args[0] if args else None)
@@ -113,6 +113,11 @@ class FunUnion(nn.Module):
         mask_image=None,
     ) -> None:
         """Pack control, keep-mask, and masked source in VideoX-Fun's 129-channel order."""
+        if strength == 0:
+            self.context = None
+            self._hints = []
+            self.strength = 0
+            return
         if (inpaint_image is None) != (mask_image is None):
             raise ValueError("Inpaintingには編集元とマスクを一緒に指定してください。")
         if inpaint_image is not None and (inpaint_image.size != image.size or mask_image.size != image.size):

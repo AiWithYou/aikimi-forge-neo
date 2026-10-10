@@ -21,6 +21,7 @@ from .core import (
     compare_runs,
     edit_question,
     parse_schema,
+    read_result,
     sha256,
     summary,
     validate_request,
@@ -198,7 +199,7 @@ def _read_run(key):
     directory = (OUTPUTS / key).resolve()
     if not directory.is_relative_to(OUTPUTS.resolve()):
         raise ClefError("判定記録の保存先が不正です。")
-    return json.loads((directory / "result.json").read_text(encoding="utf-8"))
+    return read_result(directory)
 
 
 def _history():
@@ -207,7 +208,10 @@ def _history():
         for path in sorted(OUTPUTS.glob("*/result.json"), reverse=True)[:40]:
             try:
                 run = _read_run(path.parent.name)
-                label = f"{path.parent.name} · {PROFILES[run['request']['profile']]['label']}"
+                if not run["items"]:
+                    continue
+                source = "画像" if run["items"][0].get("kind", "image") == "image" else "文章・JSON"
+                label = f"{source} · {path.parent.name} · {PROFILES[run['request']['profile']]['label']}"
                 if run["status"] == "running":
                     label += " · 処理中・中断記録"
                 result.append((label, path.parent.name))

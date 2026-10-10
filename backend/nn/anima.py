@@ -26,6 +26,24 @@ from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
 
 
+def _repeat_reference_to_batch(reference: torch.Tensor, batch_size: int) -> torch.Tensor:
+    reference_batch = int(reference.shape[0])
+    if reference_batch <= 0 or batch_size <= 0:
+        raise ValueError(
+            "Anima reference and sampling batches must be positive; "
+            f"got reference batch {reference_batch} and sampling batch {batch_size}"
+        )
+    if reference_batch == batch_size:
+        return reference
+    if batch_size % reference_batch != 0:
+        raise ValueError(
+            "Anima reference batch must divide the sampling batch; "
+            f"got reference batch {reference_batch} and sampling batch {batch_size}"
+        )
+    # Sampling concatenates full condition groups, each with the original row order.
+    return reference.repeat(batch_size // reference_batch, *([1] * (reference.ndim - 1)))
+
+
 def _fn(
     x: torch.Tensor,
     _norm: nn.Module,
@@ -499,8 +517,7 @@ class Anima(nn.Module):
         orig_shape = list(x.shape)
 
         for ref in dynamic_args.ref_latents:
-            if x.shape[0] == 2:  # batch_cond_uncond
-                ref = torch.cat((ref, ref), dim=0)
+            ref = _repeat_reference_to_batch(ref, int(x.shape[0]))
             x = torch.cat((x, ref.to(x)), dim=2)
 
         x = pad_to_patch_size(x, (self.patch_temporal, self.patch_spatial, self.patch_spatial))

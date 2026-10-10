@@ -156,6 +156,30 @@ def atomic_json(path, data):
         raise
 
 
+def read_result(directory):
+    """Merge completed journal entries while a run is still being processed."""
+    directory = Path(directory)
+    result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
+    if result["status"] != "running":
+        return result
+    try:
+        entries = (directory / "results.jsonl").read_bytes().splitlines(keepends=True)
+    except FileNotFoundError:
+        entries = []
+    indexes = {item["id"]: index for index, item in enumerate(result["items"])}
+    for line in entries:
+        if not line.endswith(b"\n"):
+            break  # A stopped writer may leave the final record or UTF-8 character incomplete.
+        entry = json.loads(line)
+        result["items"][indexes[entry["item"]["id"]]] = entry["item"]
+        result["seconds"] = entry["seconds"]
+    try:
+        result["loading"] = json.loads((directory / "loading.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        pass
+    return result
+
+
 def sha256(path):
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:

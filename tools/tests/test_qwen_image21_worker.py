@@ -144,6 +144,15 @@ class WorkerJobTests(unittest.TestCase):
     def write_request(self):
         (self.job / "request.json").write_text(json.dumps(self.request), encoding="utf-8")
 
+    def write_weight_index(self, index, size):
+        index.parent.mkdir(parents=True, exist_ok=True)
+        shard = index.with_name(index.name.removesuffix(".index.json"))
+        header = json.dumps({"weight": {"dtype": "BF16", "shape": [size // 2], "data_offsets": [0, size]}}).encode()
+        shard.write_bytes(len(header).to_bytes(8, "little") + header)
+        index.write_text(
+            json.dumps({"metadata": {"total_size": size}, "weight_map": {"weight": shard.name}}), encoding="utf-8"
+        )
+
     def run_job(self):
         with mock.patch.object(worker, "_load_runtime", return_value=self.runtime) as loader:
             result = worker.resident_run(self.payload)
@@ -317,8 +326,7 @@ class WorkerJobTests(unittest.TestCase):
             ("text_encoder", "model.safetensors.index.json", 17_534_247_392),
         ):
             target = self.model / folder / name
-            target.parent.mkdir()
-            target.write_text(json.dumps({"metadata": {"total_size": size}}), encoding="utf-8")
+            self.write_weight_index(target, size)
         self.fake_torch.cuda.get_device_properties = lambda _: types.SimpleNamespace(total_memory=24 * 2**30)
         self.payload.update(precision="bf16", memory_mode="gpu")
         with mock.patch.object(worker, "_load_runtime") as loader:
@@ -335,8 +343,7 @@ class WorkerJobTests(unittest.TestCase):
 
     def test_turbo_single_file_bf16_is_rejected_before_loading(self):
         encoder = self.model / "text_encoder" / "model.safetensors.index.json"
-        encoder.parent.mkdir()
-        encoder.write_text(json.dumps({"metadata": {"total_size": 17_534_247_392}}), encoding="utf-8")
+        self.write_weight_index(encoder, 17_534_247_392)
         transformer = self.model.parent / "turbo" / "bf16" / "transformer" / "diffusion_pytorch_model.safetensors"
         transformer.parent.mkdir(parents=True)
         # Header-only fixture: preflight must never read the multi-GB payload.
@@ -594,8 +601,7 @@ class WorkerJobTests(unittest.TestCase):
             ),
             (self.model / "text_encoder", "model.safetensors.index.json", 17_534_247_392),
         ):
-            folder.mkdir(parents=True)
-            (folder / name).write_text(json.dumps({"metadata": {"total_size": size}}), encoding="utf-8")
+            self.write_weight_index(folder / name, size)
         (self.model.parent / "turbo" / "official" / "model_index.json").write_text(
             json.dumps({"sample_sigmas": OFFICIAL_SIGMAS}), encoding="utf-8"
         )
@@ -625,6 +631,157 @@ class WorkerJobTests(unittest.TestCase):
         checkpoint.write_bytes((2**40).to_bytes(8, "little"))
         with self.assertRaisesRegex(ValueError, "header size"):
             worker._bf16_safetensors_bytes(checkpoint)
+
+    def test_sharded_fp32_capacity_reads_unique_headers_at_the_load_dtype(self):
+        folder = self.root / "local-transformer"
+        folder.mkdir()
+        for name, dtype, shape, offsets in (
+            ("one.safetensors", "F32", [6], [0, 24]),
+            ("two.safetensors", "I64", [1], [0, 8]),
+        ):
+            header = json.dumps({"weight": {"dtype": dtype, "shape": shape, "data_offsets": offsets}}).encode()
+            (folder / name).write_bytes(len(header).to_bytes(8, "little") + header + bytes(offsets[1]))
+        (folder / "diffusion_pytorch_model.safetensors.index.json").write_text(
+            json.dumps(
+                {
+                    "metadata": {"total_size": 10**12},
+                    "weight_map": {"a": "one.safetensors", "b": "one.safetensors", "c": "two.safetensors"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        request = {"precision": "bf16", "memory_mode": "gpu", "local_source": {"transformer": str(folder)}}
+        self.fake_torch.cuda.get_device_properties = lambda _: types.SimpleNamespace(total_memory=20)
+        worker._check_bf16_gpu_capacity(self.model, request, self.fake_torch)
+        self.fake_torch.cuda.get_device_properties = lambda _: types.SimpleNamespace(total_memory=19)
+        with self.assertRaisesRegex(RuntimeError, "GPU容量"):
+            worker._check_bf16_gpu_capacity(self.model, request, self.fake_torch)
+
+    def test_style_strength_changes_zero_and_resume_reuse_pipeline_and_refresh_metadata(self):
+        from modules_forge.qwen_image21.style_lora import cache_key
+
+        folder = self.root / "loras"
+        folder.mkdir()
+        path = folder / "style.safetensors"
+        header = json.dumps(
+            {
+                "transformer_blocks.0.attn.to_q.lora_A.weight": {
+                    "dtype": "F32",
+                    "shape": [1, 3],
+                    "data_offsets": [0, 12],
+                },
+                "transformer_blocks.0.attn.to_q.lora_B.weight": {
+                    "dtype": "F32",
+                    "shape": [4, 1],
+                    "data_offsets": [12, 28],
+                },
+            }
+        ).encode()
+        path.write_bytes(len(header).to_bytes(8, "little") + header + bytes(28))
+        self.request["style_loras"] = [{"name": path.name, "strength": 1}]
+        self.write_request()
+        self.pipe.transformer = object()
+        self.runtime["style_loras"] = [
+            {"name": path.name, "path": str(path), "sha256": cache_key(self.root, self.request)[0][0][1], "strength": 1}
+        ]
+        loaded_metadata = self.runtime["style_loras"]
+
+        def updated(_transformer, loaded, _root, request):
+            self.assertIs(loaded, loaded_metadata)
+            return [
+                {**loaded[0], "strength": item["strength"]} for item in request["style_loras"] if item["strength"] != 0
+            ]
+
+        update = mock.Mock(side_effect=updated)
+        with patched_modules(
+            {"modules_forge.qwen_image21.style_lora_runtime": types.SimpleNamespace(update_strengths=update)}
+        ):
+            self.run_job()
+            for strength in (-0.5, 0, 0.75):
+                with self.subTest(strength=strength):
+                    self.request["style_loras"][0]["strength"] = strength
+                    self.write_request()
+                    result, loader = self.run_job()
+                    loader.assert_not_called()
+                    self.assertTrue(result["metadata"]["reused_model"])
+                    self.assertEqual(
+                        [item["strength"] for item in result["metadata"]["style_loras"]],
+                        [] if strength == 0 else [strength],
+                    )
+            path.write_bytes(path.read_bytes() + b"changed")
+            _, loader = self.run_job()
+            loader.assert_called_once()
+        self.assertEqual(update.call_count, 3)
+
+    def test_zero_control_skips_preprocessing_and_uses_kv_cache(self):
+        control_image = self.root / "control.png"
+        Image.new("RGB", (256, 320)).save(control_image)
+        checkpoint = self.root / "control.safetensors"
+        checkpoint.write_bytes(b"checkpoint")
+        self.request.update(control_image=str(control_image), control_strength=0)
+        self.write_request()
+        controlnet = mock.Mock()
+        self.runtime["controlnet"] = controlnet
+        with (
+            mock.patch("modules_forge.qwen_image21.fun_controlnet.checkpoint_path", return_value=checkpoint),
+            mock.patch("modules_forge.qwen_image21.fun_controlnet.installed", return_value={"path": str(checkpoint)}),
+            mock.patch("PIL.ImageOps.fit", side_effect=AssertionError("zero control must not preprocess")),
+        ):
+            result, _ = self.run_job()
+        controlnet.set_control.assert_not_called()
+        controlnet.clear_control.assert_called()
+        self.assertTrue(self.pipe.calls[-1]["use_kv_cache"])
+        self.assertTrue(result["metadata"]["use_kv_cache"])
+        self.assertEqual(result["metadata"]["fun_controlnet"]["strength"], 0)
+        self.assertFalse(result["metadata"]["fun_controlnet"]["applied"])
+        self.assertFalse((self.job / "control.png").exists())
+        self.runtime["fun_acc_config"] = {"pdd_sigmas": [1, 0], "pdd_block_size": 1}
+        self.pipe.transformer = object()
+        self.fake_torch.float32 = "float32"
+        self.fake_torch.tensor = lambda values, **_: values
+        callback = mock.Mock()
+        with (
+            mock.patch("modules_forge.qwen_image21.fun_controlnet.checkpoint_path", return_value=checkpoint),
+            mock.patch("modules_forge.qwen_image21.fun_controlnet.installed", return_value={"path": str(checkpoint)}),
+            patched_modules(
+                {
+                    "modules_forge.qwen_image21.pdd_vendor.qwenimage21_pdd": types.SimpleNamespace(
+                        pdd_step_callback=lambda *_: callback
+                    )
+                }
+            ),
+        ):
+            result, _ = self.run_job()
+        self.assertFalse(self.pipe.calls[-1]["use_kv_cache"])
+        self.assertFalse(result["metadata"]["use_kv_cache"])
+        callback.assert_called()
+
+    def test_initially_zero_style_requires_loading_before_its_first_nonzero_use(self):
+        path = self.root / "loras" / "style.safetensors"
+        path.parent.mkdir()
+        header = json.dumps(
+            {
+                "transformer_blocks.0.attn.to_q.lora_A.weight": {
+                    "dtype": "F32",
+                    "shape": [1, 3],
+                    "data_offsets": [0, 12],
+                },
+                "transformer_blocks.0.attn.to_q.lora_B.weight": {
+                    "dtype": "F32",
+                    "shape": [4, 1],
+                    "data_offsets": [12, 28],
+                },
+            }
+        ).encode()
+        path.write_bytes(len(header).to_bytes(8, "little") + header + bytes(28))
+        self.request["style_loras"] = [{"name": path.name, "strength": 0}]
+        self.write_request()
+        self.run_job()
+        self.request["style_loras"][0]["strength"] = 1
+        self.write_request()
+        result, loader = self.run_job()
+        loader.assert_called_once()
+        self.assertFalse(result["metadata"]["reused_model"])
 
     def test_rewrite_off_does_not_load_optional_model(self):
         with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt") as rewrite:
@@ -752,6 +909,25 @@ class WorkerJobTests(unittest.TestCase):
         self.assertEqual(self.pipe.to.call_args_list, [mock.call("cpu"), mock.call("cuda:0")])
         loader.assert_not_called()
         self.assertTrue(result["metadata"]["reused_model"])
+
+    def test_rewrite_discards_changed_gpu_pipeline_without_restoring_it(self):
+        self.payload["memory_mode"] = "gpu"
+        self.pipe.to = mock.Mock()
+        self.run_job()
+        self.request["rewrite_prompt"] = True
+        self.payload["precision"] = "bf16"
+        self.write_request()
+
+        def rewrite(*args):
+            self.assertIsNone(worker._RESIDENT_RUNTIME)
+            self.pipe.to.assert_not_called()
+            return {"enabled": True, "applied": True, "rewritten_prompt": "Expanded"}
+
+        with mock.patch("modules_forge.qwen_image21.prompt_rewriter.rewrite_prompt", side_effect=rewrite):
+            result, loader = self.run_job()
+        loader.assert_called_once()
+        self.pipe.to.assert_not_called()
+        self.assertFalse(result["metadata"]["reused_model"])
 
     def test_offload_releases_unused_cache_without_touching_model_or_saved_pixels(self):
         self.fake_torch.cuda.is_initialized = lambda: True

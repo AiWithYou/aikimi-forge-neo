@@ -39,9 +39,9 @@ def test_control_image_is_snapshotted_without_changing_the_reference_list(tmp_pa
     "fields",
     [
         {"control_kind": "pose", "control_image": ""},
-        {"control_kind": "pose", "sparse_mode": "fixed"},
+        {"control_kind": "pose", "sparse_mode": "static"},
         {"control_kind": "pose", "control_strength": float("nan")},
-        {"control_kind": "pose", "control_strength": 2.1},
+        {"control_kind": "pose", "control_strength": float("inf")},
         {"control_kind": "unknown"},
     ],
 )
@@ -53,7 +53,7 @@ def test_invalid_control_requests_stop_before_gpu_or_download(tmp_path, fields):
         core.Request("A dancer", **fields).resolved()
 
 
-def test_worker_rejects_missing_control_and_incompatible_base(tmp_path):
+def test_worker_rejects_missing_control_and_accepts_fixed_sparse_with_any_base(tmp_path):
     model = tmp_path / "model"
     model.mkdir()
     (model / "model_index.json").write_text(json.dumps({"_class_name": "QwenImage21Pipeline"}))
@@ -84,8 +84,11 @@ def test_worker_rejects_missing_control_and_incompatible_base(tmp_path):
     request["precision"] = "int8"
     request["sparse_mode"] = "fixed"
     (job / "request.json").write_text(json.dumps(request))
-    with pytest.raises(ValueError, match="Sparse Attention"):
-        worker._read_request(payload)
+    resolved = worker._read_request(payload)[2]
+    assert resolved["sparse_mode"] == "fixed"
+    request["control_strength"] = 2.1
+    (job / "request.json").write_text(json.dumps(request))
+    assert worker._read_request(payload)[2]["control_strength"] == 2.1
 
 
 def test_missing_optional_patch_has_actionable_status(tmp_path):
@@ -205,3 +208,46 @@ def test_inpaint_condition_packs_control_keep_mask_and_masked_source():
     assert subject.strength == 0.8
     FunUnion.set_control(subject, Pipe(), control, 1, torch.Generator())
     assert torch.count_nonzero(subject.context[:, 64:]) == 0
+
+
+def test_zero_strength_drops_stale_condition_before_vae_preprocessing():
+    torch = pytest.importorskip("torch")
+    module_name = "diffusers.models.transformers.transformer_qwenimage21"
+    qwen_stub = ModuleType(module_name)
+    qwen_stub.QwenImage21TransformerBlock = object
+    with patch.dict(sys.modules, {module_name: qwen_stub}):
+        from modules_forge.qwen_image21.fun_controlnet_runtime import FunUnion
+
+    subject = SimpleNamespace(context=torch.ones(1), strength=1, _hints=[torch.ones(1)])
+    # A disabled condition needs neither a pipeline nor valid image inputs.
+    FunUnion.set_control(subject, None, None, 0, None)
+    assert subject.context is None
+    assert subject.strength == 0
+    assert subject._hints == []
+
+
+def test_zero_strength_hook_skips_control_branch_even_with_a_stale_context():
+    torch = pytest.importorskip("torch")
+    module_name = "diffusers.models.transformers.transformer_qwenimage21"
+    qwen_stub = ModuleType(module_name)
+    qwen_stub.QwenImage21TransformerBlock = object
+    with patch.dict(sys.modules, {module_name: qwen_stub}):
+        from modules_forge.qwen_image21.fun_controlnet_runtime import FunUnion
+
+    class Block(torch.nn.Module):
+        def forward(self, hidden_states):
+            return hidden_states
+
+    transformer = torch.nn.Module()
+    transformer.transformer_blocks = torch.nn.ModuleList(Block() for _ in range(32))
+
+    def should_not_run(_condition):
+        raise AssertionError("zero control must not run its branch")
+
+    subject = SimpleNamespace(
+        context=torch.ones(1, 1, 1), strength=0, _hints=[torch.ones(1)], _handles=[], control_img_in=should_not_run
+    )
+    FunUnion.attach(subject, transformer)
+    hidden = torch.ones(1, 1, 1)
+    torch.testing.assert_close(transformer.transformer_blocks[0](hidden_states=hidden), hidden)
+    assert subject._hints == []

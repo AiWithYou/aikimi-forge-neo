@@ -32,7 +32,16 @@ def register_tmp_file(gradio_app: gr.Blocks, filename: os.PathLike):
 
 def check_tmp_file(gradio_app: gr.Blocks, filename: os.PathLike) -> bool:
     filename = gradio.utils.abspath(filename)
-    return any(filename in fileset for fileset in gradio_app.temp_file_sets)
+    return any(filename in fileset or os.fspath(filename) in fileset for fileset in gradio_app.temp_file_sets)
+
+
+def gallery_saved_paths(images):
+    paths = []
+    for item in images or []:
+        image = item[0] if isinstance(item, (tuple, list)) else item
+        filename = image if isinstance(image, (str, os.PathLike)) else getattr(image, "already_saved_as", None)
+        paths.append(os.fspath(filename) if isinstance(filename, (str, os.PathLike)) else None)
+    return paths
 
 
 def save_pil_to_file(

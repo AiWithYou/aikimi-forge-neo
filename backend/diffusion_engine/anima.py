@@ -43,19 +43,23 @@ class Anima(ForgeDiffusionEngine):
         self.is_wan = True
         self.use_shift = True
 
+    def prepare_reference_latents(self, prompt: "SdConditioning"):
+        if prompt.is_negative_prompt:
+            return
+        if not opts.anima_do_reference:
+            dynamic_args.ref_latents.clear()
+            return
+
+        references = list(self.ref_latents)
+        if self.ini_latent is not None:
+            references.insert(0, self.ini_latent)
+            self.ini_latent = None
+        dynamic_args.ref_latents = references
+
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: "SdConditioning"):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
-
-        if not prompt.is_negative_prompt:
-            if not opts.anima_do_reference:
-                dynamic_args.ref_latents.clear()
-            else:
-                _references = [*self.ref_latents]
-                if self.ini_latent is not None:
-                    _references.insert(0, self.ini_latent)
-                    self.ini_latent = None
-                dynamic_args.ref_latents = _references.copy()
+        self.prepare_reference_latents(prompt)
 
         return self.text_processing_engine_anima(prompt)
 

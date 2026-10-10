@@ -25,6 +25,15 @@ class ReleaseVersionTests(unittest.TestCase):
         self.assertEqual(readme_version.group(2), VERSION)
         self.assertEqual(latest_release.group(1), VERSION)
 
+    def test_english_readme_matches_version_and_language_links(self):
+        english = (ROOT / "README.en.md").read_text(encoding="utf-8")
+        japanese = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            f"**[v{VERSION}](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v{VERSION})**", english
+        )
+        self.assertIn("[English](README.en.md)", japanese.split("\n\n", 2)[1])
+        self.assertIn("[日本語](README.md)", english.split("\n\n", 2)[1])
+
 
 if __name__ == "__main__":
     unittest.main()

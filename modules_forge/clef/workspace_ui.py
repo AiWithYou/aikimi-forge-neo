@@ -14,7 +14,18 @@ import gradio as gr
 from PIL import Image, ImageOps
 
 from .collection import generation_metadata, merge_images, parse_records, scan_files, scan_folder, thumbnails
-from .core import OUTPUTS, PROFILES, ROOT, TEMPLATES, ClefError, atomic_json, canonical_hash, parse_schema, sha256
+from .core import (
+    OUTPUTS,
+    PROFILES,
+    ROOT,
+    TEMPLATES,
+    ClefError,
+    atomic_json,
+    canonical_hash,
+    export_csv,
+    parse_schema,
+    sha256,
+)
 from .curation import REVIEW_LABELS, copy_accepted, latest_export, matching_ids, read_review, set_decision
 from .filters import active_rules, apply_filter_event, filter_payload, filter_state
 from .service import STUDIO, execution_stopped
@@ -98,16 +109,7 @@ def collection_label(collection):
 
 
 def history_for():
-    choices = []
-    for label, key in _history():
-        try:
-            items = _read_run(key)["items"]
-            if items:
-                source = "画像" if items[0].get("kind", "image") == "image" else "文章・JSON"
-                choices.append((f"{source} · {label}", key))
-        except (OSError, ValueError, KeyError):
-            pass
-    return choices
+    return _history()
 
 
 def resolve_input(source, images, text, text_mode, json_data, json_mode):
@@ -297,6 +299,8 @@ def schema_editor(initial, schema, selector, schema_table, outputs_root, notice)
 
 
 def workbench(profile, outputs_root):
+    saved_choices = history_for()
+    completed_history = set()
     initial = copy.deepcopy(TEMPLATES["人物イラストの仕分け"])
     schema = gr.State(initial)
     images = gr.State({"items": [], "root": "", "skipped": [], "bytes": 0})
@@ -457,7 +461,7 @@ def workbench(profile, outputs_root):
             heading = gr.Textbox(value="まだ判定していません", show_label=False, interactive=False)
             with gr.Accordion("過去の実行", open=False):
                 with gr.Row():
-                    history = gr.Dropdown(choices=history_for(), value=None, label="保存した判定を開く", scale=3)
+                    history = gr.Dropdown(choices=saved_choices, value=None, label="保存した判定を開く", scale=3)
                     refresh = gr.Button("更新", size="sm", scale=0)
                 return_active = gr.Button("現在の実行に戻る", size="sm")
             with gr.Column(elem_id="clef-result-content", elem_classes=["clef-results-empty"]) as result_content:
@@ -538,11 +542,12 @@ def workbench(profile, outputs_root):
                 with gr.Row():
                     json_file = gr.DownloadButton("表示中の結果 JSONを保存", interactive=False)
                     csv_file = gr.DownloadButton("表示中の一覧 CSVを保存", interactive=False)
+                    prepared_download = gr.DownloadButton(visible=False)
                 with gr.Row():
                     resume = gr.Button("保存条件で未完了分を再開", visible=False)
                     retry_errors = gr.Checkbox(label="エラーも再試行", value=False, visible=False)
                 with gr.Accordion("同じ入力・質問の結果と比較", open=False):
-                    compare = gr.Dropdown(choices=history_for(), value=None, label="比較対象の判定")
+                    compare = gr.Dropdown(choices=saved_choices, value=None, label="比較対象の判定")
                     comparison_note = gr.Markdown(COMPARISON_NOTE)
                     comparison = gr.Dataframe(
                         headers=["画像・レコード", "判断の変化", "最大確率差", "項目ごとの差"],
@@ -599,8 +604,11 @@ def workbench(profile, outputs_root):
         visibility,
         conditions,
         page_number,
+        *,
+        refresh=True,
     ):
-        run = _read_run(run["id"])
+        if refresh:
+            run = _read_run(run["id"])
         image_mode = is_image_run(run)
         directory = outputs_root / run["id"]
         review = read_review(directory, run)
@@ -640,7 +648,6 @@ def workbench(profile, outputs_root):
         partial = (run["status"] != "running" or execution_stopped(directory)) and any(
             item["status"] != "done" for item in run["items"]
         )
-        csv = directory / "results.csv"
         saved_export = latest_export(directory, run, decisions) if image_mode else None
         return [
             run,
@@ -649,8 +656,8 @@ def workbench(profile, outputs_root):
             gr.update(value=image_path, visible=bool(image_path)),
             gr.update(value=record_text, visible=record_text is not None),
             label,
-            gr.update(value=str(directory / "result.json"), interactive=True),
-            gr.update(value=str(csv) if csv.is_file() else None, interactive=csv.is_file()),
+            gr.update(value=None, interactive=True),
+            gr.update(value=None, interactive=True),
             [run["id"], item["id"]] if item else None,
             count,
             gr.update(
@@ -702,6 +709,7 @@ def workbench(profile, outputs_root):
             collection["items"],
             request.session_hash,
         )
+        choices = history_for()
         return (
             identifier,
             "実行を開始しました。判定済みの結果は順次表示します。",
@@ -711,13 +719,15 @@ def workbench(profile, outputs_root):
             None,
             None,
             _read_run(identifier),
+            gr.update(choices=choices, value=None),
+            gr.update(choices=choices),
             collection,
         )
 
     judge.click(
         submit,
         [*source_inputs, profile, context, schema, pixels, length],
-        [active_job, status, judge, stop, timer, selection_state, selection, displayed, collection],
+        [active_job, status, judge, stop, timer, selection_state, selection, displayed, history, compare, collection],
         **view_events,
     )
 
@@ -736,7 +746,7 @@ def workbench(profile, outputs_root):
         request: gr.Request,
     ):
         if not identifier:
-            return [gr.update()] * (len(result_outputs) + 5)
+            return [gr.update()] * (len(result_outputs) + 6)
         info = STUDIO.status(identifier, request.session_hash)
         done = info["done"]
         values = [
@@ -749,23 +759,28 @@ def workbench(profile, outputs_root):
             *view,
         ]
         outputs = (
-            paint(info["result"], token, *values)
+            paint(info["result"], token, *values, refresh=False)
             if not run or run["id"] == identifier
             else [gr.update()] * len(result_outputs)
         )
+        history_updates = [gr.skip(), gr.skip()]
+        if done and identifier not in completed_history:
+            choices = history_for()
+            history_updates = [gr.update(choices=choices), gr.update(choices=choices)]
+            completed_history.add(identifier)
         return [
             *outputs,
             progress_label(info["result"], info["message"]),
             gr.update(interactive=done and bool((collection or {}).get("items"))),
             gr.update(interactive=not done),
             gr.update(active=not done),
-            gr.update(choices=history_for()),
+            *history_updates,
         ]
 
     timer.tick(
         poll,
         [active_job, displayed, selection_state, *current, view_state],
-        [*result_outputs, status, judge, stop, timer, history],
+        [*result_outputs, status, judge, stop, timer, history, compare],
         **view_events,
     )
 
@@ -784,6 +799,8 @@ def workbench(profile, outputs_root):
         if not displayed_heading.startswith(run["id"]):
             raise ClefError("表示する実行が変わりました。結果を確認してから再開してください。")
         identifier = STUDIO.resume(run["id"], request.session_hash, retry)
+        completed_history.discard(identifier)
+        choices = history_for()
         return (
             identifier,
             _read_run(identifier),
@@ -791,12 +808,14 @@ def workbench(profile, outputs_root):
             gr.update(interactive=False),
             gr.update(interactive=True),
             gr.update(active=True),
+            gr.update(choices=choices),
+            gr.update(choices=choices),
         )
 
     resume.click(
         resume_job,
         [displayed, heading, retry_errors],
-        [active_job, displayed, status, judge, stop, timer],
+        [active_job, displayed, status, judge, stop, timer, history, compare],
         **view_events,
     )
 
@@ -839,8 +858,13 @@ def workbench(profile, outputs_root):
         result_outputs,
         **view_events,
     )
+
+    def refresh_history():
+        choices = history_for()
+        return gr.update(choices=choices), gr.update(choices=choices)
+
     refresh.click(
-        lambda: (gr.update(choices=history_for()), gr.update(choices=history_for())),
+        refresh_history,
         outputs=[history, compare],
         **PRIVATE,
     )
@@ -856,6 +880,42 @@ def workbench(profile, outputs_root):
         [*result_outputs, history],
         **view_events,
     )
+
+    def download_result(run, displayed_heading, kind):
+        if not run or not displayed_heading.startswith(run["id"]):
+            raise ClefError("表示する実行が変わりました。結果を確認してから保存してください。")
+        latest = _read_run(run["id"])
+        directory = outputs_root / latest["id"] / "downloads" / uuid.uuid4().hex
+        target = directory / ("result.json" if kind == "json" else "results.csv")
+        if kind == "json":
+            atomic_json(target, latest)
+        else:
+            directory.mkdir(parents=True, exist_ok=True)
+            target.write_text(export_csv(latest), encoding="utf-8-sig")
+        return str(target)
+
+    @guarded
+    def export_json(run, displayed_heading):
+        return download_result(run, displayed_heading, "json")
+
+    @guarded
+    def export_csv_file(run, displayed_heading):
+        return download_result(run, displayed_heading, "csv")
+
+    download_js = """value => {
+        if (value?.url) {
+            const link = document.createElement('a');
+            link.href = value.url;
+            link.download = value.orig_name || 'result';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
+    }"""
+    for button, handler in ((json_file, export_json), (csv_file, export_csv_file)):
+        button.click(handler, [displayed, heading], prepared_download, **view_events).success(
+            fn=None, inputs=prepared_download, js=download_js, **PRIVATE
+        )
 
     @guarded
     def select(run, profile, context, schema, pixels, length, collection, view, event: gr.SelectData):

@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from modules_forge.clef.core import RUNTIME, atomic_json, export_csv  # noqa: E402
+from modules_forge.clef.core import RUNTIME, atomic_json, export_csv, read_result  # noqa: E402
 
 _RUNNER = None
 _KEY = None
@@ -21,9 +21,7 @@ def process_run(directory, runner):
 
     directory = Path(directory)
     request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
-    result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
-    if (directory / "loading.json").is_file():
-        result["loading"] = json.loads((directory / "loading.json").read_text(encoding="utf-8"))
+    result = read_result(directory)
     start = time.perf_counter()
     for item in result["items"]:
         if item["status"] != "pending":
@@ -48,7 +46,9 @@ def process_run(directory, runner):
                 item.update(status="error", error=str(exc))
                 print(f"{item['name']}: {exc}", flush=True)  # noqa: T201
         result["seconds"] = time.perf_counter() - start
-        atomic_json(directory / "result.json", result)
+        entry = json.dumps({"item": item, "seconds": result["seconds"]}, ensure_ascii=False, allow_nan=False)
+        with (directory / "results.jsonl").open("a", encoding="utf-8", newline="\n") as journal:
+            journal.write(entry + "\n")
     result["status"] = "complete" if all(x["status"] == "done" for x in result["items"]) else "partial"
     atomic_json(directory / "result.json", result)
     (directory / "results.csv").write_text(export_csv(result), encoding="utf-8-sig")

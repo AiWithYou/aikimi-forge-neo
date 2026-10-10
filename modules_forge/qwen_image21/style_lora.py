@@ -193,7 +193,7 @@ def cache_key(runtime: Path, values: dict) -> tuple:
         path = resolve(runtime, item["name"])
         from modules_forge.local_assets import file_identity
 
-        entries.append((str(path), file_identity(path)["sha256"], item["strength"]))
+        entries.append((str(path), file_identity(path)["sha256"]))
     return tuple(entries), values.get("allow_lora_base_mismatch", False)
 
 

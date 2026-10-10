@@ -1,10 +1,14 @@
 # Aikimi Forge Neo
 
-**[v3.9.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.9.1)** · [変更履歴](CHANGELOG.md)
+[English](README.en.md) · 日本語
+
+**[v3.9.2](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.9.2)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
 **画像の生成・編集、音声付き動画、作曲、画像や文章の評価を、ひとつのWebUIから使えるWindows向けのForge Neo派生版です。** モデルの導入、高解像度処理、画像の仕上げも支援します。
+
+v3.9.2ではAnimaの参照画像とバッチ処理を修正し、QwenのLoRA強度調整・ControlNet強度0、CPU操作、Clefの一括判定で不要な処理を削減しました。
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 

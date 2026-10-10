@@ -4,14 +4,15 @@ import time
 import traceback
 from functools import wraps
 
-from modules import devices, profiling, progress, shared
+from modules import profiling, progress, shared
 from modules_forge import main_thread
 from modules_forge.gpu_ownership import queue_lock
+from modules_forge.gpu_residency import engine_scope
 
 
 def wrap_queued_call(func):
     def f(*args, **kwargs):
-        with queue_lock:
+        with engine_scope(None), queue_lock:
             res = func(*args, **kwargs)
 
         return res
@@ -92,8 +93,6 @@ def wrap_gradio_call_no_job(func, extra_outputs=None, add_stats=False):
                 extra_outputs_array = [None, ""]
 
             res = extra_outputs_array + [f"<div class='error'>{html.escape(error_message)}</div>"]
-
-        devices.torch_gc()
 
         if not add_stats:
             return tuple(res)

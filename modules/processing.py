@@ -27,7 +27,7 @@ from backend import args, memory_management
 from backend.logging import setup_logger
 from backend.modules.k_prediction import rescale_zero_terminal_snr_sigmas
 from backend.utils import hash_tensor
-from modules import devices, errors, extra_networks, images, infotext_utils, masking, profiling, prompt_parser, rng, scripts, sd_samplers, sd_samplers_common, sd_unet, sd_vae_approx
+from modules import devices, errors, extra_networks, images, infotext_utils, masking, profiling, prompt_parser, rng, scripts, sd_samplers, sd_samplers_common, sd_unet, sd_vae_approx, ui_tempdir
 from modules.sd_models import apply_token_merging, forge_model_reload
 from modules.sd_samplers_common import approximation_indexes, decode_first_stage, images_tensor_to_samples
 from modules.shared import cmd_opts, opts, state
@@ -613,7 +613,7 @@ class Processed:
 
         self.video_path = None
 
-    def js(self):
+    def js(self, *, include_saved_paths=False):
         obj = {
             "prompt": self.all_prompts[0],
             "all_prompts": self.all_prompts,
@@ -649,6 +649,8 @@ class Processed:
             "version": self.version,
         }
 
+        if include_saved_paths:
+            obj["saved_paths"] = ui_tempdir.gallery_saved_paths(self.images + self.extra_images)
         return json.dumps(obj, default=lambda o: None)
 
     def infotext(self, p: StableDiffusionProcessing, index):

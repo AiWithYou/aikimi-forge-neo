@@ -647,8 +647,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
     }
 
 
-def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -> tuple[dict[str, Any], bool]:
-    global _RESIDENT_RUNTIME, _RESIDENT_KEY
+def _runtime_keys(model_path: Path, request: dict[str, Any]) -> tuple[tuple, tuple]:
     key = _cache_key(
         runtime_root(model_path, request) / "model" if request.get("local_model") else model_path,
         request["precision"],
@@ -660,16 +659,40 @@ def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -
     from modules_forge.qwen_image21.style_lora import cache_key
 
     key += (
-        cache_key(runtime_root(model_path, request), request),
         json.dumps(request.get("local_source"), sort_keys=True),
         str(runtime_root(model_path, request)),
         "sampling-outpaint-style-stack-v1",
     )
-    if _RESIDENT_RUNTIME is not None and key == _RESIDENT_KEY:
+    return key, cache_key(runtime_root(model_path, request), request)
+
+
+def _runtime_matches(key: tuple, style_key: tuple) -> bool:
+    return (
+        _RESIDENT_RUNTIME is not None
+        and key == _RESIDENT_KEY
+        and set(style_key[0]) <= set(_RESIDENT_RUNTIME.get("loaded_style_key", ((), False))[0])
+    )
+
+
+def _runtime_for_request(model_path: Path, request: dict[str, Any], job: Path) -> tuple[dict[str, Any], bool]:
+    global _RESIDENT_RUNTIME, _RESIDENT_KEY
+    key, style_key = _runtime_keys(model_path, request)
+    if _runtime_matches(key, style_key):
+        if _RESIDENT_RUNTIME.get("loaded_style_loras"):
+            from modules_forge.qwen_image21.style_lora_runtime import update_strengths
+
+            _RESIDENT_RUNTIME["style_loras"] = update_strengths(
+                _RESIDENT_RUNTIME["pipe"].transformer,
+                _RESIDENT_RUNTIME["loaded_style_loras"],
+                runtime_root(model_path, request),
+                request,
+            )
         _progress(job, "loaded", "読み込み済みモデルを再利用", 0.30)
         return _RESIDENT_RUNTIME, True
     clear_runtime()
     _RESIDENT_RUNTIME = _load_runtime(model_path, request, job)
+    _RESIDENT_RUNTIME["loaded_style_key"] = style_key
+    _RESIDENT_RUNTIME["loaded_style_loras"] = _RESIDENT_RUNTIME.get("style_loras", [])
     _RESIDENT_KEY = key
     return _RESIDENT_RUNTIME, False
 
@@ -695,6 +718,8 @@ def _rewrite_for_request(model_path: Path, request: dict[str, Any], job: Path) -
     # Preserve a reusable image pipeline on CPU while the small helper owns CUDA.
     # The same GPU lease covers rewriting, diffusion, cancellation, and cleanup.
     restore_gpu = False
+    if _RESIDENT_RUNTIME is not None and not _runtime_matches(*_runtime_keys(model_path, request)):
+        clear_runtime()
     if _RESIDENT_RUNTIME is not None:
         if _RESIDENT_KEY[2] == "offload":
             _RESIDENT_RUNTIME["pipe"].maybe_free_model_hooks()
@@ -782,10 +807,9 @@ def _check_bf16_gpu_capacity(model_path: Path, request: dict[str, Any], torch) -
     weight_bytes = _bf16_safetensors_bytes(transformer) if transformer.is_file() else 0
     for index in indexes:
         if index.is_file():
-            metadata = json.loads(index.read_text(encoding="utf-8")).get("metadata", {})
-            size = metadata.get("total_size", 0)
-            if isinstance(size, int) and size > 0:
-                weight_bytes += size
+            from modules_forge.qwen_image21.local_source import weight_files
+
+            weight_bytes += sum(_bf16_safetensors_bytes(path) for path in weight_files(index.parent))
         else:
             single_file = index.with_name(index.name.removesuffix(".index.json"))
             if single_file.is_file():
@@ -876,8 +900,21 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             # latents. Keep their geometry aligned for source-preserving edits.
             input_resolution = math.sqrt(request["width"] * request["height"])
         controlnet = runtime.get("controlnet")
+        active_control = controlnet is not None and request["control_strength"] != 0
         control_info = None
-        if controlnet is not None:
+        if controlnet is not None and not active_control:
+            from modules_forge.qwen_image21.fun_controlnet import installed
+
+            controlnet.clear_control()
+            control_info = {
+                **installed(runtime_root(model_path, request)),
+                "kind": request.get("control_kind", "preprocessed"),
+                "strength": 0,
+                "applied": False,
+                "image": None,
+                "inpaint": request["control_inpaint"],
+            }
+        if active_control:
             from PIL import Image, ImageChops, ImageOps
 
             from modules_forge.qwen_image21.fun_controlnet import installed
@@ -915,6 +952,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 **installed(runtime_root(model_path, request)),
                 "kind": request.get("control_kind", "preprocessed"),
                 "strength": request["control_strength"],
+                "applied": True,
                 "image": "control.png",
                 "inpaint": request["control_inpaint"],
                 **(
@@ -984,7 +1022,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 height=request["height"],
                 num_inference_steps=request["steps"],
                 true_cfg_scale=1.0,
-                use_kv_cache=controlnet is None and pdd_callback is None,
+                use_kv_cache=not active_control and pdd_callback is None,
                 output_resolution=input_resolution,
                 generator=generator,
                 num_images_per_prompt=1,
@@ -1069,7 +1107,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 if sampling_timesteps is not None
                 else {}
             ),
-            "use_kv_cache": controlnet is None and pdd_callback is None,
+            "use_kv_cache": not active_control and pdd_callback is None,
             "input_resolution": input_resolution,
             "input_image_count": len(images),
             "input_image_names": [Path(path).name for path in request["input_images"]],

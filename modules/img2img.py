@@ -278,12 +278,12 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
 
     shared.total_tqdm.clear()
 
-    generation_info_js = processed.js()
     if opts.samples_log_stdout:
-        print(generation_info_js)
+        print(processed.js())
 
     if opts.do_not_show_images:
         processed.images = []
+    generation_info_js = processed.js(include_saved_paths=True)
 
     if processed.video_path is None:
         gallery_arg = gr.update(value=processed.images + processed.extra_images, visible=True)

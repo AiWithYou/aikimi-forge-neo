@@ -43,6 +43,7 @@ def fake_anima(block_count: int):
     unet = SimpleNamespace(model=SimpleNamespace(diffusion_model=diffusion_model))
     return SimpleNamespace(
         text_processing_engine_anima=object(),
+        prepare_reference_latents=Mock(),
         forge_objects=SimpleNamespace(clip=clip, unet=unet),
         filename="legacy-anima.safetensors",
     )

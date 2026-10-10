@@ -30,6 +30,7 @@ from .core import (
     canonical_hash,
     export_csv,
     fingerprint,
+    read_result,
     sha256,
     validate_request,
 )
@@ -251,6 +252,7 @@ class Studio:
             atomic_json(directory / "execution.json", process_identity())
             atomic_json(directory / "request.json", result["request"])
             atomic_json(directory / "result.json", result)
+            (directory / "results.jsonl").write_text("", encoding="utf-8")
             job = Job(owner, directory, lease)
             self.jobs[identifier] = job
             job.thread = threading.Thread(target=self._run, args=(job, python), daemon=True)
@@ -286,7 +288,7 @@ class Studio:
             directory = (self.outputs / identifier).resolve()
             if not directory.is_relative_to(self.outputs.resolve()):
                 raise ClefError("判定記録の保存先が不正です。")
-            result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
+            result = read_result(directory)
             if result.get("preprocessing") != PREPROCESSING_VERSION:
                 raise ClefError("画像の前処理が更新されています。この記録を再開せず、新しい判定を開始してください。")
             if result["status"] == "running" and not execution_stopped(directory):
@@ -352,7 +354,7 @@ class Studio:
                         raise ClefError(response.get("error", "workerでエラーが発生しました。"))
                     break
                 time.sleep(0.15)
-            result = json.loads((job.directory / "result.json").read_text(encoding="utf-8"))
+            result = read_result(job.directory)
             job.state = {
                 "status": result["status"],
                 "message": "判定完了" if result["status"] == "complete" else "一部の画像でエラーがありました。",
@@ -377,7 +379,7 @@ class Studio:
                 try:
                     if not success:
                         path = job.directory / "result.json"
-                        result = json.loads(path.read_text(encoding="utf-8"))
+                        result = read_result(job.directory)
                         for item in result["items"]:
                             if item["status"] == "pending":
                                 item["status"] = job.state["status"]
@@ -413,7 +415,7 @@ class Studio:
     def status(self, identifier, owner):
         job = self._job(identifier, owner)
         done = job.done.is_set()
-        result = json.loads((job.directory / "result.json").read_text(encoding="utf-8"))
+        result = read_result(job.directory)
         state = dict(job.state)
         if not done:
             try:

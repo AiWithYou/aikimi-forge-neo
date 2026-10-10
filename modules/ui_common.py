@@ -4,6 +4,7 @@ import html
 import json
 import os
 from contextlib import nullcontext
+from functools import wraps
 
 import gradio as gr
 
@@ -164,24 +165,44 @@ class OutputPanel:
     infotext: gr.HTML = None
     html_log: gr.HTML = None
     button_upscale: gr.Button = None
+    saved_paths: gr.State | gr.Textbox = None
+
+
+def wrap_gradio_gallery_paths(func):
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        result = func(*args, **kwargs)
+        return (*result, ui_tempdir.gallery_saved_paths(result[0]))
+
+    return wrapped
+
+
+def open_folder(f, images=None, index=None, saved_paths=None):
+    if shared.cmd_opts.hide_ui_dir_config:
+        return
+
+    if "Sub" in shared.opts.open_dir_button_choice and isinstance(index, int) and images and 0 <= index < len(images):
+        selected = images[index]
+        media = selected.get("image", selected.get("video", {})) if isinstance(selected, dict) else {}
+        if isinstance(saved_paths, str):
+            try:
+                saved_paths = json.loads(saved_paths).get("saved_paths")
+            except (AttributeError, TypeError, ValueError):
+                saved_paths = None
+        original = saved_paths[index] if isinstance(saved_paths, list) and index < len(saved_paths) else None
+        cached = media.get("path") if isinstance(media, dict) else None
+        for filename in (original, cached):
+            if isinstance(filename, str) and os.path.isfile(filename) and ui_tempdir.check_tmp_file(shared.demo, filename):
+                image_dir = os.path.dirname(filename)
+                if "temp" in shared.opts.open_dir_button_choice or not ui_tempdir.is_gradio_temp_path(image_dir):
+                    f = image_dir
+                    break
+
+    util.open_folder(f)
 
 
 def create_output_panel(tabname, outdir, toprow=None):
     res = OutputPanel()
-
-    def open_folder(f, images=None, index=None):
-        if shared.cmd_opts.hide_ui_dir_config:
-            return
-
-        try:
-            if "Sub" in shared.opts.open_dir_button_choice:
-                image_dir = os.path.split(images[index]["name"].rsplit("?", 1)[0])[0]
-                if "temp" in shared.opts.open_dir_button_choice or not ui_tempdir.is_gradio_temp_path(image_dir):
-                    f = image_dir
-        except Exception:
-            pass
-
-        util.open_folder(f)
 
     with gr.Column(elem_id=f"{tabname}_results"):
         if toprow:
@@ -207,16 +228,6 @@ def create_output_panel(tabname, outdir, toprow=None):
 
                 if tabname == "txt2img":
                     res.button_upscale = ToolButton("✨", elem_id=f"{tabname}_upscale", tooltip="Create an upscaled version of the current image using hires fix settings.")
-
-            open_folder_button.click(
-                fn=lambda images, index: open_folder(shared.opts.outdir_samples or outdir, images, index),
-                _js="(y, w) => [y, selected_gallery_index()]",
-                inputs=[
-                    res.gallery,
-                    open_folder_button,  # placeholder for index
-                ],
-                outputs=[],
-            )
 
             if tabname != "extras":
                 download_files = gr.File(None, file_count="multiple", interactive=False, show_label=False, visible=False, elem_id=f"download_files_{tabname}")
@@ -271,6 +282,15 @@ def create_output_panel(tabname, outdir, toprow=None):
                 res.generation_info = gr.HTML(elem_id=f"html_info_x_{tabname}")
                 res.infotext = gr.HTML(elem_id=f"html_info_{tabname}", elem_classes="infotext")
                 res.html_log = gr.HTML(elem_id=f"html_log_{tabname}")
+
+            res.saved_paths = gr.State(value=[]) if tabname == "extras" else res.generation_info
+            open_folder_button.click(
+                fn=lambda images, index, paths: open_folder(shared.opts.outdir_samples or outdir, images, index, paths),
+                _js="(images, index, paths) => [images, selected_gallery_index(), paths]",
+                inputs=[res.gallery, open_folder_button, res.saved_paths],
+                outputs=[],
+                preprocess=False,
+            )
 
             paste_field_names = []
             if tabname == "txt2img":

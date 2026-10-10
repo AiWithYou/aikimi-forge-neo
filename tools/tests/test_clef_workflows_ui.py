@@ -266,3 +266,85 @@ def test_return_to_current_clears_history_so_the_same_run_can_be_reopened(tmp_pa
         assert len(history) == 1, "Returning to current must also clear the history selection"
         result = callback.fn(None, *[component.value for component in callback.inputs[1:]])
         assert result[callback.outputs.index(history[0])]["value"] is None
+
+
+def test_history_labels_read_each_saved_run_once(tmp_path, monkeypatch):
+    import modules_forge.clef.ui as ui
+    import modules_forge.clef.workspace_ui as workspace
+    from modules_forge.clef.core import atomic_json
+
+    identifier = "20261011T120000-12345678"
+    atomic_json(
+        tmp_path / identifier / "result.json",
+        {"status": "complete", "request": {"profile": "flash-int8"}, "items": [{"id": "0", "kind": "record"}]},
+    )
+    monkeypatch.setattr(ui, "OUTPUTS", tmp_path)
+    calls = []
+    original = ui._read_run
+
+    def read(key):
+        calls.append(key)
+        return original(key)
+
+    monkeypatch.setattr(ui, "_read_run", read)
+    monkeypatch.setattr(workspace, "_read_run", read)
+    choices = workspace.history_for()
+    assert len(choices) == 1 and choices[0][0].startswith("文章・JSON · ")
+    assert calls == [identifier]
+
+
+def test_history_is_scanned_once_at_build_and_only_on_poll_completion(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import modules_forge.clef.workspace_ui as workspace
+
+    calls = []
+    monkeypatch.setattr(workspace, "history_for", lambda: calls.append(True) or [])
+    monkeypatch.setattr(workspace, "environment_status", lambda: "test")
+    with gr.Blocks() as app:
+        workspace.build(outputs=tmp_path / "outputs")
+    assert len(calls) == 1, "History and comparison use the same initial scan"
+    poll = next(function.fn for function in app.fns.values() if function.fn and function.fn.__name__ == "poll")
+    data = run()
+    data["status"] = "running"
+    current = ["flash-int8", "", data["request"]["questions"], 262144, 4096, {"items": []}]
+    info = {"done": False, "result": data, "message": "running"}
+    monkeypatch.setattr(workspace.STUDIO, "status", lambda *args: info)
+    arguments = [data["id"], {"id": "viewing-history"}, None, *current, ["入力順", "すべて", None, 1]]
+    request = SimpleNamespace(session_hash="owner")
+    calls.clear()
+    poll(*arguments, request)
+    poll(*arguments, request)
+    assert not calls, "Running polls must not read historical runs"
+    info["done"] = True
+    poll(*arguments, request)
+    poll(*arguments, request)
+    assert len(calls) == 1, "Repeated final polls must refresh history only once"
+
+
+def test_result_downloads_aggregate_the_latest_running_decisions_on_click(tmp_path, monkeypatch):
+    import json
+
+    import modules_forge.clef.workspace_ui as workspace
+
+    monkeypatch.setattr(workspace, "history_for", lambda: [])
+    monkeypatch.setattr(workspace, "environment_status", lambda: "test")
+    with gr.Blocks() as app:
+        workspace.build(outputs=tmp_path / "outputs")
+    latest = run()
+    latest["status"] = "running"
+    monkeypatch.setattr(workspace, "_read_run", lambda _: copy.deepcopy(latest))
+    exports = {
+        function.fn.__name__: function
+        for function in app.fns.values()
+        if function.fn and function.fn.__name__ in {"export_json", "export_csv_file"}
+    }
+    assert set(exports) == {"export_json", "export_csv_file"}
+    saved_json = exports["export_json"].fn({"id": latest["id"]}, latest["id"] + " · heading")
+    from pathlib import Path
+
+    assert json.loads(Path(saved_json).read_text(encoding="utf-8")) == latest
+    saved_csv = exports["export_csv_file"].fn({"id": latest["id"]}, latest["id"] + " · heading")
+    assert "0.8" in Path(saved_csv).read_text(encoding="utf-8-sig")
+    with pytest.raises(gr.Error, match="表示する実行が変わりました"):
+        exports["export_json"].fn({"id": latest["id"]}, "old-run · heading")

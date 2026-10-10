@@ -5,7 +5,7 @@ import gradio as gr
 
 import modules.scripts
 import modules.shared as shared
-from modules import infotext_utils, processing
+from modules import infotext_utils, processing, ui_tempdir
 from modules.infotext_utils import (
     create_override_settings_dict,
     parse_generation_parameters,
@@ -111,20 +111,27 @@ def txt2img_upscale_function(id_task: str, request: gr.Request, gallery, gallery
     insert = getattr(shared.opts, "hires_button_gallery_insert", False)
     new_gallery = []
     new_infotexts = []
+    old_saved_paths = geninfo.get("saved_paths", [])
+    if not isinstance(old_saved_paths, list):
+        old_saved_paths = []
+    new_saved_paths = []
 
     for i, image in enumerate(gallery):
         if insert or i != gallery_index:
             image[0].already_saved_as = image[0].filename.rsplit("?", 1)[0]
             new_gallery.append(image)
+            new_saved_paths.append(old_saved_paths[i] if i < len(old_saved_paths) else None)
             if i >= len(geninfo["infotexts"]):  # e.g. ControlNet Detected Map
                 new_infotexts.append(None)
             else:
                 new_infotexts.append(geninfo["infotexts"][i])
         if i == gallery_index:
             new_gallery.extend(processed.images)
+            new_saved_paths.extend(ui_tempdir.gallery_saved_paths(processed.images))
             new_infotexts.extend(processed.infotexts)
 
     geninfo["infotexts"] = new_infotexts
+    geninfo["saved_paths"] = new_saved_paths
 
     return gr.update(value=new_gallery, selected_index=gallery_index), json.dumps(geninfo), plaintext_to_html(processed.infotexts[0]), plaintext_to_html(processed.comments, classname="comments")
 
@@ -140,12 +147,12 @@ def txt2img_function(id_task: str, request: gr.Request, *args):
 
     shared.total_tqdm.clear()
 
-    generation_info_js = processed.js()
     if opts.samples_log_stdout:
-        print(generation_info_js)
+        print(processed.js())
 
     if opts.do_not_show_images:
         processed.images = []
+    generation_info_js = processed.js(include_saved_paths=True)
 
     if processed.video_path is None:
         gallery_arg = gr.update(value=processed.images + processed.extra_images, visible=True)

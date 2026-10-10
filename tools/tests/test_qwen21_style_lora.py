@@ -9,7 +9,7 @@ from unittest.mock import patch
 import torch
 from safetensors.torch import save_file
 
-from modules_forge.qwen_image21 import style_lora
+from modules_forge.qwen_image21 import style_lora, style_lora_runtime
 from modules_forge.qwen_image21.core import Request
 from modules_forge.qwen_image21.style_lora_runtime import load_adapters
 
@@ -147,18 +147,92 @@ class StyleLoraTests(unittest.TestCase):
             load_adapters(model, self.root, values)
         self.assertIs(model.transformer_blocks[0].attn.to_q, base)
 
-    def test_zero_skips_loading_and_cache_changes_with_selection_strength_file(self):
+    def test_zero_skips_loading_and_cache_tracks_files_instead_of_strength(self):
         model, base = self.model()
         with patch("modules_forge.qwen_image21.style_lora_runtime.load_file") as load:
             self.assertEqual(load_adapters(model, self.root, self.options(0)), [])
         load.assert_not_called()
         self.assertIs(model.transformer_blocks[0].attn.to_q, base)
         key = style_lora.cache_key(self.root, self.options())
-        self.assertNotEqual(key, style_lora.cache_key(self.root, self.options(0.5)))
+        self.assertEqual(key, style_lora.cache_key(self.root, self.options(0.5)))
         self.assertNotEqual(key, style_lora.cache_key(self.root, {"style_loras": []}))
         self.tensors[self.prefix + ".alpha"] = torch.ones(1, 1)
         self.write()
         self.assertNotEqual(key, style_lora.cache_key(self.root, self.options()))
+
+    def test_reused_adapters_update_independent_alpha_scales_and_zero_metadata(self):
+        second = self.root / "loras/second.safetensors"
+        save_file(self.tensors | {self.prefix + ".alpha": torch.tensor(2.0)}, second)
+        model, base = self.model()
+        x = torch.ones(1, 3, dtype=torch.bfloat16)
+        before = base(x)
+        values = self.options(0.5)
+        values["style_loras"].append({"name": second.name, "strength": -0.25})
+        loaded = load_adapters(model, self.root, values)
+        wrapper = model.transformer_blocks[0].attn.to_q
+        values["style_loras"] = [{"name": second.name, "strength": 0.75}, {"name": self.path.name, "strength": -1}]
+        with patch("modules_forge.qwen_image21.style_lora_runtime.load_file") as load:
+            current = style_lora_runtime.update_strengths(model, loaded, self.root, values)
+            self.assertEqual([item["name"] for item in current], [second.name, self.path.name])
+            self.assertEqual([item["strength"] for item in current], [0.75, -1])
+            torch.testing.assert_close(wrapper(x), before + 1.5, atol=0.016, rtol=0.016)
+            values["style_loras"] = [{"name": self.path.name, "strength": 0}, {"name": second.name, "strength": 0}]
+            self.assertEqual(style_lora_runtime.update_strengths(model, loaded, self.root, values), [])
+            torch.testing.assert_close(wrapper(x), before)
+            values["style_loras"] = [{"name": self.path.name, "strength": 1}]
+            current = style_lora_runtime.update_strengths(model, loaded, self.root, values)
+            torch.testing.assert_close(wrapper(x), before + 3, atol=0.016, rtol=0.016)
+            self.assertEqual(current[0]["strength"], 1)
+        load.assert_not_called()
+        self.assertIs(model.transformer_blocks[0].attn.to_q, wrapper)
+        self.assertIs(wrapper.base.base, base)
+
+    def test_unloaded_adapter_update_fails_before_changing_any_scale(self):
+        model, base = self.model()
+        loaded = load_adapters(model, self.root, self.options(0.5))
+        save_file(self.tensors, self.root / "loras/second.safetensors")
+        values = self.options(-1)
+        values["style_loras"].append({"name": "second.safetensors", "strength": 1})
+        with self.assertRaisesRegex(ValueError, "読み込み"):
+            style_lora_runtime.update_strengths(model, loaded, self.root, values)
+        self.assertEqual(model.transformer_blocks[0].attn.to_q.scale, 0.25)
+        self.assertIs(model.transformer_blocks[0].attn.to_q.base, base)
+
+    def test_updating_style_strength_preserves_sampling_and_outpaint_residuals(self):
+        from modules_forge.qwen_image21.outpaint_runtime import OutpaintLinear
+        from modules_forge.qwen_image21.pdd_vendor.lora_utils_pdd import PDDLoRALinear
+
+        model, base = self.model()
+        sampling = PDDLoRALinear(base, rank=2, alpha=1)
+        with torch.no_grad():
+            sampling.lora_down.fill_(1)
+            sampling.lora_up.fill_(1)
+        outpaint = OutpaintLinear(sampling, torch.ones(2, 3), torch.ones(4, 2))
+        model.transformer_blocks[0].attn.to_q = outpaint
+        x = torch.ones(1, 3, dtype=torch.bfloat16)
+        before = outpaint(x)
+        loaded = load_adapters(model, self.root, self.options())
+        style_lora_runtime.update_strengths(model, loaded, self.root, self.options(0))
+        torch.testing.assert_close(model.transformer_blocks[0].attn.to_q(x), before)
+        self.assertIs(model.transformer_blocks[0].attn.to_q.base, outpaint)
+        style_lora_runtime.update_strengths(model, loaded, self.root, self.options(-0.5))
+        torch.testing.assert_close(model.transformer_blocks[0].attn.to_q(x), before - 1.5, rtol=0.016, atol=0.016)
+
+    def test_reuse_checks_current_base_mismatch_permission_before_updating_scales(self):
+        self.write({"qwen_base_forward": "convrot_int8_bf16_backward_v1"})
+        model, _ = self.model()
+        loaded = load_adapters(model, self.root, self.options(allow_lora_base_mismatch=True))
+        wrapper = model.transformer_blocks[0].attn.to_q
+        with self.assertRaisesRegex(ValueError, "ConvRot"):
+            style_lora_runtime.update_strengths(model, loaded, self.root, self.options(0.25))
+        self.assertEqual(wrapper.scale, 0.5)
+        self.assertEqual(style_lora_runtime.update_strengths(model, loaded, self.root, self.options(0)), [])
+        self.assertEqual(wrapper.scale, 0)
+        current = style_lora_runtime.update_strengths(
+            model, loaded, self.root, self.options(0.25, allow_lora_base_mismatch=True)
+        )
+        self.assertTrue(current[0]["experimental_base_mismatch"])
+        self.assertEqual(wrapper.scale, 0.125)
 
     def test_ui_blocks_mismatched_base_and_labels_experiment(self):
         from types import SimpleNamespace
