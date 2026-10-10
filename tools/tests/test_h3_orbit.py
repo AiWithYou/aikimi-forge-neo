@@ -154,7 +154,7 @@ class H3OrbitTests(unittest.TestCase):
         self.assertEqual(meta["output_validation"]["frames"], 73)
         self.assertEqual(meta["output_validation"]["audio_channels"], 0)
         items = bridge.list_history(self.root, output)
-        selected = next(item for item in items if item.path == target)
+        selected = next(item for item in items if item.path == target.resolve())
         restored = bridge.load_history_request(selected.public_id, items, output)
         self.assertEqual(restored.mode, "orbit")
         self.assertEqual(restored.orbit_strength, 1.0)
