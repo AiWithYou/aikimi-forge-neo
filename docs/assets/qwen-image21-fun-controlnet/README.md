@@ -135,6 +135,8 @@ ControlNetの初回推論には各プロセスのウォームアップが含ま�
 
 ## 素材と再現条件
 
+以下は掲載作例の比較条件です。40 steps・制御強度1.0は推奨の参考値で、UIでは別のStepsやTurbo／Fun Accとの併用も指定できます。Sparseを同時に選ぶと、KVキャッシュを無効にしてdense Attentionで実行し、開始時に案内します。掲載画像はその組み合わせの画質評価を含みません。
+
 - [人物参照](anime-character-reference.jpg)はユーザーがこの作例用に提供した画像です。[人物Lineart](anime-pose-lineart.png)はそれを参照してImageGenで新たな片足立ちの構図を生成しました。[建築Lineart](ring-observatory-lineart.png)と[3D原画](ring-observatory-render-source.png)もImageGenで新規生成しました。Scribble・Canny・Gray・Pose・Inpaintingマスクは元画像から抽出または手作業で作成し、Depth・HED・MLSDは各前処理モデルを適用しました。
 - Windows 11、RTX 3090 24GB、Qwen Image 2.1通常版INT8、CPU退避、Sparse OFF、プロンプト書き換えOFF。制御重みはKijaiのINT8 ConvRot（SHA-256 `07aa961570ac0e03d4ca936aecd76854d077a33cde69b5092399afba01b3715d`）。
 - 数値は各条件1回の測定で、平均や画質保証ではありません。PyTorch割当量はデスクトップやCUDAコンテキストを含むGPU全体の使用量ではありません。

@@ -12,7 +12,7 @@ from pathlib import Path
 import gradio as gr
 from PIL import Image, ImageDraw
 
-from modules_forge.qwen_image21.capabilities import PRECISIONS, fixed_steps
+from modules_forge.qwen_image21.capabilities import recommended_steps, sampling_recommendations
 from modules_forge.qwen_image21.outpaint import Plan, normalize_image, prepare, recipe, stitch
 from modules_forge.qwen_image21.outpaint_gui import canvas_markup, parse_canvas_commit
 from modules_forge.qwen_image21.ui_shared import register_outpaint
@@ -454,6 +454,8 @@ def start_native(
             outpaint_feather=feather,
         )
         identifier = native_studio().start(generation, native_owner(request))
+        for message in sampling_recommendations(generation.to_dict()):
+            gr.Warning(message)
         return (
             identifier,
             "生成を開始しました。初回のモデル読み込みには時間がかかります。",
@@ -589,11 +591,10 @@ def shared_profile_summary(steps, version, *shared):
 
 
 def outpaint_step_settings(precision, fun_acc, steps, normal_steps):
-    fixed = fixed_steps(precision, fun_acc)
-    if fixed is not None:
-        previous_fixed = {fixed_steps(item) for item in PRECISIONS} - {None}
-        return gr.update(value=fixed, interactive=False), normal_steps if steps in previous_fixed else steps
-    return gr.update(value=normal_steps, interactive=True), normal_steps
+    if fun_acc:
+        return gr.update(value=4, interactive=False), normal_steps if steps == 4 else steps
+    restored = normal_steps if steps == 4 else steps
+    return gr.update(value=restored, interactive=True), restored
 
 
 def native_feather_settings(source, feather):
@@ -610,11 +611,12 @@ def on_ui_tabs(profile_controls=None):
     from modules_forge.qwen_image21.outpaint_profile import FIELDS
 
     shared_inputs = [profile_controls[name] for name in FIELDS] if profile_controls else []
-    initial_fixed = (
-        fixed_steps(profile_controls["precision"].value, profile_controls["fun_acc"].value)
+    initial_steps = (
+        recommended_steps(profile_controls["precision"].value, profile_controls["fun_acc"].value)
         if profile_controls
         else None
     )
+    initial_accelerated = profile_controls["fun_acc"].value if profile_controls else False
     with gr.Blocks() as tab:
         state = gr.State(None)
         dirty = gr.State(False)
@@ -773,16 +775,16 @@ def on_ui_tabs(profile_controls=None):
                             info="元画像の内側も、広げた辺からこの幅だけ変化します。0なら元画像の全画素を保持します。",
                             elem_id="qwen21-outpaint-native-feather",
                         )
-                        native_steps = gr.Slider(
-                            1,
-                            100,
-                            value=initial_fixed or 25,
+                        native_steps = gr.Number(
+                            minimum=1,
+                            precision=0,
+                            value=initial_steps or 25,
                             step=1,
                             label="Steps",
-                            interactive=initial_fixed is None,
+                            interactive=not initial_accelerated,
                             elem_id="qwen21-outpaint-native-steps",
                         )
-                        normal_steps = gr.State(25)
+                        normal_steps = gr.State(initial_steps or 25)
                         native_seed = gr.Number(value=-1, precision=0, label="Seed（-1でランダム）")
                     setup_status = gr.Markdown(adapter_status("v2"), elem_id="qwen21-outpaint-setup-status")
                     setup_button = gr.Button(
@@ -794,7 +796,7 @@ def on_ui_tabs(profile_controls=None):
                         profile_summary = gr.Markdown(
                             (
                                 shared_profile_summary(
-                                    initial_fixed or 25, "v2", *(component.value for component in shared_inputs)
+                                    initial_steps or 25, "v2", *(component.value for component in shared_inputs)
                                 )
                                 if shared_inputs
                                 else ""

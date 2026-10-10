@@ -404,6 +404,154 @@ class WorkerJobTests(unittest.TestCase):
                 self.assertFalse((self.job / "metadata.json").exists())
                 self.assertFalse((self.job / "result.json").exists())
 
+    def test_official_default_steps_are_eight_when_omitted(self):
+        self.payload["precision"] = "turbo_official_int8"
+        self.request.pop("steps")
+        self.write_request()
+        with (
+            mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+            mock.patch.object(worker, "sampling_sigmas", return_value=OFFICIAL_SIGMAS),
+        ):
+            result, _ = self.run_job()
+        self.assertEqual(self.pipe.calls[-1]["num_inference_steps"], 8)
+        self.assertEqual(self.pipe.calls[-1]["sigmas"], OFFICIAL_SIGMAS)
+        self.assertEqual(result["metadata"]["actual_steps"], 8)
+
+    def test_official_custom_steps_use_native_euler_grid_and_requested_trace(self):
+        self.payload["precision"] = "turbo_official_int8"
+        for steps in (1, 3, 12, 101):
+            with (
+                self.subTest(steps=steps),
+                mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+                mock.patch.object(worker, "sampling_sigmas", return_value=OFFICIAL_SIGMAS) as source,
+            ):
+                self.request["steps"] = steps
+                self.write_request()
+                result, _ = self.run_job()
+                grid = self.pipe.calls[-1]["sigmas"]
+                self.assertEqual(len(grid), steps)
+                for actual, expected in zip(grid, (1 - index / steps for index in range(steps)), strict=True):
+                    self.assertAlmostEqual(actual, expected)
+                self.assertEqual(grid[-1], 1 / steps)
+                self.assertEqual(result["metadata"]["sampling_sigmas"], grid)
+                self.assertEqual(result["metadata"]["sampling_timesteps"], [1000 * sigma for sigma in grid])
+                self.assertEqual(result["metadata"]["actual_steps"], steps)
+                source.assert_called_once()
+
+    def test_custom_official_trace_rejects_missing_extra_or_shifted_timesteps(self):
+        self.payload["precision"] = "turbo_official_int8"
+        self.request["steps"] = 3
+        self.write_request()
+        expected = [1000, 2000 / 3, 1000 / 3]
+        for trace in (expected[:2], expected + [0.0], [999, *expected[1:]]):
+            with (
+                self.subTest(trace=trace),
+                mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+                mock.patch.object(worker, "sampling_sigmas", return_value=OFFICIAL_SIGMAS),
+                mock.patch.object(worker, "_load_runtime", return_value=self.runtime),
+            ):
+                self.pipe.timesteps = trace
+                with self.assertRaisesRegex(RuntimeError, "Official Turbo.*(timestep|steps)"):
+                    worker.run_request(self.payload)
+                self.assertFalse((self.job / "output.png").exists())
+
+    def test_official_fun_acc_uses_native_pdd_grid_and_preserves_callback(self):
+        from modules_forge.qwen_image21.fun_acc_lora import CONFIG, adapter_dir
+
+        self.payload["precision"] = "turbo_official_int8"
+        self.request.update(steps=4, fun_acc=True)
+        self.write_request()
+        grid = [1.0, 0.75, 0.45, 0.15, 0.0]
+        self.runtime["fun_acc_config"] = {"pdd_sigmas": grid, "pdd_block_size": 1}
+        self.pipe.timesteps = [1000 * sigma for sigma in grid[:-1]]
+        self.pipe.transformer = object()
+        adapter = self.root / "fun-acc.safetensors"
+        adapter.write_bytes(b"fixture")
+        config_path = adapter_dir(self.root) / CONFIG
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(json.dumps(self.runtime["fun_acc_config"]), encoding="utf-8")
+        callback = mock.Mock()
+        self.fake_torch.float32 = "float32"
+        self.fake_torch.tensor = lambda values, **_: values
+        with (
+            mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+            mock.patch("modules_forge.qwen_image21.fun_acc_lora.installed", return_value={"path": str(adapter)}),
+            mock.patch.object(worker, "sampling_sigmas", return_value=OFFICIAL_SIGMAS),
+            patched_modules(
+                {
+                    "modules_forge.qwen_image21.pdd_vendor.qwenimage21_pdd": types.SimpleNamespace(
+                        pdd_step_callback=mock.Mock(return_value=callback)
+                    )
+                }
+            ),
+        ):
+            result, _ = self.run_job()
+        self.assertNotIn("sigmas", self.pipe.calls[-1])
+        self.assertEqual(callback.call_count, 4)
+        self.assertEqual(result["metadata"]["sampling_sigmas"], grid[:-1])
+        self.assertEqual(result["metadata"]["sampling_timesteps"], self.pipe.timesteps)
+        self.assertEqual(result["metadata"]["actual_steps"], 4)
+
+    def test_positive_steps_above_100_and_unbounded_finite_strength_are_accepted(self):
+        for steps, strength in ((40, -0.5), (40, 3.5), (101, 1.0), (1001, 1.0)):
+            with self.subTest(steps=steps, strength=strength):
+                self.request.update(steps=steps, control_strength=strength)
+                self.write_request()
+                _, _, request = worker._read_request(self.payload)
+                self.assertEqual(request["steps"], steps)
+                self.assertEqual(request["control_strength"], strength)
+
+    def test_viggle_turbo_accepts_steps_beyond_its_recommendation(self):
+        self.payload["precision"] = "turbo_bf16"
+        self.request["steps"] = 7
+        self.write_request()
+        with mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"):
+            result, _ = self.run_job()
+        self.assertEqual(self.pipe.calls[-1]["num_inference_steps"], 7)
+        self.assertNotIn("sigmas", self.pipe.calls[-1])
+        self.assertEqual(result["metadata"]["steps"], 7)
+
+    def test_custom_official_steps_still_require_valid_source_sigmas(self):
+        self.payload["precision"] = "turbo_official_int8"
+        self.request["steps"] = 3
+        self.write_request()
+        with (
+            mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest"),
+            mock.patch.object(worker, "sampling_sigmas", return_value=None),
+            self.assertRaisesRegex(ValueError, "sigmas"),
+        ):
+            self.run_job()
+
+    def test_controlnet_and_sparse_can_share_reference_images(self):
+        reference = self.root / "reference.png"
+        Image.new("RGB", (256, 320)).save(reference)
+        self.request.update(control_image=str(reference), input_images=[str(reference)], sparse_mode="auto")
+        self.write_request()
+        _, _, request = worker._read_request(self.payload)
+        self.assertEqual(request["input_images"], [str(reference)])
+        self.assertEqual(request["control_image"], str(reference))
+
+    def test_sampling_rejects_real_invalid_steps_and_nonfinite_strength(self):
+        for steps in (0, -1, True, 1.5, "8"):
+            with self.subTest(steps=steps):
+                self.request["steps"] = steps
+                self.write_request()
+                with self.assertRaisesRegex(ValueError, "steps"):
+                    worker._read_request(self.payload)
+        self.request["steps"] = 40
+        for strength in (True, "1", float("inf"), float("nan"), 10**1000):
+            with self.subTest(strength=strength):
+                self.request["control_strength"] = strength
+                self.write_request()
+                with self.assertRaisesRegex(ValueError, "control_strength"):
+                    worker._read_request(self.payload)
+
+    def test_fun_acc_rejects_steps_that_its_native_scheduler_cannot_execute(self):
+        self.request.update(fun_acc=True, steps=5)
+        self.write_request()
+        with self.assertRaisesRegex(ValueError, "4"):
+            worker._read_request(self.payload)
+
     def test_official_turbo_accepts_fp32_timestep_roundoff_and_records_actual_values(self):
         self.payload["precision"] = "turbo_official_int8"
         self.request["steps"] = 8
@@ -904,6 +1052,25 @@ class WorkerLoaderTests(unittest.TestCase):
         self.assertEqual(self.events[0][3]["subfolder"], "transformer")
         self.assertIs(self.events[1][3]["transformer"], self.components["transformer"])
         self.assertIsNone(runtime["pipe"].scheduler.config.shift_terminal)
+
+    def test_official_fun_acc_keeps_the_adapter_stack_pdd_scheduler(self):
+        scheduler = object()
+        config = {"pdd_sigmas": [1, 0.75, 0.45, 0.15, 0], "pdd_block_size": 1}
+
+        def load_stack(pipe, *_args):
+            pipe.scheduler = scheduler
+            return [], {"name": "Fun Acc"}, config, None
+
+        with (
+            mock.patch("modules_forge.qwen_image21.turbo.turbo_manifest", return_value={}),
+            mock.patch("modules_forge.qwen_image21.adapter_stack.load_stack", side_effect=load_stack),
+        ):
+            runtime = worker._load_runtime(
+                self.job, {"precision": "turbo_official_int8", "memory_mode": "offload", "fun_acc": True}, self.job
+            )
+        self.assertIs(runtime["pipe"].scheduler, scheduler)
+        self.assertIs(runtime["fun_acc_config"], config)
+        self.assertFalse(any(event[:2] == ("scheduler", "load") for event in self.events))
 
     def test_official_int8_uses_official_transformer_and_shared_encoder(self):
         official = self.job.parent / "turbo" / "official"

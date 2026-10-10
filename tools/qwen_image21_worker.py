@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from modules_forge.qwen_image21.capabilities import PRECISIONS, fixed_steps, quantization_precision  # noqa: E402
+from modules_forge.qwen_image21.capabilities import PRECISIONS, quantization_precision, recommended_steps  # noqa: E402
 from modules_forge.qwen_image21.quantized_cache import INT8_SKIP_MODULES  # noqa: E402
 from modules_forge.qwen_image21.regular_gguf import MODEL_ID as REGULAR_MODEL_ID  # noqa: E402
 from modules_forge.qwen_image21.regular_gguf import REVISION as REGULAR_REVISION  # noqa: E402
@@ -196,9 +196,9 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         if isinstance(value, bool) or not isinstance(value, int) or value < 256 or value > 4096 or value % 32:
             raise ValueError(f"{key} must be a multiple of 32 between 256 and 4096.")
         request[key] = value
-    steps = request.get("steps", 40)
-    if isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= 100:
-        raise ValueError("steps must be an integer between 1 and 100.")
+    steps = request.get("steps", recommended_steps(request["precision"], request.get("fun_acc", False)) or 40)
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps は正の整数で指定してください。")
     request["steps"] = steps
     from modules_forge.qwen_image21.capabilities import validate_sampling
 
@@ -220,8 +220,6 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
         if [file_identity(Path(item["path"])) for item in lora_infos] != request["lora_sources"]:
             raise ValueError("The selected LoRA changed after submission. Select it again.")
     if request["precision"].startswith("turbo_"):
-        if steps != fixed_steps(request["precision"]):
-            raise ValueError(f"Turbo requires exactly {fixed_steps(request['precision'])} steps.")
         from modules_forge.qwen_image21.turbo import turbo_manifest
 
         turbo_manifest(runtime_root(model_path, request), request["precision"])
@@ -272,18 +270,17 @@ def _read_request(payload: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
             or not Path(control_image).is_file()
         ):
             raise ValueError("ControlNet requires an existing absolute local image path.")
-        if request.get("sparse_mode", "off") != "off":
-            raise ValueError("Fun ControlNet requires Sparse Attention to be off.")
     strength = request.get("control_strength", 1.0)
-    if (
-        isinstance(strength, bool)
-        or not isinstance(strength, (int, float))
-        or not math.isfinite(strength)
-        or not 0 <= strength <= 2
-    ):
-        raise ValueError("control_strength must be between 0 and 2.")
+    if isinstance(strength, bool) or not isinstance(strength, (int, float)):
+        raise ValueError("control_strength は有限の数値で指定してください。")
+    try:
+        strength = float(strength)
+    except OverflowError as exc:
+        raise ValueError("control_strength は有限の数値で指定してください。") from exc
+    if not math.isfinite(strength):
+        raise ValueError("control_strength は有限の数値で指定してください。")
     request["control_image"] = control_image
-    request["control_strength"] = float(strength)
+    request["control_strength"] = strength
     request["control_inpaint"] = control_inpaint
     if control_inpaint:
         from modules_forge.qwen_image21.annotations import validate_edit_mask
@@ -614,7 +611,7 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         _progress(job, "loading", "Fun ControlNet INT8を読み込み中", 0.28)
         controlnet = FunUnion.from_checkpoint(Path(info["path"]))
         controlnet.attach(pipe.transformer)
-    if request["precision"].startswith("turbo_"):
+    if request["precision"].startswith("turbo_") and not request.get("fun_acc"):
         from diffusers import FlowMatchEulerDiscreteScheduler
 
         pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
@@ -816,6 +813,16 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         )
         if request["precision"] in OFFICIAL_PRECISIONS and sigmas is None:
             raise ValueError("Official Turbo sampling sigmas are missing.")
+        if request["precision"] in OFFICIAL_PRECISIONS:
+            if request.get("fun_acc"):
+                # The adapter's PDD scheduler supplies its own four-step grid.
+                sigmas = None
+            elif request["steps"] != len(OFFICIAL_SIGMAS):
+                steps = request["steps"]
+                # Match native Flow Euler's linspace(1, 1 / steps, steps).
+                spacing = (1.0 / steps - 1.0) / (steps - 1) if steps > 1 else 0.0
+                sigmas = [1.0 + index * spacing for index in range(steps)]
+                sigmas[-1] = 1.0 / steps
         if request.get("operation") == "prepare":
             from modules_forge.qwen_image21.quantized_cache import saved_components
 
@@ -934,8 +941,12 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 torch.tensor(config["pdd_sigmas"], dtype=torch.float32),
                 config["pdd_block_size"],
             )
+            if request["precision"] in OFFICIAL_PRECISIONS:
+                sigmas = list(config["pdd_sigmas"][:: config["pdd_block_size"]][:-1])
         sampling_timesteps = [] if request["precision"] in OFFICIAL_PRECISIONS else None
-        expected_timesteps = [1000 * sigma for sigma in OFFICIAL_SIGMAS]
+        expected_timesteps = [1000 * sigma for sigma in sigmas] if sigmas is not None else []
+        if sampling_timesteps is not None and len(expected_timesteps) != request["steps"]:
+            raise RuntimeError("Official Turbo sampling schedule does not match the requested steps.")
 
         def on_step(_pipe, step: int, _timestep, callback_kwargs: dict) -> dict:
             _check_cancel(job)
@@ -981,7 +992,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                 return_dict=True,
                 callback_on_step_end=on_step,
                 callback_on_step_end_tensor_inputs=[],
-                **({"sigmas": sigmas} if sigmas is not None else {}),
+                **({"sigmas": sigmas} if sigmas is not None and pdd_callback is None else {}),
             )
         finally:
             if controlnet is not None:

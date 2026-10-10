@@ -12,8 +12,8 @@ from .credentials import read_saved_key
 from .qwen21 import OPTIONS_ENV, Options
 
 ROOT = Path(__file__).resolve().parents[2]
-# Reviewed 2026-10-09 official 8-step Turbo, persistent quantization and existing edit paths.
-WORKER_BLOB = "1621c10cfcf569b1be083d5e6fa96e1a15e11c65"
+# Reviewed 2026-10-10 editable Turbo sampling, PDD scheduling and dense ControlNet fallback.
+WORKER_BLOB = "b2d8b775f05a924db1294852ffde8afa68e298a3"
 
 
 def launch_defaults() -> Options:
@@ -43,7 +43,8 @@ def worker_launch(request, worker: Path, environment: dict) -> tuple[Path, dict,
     digest = hashlib.sha1(b"blob " + str(len(source)).encode() + b"\0" + source, usedforsecurity=False).hexdigest()
     if digest != WORKER_BLOB:
         raise ValueError("Qwen worker differs from the reviewed revision; sparse mode is unavailable")
-    if options.mode == "jev" and options.max_calls:
+    dense_fallback = bool(getattr(request, "control_image", "") or getattr(request, "fun_acc", False))
+    if options.mode == "jev" and options.max_calls and not dense_fallback:
         if replay_requested():
             environment[REPLAY_ENV] = os.environ[REPLAY_ENV]
         else:

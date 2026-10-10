@@ -46,7 +46,9 @@ Close Neo and run from the Neo checkout root in PowerShell:
 & .\models\Qwen-Image-2.1\worker-env\Scripts\python.exe -X utf8 tools\qwen21_hub_release.py install --precision turbo_official_int8 --release-dir .\work\hf-models\official-turbo-int8
 ```
 
-Select **公式Turbo · INT8 · 8 steps** in Qwen Image 2.1 Studio. The importer checks both components' source identities, recipes and runtime versions, then verifies each component's payload hashes before installing that component. It creates a local cache manifest bound to the receiving machine. An existing valid component is verified and retained. If runtime versions differ, prepare a conversion locally in that environment.
+Select **公式Turbo · INT8 · 推奨8 steps** in Qwen Image 2.1 Studio. The importer checks both components' source identities, recipes and runtime versions, then verifies each component's payload hashes before installing that component. It creates a local cache manifest bound to the receiving machine. An existing valid component is verified and retained. If runtime versions differ, prepare a conversion locally in that environment.
+
+Neo v3.9.1 and later accepts any positive step count. Eight steps uses the official schedule; other counts use a native FlowMatch schedule. Recommendations appear as non-blocking notifications.
 
 CUDA with BF16 support is required. The versions and quantization recipe recorded in the manifest are part of this release's format. Neo's isolated runtime provides its required loader and CPU-offload handling.
 

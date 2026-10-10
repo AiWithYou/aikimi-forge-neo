@@ -92,11 +92,12 @@ class StyleLoraTests(unittest.TestCase):
     def test_path_escape_and_incompatible_modes(self):
         with self.assertRaises(ValueError):
             style_lora.resolve(self.root, "../outside.safetensors")
-        for changes in ({"fun_acc": True}, {"precision": "turbo_bf16"}, {"sparse_mode": "static"}):
+        for changes in ({"fun_acc": True}, {"sparse_mode": "static"}):
             with self.assertRaises(ValueError):
                 Request(prompt="test", **self.options(**changes)).resolved()
         for changes in (
             {"fun_acc": True, "steps": 4},
+            {"precision": "turbo_bf16"},
             {"precision": "turbo_bf16", "steps": 4},
             {"sparse_mode": "fixed"},
         ):

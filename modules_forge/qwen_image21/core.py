@@ -39,7 +39,7 @@ class QwenImage21Error(ValueError):
     """An actionable input, runtime, or artifact error."""
 
 
-def integer(value, label: str, lower: int, upper: int) -> int:
+def integer(value, label: str, lower: int, upper: int | None = None) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         raise QwenImage21Error(f"{label}は整数で指定してください。")
     try:
@@ -51,7 +51,9 @@ def integer(value, label: str, lower: int, upper: int) -> int:
             raise ValueError
     except (ValueError, OverflowError):
         raise QwenImage21Error(f"{label}は整数で指定してください。") from None
-    if not lower <= number <= upper:
+    if number < lower or (upper is not None and number > upper):
+        if upper is None:
+            raise QwenImage21Error(f"{label}は{lower}以上の整数で指定してください。")
         raise QwenImage21Error(f"{label}は{lower}〜{upper}の範囲です。")
     return number
 
@@ -151,7 +153,7 @@ class Request:
     local_components: str = ""
 
     def resolved(self) -> Request:
-        from .capabilities import fixed_steps, quantization_precision, validate_sampling
+        from .capabilities import quantization_precision, validate_sampling
         from .style_lora import validate_options
 
         validate_options(self.to_dict())
@@ -171,9 +173,7 @@ class Request:
         height = integer(self.height, "高さ", 256, 4096)
         if width % 32 or height % 32 or width * height > MAX_OUTPUT_PIXELS:
             raise QwenImage21Error("幅・高さは32の倍数、総画素数は約430万画素（2400×1792）以内で指定してください。")
-        steps = integer(self.steps, "Steps", 1, 100)
-        if self.operation == "prepare":
-            steps = fixed_steps(self.precision) or steps
+        steps = integer(self.steps, "Steps", 1)
         seed = integer(self.seed, "Seed", -1, 2**63 - 1)
 
         try:
@@ -203,9 +203,8 @@ class Request:
             isinstance(self.control_strength, bool)
             or not isinstance(self.control_strength, (int, float))
             or not math.isfinite(self.control_strength)
-            or not 0 <= self.control_strength <= 2
         ):
-            raise QwenImage21Error("Fun ControlNetの強さは0〜2で指定してください。")
+            raise QwenImage21Error("Fun ControlNetの強さは有限の数値で指定してください。")
         if not isinstance(self.control_inpaint, bool):
             raise QwenImage21Error("Fun ControlNetのInpainting指定が不正です。")
         if self.control_inpaint and self.control_kind == "off":
@@ -214,8 +213,6 @@ class Request:
         if self.control_kind != "off":
             if self.operation != "generate":
                 raise QwenImage21Error("Fun ControlNetは画像生成で使用してください。")
-            if self.sparse_mode != "off":
-                raise QwenImage21Error("Fun ControlNetではSparse AttentionをOFFにしてください。")
             if not self.control_image:
                 raise QwenImage21Error("前処理済みの制御画像を追加してください。")
             control_image = validate_images((self.control_image,))[0]

@@ -349,15 +349,19 @@ class UIContractTests(unittest.TestCase):
             "0.65", summary(resolve([first[name] for name in FIELDS], 4) | {"style_loras": request.style_loras}, "v2")
         )
 
-    def test_distilled_steps_restore_outpaint_steps_and_conflicts_are_visible(self):
+    def test_only_fun_acc_locks_outpaint_steps_and_restores_the_previous_value(self):
         fixed, remembered = self.ui.outpaint_step_settings("turbo_q4_k_m", False, 31, 25)
+        self.assertEqual(fixed["value"], 31)
+        self.assertTrue(fixed["interactive"])
+        fixed, remembered = self.ui.outpaint_step_settings("turbo_q4_k_m", True, 31, remembered)
         self.assertEqual(fixed["value"], 4)
         self.assertFalse(fixed["interactive"])
+        _, remembered = self.ui.outpaint_step_settings("turbo_official_int8", True, 4, remembered)
         restored, remembered = self.ui.outpaint_step_settings("bf16", False, 4, remembered)
         self.assertEqual(restored["value"], 31)
         self.assertTrue(restored["interactive"])
 
-    def test_official_turbo_outpaint_keeps_eight_steps_and_restores_normal_steps(self):
+    def test_official_turbo_outpaint_preserves_requested_steps_and_summary(self):
         from modules_forge.qwen_image21.core import Request
         from modules_forge.qwen_image21.outpaint_profile import FIELDS, resolve, summary
 
@@ -365,24 +369,27 @@ class UIContractTests(unittest.TestCase):
             precision = f"turbo_official_{quantization}"
             with self.subTest(precision=precision):
                 fixed, remembered = self.ui.outpaint_step_settings(precision, False, 31, 25)
-                self.assertEqual((fixed["value"], fixed["interactive"], remembered), (8, False, 31))
-                # Switching from another fixed schedule must not overwrite the remembered normal count.
-                _, remembered = self.ui.outpaint_step_settings("turbo_q4_k_m", False, 8, remembered)
-                restored, _ = self.ui.outpaint_step_settings("bf16", False, 4, remembered)
-                self.assertEqual((restored["value"], restored["interactive"]), (31, True))
+                self.assertEqual((fixed["value"], fixed["interactive"], remembered), (31, True, 31))
                 values = Request("test", precision=precision).to_dict()
                 values["style_loras"], values["lora_strengths"] = [], []
                 profile = resolve([values[name] for name in FIELDS], 31)
-                self.assertEqual(profile["steps"], 8)
+                self.assertEqual(profile["steps"], 31)
                 self.assertIn("公式Turbo", summary(profile, "none"))
-                self.assertIn("8 steps", summary(profile, "none"))
+                self.assertIn("31 steps", summary(profile, "none"))
         with gr.Blocks() as tab:
             controls = {name: gr.State(values[name]) for name in FIELDS}
             self.ui.on_ui_tabs(controls)[0][0].render()
         props = {item["props"].get("elem_id"): item["props"] for item in tab.get_config_file()["components"]}
+        steps_component = next(
+            item
+            for item in tab.get_config_file()["components"]
+            if item["props"].get("elem_id") == "qwen21-outpaint-native-steps"
+        )
+        self.assertEqual(steps_component["type"], "number")
+        self.assertIsNone(steps_component["props"].get("maximum"))
         self.assertEqual(
             (props["qwen21-outpaint-native-steps"]["value"], props["qwen21-outpaint-native-steps"]["interactive"]),
-            (8, False),
+            (8, True),
         )
 
     def test_control_readiness_uses_the_same_exif_orientation_as_job_copy(self):

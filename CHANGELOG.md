@@ -1,5 +1,11 @@
 # 変更履歴
 
+## v3.9.1 — 2026-10-10
+
+- Qwenの公式Turbo・Viggle TurboでStepsを変更可能にしました。選択した回数を実際のsamplingとOutpaintへ反映し、公式8 stepsの推奨スケジュールは既定として保持します。
+- ControlNetの強度とStepsの推奨外入力を許可。ControlNet・Fun AccとSparseの併用は通常Attentionへの切替を通知し、生成を続行します。推奨だけを理由に設定を拒否・解除しません。
+- TurboとFun Accの併用時はFun Accのsamplerを使用します。現在のFun Acc samplerが対応する4 steps、入力形式、必要なモデル部品の検証は維持します。
+
 ## v3.9.0 — 2026-10-10
 
 - 公式Qwen Image 2.1 Turboの画像生成・参照編集を追加。公式の8 steps・sigma列・スケジューラを使い、Viggleの4 stepsと区別して選択できます。[導入と使い方](docs/qwen21-official-turbo.md)

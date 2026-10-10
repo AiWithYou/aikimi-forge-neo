@@ -45,13 +45,22 @@ class PipelineProxy:
     def __init__(self, pipe, options, job, request):
         self.pipe, self.options, self.job, self.request = pipe, options, job, request
         self.run = None
+        self.fallback_summary = None
 
     def __getattr__(self, name):
         return getattr(self.pipe, name)
 
     def __call__(self, *args, **kwargs):
         if kwargs.get("use_kv_cache", True) is not True or kwargs.get("true_cfg_scale", 1.0) != 1.0:
-            raise ValueError("Qwen sparse benchmark requires prefix KV caching and true_cfg_scale=1")
+            self.fallback_summary = {
+                "status": "dense_fallback",
+                "reason": "prefix_kv_cache_disabled"
+                if kwargs.get("use_kv_cache", True) is not True
+                else "true_cfg_scale",
+                "settings": asdict(self.options),
+                "api_calls": 0,
+            }
+            return self.pipe(*args, **kwargs)
 
         def cancelled():
             return (self.job / "cancel").exists()
@@ -103,9 +112,10 @@ def resident_run(payload):
     base._read_request, base._runtime_for_request = read_request, lookup
     try:
         result = base.run_request(payload)
-        report = (
-            proxies[-1].run.summary if proxies and proxies[-1].run else {"status": "off", "settings": asdict(options)}
-        )
+        report = {"status": "off", "settings": asdict(options)}
+        if proxies:
+            proxy = proxies[-1]
+            report = proxy.run.summary if proxy.run else proxy.fallback_summary or report
         result["metadata"]["sparse_experiment"] = report
         base._atomic_json(job / "metadata.json", result["metadata"])
         base._atomic_json(job / "result.json", result)

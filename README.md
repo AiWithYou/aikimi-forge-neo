@@ -1,6 +1,6 @@
 # Aikimi Forge Neo
 
-**[v3.9.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.9.0)** · [変更履歴](CHANGELOG.md)
+**[v3.9.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.9.1)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -80,7 +80,7 @@ Animaの個別取得・変換には準備済みのNeo環境とNVIDIA GPUが必�
 
 Qwen公式フルモデル（INT8／W4A8／BF16）は `.\aikimi-qwen-image21-setup.bat --official-full`、任意のプロンプト書き換えは `.\aikimi-qwen-image21-setup.bat --prompt-rewriter-only` で追加します。[Qwenガイド](extensions-builtin/qwen-image21-studio/README.md) · [量子化導入ガイド](docs/w4a8.md) · [モデル導入ガイド](docs/model-installation.md)
 
-[公式Qwen Image 2.1 Turbo（8 steps）](docs/qwen21-official-turbo.md)は `.\aikimi-qwen-image21-setup.bat --official-turbo-only` で追加し、Qwen画面で**公式Turbo · W4A8／INT8／BF16**を選びます。既存のViggle Turboは4 stepsの別モデルとして選択できます。
+[公式Qwen Image 2.1 Turbo](docs/qwen21-official-turbo.md)は `.\aikimi-qwen-image21-setup.bat --official-turbo-only` で追加し、Qwen画面で**公式Turbo · W4A8／INT8／BF16**を選びます。公式Turboは8 steps、Viggle Turboは4 stepsを推奨しますが、Stepsは変更できます。ControlNetの併用や推奨範囲外の強度も設定でき、推奨事項は生成を止めない通知で表示します。
 
 公式Turboの変換済み[INT8](https://huggingface.co/Aikimi/Forge-Neo-Image-2.1-Turbo-INT8)・[W4A8](https://huggingface.co/Aikimi/Forge-Neo-Image-2.1-Turbo-W4A8)はHugging Faceから導入できます。必要な共通部品・対応環境・導入コマンドは[公式Turboガイド](docs/qwen21-official-turbo.md)を参照してください。
 

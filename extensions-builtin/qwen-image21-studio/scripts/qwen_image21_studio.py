@@ -16,7 +16,7 @@ from modules import gradio_compat, script_callbacks
 from modules.paths import data_path, script_path
 from modules_forge.qwen_image21 import style_lora as lora_library
 from modules_forge.qwen_image21.annotations import annotation_preview, reference_index, resolve_annotation
-from modules_forge.qwen_image21.capabilities import fixed_steps, quantization_precision
+from modules_forge.qwen_image21.capabilities import quantization_precision, recommended_steps, sampling_recommendations
 from modules_forge.qwen_image21.core import (
     MAX_OUTPUT_PIXELS,
     MAX_REFERENCE_IMAGES,
@@ -236,7 +236,7 @@ def start(
             precision=precision,
             memory_mode=memory_mode,
             seed=seed,
-            steps=steps,
+            steps=4 if fun_acc else steps,
             annotation_reference=annotation_reference,
             annotation_layers=annotation_layers,
             rewrite_prompt=rewrite_prompt,
@@ -262,6 +262,8 @@ def start(
             allow_lora_base_mismatch=allow_lora_base_mismatch,
         )
         identifier = STUDIO.start(generation, owner(request))
+        for message in sampling_recommendations(generation.to_dict()):
+            gr.Warning(message)
         return (
             identifier,
             "開始しました。初回のモデル読み込みには時間がかかります。",
@@ -446,43 +448,28 @@ def model_save_status(precision, identifier, request: gr.Request, local_model=""
 
 
 def profile_settings(precision, previous_precision, fun_acc=False):
-    fixed = fixed_steps(precision)
-    if fixed is not None:
-        return (
-            gr.update(value=fixed, interactive=False),
-            gr.update(interactive=True),
-            precision,
-            gr.update(value=False, interactive=False),
-        )
     if fun_acc:
         return (
             gr.update(value=4, interactive=False),
-            gr.update(value="off", interactive=False),
+            gr.update(interactive=True),
             precision,
             gr.update(interactive=True),
         )
-    steps = (
-        gr.update(value=40, interactive=True)
-        if fixed_steps(previous_precision) is not None
-        else gr.update(interactive=True)
-    )
+    suggestion = recommended_steps(precision)
+    changed = precision != previous_precision
+    if changed and suggestion is not None:
+        steps = gr.update(value=suggestion, interactive=True)
+    elif changed and recommended_steps(previous_precision) is not None:
+        steps = gr.update(value=40, interactive=True)
+    else:
+        steps = gr.update(interactive=True)
     return steps, gr.update(interactive=True), precision, gr.update(interactive=True)
 
 
-def fun_acc_settings(enabled, precision="int8"):
-    fixed = fixed_steps(precision)
-    if enabled and fixed is None:
-        return (
-            gr.update(interactive=True),
-            gr.update(value=4, interactive=False),
-            gr.update(value="off", interactive=False),
-            gr.update(interactive=True),
-            gr.update(interactive=True),
-            gr.update(interactive=True),
-        )
+def fun_acc_settings(enabled, precision="int8", normal_steps=40):
     return (
         gr.update(interactive=True),
-        gr.update(value=fixed or 40, interactive=fixed is None),
+        gr.update(value=4 if enabled else normal_steps, interactive=not enabled),
         gr.update(interactive=True),
         gr.update(interactive=True),
         gr.update(interactive=True),
@@ -753,11 +740,11 @@ def model_guidance(precision):
         "w4a8": "重み4bit・演算8bit · INT8より重みを省メモリ化。速さは環境と設定によります。",
         "int8": "8bit · W4A8より重みは大きめ。Fun Acc / ControlNetに対応。",
         "bf16": "16bit · 量子化なし。通常版で最も多くメモリを使います。",
-        "turbo_official_w4a8": "公式Turbo · 重み4bit・演算8bit · 8 steps固定。",
-        "turbo_official_int8": "公式Turbo · 8bit · 8 steps固定。",
-        "turbo_official_bf16": "公式Turbo · 16bit · 8 steps固定。",
-        "turbo_q4_k_m": "Viggle Turbo · 4bit GGUF · 4 steps固定。通常版とは画質・編集特性が異なります。",
-        "turbo_bf16": "Viggle Turbo · 16bit · 4 steps固定。Turbo Q4より重みは大きめ。",
+        "turbo_official_w4a8": "公式Turbo · 重み4bit・演算8bit · 推奨8 steps。",
+        "turbo_official_int8": "公式Turbo · 8bit · 推奨8 steps。",
+        "turbo_official_bf16": "公式Turbo · 16bit · 推奨8 steps。",
+        "turbo_q4_k_m": "Viggle Turbo · 4bit GGUF · 推奨4 steps。通常版とは画質・編集特性が異なります。",
+        "turbo_bf16": "Viggle Turbo · 16bit · 推奨4 steps。Turbo Q4より重みは大きめ。",
     }.get(precision, "")
 
 
@@ -781,7 +768,7 @@ def generation_summary(precision, steps, resolution, width=1024, height=1024, fu
             return str(exc)
     else:
         size = "編集元と同じサイズ" if resolution == "reference" else resolution.replace("x", "×")
-    return f"{models.get(precision, precision)} · {fixed_steps(precision, fun_acc) or int(steps)} steps · {size}"
+    return f"{models.get(precision, precision)} · {4 if fun_acc else int(steps)} steps · {size}"
 
 
 def lora_choices():
@@ -1235,11 +1222,11 @@ def on_ui_tabs():
                                 ("通常 · W4A8 · 省メモリ", "w4a8"),
                                 ("通常 · INT8 · 8bit", "int8"),
                                 ("通常 · BF16 · メモリ大", "bf16"),
-                                ("公式Turbo · W4A8 · 8 steps", "turbo_official_w4a8"),
-                                ("公式Turbo · INT8 · 8 steps", "turbo_official_int8"),
-                                ("公式Turbo · BF16 · 8 steps", "turbo_official_bf16"),
-                                ("Viggle Turbo · Q4_K_M · 4 steps", "turbo_q4_k_m"),
-                                ("Viggle Turbo · BF16 · 4 steps", "turbo_bf16"),
+                                ("公式Turbo · W4A8 · 推奨8 steps", "turbo_official_w4a8"),
+                                ("公式Turbo · INT8 · 推奨8 steps", "turbo_official_int8"),
+                                ("公式Turbo · BF16 · 推奨8 steps", "turbo_official_bf16"),
+                                ("Viggle Turbo · Q4_K_M · 推奨4 steps", "turbo_q4_k_m"),
+                                ("Viggle Turbo · BF16 · 推奨4 steps", "turbo_bf16"),
                             ],
                             value=selected_precision,
                             label="モデル・精度",
@@ -1285,20 +1272,21 @@ def on_ui_tabs():
                 with gr.Column(min_width=0, elem_id="qwen21-settings"):
                     fun_acc = gr.Checkbox(
                         value=False,
-                        label="Fun Acc · 4 steps（通常モデル）",
-                        interactive=fixed_steps(selected_precision) is None,
-                        info="4 stepsで高速生成。細部の再現性は下がる場合があります。",
+                        label="Fun Acc · 4 steps",
+                        interactive=True,
+                        info="現在のFun Accサンプラーは4 steps専用です。細部の再現性は下がる場合があります。",
                         elem_id="qwen21-fun-acc",
                     )
-                    steps = gr.Slider(
-                        1,
-                        100,
-                        value=fixed_steps(selected_precision) or 40,
+                    steps = gr.Number(
+                        minimum=1,
+                        precision=0,
+                        value=recommended_steps(selected_precision) or 40,
                         step=1,
                         label="Steps",
-                        interactive=fixed_steps(selected_precision) is None,
+                        interactive=True,
                         elem_id="qwen21-steps",
                     )
+                    normal_steps = gr.State(recommended_steps(selected_precision) or 40)
                     transparent = gr.Checkbox(value=False, label="透過背景を指示（RGBA PNG）")
                     with gr.Accordion(
                         "ControlNet · OFF", open=False, elem_id="qwen21-control-section"
@@ -1320,7 +1308,9 @@ def on_ui_tabs():
                             elem_id="qwen21-control-kind",
                         )
                         with gr.Group(visible="hidden", elem_id="qwen21-control-options") as control_options:
-                            control_strength = gr.Slider(0, 2, value=1, step=0.05, label="制御の強さ")
+                            control_strength = gr.Number(
+                                value=1, step=0.05, label="制御の強さ", elem_id="qwen21-control-strength"
+                            )
                             control_inpaint = gr.Checkbox(
                                 value=False,
                                 label="ControlNetにもマスクを渡す",
@@ -1430,7 +1420,9 @@ def on_ui_tabs():
                 with gr.Column(scale=0, min_width=0, elem_id="qwen21-run-dock"):
                     lora_gate = gr.Markdown("", elem_id="qwen21-lora-gate")
                     settings_summary = gr.Markdown(
-                        generation_summary(selected_precision, fixed_steps(selected_precision) or 40, "1024x1024"),
+                        generation_summary(
+                            selected_precision, recommended_steps(selected_precision) or 40, "1024x1024"
+                        ),
                         elem_id="qwen21-settings-summary",
                     )
                     with gr.Row(elem_id="qwen21-actions"):
@@ -1511,8 +1503,14 @@ def on_ui_tabs():
         )
         fun_acc.change(
             fun_acc_settings,
-            inputs=[fun_acc, precision],
+            inputs=[fun_acc, precision, normal_steps],
             outputs=[precision, steps, sparse_mode, control_kind, control_image, control_inpaint],
+            **PRIVATE,
+        )
+        steps.change(
+            lambda value, accelerated, remembered: remembered if accelerated else value,
+            inputs=[steps, fun_acc, normal_steps],
+            outputs=normal_steps,
             **PRIVATE,
         )
         tab.load(

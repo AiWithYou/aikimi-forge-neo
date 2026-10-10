@@ -683,6 +683,49 @@ def test_replay_routing_omits_credentials_and_passes_budget(monkeypatch, tmp_pat
     assert payload["sparse_experiment"]["job_max_wait_seconds"] == 12.5
 
 
+@pytest.mark.parametrize("feature", ["control_image", "fun_acc"])
+def test_jev_dense_fallback_launch_omits_cloud_and_replay_credentials(monkeypatch, tmp_path, feature):
+    service = fake_service(monkeypatch, tmp_path)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.setenv(q.OPTIONS_ENV, '{"max_calls":3}')
+    monkeypatch.setenv(common.REPLAY_ENV, json.dumps([str(tmp_path / "private-replay.jsonl")]))
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Dense fallback must not inspect cloud credentials, SDK Python or replay settings")
+
+    for helper in ("read_saved_key", "sdk_python", "cloud_environment", "replay_requested"):
+        monkeypatch.setattr(integration, helper, forbidden)
+    request = types.SimpleNamespace(
+        sparse_mode="jev",
+        sparse_keep_percent=61,
+        sparse_jev_cadence="interval",
+        sparse_jev_interval=3,
+        sparse_jev_max_calls=2,
+        sparse_jev_max_wait_seconds=12.5,
+        control_image=str(tmp_path / "control.png") if feature == "control_image" else "",
+        fun_acc=feature == "fun_acc",
+    )
+    before = vars(request).copy()
+    launch_environment = {
+        "PATH": "ok",
+        "TYPESAFE_API_KEY": "unwanted",
+        "AIKIMI_JEV_ALLOW_CLOUD": "1",
+        "AIKIMI_JEV_PYTHON": "unwanted",
+        q.OPTIONS_ENV: "{}",
+        common.REPLAY_ENV: "unwanted",
+    }
+    worker, env, payload = integration.worker_launch(request, service.WORKER, launch_environment)
+    assert worker.name == "qwen_image21_sparse_worker.py"
+    assert env == {"PATH": "ok"}
+    assert launch_environment["TYPESAFE_API_KEY"] == "unwanted"
+    assert vars(request) == before
+    settings = payload["sparse_experiment"]
+    assert settings["mode"] == "jev" and settings["keep_percent"] == 61
+    assert settings["max_calls"] == 3 and settings["decision_cadence"] == "interval"
+    assert settings["update_interval"] == 3 and settings["job_max_calls"] == 2
+    assert settings["job_max_wait_seconds"] == 12.5
+
+
 def load_worker(monkeypatch, tmp_path):
     base = types.ModuleType("_aikimi_qwen21_base_worker")
     base.DIFFUSERS_REVISION = q.REVISION
@@ -725,8 +768,9 @@ def load_worker(monkeypatch, tmp_path):
     def run(payload):
         job, model, req = base._read_request(payload)
         r, reused = base._runtime_for_request(model, req, job)
-        r["pipe"](use_kv_cache=True, true_cfg_scale=1.0)
-        result = {"metadata": {"reused_model": reused}, "output_path": str(job / "output.png")}
+        cache = req.get("use_kv_cache", True)
+        r["pipe"](use_kv_cache=cache, true_cfg_scale=req.get("true_cfg_scale", 1.0))
+        result = {"metadata": {"reused_model": reused, "use_kv_cache": cache}, "output_path": str(job / "output.png")}
         write(job / "result.json", result)
         return result
 
@@ -804,6 +848,31 @@ def test_worker_off_and_option_mismatch(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match="differ"):
         mod.resident_run({"job_dir": str(job)})
     assert not (job / "result.json").exists() and base.cleared == 1
+
+
+@pytest.mark.parametrize("cache,cfg,reason", [(False, 1.0, "prefix_kv_cache_disabled"), (True, 2.0, "true_cfg_scale")])
+def test_worker_uses_dense_fallback_without_sparse_or_cloud_calls(monkeypatch, tmp_path, cache, cfg, reason):
+    mod, base, pipe = load_worker(monkeypatch, tmp_path)
+    original_lookup, original_read = base._runtime_for_request, base._read_request
+    monkeypatch.setenv(q.OPTIONS_ENV, '{"mode":"jev"}')
+    job = make_job(tmp_path, "dense-fallback")
+    request = json.loads((job / "request.json").read_text())
+    request.update(use_kv_cache=cache, true_cfg_scale=cfg)
+    (job / "request.json").write_text(json.dumps(request), encoding="utf8")
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Dense fallback must not start Sparse/Jev experiments")
+
+    monkeypatch.setattr(mod, "experiment", forbidden)
+    result = mod.resident_run({"job_dir": str(job)})
+    report = result["metadata"]["sparse_experiment"]
+    assert report["status"] == "dense_fallback" and report["reason"] == reason
+    assert report["settings"]["mode"] == "jev" and report["api_calls"] == 0
+    assert pipe.modes == ["DefaultProcessor"] and pipe.calls == 1
+    assert result["metadata"]["use_kv_cache"] is cache
+    assert json.loads((job / "result.json").read_text()) == result
+    assert base._runtime_for_request is original_lookup and base._read_request is original_read
+    assert base.cleared == 0
 
 
 def test_worker_post_save_error_retracts_success(monkeypatch, tmp_path):

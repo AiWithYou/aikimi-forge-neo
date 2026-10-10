@@ -11,7 +11,7 @@ from safetensors.torch import save_file
 from torch import nn
 
 from modules_forge.qwen_image21.adapter_stack import materialize_pdd_projection
-from modules_forge.qwen_image21.capabilities import PRECISIONS, fixed_steps, validate_sampling
+from modules_forge.qwen_image21.capabilities import PRECISIONS, recommended_steps, validate_sampling
 from modules_forge.qwen_image21.core import Request
 from modules_forge.qwen_image21.outpaint_runtime import load_adapter
 from modules_forge.qwen_image21.pdd_vendor.lora_utils_pdd import PDDLoRALinear
@@ -64,20 +64,89 @@ def test_pdd_outpaint_and_multiple_style_residuals_add_without_changing_base(tmp
 @pytest.mark.parametrize("fun_acc", [False, True])
 @pytest.mark.parametrize("control", [False, True])
 @pytest.mark.parametrize("sparse", [False, True])
-def test_sampling_matrix_rejects_only_scheduler_or_kv_conflicts(precision, fun_acc, control, sparse):
+def test_sampling_matrix_accepts_executable_combinations(precision, fun_acc, control, sparse):
     values = {
         "precision": precision,
-        "steps": fixed_steps(precision, fun_acc) or 4,
+        "steps": 4 if fun_acc else 17,
         "fun_acc": fun_acc,
         "control_kind": "canny" if control else "off",
         "sparse_mode": "fixed" if sparse else "off",
     }
-    conflict = (fixed_steps(precision) is not None and fun_acc) or (sparse and (fun_acc or control))
-    if conflict:
-        with pytest.raises(ValueError):
-            validate_sampling(values)
-    else:
-        validate_sampling(values)
+    validate_sampling(values)
+
+
+@pytest.mark.parametrize("precision", sorted(PRECISIONS))
+@pytest.mark.parametrize("strength", [-0.5, 2.5])
+def test_requests_preserve_steps_and_control_strength_outside_recommendations(tmp_path, precision, strength):
+    control = tmp_path / "control.png"
+    Image.new("RGB", (256, 256), "white").save(control)
+    request = Request(
+        "generate",
+        precision=precision,
+        steps=120,
+        sparse_mode="fixed",
+        control_kind="canny",
+        control_image=str(control),
+        control_strength=strength,
+    ).resolved()
+    assert request.steps == 120
+    assert request.control_strength == strength
+    assert request.sparse_mode == "fixed"
+
+
+@pytest.mark.parametrize("steps", [0, -1, 4.5, True, float("inf")])
+def test_invalid_step_input_still_fails(steps):
+    with pytest.raises(ValueError, match="Steps"):
+        Request("generate", precision="turbo_official_int8", steps=steps).resolved()
+
+
+@pytest.mark.parametrize("strength", [True, float("inf"), float("nan")])
+def test_nonfinite_or_boolean_control_strength_still_fails(strength):
+    with pytest.raises(ValueError, match="強さ"):
+        Request("generate", control_strength=strength).resolved()
+
+
+@pytest.mark.parametrize("precision", sorted(PRECISIONS))
+def test_current_fun_acc_sampler_requires_four_steps(precision):
+    with pytest.raises(ValueError, match="4 steps"):
+        validate_sampling({"precision": precision, "fun_acc": True, "steps": 8})
+
+
+def test_recommendations_are_nonblocking_and_only_describe_selected_options():
+    from modules_forge.qwen_image21.capabilities import sampling_recommendations
+
+    assert sampling_recommendations({"precision": "turbo_official_int8", "steps": 8}) == []
+    notices = sampling_recommendations(
+        {
+            "precision": "turbo_official_int8",
+            "steps": 12,
+            "sparse_mode": "fixed",
+            "control_kind": "canny",
+            "control_strength": 2.5,
+        }
+    )
+    assert any("8 steps" in notice for notice in notices)
+    assert any("通常Attention" in notice for notice in notices)
+    assert any("0〜2" in notice for notice in notices)
+
+
+@pytest.mark.parametrize("precision", sorted(PRECISIONS))
+def test_outpaint_shared_profile_preserves_custom_steps(precision):
+    from modules_forge.qwen_image21.outpaint_profile import FIELDS, resolve
+
+    profile = Request("generate", precision=precision).to_dict()
+    profile["lora_strengths"] = []
+    resolved = resolve([profile[name] for name in FIELDS], 120)
+    assert resolved["steps"] == 120
+
+
+def test_outpaint_fun_acc_uses_the_four_step_sampler_control():
+    from modules_forge.qwen_image21.outpaint_profile import FIELDS, resolve
+
+    profile = Request("generate", precision="turbo_official_int8", fun_acc=True).to_dict()
+    profile["lora_strengths"] = []
+    resolved = resolve([profile[name] for name in FIELDS], 25)
+    assert resolved["steps"] == 4
 
 
 def test_only_gguf_decoder_is_dequantized_and_logical_dimensions_are_checked():
@@ -123,9 +192,9 @@ def test_local_model_sampling_contract_preserves_selected_file_and_rejects_turbo
         ).resolved()
         assert request.local_model == model
         assert request.precision == precision
-    for precision in sorted(item for item in PRECISIONS if fixed_steps(item) is not None):
+    for precision in sorted(item for item in PRECISIONS if recommended_steps(item) is not None):
         with pytest.raises(ValueError, match="外部モデル"):
-            Request("extend", local_model=model, precision=precision, steps=fixed_steps(precision)).resolved()
+            Request("extend", local_model=model, precision=precision, steps=recommended_steps(precision)).resolved()
 
 
 def test_turning_control_off_does_not_keep_a_hidden_upload_active_for_sparse(tmp_path):

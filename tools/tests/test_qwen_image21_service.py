@@ -141,27 +141,28 @@ class FakeResident:
 
 class QwenCoreTests(unittest.TestCase):
     def test_official_turbo_sampling_and_prepare_contract(self):
-        from modules_forge.qwen_image21.capabilities import fixed_steps, quantization_precision
+        from modules_forge.qwen_image21.capabilities import quantization_precision, recommended_steps
 
         for quantization in ("int8", "w4a8", "bf16"):
             precision = f"turbo_official_{quantization}"
             with self.subTest(precision=precision):
-                self.assertEqual(fixed_steps(precision), 8)
+                self.assertEqual(recommended_steps(precision), 8)
                 self.assertEqual(quantization_precision(precision), quantization)
                 self.assertEqual(core.Request("test", precision=precision, steps=8).resolved().steps, 8)
-                for changes in ({"steps": 4}, {"steps": 40}, {"fun_acc": True}):
-                    with self.assertRaises(core.QwenImage21Error):
-                        core.Request("test", **({"precision": precision, "steps": 8} | changes)).resolved()
+                for steps in (1, 4, 8, 40, 101, 1000):
+                    self.assertEqual(core.Request("test", precision=precision, steps=steps).resolved().steps, steps)
+                self.assertTrue(core.Request("test", precision=precision, steps=4, fun_acc=True).resolved().fun_acc)
                 if quantization == "bf16":
                     with self.assertRaisesRegex(core.QwenImage21Error, "INT8.*W4A8"):
                         core.Request("prepare", precision=precision, steps=8, operation="prepare").resolved()
                 else:
                     prepared = core.Request("prepare", precision=precision, operation="prepare").resolved()
-                    self.assertEqual((prepared.operation, prepared.steps), ("prepare", 8))
-        self.assertEqual(fixed_steps("turbo_bf16"), 4)
-        self.assertEqual(fixed_steps("turbo_q4_k_m"), 4)
-        self.assertEqual(fixed_steps("int8", fun_acc=True), 4)
-        self.assertIsNone(fixed_steps("int8"))
+                    self.assertEqual((prepared.operation, prepared.steps), ("prepare", 40))
+        self.assertEqual(recommended_steps("turbo_bf16"), 4)
+        self.assertEqual(recommended_steps("turbo_q4_k_m"), 4)
+        self.assertEqual(recommended_steps("int8", fun_acc=True), 4)
+        self.assertEqual(recommended_steps("turbo_official_int8", fun_acc=True), 4)
+        self.assertIsNone(recommended_steps("int8"))
         self.assertEqual(quantization_precision("base_q4_k_m"), "base_q4_k_m")
 
     def test_rgba_reference_snapshots_preserve_pixels_and_order(self):
@@ -203,12 +204,11 @@ class QwenCoreTests(unittest.TestCase):
             self.assertEqual(core.Request("test", width=width, height=height, seed=7).resolved().seed, 7)
         self.assertGreaterEqual(core.Request("test").resolved().seed, 0)
 
-    def test_turbo_requires_four_steps_and_base_keeps_its_range(self):
+    def test_turbo_and_base_keep_the_requested_step_range(self):
         for precision in ("turbo_bf16", "turbo_q4_k_m"):
             with self.subTest(precision=precision):
-                with self.assertRaisesRegex(core.QwenImage21Error, "4 steps"):
-                    core.Request("test", precision=precision, steps=40).resolved()
-                self.assertEqual(core.Request("test", precision=precision, steps=4).resolved().steps, 4)
+                for steps in (1, 4, 8, 40, 101, 1000):
+                    self.assertEqual(core.Request("test", precision=precision, steps=steps).resolved().steps, steps)
         self.assertEqual(core.Request("test", precision="int8", steps=40).resolved().steps, 40)
         self.assertEqual(core.Request("test", precision="base_q4_k_m", steps=40).resolved().steps, 40)
         self.assertEqual(
@@ -639,7 +639,7 @@ class QwenUiTests(unittest.TestCase):
                         item["props"].get("elem_id"): item["props"] for item in tab.get_config_file()["components"]
                     }
                     self.assertEqual(props["qwen21-precision"]["value"], "turbo_official_int8")
-                    self.assertEqual((props["qwen21-steps"]["value"], props["qwen21-steps"]["interactive"]), (8, False))
+                    self.assertEqual((props["qwen21-steps"]["value"], props["qwen21-steps"]["interactive"]), (8, True))
                 with self.subTest(source="normal-full-added"):
                     weights = root / "model/transformer/weights.safetensors"
                     weights.write_bytes(b"test weights")
@@ -659,6 +659,13 @@ class QwenUiTests(unittest.TestCase):
         props = {item["props"].get("elem_id"): item["props"] for item in config["components"]}
         self.assertEqual(props["qwen21-references"]["type"], "filepath")
         self.assertEqual(props["qwen21-references"]["sources"], ["upload", "clipboard"])
+        component_types = {item["props"].get("elem_id"): item["type"] for item in config["components"]}
+        self.assertEqual(component_types["qwen21-steps"], "number")
+        self.assertEqual(props["qwen21-steps"]["minimum"], 1)
+        self.assertIsNone(props["qwen21-steps"].get("maximum"))
+        self.assertEqual(component_types["qwen21-control-strength"], "number")
+        self.assertIsNone(props["qwen21-control-strength"].get("minimum"))
+        self.assertIsNone(props["qwen21-control-strength"].get("maximum"))
         self.assertFalse(props["qwen21-reference-controls"]["visible"])
         output = next(component for component in tab.blocks.values() if isinstance(component, gr.Image))
         self.assertIsNone(output.image_mode)
@@ -686,10 +693,11 @@ class QwenUiTests(unittest.TestCase):
         self.assertIn("Viggle Turbo", labels["turbo_q4_k_m"])
         self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8")[0]["value"], 4)
         self.assertTrue(self.ui.profile_settings("turbo_q4_k_m", "int8")[1]["interactive"])
-        self.assertFalse(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[3]["value"])
-        self.assertFalse(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[3]["interactive"])
-        self.assertEqual(self.ui.fun_acc_settings(False, "turbo_q4_k_m")[1]["value"], 4)
-        self.assertFalse(self.ui.fun_acc_settings(False, "turbo_q4_k_m")[1]["interactive"])
+        self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[0]["value"], 4)
+        self.assertNotIn("value", self.ui.profile_settings("turbo_q4_k_m", "int8", True)[3])
+        self.assertTrue(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[3]["interactive"])
+        self.assertEqual(self.ui.fun_acc_settings(False, "turbo_q4_k_m", 31)[1]["value"], 31)
+        self.assertTrue(self.ui.fun_acc_settings(False, "turbo_q4_k_m", 31)[1]["interactive"])
         self.assertNotIn("value", self.ui.profile_settings("bf16", "int8")[0])
         self.assertEqual(self.ui.profile_settings("int8", "turbo_q4_k_m")[0]["value"], 40)
         self.assertEqual(self.ui.profile_settings("base_q4_k_m", "turbo_q4_k_m")[0]["value"], 40)
@@ -703,17 +711,23 @@ class QwenUiTests(unittest.TestCase):
         files = next(component for component in tab.blocks.values() if isinstance(component, gr.File))
         self.assertEqual(files.visible, "hidden")
 
-    def test_official_turbo_callbacks_keep_eight_steps_and_quantization_save(self):
+    def test_official_turbo_callbacks_suggest_steps_without_locking_the_controls(self):
         browser = gr.Request(session_hash="official-turbo")
         for quantization in ("int8", "w4a8", "bf16"):
             precision = f"turbo_official_{quantization}"
             with self.subTest(precision=precision):
-                steps, _, _, fun_acc = self.ui.profile_settings(precision, "int8", True)
+                steps, _, _, fun_acc = self.ui.profile_settings(precision, "int8", False)
                 self.assertEqual(steps["value"], 8)
-                self.assertFalse(steps["interactive"])
-                self.assertFalse(fun_acc["value"])
-                self.assertFalse(fun_acc["interactive"])
-                self.assertEqual(self.ui.fun_acc_settings(False, precision)[1]["value"], 8)
+                self.assertTrue(steps["interactive"])
+                self.assertNotIn("value", fun_acc)
+                self.assertTrue(fun_acc["interactive"])
+                self.assertNotIn("value", self.ui.profile_settings(precision, precision)[0])
+                self.assertEqual(self.ui.fun_acc_settings(False, precision, 31)[1]["value"], 31)
+                accelerated, sparse, _, fun_acc = self.ui.profile_settings(precision, "int8", True)
+                self.assertEqual((accelerated["value"], accelerated["interactive"]), (4, False))
+                self.assertTrue(sparse["interactive"])
+                self.assertNotIn("value", sparse)
+                self.assertTrue(fun_acc["interactive"])
                 self.assertEqual(self.ui.profile_settings("int8", precision)[0]["value"], 40)
                 with patch.object(self.ui, "saved_status", return_value="saved"):
                     _, button = self.ui.model_save_status(precision, "", browser)
@@ -724,21 +738,74 @@ class QwenUiTests(unittest.TestCase):
         ):
             tab = self.ui.on_ui_tabs()[0][0]
         props = {item["props"].get("elem_id"): item["props"] for item in tab.get_config_file()["components"]}
-        self.assertEqual((props["qwen21-steps"]["value"], props["qwen21-steps"]["interactive"]), (8, False))
-        self.assertFalse(props["qwen21-fun-acc"]["interactive"])
+        self.assertEqual((props["qwen21-steps"]["value"], props["qwen21-steps"]["interactive"]), (8, True))
+        self.assertTrue(props["qwen21-fun-acc"]["interactive"])
+        for precision in ("int8", "turbo_official_int8", "turbo_q4_k_m"):
+            accelerated = self.ui.fun_acc_settings(True, precision, 31)
+            self.assertEqual((accelerated[1]["value"], accelerated[1]["interactive"]), (4, False))
+            self.assertNotIn("value", accelerated[0])
+            self.assertNotIn("value", accelerated[2])
+            self.assertTrue(accelerated[2]["interactive"])
 
-    def test_generation_summary_uses_selected_schedule_when_steps_change_is_pending(self):
-        for precision, steps in (
-            ("turbo_official_int8", 8),
-            ("turbo_official_w4a8", 8),
-            ("turbo_official_bf16", 8),
-            ("turbo_bf16", 4),
-            ("turbo_q4_k_m", 4),
+    def test_generation_summary_uses_the_requested_steps_except_for_fun_acc(self):
+        for precision in (
+            "turbo_official_int8",
+            "turbo_official_w4a8",
+            "turbo_official_bf16",
+            "turbo_bf16",
+            "turbo_q4_k_m",
         ):
             with self.subTest(precision=precision):
-                self.assertIn(f"{steps} steps", self.ui.generation_summary(precision, 40, "1024x1024"))
+                self.assertIn("31 steps", self.ui.generation_summary(precision, 31, "1024x1024"))
+                self.assertNotIn("value", self.ui.profile_settings(precision, precision)[0])
         self.assertIn("4 steps", self.ui.generation_summary("int8", 40, "1024x1024", fun_acc=True))
         self.assertIn("31 steps", self.ui.generation_summary("int8", 31, "1024x1024"))
+
+    def test_remembered_step_state_survives_fun_acc_and_repeated_model_changes(self):
+        tab = self.ui.on_ui_tabs()[0][0]
+        remembered = next(
+            function.fn
+            for function in tab.fns.values()
+            if len(function.inputs) == 3
+            and [getattr(item, "elem_id", None) for item in function.inputs[:2]] == ["qwen21-steps", "qwen21-fun-acc"]
+        )
+        for requested_steps in (4, 31, 101):
+            with self.subTest(steps=requested_steps):
+                state = remembered(requested_steps, False, 40)
+                self.assertEqual(state, requested_steps)
+                accelerated_steps = self.ui.fun_acc_settings(True, "int8", state)[1]["value"]
+                for precision in ("turbo_official_int8", "turbo_q4_k_m", "bf16", "bf16"):
+                    state = remembered(accelerated_steps, True, state)
+                    accelerated_steps = self.ui.profile_settings(precision, "int8", True)[0]["value"]
+                    self.assertEqual((accelerated_steps, state), (4, requested_steps))
+                restored = self.ui.fun_acc_settings(False, "bf16", state)[1]
+                self.assertEqual((restored["value"], restored["interactive"]), (requested_steps, True))
+                self.assertEqual(remembered(restored["value"], False, state), requested_steps)
+
+    def test_sampling_recommendation_popup_does_not_stop_a_requested_generation(self):
+        browser = gr.Request(session_hash="sampling-freedom")
+        with (
+            patch.object(self.ui.STUDIO, "start", return_value="job") as started,
+            patch.object(self.ui, "sampling_recommendations", return_value=["推奨は8 stepsです。"]),
+            patch.object(self.ui.gr, "Warning") as warning,
+        ):
+            result = self.ui.start("test", [], "1024x1024", False, "turbo_official_int8", "cpu_offload", 7, 31, browser)
+        self.assertEqual(result[0], "job")
+        self.assertEqual(started.call_args.args[0].steps, 31)
+        warning.assert_called_once_with("推奨は8 stepsです。")
+
+    def test_fun_acc_start_uses_four_steps_while_the_disabled_input_update_is_pending(self):
+        browser = gr.Request(session_hash="sampling-freedom")
+        with (
+            patch.object(self.ui.STUDIO, "start", return_value="job") as started,
+            patch.object(self.ui.gr, "Warning"),
+        ):
+            result = self.ui.start(
+                "test", [], "1024x1024", False, "turbo_official_int8", "offload", 7, 31, browser, fun_acc=True
+            )
+        self.assertEqual(result[0], "job")
+        self.assertEqual(started.call_args.args[0].steps, 4)
+        self.assertTrue(started.call_args.args[0].fun_acc)
 
     def test_reorder_remove_and_owner_bound_result_reuse(self):
         gallery = [("first.png", None), ("second.png", None)]
