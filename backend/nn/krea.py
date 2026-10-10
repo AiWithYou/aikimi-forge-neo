@@ -1,6 +1,7 @@
 # https://github.com/Comfy-Org/ComfyUI/blob/v0.26.1/comfy/ldm/krea2/model.py
 # https://github.com/lbouaraba/comfyui-krea2edit/blob/main/__init__.py
 
+from contextlib import contextmanager
 from typing import Optional
 
 import torch
@@ -15,6 +16,27 @@ from backend.misc.image_resize import adaptive_resize
 from backend.nn.flux import EmbedND, timestep_embedding
 from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
+
+
+class _TextConditioningCache:
+    def __init__(self, max_bytes, weight_revision):
+        self.max_bytes = max_bytes
+        self.weight_revision = weight_revision
+        self.hits = 0
+        self.misses = 0
+        self.bypasses = 0
+        self.entries = []
+        self.revision = None
+        self.parameters = ()
+
+    @property
+    def retained_bytes(self):
+        return sum(tensor.numel() * tensor.element_size() for entry in self.entries for tensor in entry)
+
+    def clear(self):
+        self.entries.clear()
+        self.revision = None
+        self.parameters = ()
 
 
 def _imgids(bs: int, frame: int, h_: int, w_: int, device: torch.device) -> torch.Tensor:
@@ -255,6 +277,7 @@ class SingleStreamDiT(nn.Module):
         self.heads = heads
         self.txtdim = txtdim
         self.txtlayers = txtlayers
+        self._text_conditioning_cache = None
 
         headdim = features // heads
         axes = [headdim - 12 * (headdim // 16), 6 * (headdim // 16), 6 * (headdim // 16)]
@@ -280,6 +303,92 @@ class SingleStreamDiT(nn.Module):
             nn.GELU(approximate="tanh"),
             nn.Linear(features, features * 6),
         )
+
+    @contextmanager
+    def text_conditioning_cache(self, max_bytes=64 * 1024 * 1024, *, weight_revision=None):
+        previous = self._text_conditioning_cache
+        if previous is not None:
+            previous.clear()
+        cache = _TextConditioningCache(max_bytes, weight_revision)
+        self._text_conditioning_cache = cache
+        try:
+            yield cache
+        finally:
+            cache.clear()
+            self._text_conditioning_cache = previous
+
+    def _fused_text_context(self, context, transformer_options):
+        def compute():
+            fused = self.txtfusion(context, mask=None, transformer_options=transformer_options)
+            return self.txtmlp(fused)
+
+        cache = self._text_conditioning_cache
+        if cache is None:
+            return compute()
+
+        modules = (*self.txtfusion.modules(), *self.txtmlp.modules())
+        custom_text_attention = (
+            transformer_options.get("krea2_attention_override") is not None
+            and "krea2_block_index" in transformer_options
+        )
+        model_revision = cache.weight_revision() if cache.weight_revision is not None else ()
+        if model_revision is None or self.training or torch.is_grad_enabled() or custom_text_attention or any(
+            module.training or module._forward_hooks or module._forward_pre_hooks
+            or getattr(module, "weight_function", ()) or getattr(module, "bias_function", ())
+            for module in modules
+        ):
+            cache.clear()
+            cache.bypasses += 1
+            return compute()
+
+        parameters = (*self.txtfusion.parameters(), *self.txtmlp.parameters())
+        try:
+            versions = tuple(parameter._version for parameter in parameters)
+        except RuntimeError:
+            # Forge constructs inference tensors; only its patch revision can
+            # authorize reuse when those tensors have no mutation counters.
+            if cache.weight_revision is None:
+                cache.clear()
+                cache.bypasses += 1
+                return compute()
+            versions = None
+        revision = (
+            model_revision, id(attention_function), versions,
+            tuple((id(module), id(module.__dict__.get("forward", type(module).forward))) for module in modules),
+            tuple((id(parameter), parameter.device, parameter.dtype) for parameter in parameters),
+        )
+        if cache.revision != revision:
+            cache.clear()
+            cache.revision = revision
+            cache.parameters = parameters
+
+        for index, (original, fused) in enumerate(cache.entries):
+            if (
+                original.shape == context.shape and original.dtype == context.dtype
+                and original.device == context.device and torch.equal(original, context)
+            ):
+                cache.entries.append(cache.entries.pop(index))
+                cache.hits += 1
+                return fused
+
+        estimated_bytes = context.numel() * context.element_size()
+        estimated_bytes += context.shape[0] * context.shape[1] * self.first.out_features * context.element_size()
+        if estimated_bytes > cache.max_bytes:
+            cache.bypasses += 1
+            return compute()
+        while cache.entries and (len(cache.entries) >= 2 or cache.retained_bytes + estimated_bytes > cache.max_bytes):
+            cache.entries.pop(0)
+
+        # TextFusionBlock mutates its input, so compare against a separate copy.
+        original = context.detach().clone()
+        cache.misses += 1
+        fused = compute()
+        actual_bytes = original.numel() * original.element_size() + fused.numel() * fused.element_size()
+        if actual_bytes <= cache.max_bytes:
+            while cache.entries and cache.retained_bytes + actual_bytes > cache.max_bytes:
+                cache.entries.pop(0)
+            cache.entries.append((original, fused.detach()))
+        return fused
 
     def forward(self, x, timesteps, context, attention_mask=None, transformer_options={}, **kwargs):
         x = x.squeeze(2)
@@ -319,8 +428,7 @@ class SingleStreamDiT(nn.Module):
             text_dim=self.txtdim,
         )
 
-        context = self.txtfusion(context, mask=None, transformer_options=transformer_options)
-        context = self.txtmlp(context)
+        context = self._fused_text_context(context, transformer_options)
 
         txtlen, imglen = context.shape[1], img.shape[1]
         if _edit:

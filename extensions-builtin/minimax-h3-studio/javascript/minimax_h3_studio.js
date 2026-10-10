@@ -13,6 +13,10 @@
             "REFERENCES · REF2VA",
             "人物・画風・動き・声を画像／動画／音声から参照します。タグ順序を確認して使います。",
         ],
+        orbit: [
+            "360° ORBIT · FL2VA",
+            "写真1枚を開始と終了に使い、カメラが被写体の周りを一周する無音動画を作ります。",
+        ],
     };
     const H3_ADVANCED_CONTROLS = new Set(["steps", "seed", "scheduler", "ref_image_size"]);
     const H3_PROMPT_DRAFT_KEY = "forge-neo:minimax-h3:prompt-draft:v1";
@@ -121,10 +125,10 @@
         const studio = app.querySelector("#h3-studio");
         const generate = app.querySelector("#h3-generate button, button#h3-generate");
         const cancel = app.querySelector("#h3-cancel button, button#h3-cancel");
-        const busy = Boolean(generate?.disabled && generate.textContent.includes("生成"));
+        const busy = Boolean(generate?.disabled && /生成中|生成を準備中|backendを確認中|backendへ再接続中/.test(generate.textContent));
         setH3Data(studio, "h3Busy", busy);
         if (generate) {
-            setH3Attribute(generate, "title", "映像＋音声を生成 (Ctrl+Enter)");
+            setH3Attribute(generate, "title", `${generate.textContent.trim()} (Ctrl+Enter)`);
             setH3Attribute(generate, "aria-keyshortcuts", "Control+Enter Meta+Enter");
             setH3Attribute(generate, "aria-busy", busy);
         }
@@ -339,12 +343,14 @@
         const selectors = {
             prompt: "#h3-prompt textarea",
             first_frame: "#h3-first-frame button, #h3-first-frame input[type='file']",
+            orbit_photo: "#h3-orbit-photo button, #h3-orbit-photo input[type='file']",
+            orbit_strength: "#h3-orbit-strength input",
             reference_images: "#h3-reference-images button, #h3-reference-images input[type='file']",
             reference_videos: "#h3-reference-videos button, #h3-reference-videos input[type='file']",
             reference_audios: "#h3-reference-audios button, #h3-reference-audios input[type='file']",
             aspect: "#h3-aspect input, #h3-aspect button",
             quality: "#h3-quality input, #h3-quality button",
-            duration: "#h3-duration input",
+            duration: "#h3-duration input, #h3-orbit-duration input",
             steps: "#h3-steps input",
             seed: "#h3-seed input",
             scheduler: "#h3-scheduler input, #h3-scheduler button",

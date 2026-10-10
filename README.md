@@ -2,13 +2,13 @@
 
 [English](README.en.md) · 日本語
 
-**[v3.9.2](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.9.2)** · [変更履歴](CHANGELOG.md)
+**[v3.10.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.10.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
 **画像の生成・編集、音声付き動画、作曲、画像や文章の評価を、ひとつのWebUIから使えるWindows向けのForge Neo派生版です。** モデルの導入、高解像度処理、画像の仕上げも支援します。
 
-v3.9.2ではAnimaの参照画像とバッチ処理を修正し、QwenのLoRA強度調整・ControlNet強度0、CPU操作、Clefの一括判定で不要な処理を削減しました。
+v3.10.0ではMiniMax H3に、写真一枚から無音の360°周回動画を作るモードを追加しました。通常生成と周回生成の設定を別々に保持します。Krea2は生成中のテキスト融合結果を再利用し、Animaの参照画像と出力サイズが異なる場合のエラーも修正しました。[Krea2の動作・速度確認](docs/krea2-jev.md#テキスト融合の再利用)
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 
@@ -50,7 +50,7 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 | [Krea2](docs/krea2_local_supersample_detail_ja.md) | 画像生成・4K/8K処理。上部 **Krea2** から使用 | `.\aikimi-setup.bat` → **1** |
 | [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | 画像生成。上部 **Anima** から使用 | `.\aikimi-setup.bat` → **2** |
 | [SenseNova U1.5](extensions-builtin/sensenova-u15-studio/README.md) | 画像生成・参照画像編集。専用Studioを使用 | `.\aikimi-setup.bat` → **3** |
-| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | 音声付き動画生成。**H3 Studio** を使用 | `.\aikimi-setup.bat` → **4** |
+| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | 音声付き動画と写真一枚からの無音360°周回。**H3 Studio** を使用 | `.\aikimi-setup.bat` → **4** |
 | [Nanosaur2](extensions-builtin/nanosaur2-studio/README.md) | イラスト向け画像生成。専用タブを使用 | `.\aikimi-setup.bat` → **5** |
 | [Ming Image Design](extensions-builtin/ming-image-studio/README.md) | ポスター・UI案・透過素材の生成。専用Studioを使用 | `.\aikimi-setup.bat` → **6**（INT8／W4A8選択） |
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | 画像生成・編集・透過PNG・拡張。専用画面を使用 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
@@ -176,7 +176,7 @@ git clone https://github.com/DominikDoom/a1111-sd-webui-tagcomplete.git extensio
 
 - **計算量の調整**：[Jev / Sparse Attention](docs/jev-sparse.md) · [Krea2設定例](docs/krea2-jev.md)。Jev自動判定は自分のAPIキーを使い、API回数・待ち時間の上限を設定できます。固定率ではAPIを呼びません。
 - **Qwen拡張**: [Qwen Fun Acc（4-step）](docs/assets/qwen-image21-fun-acc/README.md) · [Fun ControlNet](docs/assets/qwen-image21-fun-controlnet/README.md)
-- **MiniMax H3詳細**: [長尺生成](extensions-builtin/minimax-h3-studio/README.md#長尺生成) · [高速化](docs/minimax-h3-acceleration.md) · [CLIPキャッシュ](docs/minimax-h3-clipcache.md) · [ControlNet](docs/minimax-h3-fun-control.md)
+- **MiniMax H3詳細**: [360°周回](docs/minimax-h3-orbit-lora.md) · [長尺生成](extensions-builtin/minimax-h3-studio/README.md#長尺生成) · [高速化](docs/minimax-h3-acceleration.md) · [CLIPキャッシュ](docs/minimax-h3-clipcache.md) · [ControlNet](docs/minimax-h3-fun-control.md)
 - **量子化比較**: [INT8／W4A8量子化](docs/w4a8.md)
 - **H3 Image（静止画）**：[H3 Imageガイド](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)。実験機能です。実モデルでのGPU画像生成・画質・速度は未検証です。
 

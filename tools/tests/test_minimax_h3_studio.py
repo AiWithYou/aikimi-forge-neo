@@ -552,7 +552,8 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
         )
         from modules_forge.minimax_h3_acceleration import H3Acceleration
         control_count = len(H3Acceleration().values())
-        self.assertEqual(len(generate["inputs"]), 20 + control_count)
+        self.assertEqual(len(generate["inputs"]), 23 + control_count)
+        self.assertEqual(generate["inputs"][3:5], [component_ids["h3-orbit-photo"], component_ids["h3-orbit-strength"]])
         acceleration_inputs = generate["inputs"][-control_count:]
         self.assertEqual(acceleration_inputs[8], component_ids["h3-negpip-enabled"])
         self.assertEqual(acceleration_inputs[8 + len(H3Acceleration().negpip.values())], component_ids["h3-clip-cache"])
@@ -560,7 +561,7 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
             "h3-model-variant", "h3-video-vae", "h3-decode-mode", "h3-tile-batch",
             "h3-attention-mode", "h3-sparse-tau", "h3-sparse-keep", "h3-sparse-start",
         )])
-        self.assertEqual(len(generate["outputs"]), 8)
+        self.assertEqual(len(generate["outputs"]), 9)
         self.assertEqual(generate["trigger_mode"], "once")
 
         quick_id = component_ids["h3-preset-quick"]
@@ -578,9 +579,9 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
             dependency
             for dependency in dependencies
             if any(target[0] == quality_id and target[1] == "change" for target in dependency["targets"])
-            and len(dependency["inputs"]) == 8
+            and len(dependency["inputs"]) == 12 + control_count
         )
-        self.assertEqual(len(quality_input["inputs"]), 8)
+        self.assertEqual(len(quality_input["inputs"]), 12 + control_count)
         self.assertEqual(len(quality_input["outputs"]), 3)
         self.assertFalse(quality_input["queue"])
 
@@ -588,10 +589,10 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
         mode_change = next(
             dependency
             for dependency in dependencies
-            if any(target[0] == mode_id and target[1] == "change" for target in dependency["targets"])
+            if any(target[0] == mode_id and target[1] == "input" for target in dependency["targets"])
         )
-        self.assertEqual(len(mode_change["inputs"]), 8)
-        self.assertEqual(len(mode_change["outputs"]), 6)
+        self.assertEqual(len(mode_change["inputs"]), 9)
+        self.assertEqual(len(mode_change["outputs"]), 10)
 
         seed_id = component_ids["h3-seed"]
         seed_input = next(
@@ -615,7 +616,8 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
         duration_input = next(
             dependency
             for dependency in dependencies
-            if any(target[0] == duration_id and target[1] == "input" for target in dependency["targets"])
+            if any(target[0] == duration_id and target[1] == "change" for target in dependency["targets"])
+            and len(dependency["inputs"]) == 12 + control_count
         )
         self.assertEqual(len(duration_input["outputs"]), 3)
 
@@ -644,9 +646,9 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
             for dependency in dependencies
             if any(target[0] == restore_id and target[1] == "click" for target in dependency["targets"])
         )
-        self.assertEqual(len(restore["inputs"]), 2)
-        self.assertEqual(len(restore["outputs"]), 25 + control_count)
-        self.assertEqual(restore["outputs"][-control_count - 3:-3], generate["inputs"][-control_count:])
+        self.assertEqual(len(restore["inputs"]), 10)
+        self.assertEqual(len(restore["outputs"]), 29 + control_count)
+        self.assertEqual(restore["outputs"][-control_count - 7:-7], generate["inputs"][-control_count:])
         self.assertFalse(restore["queue"])
 
         runtime_functions = [

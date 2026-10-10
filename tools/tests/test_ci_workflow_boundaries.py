@@ -7,6 +7,50 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CiWorkflowBoundaryTests(unittest.TestCase):
+    def test_krea_text_conditioning_cache_is_checked_in_ci(self):
+        lint = self.workflow("lint.yml")
+        windows = self.workflow("windows-smoke.yml")
+        for path in (
+            "tools/tests/test_krea2_text_conditioning_cache.py",
+            "tools/tests/test_krea2_reference_conditioning_cache.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(lint.count(f'"{path}"'), 2)
+                self.assertIn(f"            {path}\n", lint)
+                self.assertEqual(windows.count(f'"{path}"'), 2)
+                self.assertIn(f"--module tools.tests.{Path(path).stem}\n", windows)
+
+    def test_anima_reference_canvas_is_checked_in_ci(self):
+        lint = self.workflow("lint.yml")
+        windows = self.workflow("windows-smoke.yml")
+        for path in (
+            "tools/tests/test_image_stitch_anima_canvas.py",
+            "tools/tests/test_anima_reference_conditioning.py",
+        ):
+            self.assertEqual(lint.count(f'"{path}"'), 2)
+            self.assertIn(f"            {path}\n", lint)
+            self.assertEqual(windows.count(f'"{path}"'), 2)
+            module = Path(path).stem
+            self.assertIn(f"--module tools.tests.{module}\n", windows)
+        self.assertEqual(windows.count('"extensions-builtin/sd_forge_image_stitch/**"'), 2)
+
+    def test_orbit_installation_and_ui_are_checked_in_ci(self):
+        lint = self.workflow("lint.yml")
+        for path in (
+            "modules_forge/minimax_h3_orbit_assets.py",
+            "tools/prepare_minimax_h3_orbit.py",
+            "tools/tests/test_h3_orbit*.py",
+            "tools/tests/test_comfy_startup_cleanup.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(lint.count(f'"{path}"'), 2)
+                self.assertIn(f"            {path}\n", lint)
+        windows = self.workflow("windows-smoke.yml")
+        for path in ("tools/tests/test_h3_orbit*.py", "tools/tests/test_comfy_startup_cleanup.py"):
+            self.assertEqual(windows.count(f'"{path}"'), 2)
+        for module in ("test_h3_orbit", "test_h3_orbit_assets", "test_h3_orbit_ui", "test_comfy_startup_cleanup"):
+            self.assertIn(f"--module tools.tests.{module}\n", windows)
+
     def test_clef_and_qwen_release_code_is_linted_and_clipboard_is_tested(self):
         lint = self.workflow("lint.yml")
         paths = (

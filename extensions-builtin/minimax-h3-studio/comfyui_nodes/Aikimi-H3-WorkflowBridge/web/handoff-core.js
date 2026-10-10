@@ -60,7 +60,7 @@ export function roundTripDifferences(expected, actual, schemas = {}) {
 export function validateAvailableNodes(prompt, schemas) {
     const missing = [...new Set(Object.values(prompt).map((n) => n.class_type))].filter((name) => !schemas[name]);
     if (missing.length) throw new Error(`必要なノードがありません: ${missing.join(", ")}`);
-    const modelFields = {UNETLoader: "unet_name", CLIPLoader: "clip_name", VAELoader: "vae_name", ModelPatchLoader: "name"};
+    const modelFields = {UNETLoader: "unet_name", CLIPLoader: "clip_name", VAELoader: "vae_name", ModelPatchLoader: "name", LoraLoaderModelOnly: "lora_name"};
     for (const node of Object.values(prompt)) {
         const name = modelFields[node.class_type];
         if (!name || !own(node.inputs, name)) continue;

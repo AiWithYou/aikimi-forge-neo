@@ -9,6 +9,11 @@ on:
       - "extensions-builtin/aikimi-ui/**"
       - "extensions-builtin/mobile/**"
       - "extensions-builtin/anima-3-8b/**"
+      - "extensions-builtin/sd_forge_image_stitch/**"
+      - "tools/tests/test_image_stitch_anima_canvas.py"
+      - "tools/tests/test_krea2_text_conditioning_cache.py"
+      - "tools/tests/test_krea2_reference_conditioning_cache.py"
+      - "tools/tests/test_anima_reference_conditioning.py"
       - "extensions-builtin/hyperweave/**"
       - "extensions-builtin/minimax-h3-studio/**"
       - "extensions-builtin/sd_forge_controlnet/**"
@@ -105,6 +110,8 @@ on:
       - "tools/tests/test_legacy_yaml_security.py"
       - "tools/tests/test_launch_utils_environment.py"
       - "tools/tests/test_minimax_h3_studio.py"
+      - "tools/tests/test_h3_orbit*.py"
+      - "tools/tests/test_comfy_startup_cleanup.py"
       - "tools/tests/test_option_migrations.py"
       - "tools/tests/test_patcher_cleanup.py"
       - "tools/tests/test_quant_ops_zero_scale.py"
@@ -129,6 +136,11 @@ on:
       - "extensions-builtin/aikimi-ui/**"
       - "extensions-builtin/mobile/**"
       - "extensions-builtin/anima-3-8b/**"
+      - "extensions-builtin/sd_forge_image_stitch/**"
+      - "tools/tests/test_image_stitch_anima_canvas.py"
+      - "tools/tests/test_krea2_text_conditioning_cache.py"
+      - "tools/tests/test_krea2_reference_conditioning_cache.py"
+      - "tools/tests/test_anima_reference_conditioning.py"
       - "extensions-builtin/hyperweave/**"
       - "extensions-builtin/minimax-h3-studio/**"
       - "extensions-builtin/sd_forge_controlnet/**"
@@ -225,6 +237,8 @@ on:
       - "tools/tests/test_legacy_yaml_security.py"
       - "tools/tests/test_launch_utils_environment.py"
       - "tools/tests/test_minimax_h3_studio.py"
+      - "tools/tests/test_h3_orbit*.py"
+      - "tools/tests/test_comfy_startup_cleanup.py"
       - "tools/tests/test_option_migrations.py"
       - "tools/tests/test_patcher_cleanup.py"
       - "tools/tests/test_quant_ops_zero_scale.py"
@@ -324,6 +338,10 @@ jobs:
           --module tools.tests.test_mobile_layout_chromium
           --module tools.tests.test_additional_module_identity
           --module tools.tests.test_anima38_extension
+          --module tools.tests.test_image_stitch_anima_canvas
+          --module tools.tests.test_krea2_text_conditioning_cache
+          --module tools.tests.test_krea2_reference_conditioning_cache
+          --module tools.tests.test_anima_reference_conditioning
           --module tools.tests.test_api_public_state
           --module tools.tests.test_api_script_args
           --module tools.tests.test_chromium_helpers
@@ -354,6 +372,10 @@ jobs:
           --module tools.tests.test_launch_utils_environment
           --module tools.tests.test_extension_git
           --module tools.tests.test_minimax_h3_studio
+          --module tools.tests.test_h3_orbit
+          --module tools.tests.test_h3_orbit_assets
+          --module tools.tests.test_h3_orbit_ui
+          --module tools.tests.test_comfy_startup_cleanup
           --module tools.tests.test_minimax_h3_setup
           --module tools.tests.test_local_model_sources
           --module tools.tests.test_ming_image_studio

@@ -9,11 +9,13 @@ import gradio as gr
 
 from modules import script_callbacks
 from modules.paths import data_path, script_path
+from modules_forge import minimax_h3_orbit_assets as orbit_assets
 from modules_forge.minimax_h3_acceleration import H3Acceleration
 from modules_forge.minimax_h3_acceleration_ui import create_acceleration_controls
 from modules_forge.minimax_h3_bridge import (
     H3_SERVER_URL,
     MODE_KEYFRAMES,
+    MODE_ORBIT,
     MODE_REFERENCES,
     MODE_TEXT,
     RUNTIME_PROFILE_FAST,
@@ -67,7 +69,234 @@ MODE_HELP = {
         "REFERENCES · REF2VA",
         "人物・画風・動き・声を画像／動画／音声から参照します。タグ順序を確認して使います。",
     ),
+    MODE_ORBIT: (
+        "360° ORBIT · FL2VA",
+        "写真1枚を開始と終了に使い、カメラが被写体の周りを一周する無音動画を作ります。",
+    ),
 }
+
+ORBIT_SETTINGS = ("1:1", "native", 3.0, 28, "simple", 1.0)
+ORBIT_PROMPT = (
+    "The subject stays still. The camera makes one smooth, complete 360-degree orbit around "
+    "the subject at a steady speed, keeping the subject centered and the camera height constant. "
+    "Show the side and back views as the camera moves, then return to the original front view "
+    "and framing. Keep the subject's appearance and the lighting consistent throughout."
+)
+
+
+def _initial_mode_slots():
+    return {"active": MODE_TEXT, "normal": ("16:9", "preview", 5.0, 20, "simple", 1.0), "orbit": ORBIT_SETTINGS}
+
+
+def _save_mode_slot(slots, *values):
+    state = dict(slots or _initial_mode_slots())
+    state["orbit" if state["active"] == MODE_ORBIT else "normal"] = tuple(values)
+    return state
+
+
+def _slot_updates(state):
+    aspect, quality, duration, steps, scheduler, strength = state["orbit" if state["active"] == MODE_ORBIT else "normal"]
+    if str(quality).startswith("custom:"):
+        def editable_number(value):
+            try:
+                number = float(value)
+                return number if math.isfinite(number) else None
+            except (ValueError, TypeError):
+                return None
+        dimensions = str(quality).removeprefix("custom:").split("x")
+        width, height = [editable_number(value) for value in dimensions] if len(dimensions) == 2 else (None, None)
+        quality_update = gr.update(choices=[(label, key) for key, label in QUALITY_LABELS.items()] + [("カスタム", quality)], value=quality)
+    else:
+        try:
+            width, height = dimensions_for(aspect, quality)
+        except H3BridgeError:
+            width, height = None, None
+        quality_update = gr.update(value=quality)
+    return (
+        state, gr.update(value=aspect), quality_update,
+        gr.update(value=duration, minimum=3 if state["active"] == MODE_ORBIT else 5),
+        gr.update(value=steps), gr.update(value=scheduler), gr.update(value=strength),
+        gr.update(value=width), gr.update(value=height),
+    )
+
+
+def _switch_mode_settings(mode, slots, aspect, quality, duration, steps, scheduler, strength):
+    state = _save_mode_slot(slots, aspect, quality, duration, steps, scheduler, strength)
+    state["active"] = mode
+    return _slot_updates(state)
+
+
+def _reset_orbit_settings(slots):
+    state = dict(slots)
+    state["orbit"] = ORBIT_SETTINGS
+    return _slot_updates(state)
+
+
+def _fixed_duration_updates(updates):
+    values = list(updates)
+    orbit = values[0]["active"] == MODE_ORBIT
+    duration_update = gr.update(value=values[3]["value"])
+    values[3] = gr.update() if orbit else duration_update
+    return (*values, duration_update if orbit else gr.update())
+
+
+def _switch_mode_settings_ui(mode, slots, aspect, quality, duration, steps, scheduler, strength, orbit_duration):
+    current_duration = orbit_duration if slots["active"] == MODE_ORBIT else duration
+    return _fixed_duration_updates(_switch_mode_settings(mode, slots, aspect, quality, current_duration, steps, scheduler, strength))
+
+
+def _reset_orbit_settings_ui(slots):
+    return _fixed_duration_updates(_reset_orbit_settings(slots))
+
+
+def _generation_label(mode):
+    return "周回動画を生成（無音）" if mode == MODE_ORBIT else "映像＋音声を生成"
+
+
+def _orbit_prepared(runtime_value=""):
+    return orbit_assets.installed(Path(script_path), runtime_root=Path(runtime_value) if runtime_value else None)
+
+
+def _generation_gate(mode, installing=False, busy=False, acceleration=None, photo=None, runtime_value=""):
+    reason = ""
+    if mode == MODE_ORBIT:
+        if acceleration is not None and acceleration.hybrid.enabled:
+            reason = "360°周回は一周の動画を作ります。長尺生成をオフにしてください。設定値は保持しています。"
+        elif installing:
+            reason = "Orbit LoRAを導入中です。完了するまでお待ちください。"
+        elif not _orbit_prepared(runtime_value):
+            reason = "先に写真欄の「Orbit LoRAを準備」を実行してください（約148 MiB）。"
+        elif not photo:
+            reason = "周回する写真を追加してください。"
+    message = f'<div class="h3-orbit-gate" role="status">{html.escape(reason)}</div>' if reason else ""
+    return (gr.update(interactive=False) if busy else gr.update(value=_generation_label(mode), interactive=not reason)), message
+
+
+def _orbit_status_html(message=None, error=False, runtime_value=""):
+    if message is None:
+        message = "Orbit LoRA 準備済み" if _orbit_prepared(runtime_value) else "Orbit LoRA 未導入（約148 MiB）"
+    return f'<p class="h3-orbit-status" role="{"alert" if error else "status"}" aria-live="polite">{html.escape(message)}</p>'
+
+
+def _orbit_runtime_updates(runtime_value, installing=False, busy=False):
+    return _orbit_status_html(runtime_value=runtime_value), gr.update(interactive=not installing and not busy and not _orbit_prepared(runtime_value))
+
+
+def _install_orbit(runtime_value=""):
+    yield _orbit_status_html("Orbit LoRAを導入中…"), gr.update(value="導入中…", interactive=False), True
+    try:
+        root = resolve_runtime_root(runtime_value) if runtime_value else None
+        orbit_assets.install(Path(script_path), runtime_root=root)
+    except (OSError, ValueError, RuntimeError) as exc:
+        yield _orbit_status_html(f"導入に失敗しました: {exc}", error=True), gr.update(value="再試行", interactive=True), False
+        return
+    yield _orbit_status_html("Orbit LoRA 準備済み"), gr.update(value="Orbit LoRAを準備", interactive=False), False
+
+
+def _mode_settings_summary(mode, aspect, quality, duration, steps, scheduler, ref_image_size, strength=1.0, acceleration=None, control_mode="off"):
+    orbit = mode == MODE_ORBIT
+    summary = settings_summary_html(aspect, quality, duration, steps, scheduler, ref_image_size, orbit=orbit)
+    if not orbit:
+        return summary
+    changed = []
+    try:
+        if dimensions_for(aspect, quality) != (768, 768):
+            changed.append("解像度")
+        if H3Request(mode=MODE_ORBIT, prompt="summary", duration_seconds=float(duration)).frame_count != 73:
+            changed.append("長さ")
+        if int(steps) != 28:
+            changed.append("Steps")
+        if scheduler != "simple":
+            changed.append("scheduler")
+        if float(strength) != 1.0:
+            changed.append("強さ")
+    except (H3BridgeError, ValueError, TypeError, OverflowError):
+        pass  # The existing summary already renders invalid dimensions or duration.
+    mixes = []
+    if acceleration is not None:
+        if acceleration.model_variant != "base":
+            mixes.append("Turbo" if acceleration.model_variant == "fused_turbo" else "W4A8")
+        if acceleration.video_vae != "fp16" or acceleration.decode_mode != "standard":
+            mixes.append("追加VAE設定")
+        if acceleration.attention != "dense":
+            mixes.append("Sparse Attention")
+        if acceleration.negpip.enabled:
+            mixes.append("NegPiP")
+        if acceleration.clip_cache != "off":
+            mixes.append("CLIP Cache")
+        if acceleration.hybrid.enabled:
+            mixes.append("長尺生成（併用不可）")
+    if control_mode != "off":
+        mixes.append("ControlNet")
+    notes = []
+    if changed:
+        notes.append("作者推奨から変更: " + "・".join(changed) + "（未検証の条件）")
+    if mixes:
+        notes.append("未検証の併用: " + "・".join(mixes))
+    if notes:
+        summary = summary.replace("</div>", '<small class="h3-orbit-deviation">' + html.escape(" / ".join(notes)) + "</small></div>")
+    return summary
+
+
+def _mode_chrome(mode, aspect, quality, duration, steps, scheduler, ref_image_size, strength, installing, busy, control_mode, *acceleration_values, orbit_photo=None, runtime_value=""):
+    orbit = mode == MODE_ORBIT
+    try:
+        acceleration = H3Acceleration.from_values(acceleration_values)
+        acceleration_error = ""
+    except (TypeError, ValueError, OverflowError) as exc:
+        acceleration = H3Acceleration()
+        acceleration_error = str(exc)
+    base = _mode_updates(mode, aspect, quality, duration, steps, scheduler, ref_image_size)
+    gate, message = _generation_gate(mode, installing, busy, acceleration, photo=orbit_photo, runtime_value=runtime_value)
+    if acceleration_error:
+        gate = gr.update(interactive=False) if busy else gr.update(value=_generation_label(mode), interactive=False)
+        message = f'<div class="h3-orbit-gate" role="alert">{html.escape(acceleration_error)}</div>'
+    return (
+        *base[:4], gr.update(value=_mode_settings_summary(mode, aspect, quality, duration, steps, scheduler, ref_image_size, strength, acceleration, control_mode), visible=orbit or not acceleration.hybrid.enabled),
+        gr.update(visible=True if orbit else "hidden"),
+        gr.update(visible=not orbit), gr.update(visible=orbit, interactive=orbit and (aspect, quality, duration, steps, scheduler, strength) != ORBIT_SETTINGS),
+        gr.update(value="周回の指示を追記" if orbit else "構成テンプレートを挿入"),
+        gr.update(placeholder="例: 写真の人物は静止したまま、カメラが被写体の周りを一定速度で一周し、元の構図に戻る。" if orbit else "例: 雨上がりの東京。赤い傘を持つ人物を低いカメラで追う。\n3秒で振り返り、遠くの雷に合わせて街の環境音が一瞬静まる。"),
+        gate, message,
+        '<p class="h3-output-note">周回動画は無音MP4で保存します。H3内部の音声計算は省略されません。</p>' if orbit else '<p class="h3-output-note">映像と32kHzステレオ音声は同じ推論から生成され、MP4へ同期保存されます。</p>',
+    )
+
+
+def _mode_chrome_ui(mode, aspect, quality, duration, steps, scheduler, ref_image_size, strength, installing, busy, control_mode, orbit_duration, orbit_photo, runtime_value, *acceleration_values):
+    active_duration = orbit_duration if mode == MODE_ORBIT else duration
+    return (*_mode_chrome(mode, aspect, quality, active_duration, steps, scheduler, ref_image_size, strength, installing, busy, control_mode, *acceleration_values, orbit_photo=orbit_photo, runtime_value=runtime_value), gr.update(visible=mode != MODE_ORBIT), gr.update(visible=mode == MODE_ORBIT))
+
+
+def _custom_settings_for_mode(mode, aspect, quality, duration, steps, seed, scheduler, ref_image_size, strength, control_mode, validation, *acceleration_values):
+    if mode != MODE_ORBIT:
+        return _custom_settings_updates(aspect, quality, duration, steps, seed, scheduler, ref_image_size, validation)
+    try:
+        acceleration = H3Acceleration.from_values(acceleration_values)
+    except (TypeError, ValueError, OverflowError):
+        acceleration = H3Acceleration()
+    summary = _mode_settings_summary(mode, aspect, quality, duration, steps, scheduler, ref_image_size, strength, acceleration, control_mode)
+    try:
+        request = _request_from_ui(mode, "settings-validation", None, None, None, None, None, aspect, quality, duration, steps, seed, scheduler, ref_image_size, orbit_strength=strength)
+        validate_request(request, require_media=False)
+    except (H3BridgeError, TypeError, ValueError, OverflowError):
+        validation_update = gr.update()
+    else:
+        validation_update = _clear_validation_targets(validation, "settings")
+    return summary, _mark_preset_custom(), validation_update
+
+
+def _custom_settings_for_mode_ui(mode, aspect, quality, duration, steps, seed, scheduler, ref_image_size, strength, control_mode, validation, orbit_duration, *acceleration_values):
+    return _custom_settings_for_mode(mode, aspect, quality, orbit_duration if mode == MODE_ORBIT else duration, steps, seed, scheduler, ref_image_size, strength, control_mode, validation, *acceleration_values)
+
+
+def _prompt_template_for_mode(mode, prompt, validation):
+    if mode != MODE_ORBIT:
+        return _prompt_template_updates(prompt, validation)
+    value = str(prompt or "").rstrip()
+    if ORBIT_PROMPT in value:
+        return prompt, _clear_prompt_validation(prompt, validation)
+    updated = value + "\n\n" + ORBIT_PROMPT if value else ORBIT_PROMPT
+    return updated, _clear_prompt_validation(updated, validation)
 
 QUALITY_LABELS = {
     "draft": "動作確認 · 約0.2 MP · 速い",
@@ -177,6 +406,7 @@ def _mode_updates(
             steps,
             scheduler,
             effective_ref_image_size,
+            orbit=mode == MODE_ORBIT,
         ),
         _clear_validation_targets(current_validation, "keyframes", "references"),
     )
@@ -285,10 +515,12 @@ def _aspect_settings_updates(
 
 
 def _input_validation_html(message: str, target: str, control: str | None = None) -> str:
-    safe_target = target if target in {"prompt", "keyframes", "references", "settings"} else "settings"
+    safe_target = target if target in {"prompt", "keyframes", "references", "orbit", "settings"} else "settings"
     valid_controls = {
         "prompt",
         "first_frame",
+        "orbit_photo",
+        "orbit_strength",
         "reference_images",
         "reference_videos",
         "reference_audios",
@@ -304,6 +536,7 @@ def _input_validation_html(message: str, target: str, control: str | None = None
         "prompt": "prompt",
         "keyframes": "first_frame",
         "references": "reference_images",
+        "orbit": "orbit_photo",
         "settings": "aspect",
     }[safe_target]
     return (
@@ -335,6 +568,8 @@ def _validation_target(request: H3Request) -> str:
         return "keyframes"
     if request.mode == MODE_REFERENCES:
         return "references"
+    if request.mode == MODE_ORBIT:
+        return "orbit"
     return "settings"
 
 
@@ -342,6 +577,8 @@ def _validation_control(request: H3Request | None, message: str, target: str) ->
     lowered = str(message or "").lower()
     if target == "prompt":
         return "prompt"
+    if "orbitの強さ" in lowered:
+        return "orbit_strength"
     if "seed" in lowered:
         return "seed"
     if "steps" in lowered:
@@ -364,6 +601,8 @@ def _validation_control(request: H3Request | None, message: str, target: str) ->
         if "音声" in lowered and "音声だけ" not in lowered:
             return "reference_audios"
         return "reference_images"
+    if target == "orbit":
+        return "orbit_photo"
     if request is not None and request.mode == MODE_REFERENCES:
         return "reference_images"
     return "aspect"
@@ -638,6 +877,11 @@ def _restore_history_settings(selected: str, runtime_value: str, include_acceler
     except H3BridgeError as exc:
         return (*[gr.update() for _ in range(21)], progress_html("error", str(exc), 0.0), *([gr.update() for _ in range(len(H3Acceleration().values()) + 3)] if include_acceleration else []))
 
+    return _history_settings_updates(request, include_acceleration)
+
+
+def _history_settings_updates(request, include_acceleration=False):
+
     effective_ref_image_size = request.ref_image_size if request.mode == MODE_REFERENCES else "match"
     restored_request = H3Request(
         mode=request.mode,
@@ -651,6 +895,7 @@ def _restore_history_settings(selected: str, runtime_value: str, include_acceler
         ref_image_size=effective_ref_image_size,
         acceleration=request.acceleration,
         control=request.control,
+        orbit_strength=request.orbit_strength,
     )
     mode_updates = _mode_updates(
         restored_request.mode,
@@ -668,6 +913,8 @@ def _restore_history_settings(selected: str, runtime_value: str, include_acceler
         message += "開始・終了フレームはもう一度追加してください。"
     elif restored_request.mode == MODE_REFERENCES:
         message += "参照素材はもう一度追加してください。"
+    elif restored_request.mode == MODE_ORBIT:
+        message += "周回する写真を再指定してください。"
     if restored_request.control.enabled:
         message += "Fun ControlNetの制御動画も追加してください。"
     return (
@@ -685,7 +932,7 @@ def _restore_history_settings(selected: str, runtime_value: str, include_acceler
         gr.update(value=restored_request.aspect),
         (_custom_canvas(*restored_request.dimensions) if restored_request.quality.startswith("custom:")
          else gr.update(value=restored_request.quality)),
-        gr.update(value=restored_request.duration_seconds),
+        gr.update(value=restored_request.duration_seconds, minimum=3 if restored_request.mode == MODE_ORBIT else 5),
         gr.update(value=restored_request.steps),
         gr.update(value=str(restored_request.seed)),
         gr.update(value=restored_request.scheduler),
@@ -697,6 +944,34 @@ def _restore_history_settings(selected: str, runtime_value: str, include_acceler
         *([gr.update(value=value) for value in request.acceleration.values()] if include_acceleration else []),
         *([gr.update(value=request.control.mode), gr.update(value=None), gr.update(value=request.control.strength)] if include_acceleration else []),
     )
+
+
+def _restore_history_ui(selected, runtime_value, slots, aspect, quality, duration, steps, scheduler, strength):
+    try:
+        if not selected:
+            raise H3BridgeError("設定を復元する履歴を選択してください。")
+        items, _, _ = _history_state(runtime_value)
+        request = load_history_request(selected, items, OUTPUT_DIRECTORY)
+    except H3BridgeError:
+        return (*_restore_history_settings(selected, runtime_value, include_acceleration=True), gr.update(), gr.update(), gr.update())
+    state = _save_mode_slot(slots, aspect, quality, duration, steps, scheduler, strength)
+    state["active"] = request.mode
+    state["orbit" if request.mode == MODE_ORBIT else "normal"] = (
+        request.aspect, request.quality, request.duration_seconds, request.steps, request.scheduler, request.orbit_strength,
+    )
+    updates = list(_history_settings_updates(request, include_acceleration=True))
+    if request.mode == MODE_ORBIT:
+        updates[2:7] = [gr.update() for _ in range(5)]
+    return (*updates, state, gr.update(value=None) if request.mode == MODE_ORBIT else gr.update(), gr.update(value=state["orbit"][5]))
+
+
+def _restore_history_for_ui(selected, runtime_value, slots, aspect, quality, duration, steps, scheduler, strength, orbit_duration):
+    updates = list(_restore_history_ui(selected, runtime_value, slots, aspect, quality, orbit_duration if slots["active"] == MODE_ORBIT else duration, steps, scheduler, strength))
+    orbit_duration_update = gr.update()
+    if updates[0].get("value") == MODE_ORBIT:
+        orbit_duration_update = gr.update(value=updates[13]["value"])
+        updates[13] = gr.update()
+    return (*updates, orbit_duration_update)
 
 
 def _request_from_ui(
@@ -718,6 +993,8 @@ def _request_from_ui(
     control_video=None,
     control_strength=1.0,
     *acceleration_values,
+    orbit_photo=None,
+    orbit_strength=1.0,
 ) -> H3Request:
     try:
         duration_value = float(duration)
@@ -730,11 +1007,11 @@ def _request_from_ui(
     return H3Request(
         mode=str(mode),
         prompt=str(prompt or ""),
-        first_frame=os.fspath(first_frame) if first_frame else None,
-        last_frame=os.fspath(last_frame) if last_frame else None,
-        reference_images=normalize_file_list(reference_images),
-        reference_videos=normalize_file_list(reference_videos),
-        reference_audios=normalize_file_list(reference_audios),
+        first_frame=os.fspath(orbit_photo if mode == MODE_ORBIT else first_frame) if (orbit_photo if mode == MODE_ORBIT else first_frame) else None,
+        last_frame=os.fspath(last_frame) if last_frame and mode != MODE_ORBIT else None,
+        reference_images=() if mode == MODE_ORBIT else normalize_file_list(reference_images),
+        reference_videos=() if mode == MODE_ORBIT else normalize_file_list(reference_videos),
+        reference_audios=() if mode == MODE_ORBIT else normalize_file_list(reference_audios),
         aspect=str(aspect),
         quality=str(quality),
         duration_seconds=duration_value,
@@ -745,6 +1022,7 @@ def _request_from_ui(
         acceleration=H3Acceleration.from_values(acceleration_values),
         control=H3FunControl(str(control_mode), float(control_strength)),
         control_video=os.fspath(control_video) if control_video else None,
+        orbit_strength=float(orbit_strength),
     )
 
 
@@ -757,6 +1035,24 @@ def _open_current_workflow(runtime_value, server_url, runtime_profile, *values):
             request, resolve_runtime_root(runtime_value), server_url,
             LOG_DIRECTORY, runtime_profile,
         )
+        return handoff.result_html(record, target), target
+    except (H3BridgeError, OSError, ValueError, TypeError) as exc:
+        return _status_error(str(exc)), ""
+
+
+def _active_generation_values(values, orbit_duration):
+    values = list(values)
+    if values[0] == MODE_ORBIT:
+        values[9] = orbit_duration
+    return values
+
+
+def _open_current_workflow_ui(runtime_value, server_url, runtime_profile, orbit_photo, orbit_strength, orbit_duration, *values):
+    from modules_forge import minimax_h3_handoff as handoff
+
+    try:
+        request = _request_from_ui(*_active_generation_values(values, orbit_duration), orbit_photo=orbit_photo, orbit_strength=orbit_strength)
+        record, target = handoff.export_current(request, resolve_runtime_root(runtime_value), server_url, LOG_DIRECTORY, runtime_profile)
         return handoff.result_html(record, target), target
     except (H3BridgeError, OSError, ValueError, TypeError) as exc:
         return _status_error(str(exc)), ""
@@ -798,6 +1094,8 @@ def _generate(
     control_video=None,
     control_strength=1.0,
     *acceleration_values,
+    orbit_photo=None,
+    orbit_strength=1.0,
 ):
     yield (
         progress_html("prepare", "生成条件を確認しています", 0.02),
@@ -831,7 +1129,11 @@ def _generate(
                 control_video,
                 control_strength,
                 *acceleration_values,
+                orbit_photo=orbit_photo,
+                orbit_strength=orbit_strength,
             )
+            if mode == MODE_ORBIT and not _orbit_prepared(runtime_value):
+                raise H3BridgeError("先に写真欄の「Orbit LoRAを準備」を実行してください。")
             validate_request(request)
         except (H3BridgeError, ValueError, TypeError, OverflowError) as exc:
             target = _validation_target(request) if request is not None else "settings"
@@ -843,7 +1145,7 @@ def _generate(
                 gr.update(),
                 gr.update(),
                 gr.update(interactive=False),
-                gr.update(value="映像＋音声を生成", interactive=True),
+                gr.update(value=_generation_label(mode), interactive=mode != MODE_ORBIT or _orbit_prepared(runtime_value)),
                 _input_validation_html(str(exc), target, control),
             )
             return
@@ -876,7 +1178,7 @@ def _generate(
             elif update["stage"] == "reconnecting":
                 generate_label = "H3 backendへ再接続中…"
             else:
-                generate_label = "映像＋音声を生成" if generation_finished else "生成中…"
+                generate_label = _generation_label(mode) if generation_finished else "生成中…"
             generate_update = gr.update(
                 value=generate_label,
                 interactive=generation_finished,
@@ -904,7 +1206,7 @@ def _generate(
             gr.update(),
             gr.update(),
             gr.update(interactive=False),
-            gr.update(value="映像＋音声を生成", interactive=True),
+            gr.update(value=_generation_label(mode), interactive=mode != MODE_ORBIT or _orbit_prepared(runtime_value)),
             gr.update(),
         )
     except (H3BridgeError, OSError, ValueError, TypeError, OverflowError) as exc:
@@ -915,7 +1217,7 @@ def _generate(
             gr.update(),
             gr.update(),
             gr.update(interactive=False),
-            gr.update(value="映像＋音声を生成", interactive=True),
+            gr.update(value=_generation_label(mode), interactive=mode != MODE_ORBIT or _orbit_prepared(runtime_value)),
             gr.update(),
         )
 
@@ -939,6 +1241,11 @@ def _runtime_checking_html() -> str:
         "生成準備を確認中",
         "backend・モデル・利用可能なメモリを確認しています…",
     )
+
+
+def _generate_ui(runtime_value, server_url, runtime_profile, orbit_photo, orbit_strength, orbit_duration, *values):
+    for update in _generate(runtime_value, server_url, runtime_profile, *_active_generation_values(values, orbit_duration), orbit_photo=orbit_photo, orbit_strength=orbit_strength):
+        yield (*update, not update[6].get("interactive", False) and 'data-stage="validation"' not in update[0] and 'data-stage="error"' not in update[0])
 
 
 def _initial_ui_updates(
@@ -1095,8 +1402,10 @@ def _build_ui():
                             ("テキスト", MODE_TEXT),
                             ("キーフレーム", MODE_KEYFRAMES),
                             ("参照素材", MODE_REFERENCES),
+                            ("360°周回（写真1枚）", MODE_ORBIT),
                         ],
                         value=MODE_TEXT,
+                        interactive=False,
                         label="生成モード",
                         show_label=False,
                         elem_id="h3-mode",
@@ -1191,12 +1500,22 @@ def _build_ui():
                             elem_id="h3-reference-guide",
                         )
 
+                    with gr.Group(visible="hidden", elem_id="h3-orbit", elem_classes=["h3-media-panel"]) as orbit_group:
+                        gr.Markdown("### 周回する写真\n1枚の写真を生成サイズへ中央切り抜きし、開始と終了の両方に使います。")
+                        orbit_photo = gr.Image(type="filepath", label="周回する写真", height=240, elem_id="h3-orbit-photo")
+                        orbit_photo.do_not_save_to_config = True
+                        with gr.Row(elem_id="h3-orbit-prepare"):
+                            orbit_status = gr.HTML(value=_orbit_status_html(runtime_value=runtime_value), elem_id="h3-orbit-status")
+                            orbit_install = gr.Button("Orbit LoRAを準備", size="sm", scale=0, min_width=150, interactive=not _orbit_prepared(runtime_value), elem_id="h3-orbit-install")
+                        orbit_strength = gr.Slider(0.05, 2.0, value=1.0, step=0.05, label="Orbit LoRAの強さ", elem_id="h3-orbit-strength")
+                        orbit_strength.do_not_save_to_config = True
+
                     gr.HTML(
                         '<div class="h3-section-kicker"><h3>生成設定</h3></div>'
                     )
                     with gr.Group(elem_classes=["h3-settings-card"]):
-                        gr.Markdown("#### 用途で選ぶ\n解像度・5秒・20 Stepsを用途別の標準値へまとめて揃えます。")
-                        with gr.Row(elem_classes=["h3-speed-presets"]):
+                        gr.Markdown("#### 用途で選ぶ\n解像度・5秒・20 Stepsを用途別の標準値へまとめて揃えます。", elem_id="h3-presets-heading")
+                        with gr.Row(elem_classes=["h3-speed-presets"]) as normal_presets:
                             quick_preset_button = gr.Button(
                                 "動作確認\n速い・低解像度",
                                 size="sm",
@@ -1215,6 +1534,7 @@ def _build_ui():
                                 interactive=False,
                                 elem_id="h3-preset-final",
                             )
+                        orbit_reset = gr.Button("推奨値に戻す", visible=False, size="sm", elem_id="h3-orbit-reset")
                         preset_state = gr.HTML(
                             value=_preset_state_html(initial_preset),
                             elem_id="h3-preset-state",
@@ -1249,6 +1569,8 @@ def _build_ui():
                             interactive=False,
                             elem_id="h3-duration",
                         )
+                        orbit_duration = gr.Slider(3, 15, step=0.5, value=3.0, label="長さ（秒）", visible=False, elem_id="h3-orbit-duration")
+                        orbit_duration.do_not_save_to_config = True
                         settings_summary = gr.HTML(
                             value=initial_settings_summary,
                             elem_id="h3-settings-summary",
@@ -1270,6 +1592,7 @@ def _build_ui():
                                 elem_id="h3-cancel",
                                 elem_classes=["h3-cancel-button"],
                             )
+                        generation_gate = gr.HTML(value="", elem_id="h3-generation-gate")
                         acceleration_controls, acceleration_buttons = create_acceleration_controls(duration)
                         with gr.Accordion("Fun ControlNet · Union 1 / 2.0", open=False, elem_id="h3-fun-control"):
                             control_mode = gr.Dropdown(
@@ -1361,7 +1684,7 @@ def _build_ui():
                         'aria-atomic="true"></p>',
                         elem_id="h3-progress-announcer",
                     )
-                    gr.HTML(
+                    output_note = gr.HTML(
                         '<p class="h3-output-note">映像と32kHzステレオ音声は同じ推論から生成され、MP4へ同期保存されます。</p>'
                     )
 
@@ -1489,12 +1812,15 @@ def _build_ui():
                             )
 
             prompt_id_state = gr.State("")
+            mode_slots = gr.State(_initial_mode_slots())
+            orbit_installing = gr.State(False)
+            generation_busy = gr.State(False)
             initialize_trigger = gr.Button(
                 "H3 Studioを初期化",
                 elem_id="h3-initialize-trigger",
             )
 
-        initialize_trigger.click(
+        initialization_event = initialize_trigger.click(
             fn=_initial_ui_with_acceleration,
             inputs=[runtime_path, server_url, runtime_profile, aspect],
             outputs=[
@@ -1527,31 +1853,41 @@ def _build_ui():
             trigger_mode="once",
             concurrency_limit=1,
             concurrency_id="h3-runtime-control",
-        )
+        ).then(_restored_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden")
 
         for dimension in (width, height):
             dimension.input(_custom_canvas, inputs=[width, height], outputs=quality, queue=False, show_progress="hidden")
         swap_size.click(lambda w, h: (h, w, _custom_canvas(h, w)), inputs=[width, height], outputs=[width, height, quality], queue=False, show_progress="hidden")
         for control in (aspect, quality):
-            control.change(_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden")
+            control.input(_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden")
         quality.change(_canvas_ratio_state, inputs=quality, outputs=aspect, queue=False, show_progress="hidden")
         summary_inputs = [aspect, quality, duration, steps, scheduler, ref_image_size]
+        slot_inputs = [aspect, quality, duration, steps, scheduler, orbit_strength]
+        slot_outputs = [mode_slots, aspect, quality, duration, steps, scheduler, orbit_strength, width, height, orbit_duration]
+        chrome_inputs = [mode, *summary_inputs, orbit_strength, orbit_installing, generation_busy, control_mode, orbit_duration, orbit_photo, runtime_path, *acceleration_controls]
+        chrome_outputs = [keyframe_group, reference_group, mode_help, ref_image_size, settings_summary, orbit_group, normal_presets, orbit_reset, prompt_template_button, prompt, generate_button, generation_gate, output_note, duration, orbit_duration]
         acceleration_controls[-7].change(
-            lambda enabled: (gr.update(visible=not enabled), gr.update(label="各区間の終了構図" if enabled else "終了フレーム")),
-            inputs=[acceleration_controls[-7]], outputs=[settings_summary, last_frame], queue=False, show_progress="hidden",
+            lambda enabled, current_mode: (gr.update(visible=not enabled or current_mode == MODE_ORBIT), gr.update(label="各区間の終了構図" if enabled else "終了フレーム")),
+            inputs=[acceleration_controls[-7], mode], outputs=[settings_summary, last_frame], queue=False, show_progress="hidden",
         )
-        mode.change(
-            fn=_mode_updates,
-            inputs=[mode, *summary_inputs, input_validation],
-            outputs=[
-                keyframe_group,
-                reference_group,
-                mode_help,
-                ref_image_size,
-                settings_summary,
-                input_validation,
-            ],
-            queue=False,
+        # input fires only for a human mode switch. Programmatic history restores
+        # write the target slot directly and cannot trigger a stale slot swap.
+        mode.input(_switch_mode_settings_ui, inputs=[mode, mode_slots, *slot_inputs, orbit_duration], outputs=slot_outputs, queue=False, show_progress="hidden").then(
+            _mode_chrome_ui, inputs=chrome_inputs, outputs=chrome_outputs, queue=False, show_progress="hidden",
+        )
+        orbit_reset.click(_reset_orbit_settings_ui, inputs=[mode_slots], outputs=slot_outputs, queue=False, show_progress="hidden").then(
+            _mode_chrome_ui, inputs=chrome_inputs, outputs=chrome_outputs, queue=False, show_progress="hidden",
+        )
+        orbit_install.click(_install_orbit, inputs=[runtime_path], outputs=[orbit_status, orbit_install, orbit_installing], show_progress="hidden", trigger_mode="once", concurrency_limit=1, concurrency_id="h3-runtime-control")
+        orbit_installing.change(lambda installing: gr.update(interactive=not installing), inputs=[orbit_installing], outputs=[runtime_path], queue=False, show_progress="hidden")
+        runtime_path.change(_orbit_runtime_updates, inputs=[runtime_path, orbit_installing, generation_busy], outputs=[orbit_status, orbit_install], queue=False, show_progress="hidden").then(
+            _mode_chrome_ui, inputs=chrome_inputs, outputs=chrome_outputs, queue=False, show_progress="hidden",
+        )
+        for state in (orbit_installing, generation_busy):
+            state.change(_mode_chrome_ui, inputs=chrome_inputs, outputs=chrome_outputs, queue=False, show_progress="hidden")
+        orbit_photo.change(_mode_chrome_ui, inputs=chrome_inputs, outputs=chrome_outputs, queue=False, show_progress="hidden")
+        initialization_event.then(lambda: gr.update(interactive=True), inputs=[], outputs=[mode], queue=False, show_progress="hidden").then(
+            _mode_chrome_ui, inputs=chrome_inputs, outputs=chrome_outputs, queue=False, show_progress="hidden",
         )
         prompt.blur(
             fn=_clear_prompt_validation,
@@ -1576,8 +1912,8 @@ def _build_ui():
                 queue=False,
             )
         prompt_action_outputs = [prompt, input_validation]
+        prompt_template_button.click(_prompt_template_for_mode, inputs=[mode, prompt, input_validation], outputs=prompt_action_outputs, queue=False)
         for button, callback in [
-            (prompt_template_button, _prompt_template_updates),
             (camera_button, _prompt_camera_updates),
             (dialogue_button, _prompt_dialogue_updates),
             (sfx_button, _prompt_sfx_updates),
@@ -1591,13 +1927,7 @@ def _build_ui():
             )
 
         setting_inputs = [aspect, quality, duration, steps, seed, scheduler, ref_image_size]
-        aspect.input(
-            fn=_aspect_settings_updates,
-            inputs=[*setting_inputs, input_validation],
-            outputs=[settings_summary, input_validation],
-            queue=False,
-            trigger_mode="always_last",
-        )
+        mode_setting_inputs = [mode, *setting_inputs, orbit_strength, control_mode, input_validation, orbit_duration, *acceleration_controls]
 
         preset_outputs = [
             quality,
@@ -1614,37 +1944,29 @@ def _build_ui():
             outputs=preset_outputs,
             queue=False,
             api_name="h3_apply_quick_preset",
-        )
+        ).then(_restored_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden")
         recommended_preset_button.click(
             fn=_apply_recommended_preset,
             inputs=[aspect],
             outputs=preset_outputs,
             queue=False,
             api_name="h3_apply_recommended_preset",
-        )
+        ).then(_restored_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden")
         final_preset_button.click(
             fn=_apply_final_preset,
             inputs=[aspect],
             outputs=preset_outputs,
             queue=False,
             api_name="h3_apply_final_preset",
-        )
-        for component in [quality, scheduler, ref_image_size]:
+        ).then(_restored_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden")
+        for component in [aspect, quality, scheduler, ref_image_size, duration, orbit_duration, steps, orbit_strength, control_mode]:
             component.change(
-                fn=_custom_settings_updates,
-                inputs=[*setting_inputs, input_validation],
+                fn=_custom_settings_for_mode_ui,
+                inputs=mode_setting_inputs,
                 outputs=[settings_summary, preset_state, input_validation],
                 queue=False,
                 trigger_mode="always_last",
-            )
-        for component in [duration, steps]:
-            component.input(
-                fn=_custom_settings_updates,
-                inputs=[*setting_inputs, input_validation],
-                outputs=[settings_summary, preset_state, input_validation],
-                queue=False,
-                trigger_mode="always_last",
-            )
+            ).then(_mode_chrome_ui, inputs=chrome_inputs, outputs=chrome_outputs, queue=False, show_progress="hidden")
         seed.change(
             fn=_clear_settings_validation,
             inputs=[*setting_inputs, input_validation],
@@ -1716,8 +2038,8 @@ def _build_ui():
             outputs=[result_video, progress],
         )
         restore_history_button.click(
-            fn=_restore_history_with_acceleration,
-            inputs=[history_selector, runtime_path],
+            fn=_restore_history_for_ui,
+            inputs=[history_selector, runtime_path, mode_slots, *slot_inputs, orbit_duration],
             outputs=[
                 mode,
                 prompt,
@@ -1743,16 +2065,22 @@ def _build_ui():
                 progress,
                 *acceleration_controls,
                 *fun_control_controls,
+                mode_slots,
+                orbit_photo,
+                orbit_strength,
+                orbit_duration,
             ],
             queue=False,
             show_progress="hidden",
-        ).then(_restored_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden")
+        ).then(_restored_canvas_values, inputs=[aspect, quality], outputs=[width, height], queue=False, show_progress="hidden").then(
+            _mode_chrome_ui, inputs=chrome_inputs, outputs=chrome_outputs, queue=False, show_progress="hidden",
+        )
 
         for control in acceleration_controls:
             control.change(
                 _acceleration_pending, inputs=acceleration_controls, outputs=[runtime_status],
                 queue=False, show_progress="hidden", trigger_mode="always_last",
-            )
+            ).then(_mode_chrome_ui, inputs=chrome_inputs, outputs=chrome_outputs, queue=False, show_progress="hidden")
         turbo_inputs = [aspect, quality, duration, ref_image_size]
         turbo_outputs = [acceleration_controls[0], steps, scheduler, settings_summary, preset_state]
         for button, callback in zip(acceleration_buttons[:2], [_turbo_four_updates, _turbo_eight_updates], strict=True):
@@ -1767,6 +2095,9 @@ def _build_ui():
                 runtime_path,
                 server_url,
                 runtime_profile,
+                orbit_photo,
+                orbit_strength,
+                orbit_duration,
                 mode,
                 prompt,
                 first_frame,
@@ -1786,7 +2117,7 @@ def _build_ui():
         ]
 
         for button, callback, inputs, window_key, target in (
-            (export_current_button, _open_current_workflow, generation_inputs, "current", handoff_current_target),
+            (export_current_button, _open_current_workflow_ui, generation_inputs, "current", handoff_current_target),
             (export_history_button, _open_history_workflow, [history_selector, runtime_path, server_url], "history", handoff_history_target),
         ):
             button.click(
@@ -1800,7 +2131,7 @@ def _build_ui():
             )
 
         generate_button.click(
-            fn=_generate,
+            fn=_generate_ui,
             inputs=generation_inputs,
             outputs=[
                 progress,
@@ -1811,6 +2142,7 @@ def _build_ui():
                 cancel_button,
                 generate_button,
                 input_validation,
+                generation_busy,
             ],
             show_progress="hidden",
             trigger_mode="once",

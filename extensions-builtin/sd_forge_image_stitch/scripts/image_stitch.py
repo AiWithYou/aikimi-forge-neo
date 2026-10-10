@@ -87,7 +87,7 @@ class ImageStitch(scripts.Script):
                 value=1024,
                 step=256,
                 label="Maximum Side Length",
-                info="reduce VRAM usage during encoding ; apply to all reference images ; set to 0 for no limit",
+                info="reduce VRAM usage during encoding ; set to 0 for no limit ; Anima uses output Width / Height",
             )
 
         def _upload(gallery: list[tuple[Image.Image, str]], image: Image.Image):
@@ -164,6 +164,8 @@ class ImageStitch(scripts.Script):
 
         # cache is based on reference inputs & model
         cache: list[str | int | bool] = [str(sd_models.model_data.forge_loading_parameters), *(self.hash_image(ref) for ref in references), (dynamic_args.wan and isinstance(p, StableDiffusionProcessingTxt2Img))]
+        if dynamic_args.anima:
+            cache.extend([p.width, p.height])
         if ImageStitch.cached_parameters == cache:
             return
 
@@ -185,7 +187,10 @@ class ImageStitch(scripts.Script):
         dynamic_args.is_referencing = True
 
         for reference in references:
-            reference = self.preprocess(reference, max_dim)
+            if dynamic_args.anima:
+                reference = images.resize_image(1, reference, p.width, p.height)
+            else:
+                reference = self.preprocess(reference, max_dim)
             if _batch_size:
                 reference = images.resize_image(1, reference, p.width, p.height)
             image = images.flatten(reference, opts.img2img_background_color)

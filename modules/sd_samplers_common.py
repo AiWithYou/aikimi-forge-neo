@@ -1,6 +1,7 @@
 import inspect
 import re
 from collections import namedtuple
+from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -439,13 +440,34 @@ class Sampler:
         state.sampling_step = 0
         state.preview_step = 0
 
-        try:
-            return func()
-        except RecursionError:
-            print("Encountered RecursionError during sampling; try to use a smaller rho value instead")
-            return state.current_latent
-        except InterruptedException:
-            return state.current_latent
+        unet = self.p.sd_model.forge_objects.unet
+        cache_scope = getattr(unet.model.diffusion_model, "text_conditioning_cache", None)
+
+        def weight_revision():
+            if self.p.sd_model.forge_objects.unet is not unet:
+                return None
+            options = getattr(unet, "model_options", {})
+            transformers = options.get("transformer_options", {})
+            if getattr(unet, "has_online_lora", lambda: False)() or any(options.get(key) for key in (
+                "model_function_wrapper", "conditioning_modifiers", "sampler_pre_cfg_function",
+                "sampler_post_cfg_function", "sampler_cfg_function", "sampler_calc_cond_batch_function",
+            )) or any(transformers.get(key) for key in (
+                "patches", "patches_replace", "block_modifiers", "block_inner_modifiers", "krea2_attention_override",
+            )) or getattr(unet, "controlnet_linked_list", None) is not None:
+                return None
+            if not hasattr(unet.model, "current_weight_patches_uuid") or getattr(unet, "patches_uuid", None) is None:
+                return None
+            return unet.model.current_weight_patches_uuid, unet.patches_uuid
+
+        context = cache_scope(weight_revision=weight_revision) if cache_scope is not None else nullcontext()
+        with context:
+            try:
+                return func()
+            except RecursionError:
+                print("Encountered RecursionError during sampling; try to use a smaller rho value instead")
+                return state.current_latent
+            except InterruptedException:
+                return state.current_latent
 
     def number_of_needed_noises(self, p):
         return p.steps

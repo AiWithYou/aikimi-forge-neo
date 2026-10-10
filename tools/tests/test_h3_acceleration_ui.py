@@ -56,7 +56,7 @@ class H3AccelerationUITests(unittest.TestCase):
         return next((index, fn) for index, fn in self.demo.fns.items() if fn.fn is not None and fn.fn.__name__ == name)
 
     def test_workflow_handoff_buttons_keep_current_and_history_separate(self):
-        _, current = self.callback("_open_current_workflow")
+        _, current = self.callback("_open_current_workflow_ui")
         _, history = self.callback("_open_history_workflow")
         self.assertEqual(current.outputs[0].elem_id, "h3-workflow-status")
         self.assertEqual(history.outputs[0].elem_id, "h3-workflow-status")
@@ -72,7 +72,7 @@ class H3AccelerationUITests(unittest.TestCase):
         from modules_forge.minimax_h3_hybrid_ui import hybrid_summary
 
         option = H3Acceleration(hybrid=H3Hybrid(True, 3, 39, 16, "left\nforward\nright"))
-        _, generate = self.callback("_generate")
+        _, generate = self.callback("_generate_ui")
         self.assertEqual([item.elem_id for item in generate.inputs if (item.elem_id or "").startswith("h3-hybrid-")], [
             "h3-hybrid-enabled", "h3-hybrid-windows", "h3-hybrid-overlap", "h3-hybrid-switch", "h3-hybrid-prompts",
         ])
@@ -117,10 +117,10 @@ class H3AccelerationUITests(unittest.TestCase):
         self.assertEqual(len(fn.outputs), CONTROL_COUNT + 4)
 
     def test_runtime_and_generation_consume_the_same_controls(self):
-        for name, count in (("_generate", 20 + CONTROL_COUNT), ("_connect_runtime_updates", 3 + CONTROL_COUNT), ("_restart_runtime_updates", 3 + CONTROL_COUNT), ("_rescan_runtime_updates", 3 + CONTROL_COUNT)):
+        for name, count in (("_generate_ui", 23 + CONTROL_COUNT), ("_connect_runtime_updates", 3 + CONTROL_COUNT), ("_restart_runtime_updates", 3 + CONTROL_COUNT), ("_rescan_runtime_updates", 3 + CONTROL_COUNT)):
             _, fn = self.callback(name)
             self.assertEqual(len(fn.inputs), count)
-            self.assertEqual(fn.inputs[-CONTROL_COUNT:], self.callback("_generate")[1].inputs[-CONTROL_COUNT:])
+            self.assertEqual(fn.inputs[-CONTROL_COUNT:], self.callback("_generate_ui")[1].inputs[-CONTROL_COUNT:])
             self.assertEqual(fn.inputs[-CONTROL_COUNT + 8].elem_id, "h3-negpip-enabled")
             self.assertEqual(fn.inputs[-CONTROL_COUNT + 8 + len(H3NegPiP().values())].elem_id, "h3-clip-cache")
             self.assertEqual([item.elem_id for item in fn.inputs][-CONTROL_COUNT:-CONTROL_COUNT + 8], ["h3-model-variant", "h3-video-vae", "h3-decode-mode", "h3-tile-batch", "h3-attention-mode", "h3-sparse-tau", "h3-sparse-keep", "h3-sparse-start"])

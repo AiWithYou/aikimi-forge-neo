@@ -493,10 +493,9 @@ class StableDiffusionProcessing:
         Returns the result of calling function(shared.sd_model, required_prompts, steps)
         using a cache to store the result if the same arguments have been used before.
 
-        cache is an array containing two elements. The first element is a tuple
-        representing the previously used arguments, or None if no arguments
-        have been used before. The second element is where the previously
-        computed result is stored.
+        cache contains the previous arguments, computed result, and generation
+        metadata. Models with conditioning state hooks also store that state
+        as a fourth element, restored when the matching result is reused.
 
         caches is a list with items described above.
         """
@@ -507,6 +506,9 @@ class StableDiffusionProcessing:
             if cache[0] is not None and cached_params == cache[0]:
                 if len(cache) > 2:
                     shared.sd_model.extra_generation_params.update(cache[2])
+                restore_cache_state = getattr(shared.sd_model, "restore_conditioning_cache_state", None)
+                if len(cache) > 3 and restore_cache_state is not None:
+                    restore_cache_state(required_prompts, cache[3])
                 return cache[1]
 
         cache = caches[0]
@@ -523,6 +525,14 @@ class StableDiffusionProcessing:
             cache[2] = last_extra_generation_params.copy()
 
         args.dynamic_args.last_extra_generation_params.clear()
+
+        capture_cache_state = getattr(shared.sd_model, "get_conditioning_cache_state", None)
+        if capture_cache_state is not None:
+            state = capture_cache_state(required_prompts)
+            if len(cache) > 3:
+                cache[3] = state
+            else:
+                cache.append(state)
 
         cache[0] = cached_params
         return cache[1]

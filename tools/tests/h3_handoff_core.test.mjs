@@ -70,6 +70,23 @@ test('V1 and V3 model selectors accepted only when exact filename is available',
   assert.doesNotThrow(()=>validateAvailableNodes(p,{VAELoader:{input:{required:{vae_name:spec}}}}));
  }
 });
+test('missing Orbit LoRA fails before touching the editor canvas',async()=>{
+ const orbitPrompt={...prompt,lora:{class_type:'LoraLoaderModelOnly',inputs:{model:['1',0],lora_name:'minimax_h3_flf2v_lora_v1.safetensors',strength_model:1}}};
+ const orbitSchemas={...schemas,LoraLoaderModelOnly:{input:{required:{lora_name:[['other.safetensors']]}}}};
+ const {app,calls}=mockApp();
+ await assert.rejects(importEditable(app,{...record,prompt:orbitPrompt},orbitSchemas),/モデル/);
+ assert.deepEqual(calls,[]);
+});
+test('Orbit LoRA V1 and V3 selectors require the exact available filename',()=>{
+ const name='minimax_h3_flf2v_lora_v1.safetensors';
+ const p={lora:{class_type:'LoraLoaderModelOnly',inputs:{model:['1',0],lora_name:name,strength_model:1}}};
+ for(const spec of [[[name]],['COMBO',{options:[name]}]]) {
+  const definitions={LoraLoaderModelOnly:{input:{required:{lora_name:spec}}}};
+  assert.doesNotThrow(()=>validateAvailableNodes(p,definitions));
+  const renamed=copy(p); renamed.lora.inputs.lora_name='renamed.safetensors';
+  assert.throws(()=>validateAvailableNodes(renamed,definitions),/モデル/);
+ }
+});
 test('only verified native default additions allowed',()=>{
  const actual=copy(prompt); actual['1'].inputs.extra=1;
  assert.equal(roundTripDifferences(prompt,actual,schemas).length,1);

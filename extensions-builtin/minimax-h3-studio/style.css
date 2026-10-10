@@ -369,6 +369,32 @@
     display: none !important;
 }
 
+#h3-studio:not([data-h3-mode="orbit"]) #h3-orbit,
+#h3-studio[data-h3-mode="orbit"] #h3-keyframes,
+#h3-studio[data-h3-mode="orbit"] #h3-references,
+#h3-studio[data-h3-mode="orbit"] #h3-ref-image-size,
+#h3-studio[data-h3-mode="orbit"] #h3-presets-heading,
+#h3-studio[data-h3-mode="orbit"] .h3-speed-presets {
+    display: none !important;
+}
+
+#h3-studio #h3-orbit-prepare {
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#h3-studio .h3-orbit-status,
+#h3-studio .h3-orbit-gate {
+    margin: 5px 0;
+    color: var(--h3-muted);
+    font-size: 0.8rem;
+}
+
+#h3-studio .h3-orbit-deviation {
+    color: var(--h3-warn);
+}
+
 #h3-studio[data-h3-mode="keyframes"] #h3-keyframes,
 #h3-studio[data-h3-mode="references"] #h3-references {
     display: flex !important;

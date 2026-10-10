@@ -31,6 +31,7 @@ from modules_forge import minimax_h3_fun_control as fun_control
 from modules_forge import minimax_h3_handoff as workflow_handoff
 from modules_forge import minimax_h3_hybrid as hybrid
 from modules_forge import minimax_h3_negpip_cache as negpip_cache
+from modules_forge import minimax_h3_orbit_assets as orbit_assets
 from modules_forge import minimax_h3_pending as pending_jobs
 from modules_forge import minimax_h3_union2_vae as union2_vae
 from modules_forge.gpu_ownership import GPUOwnership, release_forge_vram
@@ -72,7 +73,8 @@ RUNTIME_PROFILE_LABELS = {
 MODE_TEXT = "text"
 MODE_KEYFRAMES = "keyframes"
 MODE_REFERENCES = "references"
-MODES = {MODE_TEXT, MODE_KEYFRAMES, MODE_REFERENCES}
+MODE_ORBIT = "orbit"
+MODES = {MODE_TEXT, MODE_KEYFRAMES, MODE_REFERENCES, MODE_ORBIT}
 
 ASPECTS = ("21:9", "16:9", "4:3", "1:1", "3:4", "9:16")
 QUALITY_DIMENSIONS: dict[str, dict[str, tuple[int, int]]] = {
@@ -260,6 +262,7 @@ class H3Request:
     acceleration: H3Acceleration = field(default_factory=H3Acceleration)
     control: fun_control.H3FunControl = field(default_factory=fun_control.H3FunControl)
     control_video: str | None = None
+    orbit_strength: float = 1.0
 
     @property
     def dimensions(self) -> tuple[int, int]:
@@ -267,12 +270,16 @@ class H3Request:
 
     @property
     def frame_count(self) -> int:
-        frames = snap_h3_frames(self.duration_seconds)
+        frames = snap_h3_frames(self.duration_seconds, orbit=self.mode == MODE_ORBIT)
         return self.acceleration.hybrid.frame_count(frames) if self.acceleration.hybrid.enabled else frames
 
     @property
     def effective_seconds(self) -> float:
         return self.frame_count / H3_FPS
+
+    @property
+    def has_audio(self) -> bool:
+        return self.mode != MODE_ORBIT
 
     @property
     def resolved_seed(self) -> int:
@@ -346,13 +353,14 @@ class HistoryItem:
         return f"{stamp} · {self.path.name}"
 
 
-def snap_h3_frames(seconds: float) -> int:
+def snap_h3_frames(seconds: float, *, orbit: bool = False) -> int:
     try:
         seconds = float(seconds)
     except (TypeError, ValueError, OverflowError) as exc:
         raise H3BridgeError("長さは秒数で指定してください。") from exc
-    if not math.isfinite(seconds) or not H3_MIN_SECONDS <= seconds <= H3_MAX_SECONDS:
-        raise H3BridgeError("MiniMax H3 の長さは 5〜15 秒で指定してください。")
+    minimum = 3.0 if orbit else H3_MIN_SECONDS
+    if not math.isfinite(seconds) or not minimum <= seconds <= H3_MAX_SECONDS:
+        raise H3BridgeError(f"MiniMax H3 の長さは {minimum:g}〜15 秒で指定してください。")
     requested = max(5, int(seconds * H3_FPS + 0.5))
     return requested + (5 - requested % 17) % 17
 
@@ -408,7 +416,7 @@ def _integer_setting(value: Any, label: str) -> int:
     return number
 
 
-def validate_request(request: H3Request) -> None:
+def validate_request(request: H3Request, *, require_media: bool = True) -> None:
     try:
         if not isinstance(request.acceleration, H3Acceleration):
             raise ValueError("H3 高速化設定の形式が不正です。")
@@ -420,14 +428,28 @@ def validate_request(request: H3Request) -> None:
         raise H3BridgeError(str(exc)) from exc
     if request.mode not in MODES:
         raise H3BridgeError("生成モードを選択してください。")
-    if request.control.enabled and not request.control_video:
+    if request.mode == MODE_ORBIT:
+        if (
+            isinstance(request.orbit_strength, bool)
+            or not isinstance(request.orbit_strength, (int, float))
+            or not math.isfinite(request.orbit_strength)
+            or not 0 < request.orbit_strength <= 2
+        ):
+            raise H3BridgeError("Orbitの強さは0より大きく2以下で指定してください。")
+        if require_media and not request.first_frame:
+            raise H3BridgeError("360°周回に使う写真を追加してください。")
+        if request.last_frame:
+            raise H3BridgeError("360°周回は一枚の写真を両端に使います。終了画像は指定しません。")
+        if request.acceleration.hybrid.enabled:
+            raise H3BridgeError("360°周回は一周の動画を作ります。長尺生成をオフにしてください。")
+    if require_media and request.control.enabled and not request.control_video:
         raise H3BridgeError("Fun ControlNetの制御動画を追加してください。")
     if not request.prompt or not request.prompt.strip():
         raise H3BridgeError("映像と音のプロンプトを入力してください。")
     if len(request.prompt) > 20_000:
         raise H3BridgeError("プロンプトが長すぎます。20,000文字以内にしてください。")
     dimensions_for(request.aspect, request.quality)
-    snap_h3_frames(request.duration_seconds)
+    snap_h3_frames(request.duration_seconds, orbit=request.mode == MODE_ORBIT)
     if request.acceleration.hybrid.enabled:
         try:
             request.acceleration.hybrid.frame_count(snap_h3_frames(request.duration_seconds))
@@ -450,7 +472,7 @@ def validate_request(request: H3Request) -> None:
     if request.ref_image_size not in {"match", "max"}:
         raise H3BridgeError("参照画像サイズは match または max を選択してください。")
 
-    if request.mode == MODE_KEYFRAMES and not (request.first_frame or request.last_frame):
+    if require_media and request.mode == MODE_KEYFRAMES and not (request.first_frame or request.last_frame):
         raise H3BridgeError("キーフレームモードでは開始画像または終了画像を追加してください。")
 
     if request.mode == MODE_REFERENCES:
@@ -465,7 +487,7 @@ def validate_request(request: H3Request) -> None:
             raise H3BridgeError("参照音声は最大3本です。")
         if image_count + video_count + audio_count > 12:
             raise H3BridgeError("参照素材は合計12個までです。")
-        if not image_count and not video_count:
+        if require_media and not image_count and not video_count:
             raise H3BridgeError("参照モードには画像または動画が必要です。音声だけでは生成できません。")
 
 
@@ -1264,6 +1286,7 @@ def _start_runtime_locked(
     command = _runtime_command(python, port, runtime_profile, acceleration=acceleration,
                                trusted_custom_nodes=extra_nodes)
 
+    spawned = None
     with _PROCESS_LOCK:
         if _MANAGED_PROCESS is not None and _MANAGED_PROCESS.poll() is None:
             if _MANAGED_PROCESS_IDENTITY != identity:
@@ -1296,23 +1319,32 @@ def _start_runtime_locked(
                     creationflags=creationflags,
                 )
                 _MANAGED_PROCESS_IDENTITY = identity
+                spawned = _MANAGED_PROCESS
 
-    deadline = time.monotonic() + wait_seconds
-    last = current
-    while time.monotonic() < deadline:
-        if _MANAGED_PROCESS is not None and _MANAGED_PROCESS.poll() is not None:
-            raise H3BridgeError(
-                f"ComfyUI が起動直後に終了しました。ログを確認してください: {stderr_path}"
-            )
-        time.sleep(1.0)
-        if not _server_api_responding(normalized_url):
-            continue
-        last = inspect_readiness(runtime_root, normalized_url, acceleration=acceleration)
-        if last.connected:
-            return last
-    raise H3BridgeError(
-        f"ComfyUI の起動を {int(wait_seconds)} 秒待ちましたが接続できません。ログ: {stderr_path}"
-    )
+    try:
+        deadline = time.monotonic() + wait_seconds
+        last = current
+        while time.monotonic() < deadline:
+            if _MANAGED_PROCESS is not None and _MANAGED_PROCESS.poll() is not None:
+                raise H3BridgeError(
+                    f"ComfyUI が起動直後に終了しました。ログを確認してください: {stderr_path}"
+                )
+            time.sleep(1.0)
+            if not _server_api_responding(normalized_url):
+                continue
+            last = inspect_readiness(runtime_root, normalized_url, acceleration=acceleration)
+            if last.connected:
+                return last
+        raise H3BridgeError(
+            f"ComfyUI の起動を {int(wait_seconds)} 秒待ちましたが接続できません。ログ: {stderr_path}"
+        )
+    except BaseException:
+        if spawned is not None:
+            try:
+                _stop_managed_runtime(expected_process=spawned)
+            except Exception as exc:
+                _LOG.warning("Failed H3 startup cleanup did not complete (%s).", type(exc).__name__)
+        raise
 
 
 def _owns_runtime_process(listener: Any, identity: tuple[Path, str]) -> bool:
@@ -1331,16 +1363,47 @@ def _owns_runtime_process(listener: Any, identity: tuple[Path, str]) -> bool:
         return False
 
 
-def _stop_managed_runtime(listener: Any | None = None) -> None:
+def _stop_managed_runtime(listener: Any | None = None, *, expected_process: Any | None = None) -> None:
+    """Stop the owned launcher and its descendants, including before binding."""
     global _MANAGED_PROCESS, _MANAGED_PROCESS_IDENTITY
     with _PROCESS_LOCK:
+        if expected_process is not None and _MANAGED_PROCESS is not expected_process:
+            return
         process = _MANAGED_PROCESS
         identity = _MANAGED_PROCESS_IDENTITY
     if process is not None and process.poll() is None:
+        import psutil
+
+        try:
+            children = psutil.Process(process.pid).children(recursive=True)
+            owned = []
+            for child in children:
+                try:
+                    created = child.create_time()
+                    if psutil.Process(child.pid).create_time() == created:
+                        owned.append(child)
+                except psutil.NoSuchProcess:
+                    continue
+            for child in owned:
+                try:
+                    child.terminate()
+                except psutil.NoSuchProcess:
+                    continue
+            _, alive = psutil.wait_procs(owned, timeout=10)
+            for child in alive:
+                child.kill()
+            if alive:
+                _, alive = psutil.wait_procs(alive, timeout=10)
+                if alive:
+                    _LOG.warning("Managed H3 descendants did not stop cleanly.")
+                    return
+        except psutil.NoSuchProcess:
+            pass
+        except (OSError, psutil.Error) as exc:
+            _LOG.warning("Managed H3 descendants could not be confirmed or stopped (%s).", type(exc).__name__)
+            return
         listener_stopped = False
         if identity is not None:
-            import psutil
-
             try:
                 listener = listener if listener is not None else _loopback_server_process(identity[1])
                 if listener is not None and _owns_runtime_process(listener, identity):
@@ -1357,7 +1420,7 @@ def _stop_managed_runtime(listener: Any | None = None) -> None:
                 _LOG.warning("Managed H3 listener could not be stopped (%s).", type(exc).__name__)
                 return
         try:
-            if not listener_stopped:
+            if not listener_stopped and process.poll() is None:
                 process.terminate()
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
@@ -1879,12 +1942,14 @@ def prepare_media(request: H3Request, runtime_root: Path) -> dict[str, Any]:
             managed_root.mkdir(parents=True, exist_ok=True)
             name = f"{uuid.uuid4().hex[:12]}_fun_control.mp4"
             prepared["control_video"] = f"forge_h3/{name}"
-            fun_control.prepare_video(source, managed_root / name, *request.dimensions, request.frame_count, request.control.mode)
-        if request.mode == MODE_KEYFRAMES:
+            fun_control.prepare_video(
+                source, managed_root / name, *request.dimensions, request.frame_count, request.control.mode
+            )
+        if request.mode in {MODE_KEYFRAMES, MODE_ORBIT}:
             if request.first_frame:
                 source = _validate_media_path(request.first_frame, "image")
                 prepared["first_frame"] = _copy_to_comfy_input(source, runtime_root)
-            if request.last_frame:
+            if request.mode == MODE_KEYFRAMES and request.last_frame:
                 source = _validate_media_path(request.last_frame, "image")
                 prepared["last_frame"] = _copy_to_comfy_input(source, runtime_root)
             return prepared
@@ -1903,9 +1968,7 @@ def prepare_media(request: H3Request, runtime_root: Path) -> dict[str, Any]:
                 raise H3BridgeError(f"参照動画 {source.name} は 2〜15 秒にしてください（{duration:.1f}秒）。")
             if video_fps is None or abs(video_fps - H3_FPS) > 0.05:
                 shown_fps = "不明" if video_fps is None else f"{video_fps:.3f}"
-                raise H3BridgeError(
-                    f"参照動画 {source.name} は24fpsに変換してください（現在 {shown_fps}fps）。"
-                )
+                raise H3BridgeError(f"参照動画 {source.name} は24fpsに変換してください（現在 {shown_fps}fps）。")
             total_timed_seconds += duration
             prepared["videos"].append(
                 {
@@ -2066,19 +2129,43 @@ def build_workflow(request: H3Request, prepared_media: dict[str, Any], seed: int
             "height": height,
             "length": request.frame_count,
         }
-        if request.mode == MODE_KEYFRAMES:
+        if request.mode in {MODE_KEYFRAMES, MODE_ORBIT}:
             if prepared_media.get("first_frame"):
                 workflow["20"] = _node("LoadImage", image=prepared_media["first_frame"])
                 conditioning_inputs["first_frame"] = ["20", 0]
-            if prepared_media.get("last_frame"):
+            if request.mode == MODE_KEYFRAMES and prepared_media.get("last_frame"):
                 workflow["21"] = _node("LoadImage", image=prepared_media["last_frame"])
                 conditioning_inputs["last_frame"] = ["21", 0]
         workflow["5"] = _node("MiniMaxH3ImageToVideo", **conditioning_inputs)
 
+    if request.mode == MODE_ORBIT:
+        if not prepared_media.get("first_frame"):
+            raise H3BridgeError("360°周回の写真を準備できませんでした。")
+        workflow["40"] = _node(
+            "LoraLoaderModelOnly",
+            model=["1", 0],
+            lora_name=orbit_assets.MODEL_NAME,
+            strength_model=request.orbit_strength,
+        )
+        workflow["15"]["inputs"]["model"] = ["40", 0]
+        workflow["8"]["inputs"]["model"] = ["40", 0]
+        workflow["41"] = _node(
+            "ImageScale", image=["20", 0], upscale_method="lanczos", width=width, height=height, crop="center"
+        )
+        workflow["5"]["inputs"].update(first_frame=["41", 0], last_frame=["41", 0])
+        del workflow["4"], workflow["12"]
+        del workflow["13"]["inputs"]["audio"]
     request.acceleration.apply_workflow(workflow, MODEL_FILES, request.mode)
     fun_control.apply_workflow(workflow, request.control, prepared_media.get("control_video"))
     if request.acceleration.hybrid.enabled:
-        hybrid.apply_workflow(workflow, request.acceleration.hybrid, snap_h3_frames(request.duration_seconds), int(request.steps), request.scheduler, seed)
+        hybrid.apply_workflow(
+            workflow,
+            request.acceleration.hybrid,
+            snap_h3_frames(request.duration_seconds),
+            int(request.steps),
+            request.scheduler,
+            seed,
+        )
     return workflow
 
 
@@ -2116,7 +2203,7 @@ def _execution_error(job: dict[str, Any]) -> str:
 
 
 def _validate_video_result(path: Path, request: H3Request) -> dict[str, Any]:
-    """全フレームを順に復号し、要求した映像と音声が最後まで存在することを確認する。"""
+    """全フレームを復号し、要求した映像と音声の有無・長さを確認する。"""
     import av
 
     expected_frames = request.frame_count
@@ -2124,16 +2211,22 @@ def _validate_video_result(path: Path, request: H3Request) -> dict[str, Any]:
     frame_count = audio_samples = 0
     try:
         with av.open(os.fspath(path)) as container:
-            if len(container.streams.video) != 1 or len(container.streams.audio) != 1:
-                raise H3BridgeError("完成動画に映像と音声が一つずつ含まれていません。")
-            video, audio = container.streams.video[0], container.streams.audio[0]
+            if len(container.streams.video) != 1 or len(container.streams.audio) != int(request.has_audio):
+                expected = "映像と音声が一つずつ" if request.has_audio else "映像一つだけ"
+                raise H3BridgeError(f"完成動画に{expected}含まれていません。")
+            video = container.streams.video[0]
             if (video.width, video.height) != expected_size or video.average_rate != H3_FPS:
                 raise H3BridgeError("完成動画の解像度またはフレームレートが生成条件と一致しません。")
-            sample_rate = audio.codec_context.sample_rate
-            channels = len(audio.codec_context.layout.channels)
-            if sample_rate != 32000 or channels != 2:
-                raise H3BridgeError("完成動画の音声が32kHzステレオではありません。")
-            for packet in container.demux(video, audio):
+            sample_rate = channels = 0
+            streams = [video]
+            if request.has_audio:
+                audio = container.streams.audio[0]
+                sample_rate = audio.codec_context.sample_rate
+                channels = len(audio.codec_context.layout.channels)
+                if sample_rate != 32000 or channels != 2:
+                    raise H3BridgeError("完成動画の音声が32kHzステレオではありません。")
+                streams.append(audio)
+            for packet in container.demux(*streams):
                 for frame in packet.decode():
                     if isinstance(frame, av.VideoFrame):
                         if (frame.width, frame.height) != expected_size:
@@ -2152,7 +2245,9 @@ def _validate_video_result(path: Path, request: H3Request) -> dict[str, Any]:
         if frame_count != expected_frames:
             raise H3BridgeError(f"完成動画が途中で終わっています（{frame_count}/{expected_frames}フレーム）。")
         # AACの末尾パディングを許容し、音声の欠落や大きな尺違いを拒否する。
-        if not audio_samples or abs(audio_samples / sample_rate - request.effective_seconds) > 2 / H3_FPS:
+        if request.has_audio and (
+            not audio_samples or abs(audio_samples / sample_rate - request.effective_seconds) > 2 / H3_FPS
+        ):
             raise H3BridgeError("完成動画の音声の長さが映像と一致しません。")
     except H3BridgeError:
         raise
@@ -2202,10 +2297,13 @@ def mirror_result(
         "seed": seed,
         "scheduler": request.scheduler,
         "ref_image_size": request.ref_image_size,
-        "attention_backend": "comfy-kitchen-int8" if request.acceleration.attention == "dense" else f"comfy-kitchen-sparse-{request.acceleration.attention}",
+        "attention_backend": "comfy-kitchen-int8"
+        if request.acceleration.attention == "dense"
+        else f"comfy-kitchen-sparse-{request.acceleration.attention}",
         "acceleration": request.acceleration.to_dict(),
         "fun_control": request.control.to_dict(),
         "fun_control_model": request.control.model_name if request.control.enabled else None,
+        "orbit": orbit_metadata(request),
         "clip_cache_revision": CLIP_CACHE_REVISION if request.acceleration.clip_cache != "off" else None,
         "selected_models": {
             name: filename for name, (_, filename) in request.acceleration.model_files(MODEL_FILES).items()
@@ -2261,6 +2359,42 @@ def _estimated_required_free_gib(request: H3Request, runtime_profile: str, runti
     return decoded_video_gib + safety_gib + control_gib
 
 
+def orbit_metadata(request: H3Request) -> dict[str, Any] | None:
+    if request.mode != MODE_ORBIT:
+        return None
+    return {
+        "strength": request.orbit_strength,
+        "model": orbit_assets.MODEL_NAME,
+        "revision": orbit_assets.REVISION,
+        "sha256": orbit_assets.MODEL_SHA256,
+    }
+
+
+def validate_orbit_runtime(readiness: RuntimeReadiness) -> None:
+    client = None
+    try:
+        if readiness.runtime_root is None:
+            raise ValueError("Orbitの実行環境を確認できません。")
+        orbit_assets.validate_model(readiness.runtime_root)
+        client = ComfyH3Client(readiness.server_url)
+        specs = client.object_info({"LoraLoaderModelOnly", "ImageScale"})
+        for node, required in (
+            ("LoraLoaderModelOnly", {"model", "lora_name", "strength_model"}),
+            ("ImageScale", {"image", "width", "height", "crop", "upscale_method"}),
+        ):
+            inputs = specs.get(node, {}).get("input", {}).get("required", {})
+            if not required <= inputs.keys():
+                raise ValueError(f"Orbitに必要な{node}の入力仕様が一致しません。")
+        choices = specs["LoraLoaderModelOnly"]["input"]["required"]["lora_name"][0]
+        if not isinstance(choices, list) or orbit_assets.MODEL_NAME not in choices:
+            raise ValueError("Orbit LoRAが接続先に見つかりません。導入後に状態を再確認してください。")
+    except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
+        raise H3BridgeError(str(exc)) from exc
+    finally:
+        if client is not None:
+            client.close()
+
+
 def _validate_request_runtime_constraints(
     request: H3Request,
     readiness: RuntimeReadiness,
@@ -2271,15 +2405,21 @@ def _validate_request_runtime_constraints(
     if readiness.acceleration != request.acceleration:
         raise H3BridgeError("生成要求と確認済みの高速化構成が一致しません。状態を再確認してください。")
     if runtime_profile == RUNTIME_PROFILE_RAM and request.acceleration.clip_cache == "off":
-        raise H3BridgeError("RAM保持ではCLIP条件キャッシュを「自動」にしてください。文章の処理後に大きなエンコーダーを解放します。")
+        raise H3BridgeError(
+            "RAM保持ではCLIP条件キャッシュを「自動」にしてください。文章の処理後に大きなエンコーダーを解放します。"
+        )
     if request.mode == MODE_REFERENCES and not readiness.ready_for_ref2va:
         raise H3BridgeError("参照モード用 Ref2VA モデルがありません。")
     if request.mode != MODE_REFERENCES and not readiness.ready_for_fl2va:
         raise H3BridgeError("テキスト・画像モード用 FL2VA モデルがありません。")
+    if request.mode == MODE_ORBIT:
+        validate_orbit_runtime(readiness)
     if request.control.enabled:
         control_client = ComfyH3Client(readiness.server_url)
         try:
-            union2_vae.check_runtime(readiness, decode_mode=request.acceleration.decode_mode, union2=request.control.is_union2)
+            union2_vae.check_runtime(
+                readiness, decode_mode=request.acceleration.decode_mode, union2=request.control.is_union2
+            )
             fun_control.validate_model(readiness.runtime_root, request.control)
             fun_control.validate_nodes(control_client.object_info(fun_control.NODES), request.control)
         except ValueError as exc:
@@ -2535,7 +2675,8 @@ def _run_generation(
                 handoff_warning = workflow_handoff.finish_generation(target, handoff_record, handoff_warning, source=source)
                 yield {
                     "stage": "complete",
-                    "message": "音声付き動画を保存しました" + (" — " + handoff_warning if handoff_warning else ""),
+                    "message": ("音声付き動画を保存しました" if request.has_audio else "無音動画を保存しました")
+                    + (" — " + handoff_warning if handoff_warning else ""),
                     "progress": 1.0,
                     "prompt_id": prompt_id,
                     "seed": seed,
@@ -2650,7 +2791,7 @@ def history_html(items: Sequence[HistoryItem]) -> str:
     if not items:
         return (
             '<div class="h3-history-empty"><span>履歴はまだありません</span>'
-            '<small>生成が完了すると、音声付きMP4がここに並びます。</small></div>'
+            '<small>生成が完了すると、MP4がここに並びます。</small></div>'
         )
     rows = []
     for item in items[:6]:
@@ -2745,11 +2886,25 @@ def load_history_request(
     for name in ("mode", "prompt", "aspect", "quality", "scheduler", "ref_image_size"):
         if not isinstance(metadata[name], str):
             raise H3BridgeError(f"復元用の設定 {name} の形式が不正です。")
-    if isinstance(metadata["requested_seconds"], bool) or isinstance(metadata["steps"], bool) or isinstance(
-        metadata["seed"], bool
+    if (
+        isinstance(metadata["requested_seconds"], bool)
+        or isinstance(metadata["steps"], bool)
+        or isinstance(metadata["seed"], bool)
     ):
         raise H3BridgeError("復元用の数値設定の形式が不正です。")
 
+    orbit_record = metadata.get("orbit")
+    if orbit_record is not None and not isinstance(orbit_record, dict):
+        raise H3BridgeError("復元用のOrbit設定の形式が不正です。")
+    if metadata["mode"] == MODE_ORBIT:
+        if not isinstance(orbit_record, dict) or set(orbit_record) != {"strength", "model", "revision", "sha256"}:
+            raise H3BridgeError("復元用のOrbit設定が不足しているか形式が不正です。")
+        if (
+            orbit_record["model"] != orbit_assets.MODEL_NAME
+            or orbit_record["revision"] != orbit_assets.REVISION
+            or orbit_record["sha256"] != orbit_assets.MODEL_SHA256
+        ):
+            raise H3BridgeError("履歴のOrbitモデルが現在の固定版と一致しません。")
     try:
         request = H3Request(
             mode=metadata["mode"],
@@ -2763,25 +2918,13 @@ def load_history_request(
             ref_image_size=metadata["ref_image_size"],
             acceleration=H3Acceleration.from_dict(metadata.get("acceleration")),
             control=fun_control.H3FunControl.from_dict(metadata.get("fun_control")),
+            orbit_strength=(orbit_record or {}).get("strength", 1.0),
         )
     except (TypeError, ValueError, OverflowError) as exc:
         raise H3BridgeError(f"復元用の数値設定が不正です: {exc}") from exc
     if request.mode not in MODES:
         raise H3BridgeError("復元用の生成モードが不正です。")
-    validate_request(
-        H3Request(
-            mode=MODE_TEXT,
-            prompt=request.prompt,
-            aspect=request.aspect,
-            quality=request.quality,
-            duration_seconds=request.duration_seconds,
-            steps=request.steps,
-            seed=request.seed,
-            scheduler=request.scheduler,
-            ref_image_size=request.ref_image_size,
-            acceleration=request.acceleration,
-        )
-    )
+    validate_request(request, require_media=False)
     return request
 
 
@@ -2964,11 +3107,12 @@ def readiness_html(
         )
         if readiness.connected and not profile_matches
         else (
-            f"backendは準備完了ですが、標準5秒には約 {recommended_required_gib:.1f} GiB の余力が必要です。"
+            f"backendは準備完了ですが、メモリ余力が基本構成の目安（約 {recommended_required_gib:.1f} GiB）を下回っています。"
+            "必要量は生成設定で変わります。"
             f"{memory_hint}"
         )
         if memory_low
-        else "ローカル音声付き生成の準備ができています。"
+        else "ローカルH3生成の準備ができています。"
     )
     root = os.fspath(readiness.runtime_root) if readiness.runtime_root else "runtime未検出"
     gpu_detail = readiness.gpu_name or "未確認"
@@ -3089,9 +3233,9 @@ def generation_preset_values(
     )
 
 
-def relative_workload(aspect: str, quality: str, duration: float, steps: int) -> float:
+def relative_workload(aspect: str, quality: str, duration: float, steps: int, *, orbit: bool = False) -> float:
     width, height = dimensions_for(aspect, quality)
-    frames = snap_h3_frames(duration)
+    frames = snap_h3_frames(duration, orbit=orbit)
     baseline = 864 * 480 * 124 * 20
     return (width * height * frames * int(steps)) / baseline
 
@@ -3103,12 +3247,14 @@ def settings_summary_html(
     steps: int,
     scheduler: str = "simple",
     ref_image_size: str = "match",
+    *,
+    orbit: bool = False,
 ) -> str:
     try:
         width, height = dimensions_for(aspect, quality)
-        frames = snap_h3_frames(duration)
+        frames = snap_h3_frames(duration, orbit=orbit)
         effective = frames / H3_FPS
-        workload = relative_workload(aspect, quality, duration, steps)
+        workload = relative_workload(aspect, quality, duration, steps, orbit=orbit)
         official_preview = (
             quality == "preview"
             and frames == 124
@@ -3118,13 +3264,12 @@ def settings_summary_html(
         )
         tone = (
             "warn"
-            if quality == "native"
-            or scheduler != "simple"
-            or ref_image_size == "max"
-            or workload >= 2.0
+            if quality == "native" or scheduler != "simple" or ref_image_size == "max" or workload >= 2.0
             else "ready"
         )
-        if ref_image_size == "max":
+        if orbit:
+            note = "360°周回 · 同じ写真を両端に使用。推奨は768×768・73フレーム・28 Steps・強さ1.0。"
+        elif ref_image_size == "max":
             note = "Reference Maxは非常に重い設定です。まずMatchで内容を確認してください。"
         elif scheduler != "simple":
             note = "実験的schedulerです。再現性重視ならsimpleへ戻してください。"
@@ -3144,8 +3289,8 @@ def settings_summary_html(
             note = "H3の32pxキャンバスと17-frameグリッドへ整列済みです。"
         return (
             f'<div class="h3-settings-summary" data-tone="{tone}" role="status" aria-live="polite">'
-            f'<strong>{width} × {height}</strong><span>{frames} frames · {effective:.2f} sec · {int(steps)} steps · 24fps stereo · 相対負荷 {workload:.2f}×</span>'
-            f'<small>{html.escape(note)} 相対負荷は所要時間の予測ではありません。</small></div>'
+            f"<strong>{width} × {height}</strong><span>{frames} frames · {effective:.2f} sec · {int(steps)} steps · 24fps {'stereo' if not orbit else '無音'} · 相対負荷 {workload:.2f}×</span>"
+            f"<small>{html.escape(note)} 相対負荷は所要時間の予測ではありません。</small></div>"
         )
     except (H3BridgeError, TypeError, ValueError, OverflowError) as exc:
         return f'<div class="h3-settings-summary" data-tone="error" role="alert">{html.escape(str(exc))}</div>'

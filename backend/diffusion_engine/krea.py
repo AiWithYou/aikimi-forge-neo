@@ -77,6 +77,18 @@ class Krea2(ForgeDiffusionEngine):
         dynamic_args.ref_latents = ref_latents.copy()
         return self.text_processing_engine_qwen(prompt, images=images_vl)
 
+    def get_conditioning_cache_state(self, prompt: "SdConditioning"):
+        """Retain reference state on CPU alongside its matching text condition."""
+        if prompt.is_negative_prompt:
+            return None
+        return [reference.detach().cpu() for reference in dynamic_args.ref_latents]
+
+    def restore_conditioning_cache_state(self, prompt: "SdConditioning", references):
+        if prompt.is_negative_prompt:
+            return
+        dynamic_args.ref_latents = references.copy()
+        self.ini_latent = None
+
     @torch.inference_mode()
     def encode_vision(self, image: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         samples = image.movedim(-1, 1)  # b, c, h, w

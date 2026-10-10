@@ -2,13 +2,13 @@
 
 English · [日本語](README.md)
 
-**[v3.9.2](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.9.2)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v3.10.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.10.0)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
 **A Windows-focused Forge Neo fork for image generation and editing, video with audio, music composition, and image or text evaluation in one WebUI.** It also provides model setup, high-resolution workflows, and image finishing tools.
 
-v3.9.2 fixes Anima reference conditioning and batch handling, and removes unnecessary work from Qwen LoRA strength changes, zero-strength ControlNet, CPU UI actions, and Clef batch evaluation.
+v3.10.0 adds silent 360° orbit videos from a single photo in MiniMax H3. Orbit and regular generation retain their settings separately. Krea2 reuses fused text conditioning during sampling, and Anima references are fitted to the output dimensions to prevent shape errors. [Krea2 behavior and timing (Japanese)](docs/krea2-jev.md#テキスト融合の再利用)
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 
@@ -46,7 +46,7 @@ For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choos
 | [Krea2](docs/krea2_local_supersample_detail_ja.md) | Image generation and 4K/8K workflows; open **Krea2** in the top navigation | `.\aikimi-setup.bat` → **1** |
 | [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | Image generation; open **Anima** in the top navigation | `.\aikimi-setup.bat` → **2** |
 | [SenseNova U1.5](extensions-builtin/sensenova-u15-studio/README.md) | Image generation and reference-based editing in its Studio | `.\aikimi-setup.bat` → **3** |
-| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | Video generation with audio in **H3 Studio** | `.\aikimi-setup.bat` → **4** |
+| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | Videos with audio and silent 360° orbits from one photo in **H3 Studio**; see the [Orbit guide](docs/minimax-h3-orbit-lora.md) | `.\aikimi-setup.bat` → **4** |
 | [Nanosaur2](extensions-builtin/nanosaur2-studio/README.md) | Illustration-oriented image generation in its dedicated tab | `.\aikimi-setup.bat` → **5** |
 | [Ming Image Design](extensions-builtin/ming-image-studio/README.md) | Posters, UI concepts, and transparent assets in its Studio | `.\aikimi-setup.bat` → **6** (choose INT8 or W4A8) |
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | Image generation, editing, transparent PNG, and outpainting | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |

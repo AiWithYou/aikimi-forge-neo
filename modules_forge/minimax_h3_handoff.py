@@ -26,7 +26,7 @@ _BUNDLE = Path(__file__).resolve().parents[1] / "extensions-builtin" / "minimax-
 PACK_HASHES = {
     "__init__.py": "55f48de8b29646e20a9531dd660c3e688118c72c7ea4ed95ea82c954fc85b8b4",
     "store.py": "7889860183fa3402a3ffced2881c63a88d1c97a8958df91b48658ff06018ef5b",
-    "web/handoff-core.js": "8bc0ec305fe1581a619f4e19c1d7585d7445b2d1cc0bf9ac9d4592493ef142f2",
+    "web/handoff-core.js": "276285e301ed8870e9f83196d3a0581876a04997ba4a1c240e4629f7eacf6ef4",
     "web/handoff.js": "c307aacb94bfebd549039e444f60da36a9f2a4218be42d3027ee79e57cdc49c0",
     "web/package.json": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8",
 }  # BUILD_HASHES
@@ -90,6 +90,8 @@ def install_bundle(runtime_root: Path) -> Path:
 
 
 def _metadata(request, seed, readiness, profile, *, source, generation_id=None):
+    from modules_forge import minimax_h3_bridge as bridge
+
     return {
         "source": source,
         "generation_id": generation_id,
@@ -103,6 +105,7 @@ def _metadata(request, seed, readiness, profile, *, source, generation_id=None):
         "scheduler": request.scheduler,
         "acceleration": request.acceleration.to_dict(),
         "control": request.control.to_dict(),
+        "orbit": bridge.orbit_metadata(request),
         "runtime_profile": profile,
         "runtime_args": list(readiness.runtime_args),
         "comfy_version": readiness.comfy_version,
@@ -161,6 +164,8 @@ def export_current(request, runtime_root, server_url, log_directory, runtime_pro
     readiness = bridge.ensure_ready(
         root, server_url, log_directory, runtime_profile=runtime_profile, acceleration=request.acceleration
     )
+    if request.mode == bridge.MODE_ORBIT:
+        bridge.validate_orbit_runtime(readiness)
     if request.control.enabled:
         _validate_control_handoff(bridge, readiness, request.control, request.acceleration, server_url)
     prepared = bridge.prepare_media(request, root)
@@ -202,6 +207,8 @@ def export_history(selected, items, runtime_root, server_url, log_directory):
     readiness = bridge.ensure_ready(
         root, server_url, log_directory, runtime_profile=metadata["runtime_profile"], acceleration=acceleration
     )
+    if metadata.get("mode") == bridge.MODE_ORBIT:
+        bridge.validate_orbit_runtime(readiness)
     if control.enabled:
         _validate_control_handoff(bridge, readiness, control, acceleration, server_url)
     return record, handoff_url(server_url, record["token"])

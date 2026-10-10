@@ -44,6 +44,8 @@ v1.1 bundleはmetadataから自動検出されるため、`Anima 3.8B (Qwen3.5 /
 
 negative promptは既定でAnima標準encoderだけを使います。`Use adapter on negative prompt`を有効にすると、negative側のstrengthを個別に指定できます。
 
+参照画像には、対応するEdit学習済みLoRAが必要です。Animaの参照設定と`ImageStitch Integrated`を有効にして画像を追加します。参照画像は出力のWidth / Heightに合わせて縦横比を保ったまま中央cropとresizeを行うため、参照と出力の縦横比が異なっても利用できます。Animaでは`Maximum Side Length`より出力canvasを優先します。出力サイズを変更した場合は、同じ参照画像でもVAEで再encodeします。他modelの参照画像サイズの扱いは従来どおりです。Anima 3.8B v1.1のEdit LoRA併用時の画質は未確認です。
+
 通常のAnima LoRAを使う場合は、同じパネルの`Standard Anima LoRA`で1件目を選択し、`Standard LoRA strength`を指定します。`Additional Standard Anima LoRAs`を開けば、さらに3件のLoRAと個別のstrengthを追加可能です。候補は`models/Lora`にある完全な28層・40層・52層のsafetensors LoRAに限定し、28層版と40層版は52層へ自動展開してからForge標準LoRA経路で適用します。起動後にLoRAを追加した場合は`Refresh standard Anima LoRAs`を押してください。5件以上を組み合わせる場合は、LoRAタブまたは`<lora:name:weight>`タグを利用します。
 
 Qwen3.5の約1.2 GiBのembedding tableはCPUに保持し、promptで使うtoken行だけをGPUへ送ります。同じpromptでSeedだけを変えた場合は、ForgeのPersistent Cond Cacheがbundleまたはadapterのweight fingerprintを含む条件でconditioningを再利用します。

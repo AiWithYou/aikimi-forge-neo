@@ -13,6 +13,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import psutil
+
 import modules_forge.minimax_h3_bridge as h3_bridge
 from modules_forge.minimax_h3_bridge import (
     H3_AUDIO_VAE,
@@ -817,10 +819,15 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         )
         rendered = readiness_html(readiness, RUNTIME_PROFILE_FAST)
         self.assertIn("RAM余力 4.4 GiB", rendered)
-        self.assertIn("標準5秒", rendered)
+        self.assertIn("基本構成の目安", rendered)
+        self.assertIn("必要量は生成設定で変わります", rendered)
+        self.assertNotIn("標準5秒", rendered)
         self.assertIn("commit余力 4.4 GiB", rendered)
         self.assertGreaterEqual(rendered.count('data-mobile="primary"'), 3)
         self.assertIn("<dt>Runtime</dt>", rendered)
+        ready = readiness_html(replace(readiness, commit_free_gib=20.0), RUNTIME_PROFILE_FAST)
+        self.assertIn("ローカルH3生成", ready)
+        self.assertNotIn("ローカル音声付き生成", ready)
 
     def test_non_finite_ram_telemetry_is_rejected(self):
         readiness = replace(self.ready_runtime(), ram_free_gib=float("nan"))
@@ -1235,10 +1242,24 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         )
 
         self.assertEqual(updates[-1]["stage"], "complete")
+        self.assertIn("音声付き動画", updates[-1]["message"])
         self.assertEqual(client.history.call_count, 2)
         self.assertEqual(extract.call_count, 2)
         mirror.assert_called_once()
         client.cancel.assert_not_called()
+        client.history.side_effect = None
+        client.history.return_value = {"ok": True}
+        extract.side_effect = None
+        with mock.patch.object(h3_bridge, "validate_orbit_runtime"):
+            orbit_updates = list(
+                run_generation(
+                    H3Request(mode="orbit", prompt="A camera orbit", first_frame="photo.png", duration_seconds=3),
+                    Path("runtime"), "http://127.0.0.1:8188", Path("logs"), Path("output"), poll_seconds=0.5,
+                )
+            )
+        self.assertEqual(orbit_updates[-1]["stage"], "complete")
+        self.assertIn("無音動画", orbit_updates[-1]["message"])
+        self.assertNotIn("音声付き", orbit_updates[-1]["message"])
         sleep.assert_called_once_with(0.5)
 
     @mock.patch("modules_forge.minimax_h3_bridge.time.sleep")
@@ -1466,6 +1487,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
 
     def test_managed_runtime_timeout_falls_back_to_kill(self):
         process = mock.MagicMock()
+        process.pid = 12345
         process.poll.return_value = None
         def wait(timeout):
             if not process.kill.called:
@@ -1477,6 +1499,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
 
         with (
             mock.patch.object(h3_bridge, "_MANAGED_PROCESS", process),
+            mock.patch("psutil.Process", side_effect=psutil.NoSuchProcess(process.pid)),
             mock.patch.object(
                 h3_bridge,
                 "_MANAGED_PROCESS_IDENTITY",

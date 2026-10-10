@@ -112,6 +112,8 @@ findingがある場合は、単語だけを置換せず、対象文全体を書�
 - [ ] remote modeが認証なしで失敗する
 - [ ] 認証付きLAN profileを隔離networkで確認した
 - [ ] Krea2、Anima、SenseNova、MiniMax H3の対象testを分離して記録した
+- [ ] H3の通常生成と360°周回の設定保持、写真入力、履歴とComfyUIへの書き出しをWindowsで確認した
+- [ ] 推論キャッシュを変更した場合、同じ条件でGPU時間・VRAM・出力差と終了後の破棄を確認した
 
 GPU live testを実行していない機能は、成功と記載しません。GPU、driver、PyTorch、model revision、入力条件、出力確認方法をrelease noteへ残します。
 

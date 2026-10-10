@@ -77,6 +77,14 @@ on:
       - "tools/tests/test_ming_image_studio.py"
       - "tools/tests/test_minimax_h3_setup.py"
       - "modules_forge/minimax_h3_runtime.py"
+      - "modules_forge/minimax_h3_orbit_assets.py"
+      - "tools/prepare_minimax_h3_orbit.py"
+      - "tools/tests/test_h3_orbit*.py"
+      - "tools/tests/test_comfy_startup_cleanup.py"
+      - "tools/tests/test_image_stitch_anima_canvas.py"
+      - "tools/tests/test_krea2_text_conditioning_cache.py"
+      - "tools/tests/test_krea2_reference_conditioning_cache.py"
+      - "tools/tests/test_anima_reference_conditioning.py"
       - "modules_forge/minimax_h3_setup_ui.py"
       - "tools/tests/chromium_helpers.py"
       - "tools/tests/test_additional_module_identity.py"
@@ -188,6 +196,14 @@ on:
       - "tools/tests/test_ming_image_studio.py"
       - "tools/tests/test_minimax_h3_setup.py"
       - "modules_forge/minimax_h3_runtime.py"
+      - "modules_forge/minimax_h3_orbit_assets.py"
+      - "tools/prepare_minimax_h3_orbit.py"
+      - "tools/tests/test_h3_orbit*.py"
+      - "tools/tests/test_comfy_startup_cleanup.py"
+      - "tools/tests/test_image_stitch_anima_canvas.py"
+      - "tools/tests/test_krea2_text_conditioning_cache.py"
+      - "tools/tests/test_krea2_reference_conditioning_cache.py"
+      - "tools/tests/test_anima_reference_conditioning.py"
       - "modules_forge/minimax_h3_setup_ui.py"
       - "tools/tests/chromium_helpers.py"
       - "tools/tests/test_additional_module_identity.py"
@@ -328,6 +344,14 @@ jobs:
             extensions-builtin/ming-image-studio/scripts/ming_image_studio.py
             tools/tests/test_minimax_h3_setup.py
             modules_forge/minimax_h3_runtime.py
+            modules_forge/minimax_h3_orbit_assets.py
+            tools/prepare_minimax_h3_orbit.py
+            tools/tests/test_h3_orbit*.py
+            tools/tests/test_comfy_startup_cleanup.py
+            tools/tests/test_image_stitch_anima_canvas.py
+            tools/tests/test_krea2_text_conditioning_cache.py
+            tools/tests/test_krea2_reference_conditioning_cache.py
+            tools/tests/test_anima_reference_conditioning.py
             modules_forge/minimax_h3_setup_ui.py
             modules_forge/minimax_h3_handoff.py
             modules_forge/minimax_h3_handoff_store.py

@@ -1,5 +1,6 @@
 *.pdf binary
 modules/util.py whitespace=cr-at-eol
+modules/processing.py whitespace=cr-at-eol
 modules/ui_components.py whitespace=cr-at-eol
 modules/hashes.py whitespace=cr-at-eol
 modules/extensions.py whitespace=cr-at-eol
