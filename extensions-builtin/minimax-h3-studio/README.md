@@ -83,14 +83,15 @@ ControlNet生成が最初のStepで進まない場合は「高速化 > Comfy Com
 
 ## 高速・省メモリ構成
 
-H3 Studioの専用runtimeは、生成品質とは独立した2つの起動profileを明示選択できます。
+H3 Studioの専用runtimeは、生成品質とは独立した3つの起動profileを明示選択できます。
 
-- `高速（推奨）`: DynamicVRAM + Async Offload 2 streams + Pinned Memory
-- `省RAM（低速）`: node cache、Pinned Memory、Async Offloadを無効化
-- OS用VRAM 2 GiBを予約し、追加headroomは確保しない
+- `高速`: DynamicVRAM + Async Offload 2 streams + Pinned Memory
+- `省RAM`: DynamicVRAMを使い、node cache・Pinned Memory・Async Offloadを無効化
+- `RAM保持（64GB以上）`: DynamicVRAMを無効にし、classic node cacheを使用。Pinned Memory・Async Offloadは無効です。CLIP条件キャッシュは「自動」にしてください
+- OS用VRAM 2 GiBを予約。高速・省RAMではDynamicVRAMのheadroomも2 GiBに設定し、RAM保持では追加headroomを設定しません
 - USB SSDでは不利になる `--fast-disk` を使用しない
 - H3のUNetだけに `ModelAttentionBackend = comfy kitchen attention` を適用
-- preview、custom nodes、cloud API nodesを読み込まない
+- 必要なH3用custom nodesだけを読み込み、preview・cloud API nodesは無効化
 
 profileを変えただけでは接続中のprocessを書き換えません。キューが空の状態で `選択設定で再起動` を押すと、このForgeセッションが起動したbackendだけを安全に再起動します。外部ランチャーで起動したprocessは自動停止しません。生成前には選択profileと実際の引数を値・競合指定まで検査し、一致しなければ明示的に停止します。
 
