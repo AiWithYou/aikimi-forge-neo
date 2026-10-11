@@ -15,6 +15,7 @@ from PIL import Image
 
 from modules import ui_tempdir
 from modules.gradio_frontend_compat import build_patched_tabs_asset, create_gradio_compatibility_app
+from modules_forge import local_assets
 from tools.tests.chromium_helpers import chromium_memory_usage, find_chromium, reserve_local_port
 from tools.tests.test_gradio_frontend_compat_chromium import _wait_expression, cdp_page
 from tools.tests.test_qwen_image21_service import load_ui
@@ -48,6 +49,9 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
         fixture.save(cls.output)
         (cls.directory / "result.json").write_text(json.dumps({"seed": 123}), encoding="utf-8")
         cls.ui = load_ui()
+        cls.enterClassContext(patch.object(local_assets, "LIBRARY", cls.directory / "library.json"))
+        cls.enterClassContext(patch.object(local_assets, "HASH_CACHE", cls.directory / "hashes.json"))
+        local_assets.save_selection("qwen21", {"precision": "bf16"})
         cls.poll_counts = {}
 
         def delayed_status(identifier, owner):
@@ -82,8 +86,10 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             )
         )
         cls.enterClassContext(patch.object(cls.ui.STUDIO, "artifact", return_value=cls.output))
-        with patch("modules_forge.local_assets.selection", return_value={"precision": "base_q4_k_m"}):
-            studio = cls.ui.on_ui_tabs()[0][0]
+        studio = cls.ui.on_ui_tabs()[0][0]
+        # A new browser must restore this newer selection from the isolated
+        # library, rather than only receiving the UI construction snapshot.
+        local_assets.save_selection("qwen21", {"precision": "base_q4_k_m"})
         # Match Forge: build the extension separately, then render it inside
         # a tab that is not selected at page load.
         with gr.Blocks() as cls.demo:
@@ -160,6 +166,15 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-fun-acc input", "true", 15000)))
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')")
+                ),
+                page.exceptions,
+            )
+            # Empty LoRA rows stay mounted during restoration. Removing this
+            # Dataframe races its derived column metadata in Gradio 6.17.
+            self.assertTrue(page.evaluate(_wait_expression("#qwen21-lora-strengths", "true", 3000)), page.exceptions)
             selected_model = page.evaluate("document.querySelector('#qwen21-precision input[role=listbox]')?.value")
             self.assertTrue(selected_model)
             page.evaluate("document.querySelector('#qwen21-fun-acc input').click()")

@@ -78,11 +78,23 @@ class WorkerCleanupTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
+        file_identity = bridge.local_assets.file_identity
+
+        def fixture_identity(path):
+            if not Path(path).resolve().is_relative_to(self.root.resolve()):
+                raise FileNotFoundError("The offline fixture has no checkpoint outside its temporary directory.")
+            return file_identity(path)
+
+        self.enterContext(patch.object(bridge.local_assets, "file_identity", side_effect=fixture_identity))
+        self.enterContext(patch.object(bridge.local_assets, "HASH_CACHE", self.root / "hashes.json"))
+        self.checkpoint = self.root / "checkpoint.safetensors"
+        self.checkpoint.write_bytes(b"fixture")
         self.worker = self.root / "worker.py"
         self.worker.touch()
         self.request = bridge.SenseNovaRequest(
             mode=bridge.MODE_TEXT,
             prompt="test",
+            checkpoint=str(self.checkpoint),
             generation_profile=bridge.PROFILE_QUALITY,
         )
         for name, value in (

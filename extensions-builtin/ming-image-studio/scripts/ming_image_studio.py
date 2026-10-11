@@ -483,7 +483,7 @@ def load_model_selection():
         gr.update(value=saved.get("precision") or default_precision()),
         gr.update(value=directory),
         gr.update(value=names),
-        gr.update(value=rows, visible=bool(names)),
+        gr.update(value=rows, visible=True if names else "hidden"),
     )
 
 
@@ -549,7 +549,7 @@ def on_ui_tabs():
                         interactive=True,
                         elem_id="ming-lora-strengths",
                         label="強度 −2〜2 · 0で無効",
-                        visible=False,
+                        visible="hidden",
                     )
                     with gr.Accordion("共通部品を指定 · 任意", open=False):
                         text_encoder_path = gr.Textbox(
@@ -752,14 +752,18 @@ def on_ui_tabs():
         for control in source_inputs:
             control.change(_readiness, inputs=source_inputs, outputs=readiness_outputs, queue=False, **private)
         loras.change(
-            lambda names, rows: gr.update(value=local_assets.lora_rows(names, rows), visible=bool(names)),
+            lambda names, rows: gr.update(
+                value=local_assets.lora_rows(names, rows), visible=True if names else "hidden"
+            ),
             inputs=[loras, strengths],
             outputs=strengths,
             queue=False,
             **private,
         )
         model_section.expand(
-            lambda names, rows: gr.update(value=local_assets.lora_rows(names, rows), visible=bool(names)),
+            lambda names, rows: gr.update(
+                value=local_assets.lora_rows(names, rows), visible=True if names else "hidden"
+            ),
             inputs=[loras, strengths],
             outputs=strengths,
             queue=False,

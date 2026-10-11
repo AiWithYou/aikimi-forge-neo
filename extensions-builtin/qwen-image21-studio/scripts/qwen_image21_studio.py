@@ -960,7 +960,7 @@ def load_model_selection():
         gr.update(value=directory),
         local_model_selected(model, precision)[1],
         gr.update(value=names),
-        gr.update(value=rows, visible=bool(names)),
+        gr.update(value=rows, visible=True if names else "hidden"),
     )
 
 

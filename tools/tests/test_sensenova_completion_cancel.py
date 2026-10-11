@@ -54,6 +54,17 @@ class CompletedResident:
 class SenseNovaCompletionCancelTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        file_identity = bridge.local_assets.file_identity
+
+        def fixture_identity(path):
+            if not Path(path).resolve().is_relative_to(self.root.resolve()):
+                raise FileNotFoundError("The offline fixture has no checkpoint outside its temporary directory.")
+            return file_identity(path)
+
+        self.enterContext(patch.object(bridge.local_assets, "file_identity", side_effect=fixture_identity))
+        self.enterContext(patch.object(bridge.local_assets, "HASH_CACHE", self.root / "hashes.json"))
+        self.checkpoint = self.root / "checkpoint.safetensors"
+        self.checkpoint.write_bytes(b"fixture")
         self.script = self.root / "worker.py"
         self.script.touch()
         self.resident = CompletedResident()
@@ -77,6 +88,7 @@ class SenseNovaCompletionCancelTests(unittest.TestCase):
         self.request = bridge.SenseNovaRequest(
             mode=bridge.MODE_TEXT,
             prompt="検証中の取消",
+            checkpoint=str(self.checkpoint),
             generation_profile=bridge.PROFILE_QUALITY,
             width=512,
             height=512,

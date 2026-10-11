@@ -138,6 +138,15 @@ class CheckpointSelectorUiTests(unittest.TestCase):
         self.assertEqual(view[2]["value"], "bf16")
         self.assertEqual(local_assets.LIBRARY.read_bytes(), before)
 
+    def test_qwen_lora_restore_keeps_empty_strength_table_mounted(self):
+        ui = qwen_ui()
+        for loras in ([], [{"name": "custom.safetensors", "strength": 0.5}]):
+            with self.subTest(loras=loras):
+                local_assets.save_selection("qwen21", {"style_loras": loras})
+                table = ui.load_model_selection()[-1]
+                self.assertEqual(table["visible"], True if loras else "hidden")
+                self.assertEqual(table["value"], [[item["name"], item["strength"]] for item in loras])
+
     def test_ming_input_selection_restores_latest_library_without_writing(self):
         ui = ming_ui()
         selected = tensor_file(self.root / "FT/model.safetensors", {"layers.0.weight": [1]})
@@ -149,6 +158,26 @@ class CheckpointSelectorUiTests(unittest.TestCase):
         self.assertEqual(view[0]["value"], str(selected.resolve()))
         self.assertEqual(view[3]["value"], "int8")
         self.assertEqual(local_assets.LIBRARY.read_bytes(), before)
+
+    def test_ming_lora_restore_and_selection_keep_empty_strength_table_mounted(self):
+        ui = ming_ui()
+        with patch.object(ui.studio, "runtime_root", return_value=self.root / "runtime"):
+            tab = ui.on_ui_tabs()[0][0]
+        self.addCleanup(tab.close)
+        table = next(item for item in tab.blocks.values() if getattr(item, "elem_id", None) == "ming-lora-strengths")
+        self.assertEqual(table.visible, "hidden")
+        updates = [function.fn for function in tab.fns.values() if function.outputs == [table]]
+        self.assertEqual(len(updates), 2)
+        for loras in ([], [{"name": "custom.safetensors", "strength": 0.5}]):
+            with self.subTest(loras=loras):
+                local_assets.save_selection("ming", {"loras": loras})
+                expected_rows = [[item["name"], item["strength"]] for item in loras]
+                expected_visibility = True if loras else "hidden"
+                restored = ui.load_model_selection()[-1]
+                self.assertEqual((restored["value"], restored["visible"]), (expected_rows, expected_visibility))
+                for update in updates:
+                    selected = update([item["name"] for item in loras], expected_rows)
+                    self.assertEqual((selected["value"], selected["visible"]), (expected_rows, expected_visibility))
 
     def test_ming_load_keeps_w4a8_when_only_that_official_model_is_installed(self):
         ui = ming_ui()
