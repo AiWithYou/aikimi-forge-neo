@@ -22,6 +22,228 @@ from modules.aikimi_security.gradio_file_guard import install_gradio_file_url_gu
 
 
 class GradioFrontendCompatibilityTests(unittest.TestCase):
+    def test_dataframe_row_count_preserves_compiled_empty_row_semantics(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node.js is required to execute the compiled dataframe empty-row condition")
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.DATAFRAME_ASSET_NAME
+        source = path.read_text(encoding="utf-8")
+        asset = module.build_patched_dataframe_asset()
+        script = (
+            "import assert from 'node:assert/strict';\n"
+            + "const originalSource = "
+            + json.dumps(source)
+            + ";\nconst servedSource = "
+            + json.dumps(asset.content.decode("utf-8"))
+            + ";\n"
+            + r"""
+            function between(source, start, end) {
+                const offset = source.indexOf(start);
+                assert.notEqual(offset, -1, start);
+                assert.equal(source.indexOf(start, offset + 1), -1, start);
+                const finish = source.indexOf(end, offset + start.length);
+                assert.notEqual(finish, -1, end);
+                return source.slice(offset + start.length, finish);
+            }
+            function rowGetter(source) {
+                const matches = source.match(/get row_count\(\)\{return r\.props\.row_count[^}]*\}/g) ?? [];
+                assert.equal(matches.length, 1);
+                return matches[0];
+            }
+            function columnGetter(source) {
+                const matches = source.match(/get col_count\(\)\{return r\.props\.col_count[^}]*\}/g) ?? [];
+                assert.equal(matches.length, 1);
+                return matches[0];
+            }
+            const headerArrow = between(originalSource, 'M=R(', '),I=R(()=>r.props.value?.data??[])');
+            const headerDerived = '()=>{let f=o()??[];' + between(
+                originalSource, 'B=R(()=>{let f=o()??[];', '),ie=R(()=>l(B).map('
+            );
+            const dataStart = 'M=R(()=>r.props.value?.headers??[]),I=R(';
+            const dataArrow = between(originalSource, dataStart, '),b=R(');
+            const emptyRowArrow = between(originalSource, 'H(yr,', ')}ae(()=>{wn=');
+            assert.equal(dataArrow, '()=>r.props.value?.data??[]');
+            assert.equal(dataArrow, between(servedSource, dataStart, '),b=R('));
+            assert.equal(emptyRowArrow, 'f=>{i().length===0&&a()&&t.row_count[1]==="dynamic"&&f(br)}');
+            assert.equal(emptyRowArrow, between(servedSource, 'H(yr,', ')}ae(()=>{wn='));
+            assert.equal(originalSource.split('get values(){return l(I)}').length, 2);
+            // Execute the actual compiled lazy getter/condition, without a
+            // browser renderer or Svelte scheduling assumptions.
+            const R = fn => fn, l = signal => signal();
+            const make = source => new Function('r', 'R', 'l',
+                `const M=R(${headerArrow}),I=R(${dataArrow});return({get headers(){return l(M)},`
+                + `get values(){return l(I)},${columnGetter(source)},${rowGetter(source)}});`
+            );
+            const original = make(originalSource), guarded = make(servedSource);
+            const deriveHeaders = new Function('o', 't', `return (${headerDerived})();`);
+            const runCondition = new Function('i', 'a', 't', 'br', 'f', `(${emptyRowArrow})(f);`);
+            function canAddEmptyRow(node, editable = true) {
+                const br = Symbol('empty-row-renderer');
+                let allowed = false;
+                runCondition(() => node.values, () => editable, node, br, renderer => {
+                    assert.equal(renderer, br);
+                    allowed = true;
+                });
+                return allowed;
+            }
+            function unchanged(props, run) {
+                const value = props.value, headers = value?.headers, data = value?.data;
+                const count = props.row_count, hadCount = Object.hasOwn(props, 'row_count');
+                const before = JSON.stringify(props);
+                run();
+                assert.equal(props.value, value);
+                assert.equal(props.value?.headers, headers);
+                assert.equal(props.value?.data, data);
+                assert.equal(props.row_count, count);
+                assert.equal(Object.hasOwn(props, 'row_count'), hadCount);
+                assert.equal(JSON.stringify(props), before);
+            }
+            const headers = Object.freeze(['LoRA', '強度']);
+            const empty = Object.freeze([]), rows = Object.freeze([Object.freeze(['chosen', 0.5])]);
+            let cases = 0;
+            function check(run) { run(); cases++; }
+            function propsWithoutRows(state) {
+                const props = { value: { headers, data: empty } };
+                if (state !== 'absent') props.row_count = state === 'null' ? null : undefined;
+                return props;
+            }
+            for (const state of ['absent', 'undefined', 'null']) {
+                check(() => {
+                    const props = propsWithoutRows(state);
+                    assert.throws(() => canAddEmptyRow(original({ props }, R, l)),
+                        error => error instanceof TypeError && /reading '1'/.test(error.message));
+                    const node = guarded({ props }, R, l);
+                    unchanged(props, () => {
+                        assert.equal(canAddEmptyRow(node), false);
+                        assert.deepEqual(node.row_count, [0, 'fixed']);
+                        assert.equal(node.values, empty);
+                    });
+                });
+            }
+            for (const tuple of [[0, 'fixed'], [0, 'dynamic'], [3, 'fixed'], [3, 'dynamic']]) {
+                check(() => {
+                    const row_count = Object.freeze(tuple);
+                    const props = { value: { headers, data: empty }, row_count };
+                    const node = guarded({ props }, R, l);
+                    for (const data of [empty, rows]) {
+                        props.value.data = data;
+                        unchanged(props, () => {
+                            assert.equal(node.row_count, row_count);
+                            assert.equal(node.values, data);
+                            assert.equal(canAddEmptyRow(node), data.length === 0 && tuple[1] === 'dynamic');
+                            assert.equal(canAddEmptyRow(node), canAddEmptyRow(original({ props }, R, l)));
+                        });
+                    }
+                });
+            }
+            for (const state of ['absent', 'undefined', 'null']) {
+                check(() => {
+                    const props = propsWithoutRows(state);
+                    const node = guarded({ props }, R, l);
+                    assert.equal(canAddEmptyRow(node), false);
+                    for (const kind of ['dynamic', 'fixed']) {
+                        const restored = Object.freeze([0, kind]);
+                        props.row_count = restored;
+                        unchanged(props, () => {
+                            assert.equal(node.row_count, restored);
+                            assert.equal(canAddEmptyRow(node), kind === 'dynamic');
+                        });
+                        props.value.data = rows;
+                        unchanged(props, () => assert.equal(canAddEmptyRow(node), false));
+                        props.value.data = empty;
+                    }
+                });
+            }
+            for (const initial of [empty, undefined, null]) {
+                check(() => {
+                    const props = { value: { headers, data: initial } };
+                    const node = guarded({ props }, R, l);
+                    for (const data of [initial, rows, empty, null, undefined]) {
+                        props.value.data = data;
+                        unchanged(props, () => {
+                            assert.deepEqual(node.values, data ?? []);
+                            assert.deepEqual(node.row_count, [data?.length ?? 0, 'fixed']);
+                            assert.equal(canAddEmptyRow(node), false);
+                        });
+                    }
+                });
+            }
+            for (const value of [undefined, null]) {
+                check(() => {
+                    const props = { value };
+                    const node = guarded({ props }, R, l);
+                    unchanged(props, () => {
+                        assert.deepEqual(node.values, []);
+                        assert.deepEqual(node.row_count, [0, 'fixed']);
+                        assert.equal(canAddEmptyRow(node), false);
+                    });
+                });
+            }
+            check(() => {
+                const props = propsWithoutRows('absent');
+                assert.equal(canAddEmptyRow(original({ props }, R, l), false), false);
+                assert.equal(canAddEmptyRow(guarded({ props }, R, l), false), false);
+                props.row_count = Object.freeze([0, 'dynamic']);
+                assert.equal(canAddEmptyRow(guarded({ props }, R, l), false), false);
+            });
+            check(() => {
+                const props = { value: { headers, data: empty } };
+                const node = guarded({ props }, R, l);
+                unchanged(props, () => {
+                    assert.deepEqual(node.row_count, [0, 'fixed']);
+                    assert.deepEqual(node.col_count, [2, 'fixed']);
+                    assert.deepEqual(deriveHeaders(() => node.headers, node), headers);
+                    assert.equal(canAddEmptyRow(node), false);
+                });
+                for (const [rowKind, columnKind] of [['dynamic', 'fixed'], ['fixed', 'dynamic']]) {
+                    const restoredRows = Object.freeze([0, rowKind]);
+                    const restoredColumns = Object.freeze([3, columnKind]);
+                    props.row_count = restoredRows;
+                    props.col_count = restoredColumns;
+                    unchanged(props, () => {
+                        assert.equal(node.row_count, restoredRows);
+                        assert.equal(node.col_count, restoredColumns);
+                        assert.deepEqual(deriveHeaders(() => node.headers, node), columnKind === 'fixed'
+                            ? ['LoRA', '強度', '2'] : ['LoRA', '強度']);
+                        assert.equal(canAddEmptyRow(node), rowKind === 'dynamic');
+                    });
+                }
+            });
+            console.log(`compiled dataframe row_count: ${cases} scenarios passed`);
+            """
+        )
+        result = subprocess.run(  # noqa: S603 - execute expressions extracted from the audited frontend asset
+            [node, "--input-type=module", "-"],
+            input=script,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("compiled dataframe row_count: 17 scenarios passed", result.stdout)
+
+    def test_dataframe_row_count_getter_missing_or_duplicated_fails_closed(self):
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.DATAFRAME_ASSET_NAME
+        source = path.read_bytes()
+        getter = b"get row_count(){return r.props.row_count}"
+        self.assertEqual(source.count(getter), 1)
+        for name, modified in (
+            ("missing", source.replace(getter, b"get row_count(){return undefined}", 1)),
+            ("duplicated", source + getter),
+        ):
+            with (
+                self.subTest(snippet=name),
+                patch.object(module, "DATAFRAME_ORIGINAL_SHA256", hashlib.sha256(modified).hexdigest()),
+                patch.object(Path, "read_bytes", return_value=modified),
+            ):
+                with self.assertRaisesRegex(
+                    module.GradioFrontendCompatibilityError, "row-count getter snippet was not found exactly once"
+                ):
+                    module.build_patched_dataframe_asset()
+
     def test_dataframe_column_count_preserves_compiled_header_semantics(self):
         node = shutil.which("node")
         if node is None:
@@ -176,7 +398,12 @@ class GradioFrontendCompatibilityTests(unittest.TestCase):
             """
         )
         result = subprocess.run(  # noqa: S603 - execute expressions extracted from the audited frontend asset
-            [node, "--input-type=module", "-"], input=script, text=True, capture_output=True, timeout=10
+            [node, "--input-type=module", "-"],
+            input=script,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            timeout=10,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("compiled dataframe col_count: 18 scenarios passed", result.stdout)
@@ -252,7 +479,12 @@ class GradioFrontendCompatibilityTests(unittest.TestCase):
         """
         )
         result = subprocess.run(  # noqa: S603 - execute the audited frontend snippet
-            [node, "--input-type=module", "-"], input=script, text=True, capture_output=True, timeout=10
+            [node, "--input-type=module", "-"],
+            input=script,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            timeout=10,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -291,6 +523,9 @@ class GradioFrontendCompatibilityTests(unittest.TestCase):
         self.assertEqual(before.count(b"get col_count(){return r.props.col_count}"), 1)
         self.assertEqual(asset.content.count(b"get col_count(){return r.props.col_count}"), 0)
         self.assertEqual(asset.content.count(b'get col_count(){return r.props.col_count??[l(M).length,"fixed"]}'), 1)
+        self.assertEqual(before.count(b"get row_count(){return r.props.row_count}"), 1)
+        self.assertEqual(asset.content.count(b"get row_count(){return r.props.row_count}"), 0)
+        self.assertEqual(asset.content.count(b'get row_count(){return r.props.row_count??[l(I).length,"fixed"]}'), 1)
         self.assertNotIn(module._ORIGINAL_TABLE_RESIZE, asset.content)
         self.assertEqual(asset.content.count(module._REACTIVE_TABLE_RESIZE), 1)
         app = module.create_gradio_compatibility_app(module.build_patched_tabs_asset())
