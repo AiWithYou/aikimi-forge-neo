@@ -8,7 +8,7 @@ English · [日本語](README.md)
 
 **A Windows-focused Forge Neo fork for image generation and editing, video with audio, music composition, and image or text evaluation in one WebUI.** It also provides model setup, high-resolution workflows, and image finishing tools.
 
-v3.10.0 adds silent 360° orbit videos from a single photo in MiniMax H3. Orbit and regular generation retain their settings separately. Krea2 reuses fused text conditioning during sampling, and Anima references are fitted to the output dimensions to prevent shape errors. [Krea2 behavior and timing (Japanese)](docs/krea2-jev.md#テキスト融合の再利用)
+v3.10.0 adds an experimental mode for silent 360° orbit videos from a single photo in MiniMax H3. Orbit and regular generation retain their settings separately. Completed real-model Orbit video generation, orbit quality, and generation time have not been validated. See the [Orbit guide and validation scope (Japanese)](docs/minimax-h3-orbit-lora.md). Krea2 reuses fused text conditioning during sampling, and Anima references are fitted to the output dimensions to prevent shape errors. [Krea2 behavior and timing (Japanese)](docs/krea2-jev.md#テキスト融合の再利用)
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 
