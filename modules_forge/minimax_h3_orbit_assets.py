@@ -16,6 +16,7 @@ from modules_forge.minimax_h3_runtime import (
 )
 from modules_forge.minimax_h3_runtime import (
     configured_model_root,
+    installed_runtime_root,
     managed_runtime_root,
     model_root,
     setup_lock,
@@ -91,11 +92,29 @@ def receipt_identity(history: dict, prompt_id: str, value: dict, strength_model:
     return expected
 
 
+def trusted_runtime_root(runtime_root: Path) -> Path:
+    """Return the fixed managed destination, never the request's write path."""
+    repository = REPO_ROOT.absolute()
+    root = managed_runtime_root(repository)
+    record = root.parent / "setup.json"
+    if (
+        repository.resolve() != repository
+        or root.resolve() != root
+        or not root.is_relative_to(repository)
+        or record.is_symlink()
+        or record.resolve() != record
+    ):
+        raise ValueError("Orbitノードはリンクされた実行環境へ導入しません。")
+    if Path(runtime_root).absolute() != root:
+        raise ValueError("Orbitノードの自動導入先はNeoの管理済みH3環境に限ります。")
+    if installed_runtime_root(repository) != root:
+        raise ValueError("H3のセットアップ記録を確認できません。「環境とモデルを準備」を実行してください。")
+    return root
+
+
 def install_node(runtime_root: Path) -> Path:
-    """Install the local pack only before starting the selected stopped runtime."""
-    root = Path(runtime_root).resolve(strict=True)
-    if not (root / "main.py").is_file() or not (root / "models").is_dir():
-        raise ValueError("Orbitノードの導入先はComfyUIルートを指定してください。")
+    """Install the local pack only into the recorded, stopped managed H3 runtime."""
+    root = trusted_runtime_root(runtime_root)
     custom = root / "custom_nodes"
     target = custom / PACK
     if custom.is_symlink() or custom.resolve() != custom or target.is_symlink() or target.resolve() != target:

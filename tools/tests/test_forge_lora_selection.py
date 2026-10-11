@@ -152,7 +152,7 @@ class ForgeLoraSelectionTests(unittest.TestCase):
         )
         entries = self.scan()["available_networks"]
         expected = "local_" + hashlib.sha256(os.path.normcase(os.path.realpath(active)).encode()).hexdigest()[:16]
-        self.assertEqual({name: entry.filename for name, entry in entries.items()}, {expected: str(active)})
+        self.assertEqual({name: entry.filename for name, entry in entries.items()}, {expected: str(active.resolve())})
 
 
 if __name__ == "__main__":

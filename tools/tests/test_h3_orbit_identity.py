@@ -16,10 +16,36 @@ from safetensors.torch import save
 
 from modules_forge import local_assets
 from modules_forge import minimax_h3_orbit_assets as orbit
+from modules_forge import minimax_h3_runtime as runtime
 
 ROOT = Path(__file__).resolve().parents[2]
 NODE_FILE = ROOT / "extensions-builtin/minimax-h3-studio/comfyui_nodes/Aikimi-MiniMax-H3-Orbit/__init__.py"
 TARGET = "diffusion_model.blocks.0.attn.out_proj.weight"
+
+
+def registered_runtime(test, repository):
+    root = runtime.managed_runtime_root(repository)
+    root.mkdir(parents=True)
+    (root / "main.py").touch()
+    (root / "models").mkdir()
+    python = root.parent / ".venv/Scripts/python.exe"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    (root / "extra_model_paths.yaml").write_text(runtime.model_config(root / "models"), encoding="utf-8")
+    for name in (
+        "tools/minimax_h3_runtime_manifest.json",
+        "tools/requirements-minimax-h3.lock",
+        "patches/minimax-h3/comfyui-0.34.0-compiler.patch",
+    ):
+        path = repository / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"fixture setup contract")
+    (root.parent / "setup.json").write_text(
+        json.dumps({"schema_version": 1, "fingerprint": runtime.setup_fingerprint(repository), "shared_models": False}),
+        encoding="utf-8",
+    )
+    test.enterContext(patch.object(orbit, "REPO_ROOT", repository))
+    return root
 
 
 class FakePatcher:
@@ -44,7 +70,7 @@ class OrbitFixture(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        self.root = Path(folder.name)
+        self.root = Path(folder.name).resolve()
         self.path = self.root / "loras" / orbit.MODEL_NAME
         self.path.parent.mkdir()
         self.data = save(
@@ -234,25 +260,23 @@ class OrbitIdentityTests(OrbitFixture):
             self.assertFalse((self.root / "custom_nodes").exists())
 
     def test_owned_node_install_is_exact_and_does_not_overwrite_existing_code(self):
-        (self.root / "main.py").touch()
-        (self.root / "models").mkdir()
-        target = orbit.install_node(self.root)
+        root = registered_runtime(self, self.root / "repository")
+        target = orbit.install_node(root)
         self.assertEqual({p.name for p in target.iterdir()}, {"__init__.py", "orbit_bytes.py"})
         for path in target.iterdir():
             self.assertEqual(path.read_bytes(), (orbit.BUNDLE / path.name).read_bytes())
-        self.assertEqual(orbit.install_node(self.root), target)
+        self.assertEqual(orbit.install_node(root), target)
         (target / "__init__.py").write_bytes(b"unrelated existing code")
         with self.assertRaisesRegex(ValueError, "既存ファイル"):
-            orbit.install_node(self.root)
+            orbit.install_node(root)
         self.assertEqual((target / "__init__.py").read_bytes(), b"unrelated existing code")
 
     def test_owned_start_installs_node_before_spawn_and_enables_it(self):
         from modules_forge import minimax_h3_bridge as bridge
 
-        (self.root / "main.py").touch()
-        (self.root / "models").mkdir()
-        disconnected = bridge.RuntimeReadiness(self.root, bridge.H3_SERVER_URL, connected=False)
-        connected = bridge.RuntimeReadiness(self.root, bridge.H3_SERVER_URL, connected=True)
+        root = registered_runtime(self, self.root / "repository")
+        disconnected = bridge.RuntimeReadiness(root, bridge.H3_SERVER_URL, connected=False)
+        connected = bridge.RuntimeReadiness(root, bridge.H3_SERVER_URL, connected=True)
         with (
             patch.object(bridge, "resolve_runtime_root", side_effect=lambda root: root),
             patch.object(bridge, "inspect_readiness", return_value=connected),
@@ -271,18 +295,175 @@ class OrbitIdentityTests(OrbitFixture):
             spawn.return_value.poll.return_value = None
 
             def installed_before_spawn(*_, **__):
-                self.assertTrue((self.root / "custom_nodes" / orbit.PACK / "orbit_bytes.py").is_file())
+                self.assertTrue((root / "custom_nodes" / orbit.PACK / "orbit_bytes.py").is_file())
                 return spawn.return_value
 
             spawn.side_effect = installed_before_spawn
             self.assertIs(
+                bridge._start_runtime_locked(root, bridge.H3_SERVER_URL, self.root, initial_readiness=disconnected),
+                connected,
+            )
+            install.assert_called_once_with(root)
+            self.assertIn(orbit.PACK, spawn.call_args.args[0])
+
+    def test_structurally_valid_unregistered_runtime_cannot_receive_node_files(self):
+        registered_runtime(self, self.root / "repository")
+        foreign = self.root / "foreign"
+        foreign.mkdir()
+        (foreign / "main.py").touch()
+        (foreign / "models").mkdir()
+        before = sorted(str(path.relative_to(foreign)) for path in foreign.rglob("*"))
+        with self.assertRaisesRegex(ValueError, "管理済み"):
+            orbit.install_node(foreign)
+        self.assertEqual(sorted(str(path.relative_to(foreign)) for path in foreign.rglob("*")), before)
+
+    def test_managed_location_requires_current_setup_receipt(self):
+        root = registered_runtime(self, self.root / "repository")
+        record = root.parent / "setup.json"
+        for contents in (None, '{"schema_version":1,"fingerprint":"stale"}'):
+            if contents is None:
+                record.unlink()
+            else:
+                record.write_text(contents, encoding="utf-8")
+            with self.subTest(record=contents), self.assertRaisesRegex(ValueError, "セットアップ"):
+                orbit.install_node(root)
+            self.assertFalse((root / "custom_nodes").exists())
+
+    def test_managed_parent_link_cannot_redirect_installation(self):
+        repository = self.root / "repository"
+        root = registered_runtime(self, repository)
+        original = root.parent
+        outside = self.root / "outside"
+        original.rename(outside)
+        self.create_directory_link(original, outside)
+        before = sorted(str(path.relative_to(outside)) for path in outside.rglob("*"))
+        with self.assertRaisesRegex(ValueError, "リンク"):
+            orbit.install_node(root.resolve())
+        self.assertEqual(sorted(str(path.relative_to(outside)) for path in outside.rglob("*")), before)
+        self.assertTrue(original.exists())
+
+    def create_directory_link(self, link, target):
+        try:
+            link.symlink_to(target, target_is_directory=True)
+        except OSError:
+            if sys.platform != "win32":
+                self.skipTest("Directory links are unavailable")
+            import _winapi
+
+            try:
+                _winapi.CreateJunction(str(target), str(link))
+            except OSError:
+                self.skipTest("Directory links are unavailable")
+
+    def test_custom_node_link_is_preserved_without_writing_target(self):
+        root = registered_runtime(self, self.root / "repository")
+        outside = self.root / "outside"
+        outside.mkdir()
+        self.create_directory_link(root / "custom_nodes", outside)
+        with self.assertRaisesRegex(ValueError, "リンク"):
+            orbit.install_node(root)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertTrue((root / "custom_nodes").exists())
+
+    def test_unregistered_h3_start_rejects_before_handoff_config_logs_lock_or_spawn(self):
+        from modules_forge import minimax_h3_bridge as bridge
+        from modules_forge.minimax_h3_acceleration import H3Acceleration
+
+        registered_runtime(self, self.root / "repository")
+        foreign = self.root / "foreign"
+        foreign.mkdir()
+        (foreign / "main.py").touch()
+        (foreign / "models").mkdir()
+        acceleration = H3Acceleration(model_path=str(self.path))
+        disconnected = bridge.RuntimeReadiness(
+            foreign, bridge.H3_SERVER_URL, connected=False, acceleration=acceleration
+        )
+        with (
+            patch.object(bridge, "server_runtime_root", return_value=None),
+            patch.object(bridge, "_python_for_runtime", return_value=Path(sys.executable)),
+            patch.object(bridge, "_MANAGED_PROCESS", None),
+            patch.object(bridge.workflow_handoff, "install_bundle") as handoff,
+            patch.object(bridge.subprocess, "Popen") as spawn,
+            patch("modules_forge.studio_checkpoints.write_comfy_config") as config,
+            self.assertRaisesRegex(bridge.H3BridgeError, "管理済み"),
+        ):
+            bridge.start_runtime(
+                foreign,
+                bridge.H3_SERVER_URL,
+                self.root / "logs",
+                initial_readiness=disconnected,
+                acceleration=acceleration,
+                wait_seconds=0,
+            )
+        handoff.assert_not_called()
+        config.assert_not_called()
+        spawn.assert_not_called()
+        self.assertFalse((self.root / "setup.lock").exists())
+        self.assertFalse((self.root / "logs").exists())
+        self.assertEqual({p.name for p in foreign.iterdir()}, {"main.py", "models"})
+
+    def test_other_studio_start_does_not_copy_or_whitelist_orbit(self):
+        from modules_forge import minimax_h3_bridge as bridge
+
+        (self.root / "main.py").touch()
+        (self.root / "models").mkdir()
+        disconnected = bridge.RuntimeReadiness(self.root, bridge.H3_SERVER_URL, connected=False)
+        connected = bridge.RuntimeReadiness(self.root, bridge.H3_SERVER_URL, connected=True)
+        for prefix, nano, ming in (("nanosaur2", True, False), ("ming-image", False, True)):
+            with (
+                self.subTest(studio=prefix),
+                patch.object(bridge, "inspect_readiness", return_value=connected),
+                patch.object(bridge, "server_runtime_root", return_value=None),
+                patch.object(bridge, "_python_for_runtime", return_value=Path(sys.executable)),
+                patch.object(bridge, "_MANAGED_PROCESS", None),
+                patch.object(bridge, "_MANAGED_PROCESS_IDENTITY", None),
+                patch.object(bridge.time, "sleep"),
+                patch.object(bridge, "_server_api_responding", return_value=True),
+                patch.object(bridge.workflow_handoff, "install_bundle") as handoff,
+                patch("modules_forge.nanosaur2_studio.source_ready", return_value=nano),
+                patch("modules_forge.ming_local.source_ready", return_value=ming),
+                patch.object(bridge.subprocess, "Popen") as spawn,
+                patch.object(orbit, "install_node") as install,
+            ):
+                spawn.return_value.poll.return_value = None
+                self.assertIs(
+                    bridge._start_runtime_locked(
+                        self.root,
+                        bridge.H3_SERVER_URL,
+                        self.root,
+                        initial_readiness=disconnected,
+                        log_prefix=prefix,
+                    ),
+                    connected,
+                )
+                install.assert_not_called()
+                handoff.assert_called_once_with(self.root)
+                self.assertNotIn(orbit.PACK, spawn.call_args.args[0])
+
+    def test_connected_external_runtime_never_copies_bundles(self):
+        from modules_forge import minimax_h3_bridge as bridge
+
+        (self.root / "main.py").touch()
+        (self.root / "models").mkdir()
+        connected = bridge.RuntimeReadiness(self.root, bridge.H3_SERVER_URL, connected=True)
+        with (
+            patch.object(bridge.workflow_handoff, "install_bundle") as handoff,
+            patch.object(orbit, "install_node") as install,
+            patch.object(bridge.subprocess, "Popen") as spawn,
+        ):
+            self.assertIs(
                 bridge._start_runtime_locked(
-                    self.root, bridge.H3_SERVER_URL, self.root, initial_readiness=disconnected
+                    self.root,
+                    bridge.H3_SERVER_URL,
+                    self.root / "logs",
+                    initial_readiness=connected,
                 ),
                 connected,
             )
-            install.assert_called_once_with(self.root)
-            self.assertIn(orbit.PACK, spawn.call_args.args[0])
+        handoff.assert_not_called()
+        install.assert_not_called()
+        spawn.assert_not_called()
+        self.assertFalse((self.root / "logs").exists())
 
 
 class OrbitWorkerByteTests(OrbitFixture):

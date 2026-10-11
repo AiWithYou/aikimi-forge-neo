@@ -1215,6 +1215,12 @@ def start_runtime(
             raise H3BridgeError("RAM保持プロファイルは64GB以上の物理RAMが必要です。通常の高速プロファイルを選んでください。")
     runtime_root = resolve_runtime_root(runtime_root)
     try:
+        if (
+            log_prefix == "minimax-h3"
+            and not (initial_readiness is not None and initial_readiness.connected)
+            and server_runtime_root(normalize_loopback_url(server_url)) is None
+        ):
+            runtime_root = orbit_assets.trusted_runtime_root(runtime_root)
         with setup_lock(runtime_root):
             readiness = _start_runtime_locked(
                 runtime_root, server_url, log_directory, runtime_profile, wait_seconds, initial_readiness, acceleration,
@@ -1285,6 +1291,12 @@ def _start_runtime_locked(
     if listening_root is not None and current.error and "接続できません" not in current.error:
         raise H3BridgeError(current.error)
 
+    orbit_runtime = log_prefix == "minimax-h3"
+    if orbit_runtime and listening_root is None:
+        try:
+            runtime_root = orbit_assets.trusted_runtime_root(runtime_root)
+        except (OSError, ValueError) as exc:
+            raise H3BridgeError(str(exc)) from exc
     python = _python_for_runtime(runtime_root)
     if not re.fullmatch(r"[a-z0-9-]+", log_prefix):
         raise H3BridgeError("実行ログの名前が不正です。")
@@ -1294,7 +1306,7 @@ def _start_runtime_locked(
     stderr_path = log_directory / f"{log_prefix}-{stamp}.stderr.log"
     from modules_forge.nanosaur2_studio import NODE_NAME, source_ready
 
-    extra_nodes = (orbit_assets.PACK, *((NODE_NAME,) if source_ready(runtime_root) else ()))
+    extra_nodes = (*((orbit_assets.PACK,) if orbit_runtime else ()), *((NODE_NAME,) if source_ready(runtime_root) else ()))
     from modules_forge import ming_local
 
     if ming_local.source_ready(runtime_root):
@@ -1319,8 +1331,9 @@ def _start_runtime_locked(
                 )
         elif listening_root is None:
             try:
+                if orbit_runtime:
+                    orbit_assets.install_node(runtime_root)
                 workflow_handoff.install_bundle(runtime_root)
-                orbit_assets.install_node(runtime_root)
             except (OSError, ValueError) as exc:
                 raise H3BridgeError(str(exc)) from exc
             if acceleration.negpip.enabled:

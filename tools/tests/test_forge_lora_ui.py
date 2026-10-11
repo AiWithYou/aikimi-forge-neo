@@ -29,7 +29,7 @@ class ForgeLoraUITests(unittest.TestCase):
     def setUp(self):
         folder = TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        self.root = Path(folder.name)
+        self.root = Path(folder.name).resolve()
         self.standard = self.root / "Lora"
         self.standard.mkdir()
         for name, value in (("LIBRARY", self.root / "library.json"), ("HASH_CACHE", self.root / "hashes.json")):

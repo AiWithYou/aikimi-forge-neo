@@ -13,7 +13,7 @@
 | 容量 | 155,111,424 bytes（約148 MiB） |
 | SHA-256 | `14f13e3effaf3e729fdc0c97680344aa63f473be0c55963f963d718b3db2a4d4` |
 
-既存のH3本体・テキストエンコーダー・VAEを再利用し、Neo同梱の `MiniMaxH3OrbitLora` 専用ノードを使います。Neoが起動するComfyUIへは起動時に導入します。外部起動のComfyUIには同梱の `Aikimi-MiniMax-H3-Orbit` を導入して再起動してください。専用ノードがない場合は生成を停止します。利用条件は [MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) に従います。
+既存のH3本体・テキストエンコーダー・VAEを再利用し、Neo同梱の `MiniMaxH3OrbitLora` 専用ノードを使います。自動導入先は、NeoのH3セットアップ記録を確認できる管理済みComfyUIに限ります。実行環境や導入先にリンクしたフォルダーは使用できません。共有モデル保存先へのノード導入は行いません。外部起動のComfyUIには同梱の `Aikimi-MiniMax-H3-Orbit` を手動で導入して再起動してください。外部実行中のComfyUIへは書き込みません。専用ノードがない場合は生成を停止します。利用条件は [MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) に従います。
 
 ## 使い方
 

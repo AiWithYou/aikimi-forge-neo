@@ -122,7 +122,12 @@ class ManagedH3RuntimeTests(unittest.TestCase):
             root.mkdir()
             (root / "main.py").touch()
             (root / "models").mkdir()
-            with runtime.setup_lock(root), mock.patch.object(bridge, "_start_runtime_locked") as start:
+            with (
+                runtime.setup_lock(root),
+                mock.patch.object(bridge, "_start_runtime_locked") as start,
+                mock.patch.object(bridge.orbit_assets, "trusted_runtime_root", return_value=root),
+                mock.patch.object(bridge, "server_runtime_root", return_value=None),
+            ):
                 with self.assertRaises(ValueError):
                     with runtime.setup_lock(root):
                         self.fail("lock acquired twice")

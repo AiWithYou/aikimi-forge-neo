@@ -169,18 +169,21 @@ class StyleLoraTests(unittest.TestCase):
         values["style_loras"].append({"name": second.name, "strength": 1})
         model, base = self.model()
         original_load = style_lora_runtime.load_file
+        mutations = []
 
         def changed_load(path, **kwargs):
             state = original_load(path, **kwargs)
-            if Path(path) == second:
+            if Path(path).resolve() == second.resolve():
                 self.tensors[self.prefix + ".lora_up.weight"] *= 2
                 self.write()
+                mutations.append(Path(path).resolve())
             return state
 
         with patch.object(style_lora_runtime, "load_file", side_effect=changed_load):
             with self.assertRaisesRegex(ValueError, "LoRA.*changed"):
                 load_adapters(model, self.root, values)
         self.assertIs(model.transformer_blocks[0].attn.to_q, base)
+        self.assertEqual(mutations, [second.resolve()])
 
     def test_zero_skips_loading_and_cache_tracks_files_instead_of_strength(self):
         model, base = self.model()

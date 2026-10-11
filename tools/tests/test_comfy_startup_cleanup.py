@@ -34,6 +34,8 @@ class StartupCleanupTests(unittest.TestCase):
         self.stack.enter_context(patch.object(bridge, "server_runtime_root", return_value=None))
         self.stack.enter_context(patch.object(bridge, "_python_for_runtime", return_value=Path(sys.executable)))
         self.stack.enter_context(patch.object(bridge.workflow_handoff, "install_bundle", return_value=False))
+        self.stack.enter_context(patch.object(bridge.orbit_assets, "trusted_runtime_root", return_value=self.root))
+        self.stack.enter_context(patch.object(bridge.orbit_assets, "install_node"))
         self.stack.enter_context(patch("modules_forge.nanosaur2_studio.source_ready", return_value=False))
         self.stack.enter_context(patch("modules_forge.ming_local.source_ready", return_value=False))
         self.spawn = self.stack.enter_context(patch.object(bridge.subprocess, "Popen", return_value=self.process))

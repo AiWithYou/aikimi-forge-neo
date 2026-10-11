@@ -131,7 +131,7 @@ class CheckpointSelectorUiTests(unittest.TestCase):
 
     def test_managed_discovery_ignores_remembered_models_but_keeps_current_path(self):
         for engine, ui, make in (
-            ("qwen21", qwen_ui(), lambda path: qwen_transformer(path)),
+            ("qwen21", qwen_ui(), qwen_transformer),
             ("ming", ming_ui(), lambda path: tensor_file(path / "model.safetensors", {"layers.0.weight": [1]})),
         ):
             with self.subTest(engine=engine):
