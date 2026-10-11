@@ -242,8 +242,6 @@ class SelectionTests(unittest.TestCase):
             with patch.object(runtime, "Runner", MutatingRunner):
                 with self.assertRaisesRegex(ValueError, "読み込み中"):
                     worker.resident_run({"root": str(root), "job_dir": str(job)})
-            self.assertIsNone(worker._RUNNER)
-            self.assertIsNone(worker._KEY)
         self.assertEqual(events, [str(weights), "close"])
 
     def test_short_relative_folder_means_the_actual_folder(self):

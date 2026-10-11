@@ -43,7 +43,10 @@ class ModelCatalogTests(unittest.TestCase):
     def test_startup_prepares_managed_folders_without_touching_existing_weights(self):
         existing = self.touch("models/Iris-3B/checkpoints/FT/model.safetensors")
         existing.write_bytes(b"existing model")
+        adapter = self.touch("models/Qwen-Image-2.1/loras/styles/model.safetensors")
+        adapter.write_bytes(b"existing adapter")
         with patch.object(model_catalog, "ROOT", self.root):
+            model_catalog.prepare_directories()
             model_catalog.prepare_directories()
         for family in (
             "Iris-3B",
@@ -56,9 +59,10 @@ class ModelCatalogTests(unittest.TestCase):
             "YuE2",
         ):
             self.assertTrue((self.root / "models" / family / "checkpoints").is_dir(), family)
-        for relative in ("Lora", "Qwen-Image-2.1/loras", "Ming-Image/loras"):
+        for relative in ("Lora", "Qwen-Image-2.1/loras", "Ming-Image/loras", "Iris-3B/loras"):
             self.assertTrue((self.root / "models" / relative).is_dir(), relative)
         self.assertEqual(existing.read_bytes(), b"existing model")
+        self.assertEqual(adapter.read_bytes(), b"existing adapter")
         self.assertFalse((self.root / "model").exists())
 
     def test_folder_bundle_hides_internal_shards_and_shared_parts(self):

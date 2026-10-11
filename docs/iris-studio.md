@@ -86,17 +86,17 @@ BF16で保存した学習済み重みは、読み込み時にIrisの浮動小数
 
 ## 任意のLoRAとTurbo
 
-画像生成では `models/Iris-3B/loras/` と下位フォルダーのLoRAを複数選び、各強度を−2〜2で指定できます。フルパスの直接入力にも対応し、0は読み込みを省略します。選択と強度は保存します。通常版・INT8・W4A8と、互換の画像生成用Full FTに適用できます。深度・復元には適用しません。
+画像生成では `models/Iris-3B/loras/` と下位フォルダーのLoRAを複数選び、各強度を−2〜2で指定できます。標準フォルダーは起動時に用意します。フルパスの直接入力にも対応し、0は読み込みを省略します。選択と強度は保存します。通常版・INT8・W4A8と、互換の画像生成用Full FTに適用できます。深度・復元には適用しません。
 
-対応する重みはIrisのモジュール名を使う `.lora_down` / `.lora_up`、または `.lora_A.weight` / `.lora_B.weight` の対です。rank・alphaはsafetensorsのメタデータから読み、未指定のalphaはrankを使います。対象名・形状・値を全て確認し、別系列や未対応のキーを含むファイルはエラーにします。量子化本体は圧縮された重みを保持したままLoRAの差分を加えます。
+対応する重みはIrisのモジュール名を使う `.lora_down` / `.lora_up`、または `.lora_A.weight` / `.lora_B.weight` の対です。rank・alphaはsafetensorsのメタデータから読み、未指定のalphaはrankを使います。`adapter_config.json`は読みません。対象名・形状・値を全て確認し、別系列や未対応のキーを含むファイルはエラーにします。量子化本体は圧縮された重みを保持したままLoRAの差分を加えます。
 
-[Iris-3B Turbo Space](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo)の蒸留LoRAは、メタデータの `shift` に従って専用のTurbo方式で生成します。Turboへの切替時に推奨初期値を設定し、既定の `r2-1000` は4 Steps・CFG 1・shift 4です。その後はSteps・CFG・Negative Promptを手動変更でき、生成は変更後の値を使います。一覧更新や追加の通常LoRAの変更では手動設定を戻しません。LoRAの入力エラーが出た場合も、最後に有効だった生成方式と手動設定を保持します。CFG 1ではNegative Promptを使用せず、CFGを上げた場合に使います。Turbo LoRAは一度に一つで強度1を使い、追加の通常LoRAとの併用は可能です。通常のLoRAだけの場合は従来のSteps・CFG・Negative Promptを使用します。
+[Iris-3B Turbo Space](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo)の蒸留LoRAは、メタデータの `shift` に従って専用のTurbo方式で生成します。Turboへの切替時に推奨初期値を設定してNegative Promptを空にし、既定の `r2-1000` は4 Steps・CFG 1・shift 4です。その後はSteps・CFG・Negative Promptを手動変更でき、生成は変更後の値を使います。一覧更新や追加の通常LoRAの変更では手動設定を戻しません。LoRAの入力エラーが出た場合も、最後に有効だった生成方式と手動設定を保持します。CFG 1ではNegative Promptを使用せず、CFGを上げた場合に使います。Turbo LoRAは一度に一つで強度1を使い、追加の通常LoRAとの併用は可能です。通常のLoRAだけの場合は従来のSteps・CFG・Negative Promptを使用します。
 
 Turboはガイダンスを含めて蒸留されています。手動CFGは蒸留後の追加補正であり、学習時のガイダンス強度を変更するものではありません。StepsやCFGを増やしても画質が改善するとは限らないため、まず推奨初期値を使い、調整後の画質は個別に確認してください。
 
 2026-10-12、RTX 3090のW4A8で `r2-1000` の1024×1024・4 Steps・CFG 1と、手動8 Steps・CFG 1.5・Negative Prompt指定の実生成を確認しました。画質の優劣比較ではありません。通常版・INT8でのTurbo実生成は未確認です。
 
-LoRAを解除・変更した際は前回の差分が残らないよう読み直します。受付時のSHA-256を読み込み時と生成終了時に確認し、途中で更新されたファイルは完了扱いにしません。実行条件には実際のLoRA、強度、識別情報と生成方式を記録します。
+LoRAを解除・変更した際は前回の差分が残らないよう読み直します。読み込みや生成に失敗した場合も、次の実行ではモデルを読み直します。受付時のSHA-256を読み込み時と生成終了時に確認し、途中で更新されたファイルは完了扱いにしません。実行条件には実際のLoRA、強度、識別情報と生成方式を記録します。
 
 Turbo重みの導入は専用環境のPythonで実行します。
 

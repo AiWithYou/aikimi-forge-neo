@@ -2,7 +2,9 @@
 
 ## v4.1.0 — 2026-10-12
 
+- Irisの追加LoRAフォルダーを起動時に用意し、下位フォルダーの重みをそのまま利用できます。
 - Irisの画像生成に任意の互換LoRAの複数選択・強度指定・解除を追加。通常版・INT8・W4A8と互換Full FTに対応し、Iris-3B Turboの蒸留LoRAは専用の少ステップ生成を使います。Turbo切替時に推奨値を設定した後も、Steps・CFGを手動変更できます。[使い方](docs/iris-studio.md#任意のloraとturbo)
+- Irisのページ読込中にLoRA操作が無効になる競合と、通常LoRAの操作で直後のSteps・CFG・Negative Promptが古い値に戻る競合を防ぎます。
 
 ## v4.0.1 — 2026-10-11
 

@@ -30,7 +30,7 @@ def prepare_directories():
     """Prepare empty user-facing storage once during app startup; leave all weights in place."""
     for family in ("Stable-diffusion", *FORGE_FAMILIES, *STUDIO_FAMILIES):
         (ROOT / "models" / family / "checkpoints").mkdir(parents=True, exist_ok=True)
-    for relative in ("Lora", "Qwen-Image-2.1/loras", "Ming-Image/loras"):
+    for relative in ("Lora", "Qwen-Image-2.1/loras", "Ming-Image/loras", "Iris-3B/loras"):
         (ROOT / "models" / relative).mkdir(parents=True, exist_ok=True)
 
 

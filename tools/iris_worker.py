@@ -6,17 +6,16 @@ import json
 import math
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from modules_forge.iris.core import atomic_json, checkpoint_identity, model_files  # noqa: E402
 
-_RUNNER = None
-_KEY = None
+_STATE = SimpleNamespace(runner=None, key=None)
 
 
 def resident_run(payload):
-    global _RUNNER, _KEY
     from modules_forge.iris.runtime import Runner
 
     directory = Path(payload["job_dir"])
@@ -49,28 +48,28 @@ def resident_run(payload):
         json.dumps(loras, sort_keys=True),
     )
     atomic_json(directory / "progress.json", {"stage": "モデルを読み込み中"})
-    if key != _KEY:
-        if _RUNNER is not None:
-            _RUNNER.close()
-        _RUNNER = None
-        _KEY = None
-        _RUNNER = Runner(payload["root"], request["precision"], request["task"], checkpoint)
+    if key != _STATE.key:
+        if _STATE.runner is not None:
+            _STATE.runner.close()
+        _STATE.runner = None
+        _STATE.key = None
+        _STATE.runner = Runner(payload["root"], request["precision"], request["task"], checkpoint)
         try:
-            _RUNNER.set_loras(loras)
+            _STATE.runner.set_loras(loras)
         except BaseException:
-            _RUNNER.close()
-            _RUNNER = None
+            _STATE.runner.close()
+            _STATE.runner = None
             raise
         if checkpoint_identity(payload["root"], request["precision"], request["task"], checkpoint) != identity:
-            _RUNNER.close()
-            _RUNNER = None
+            _STATE.runner.close()
+            _STATE.runner = None
             raise ValueError("読み込み中にモデルが更新されました。再実行してください。")
-        _RUNNER.source_identity = identity
-        _KEY = key
+        _STATE.runner.source_identity = identity
+        _STATE.key = key
     try:
-        return _RUNNER.run(directory, request=request)
+        return _STATE.runner.run(directory, request=request)
     except BaseException:
-        _RUNNER.close()
-        _RUNNER = None
-        _KEY = None
+        _STATE.runner.close()
+        _STATE.runner = None
+        _STATE.key = None
         raise

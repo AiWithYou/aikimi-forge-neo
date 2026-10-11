@@ -158,7 +158,7 @@ def lora_controls(state, task, names, rows, standard, steps, cfg, negative, *, p
             sampling = lora_sampling(settings)
     except ValueError as exc:
         message = str(exc)
-    update_sampling = sampling is not None and sampling["mode"] == "standard"
+    update_sampling = False
     if sampling is not None:
         if sampling["mode"] == "turbo":
             update_sampling = standard.get("turbo_name") != sampling["turbo_name"]
@@ -168,6 +168,7 @@ def lora_controls(state, task, names, rows, standard, steps, cfg, negative, *, p
             message = f"Turbo · 推奨 {sampling['default_steps']}ステップ・CFG 1"
         else:
             if standard.get("mode") == "turbo":
+                update_sampling = True
                 steps, cfg, negative = standard["steps"], standard["cfg"], standard["negative"]
             standard.pop("turbo_name", None)
         standard["mode"] = sampling["mode"]
@@ -190,6 +191,8 @@ def lora_controls(state, task, names, rows, standard, steps, cfg, negative, *, p
 
 
 def sync_loras(state, task, names, rows, standard, steps, cfg, negative):
+    if (standard or {}).get("initialized") is False:
+        return tuple(gr.skip() for _ in range(9))
     updates = list(lora_controls(state, task, names, rows, standard, steps, cfg, negative, persist=False))
     updates[1].pop("value")
     return tuple(updates)

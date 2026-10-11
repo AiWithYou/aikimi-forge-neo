@@ -126,7 +126,7 @@ class IrisLoRAUITests(unittest.TestCase):
         result = self.controls(["turbo.safetensors"], [["turbo.safetensors", 0]])
         self.backend.inspect.assert_not_called()
         self.assertEqual(result[0]["mode"], "standard")
-        self.assertEqual(result[5]["value"], 80)
+        self.assertNotIn("value", result[5])
 
     def test_dropdown_changes_cover_removal_without_echoing_selected_values(self):
         blocks, _, _ = self.module.on_ui_tabs()[0]
@@ -182,6 +182,34 @@ class IrisLoRAUITests(unittest.TestCase):
         blocks, _, _ = self.module.on_ui_tabs()[0]
         states = [item.value for item in blocks.blocks.values() if isinstance(item, gr.State)]
         self.assertTrue(any(item.get("initialized") is False for item in states if isinstance(item, dict)))
+
+    def test_task_and_refresh_sync_cannot_overwrite_initialization_during_page_load(self):
+        for task in ("generate", "depth", "upscale"):
+            with self.subTest(task=task):
+                updates = self.module.sync_loras({}, task, [], [], {"initialized": False}, 100, 3, "")
+                self.assertTrue(all(item == gr.skip() for item in updates))
+        self.backend.inspect.assert_not_called()
+        loaded = self.module.load_loras(task="depth")
+        self.assertTrue(loaded[0]["initialized"])
+        returned = self.module.edit_loras(
+            {}, "generate", ["turbo.safetensors"], [["turbo.safetensors", 1]], loaded[0], 100, 3, ""
+        )
+        self.assertEqual(tuple(returned[index]["value"] for index in (5, 6, 7)), (4, 1, ""))
+
+    def test_standard_lora_edits_and_refresh_do_not_echo_sampling_inputs(self):
+        for callback in (self.module.edit_loras, self.module.sync_loras):
+            with self.subTest(callback=callback.__name__):
+                updates = callback(
+                    {},
+                    "generate",
+                    ["style.safetensors"],
+                    [["style.safetensors", 0.5]],
+                    {"initialized": True, "mode": "standard"},
+                    80,
+                    4,
+                    "blurry",
+                )
+                self.assertTrue(all("value" not in updates[index] for index in (5, 6, 7)))
 
     def test_task_and_refresh_sync_do_not_echo_dropdown_values(self):
         result = self.module.sync_loras(

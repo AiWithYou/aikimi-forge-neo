@@ -17,6 +17,7 @@ class LoRAWorkerTests(unittest.TestCase):
         worker = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(worker)
         events = []
+        requests = []
 
         class FakeRunner:
             def __init__(self, *args):
@@ -29,7 +30,7 @@ class LoRAWorkerTests(unittest.TestCase):
                 self.loras = loras
 
             def run(self, directory, request=None):
-                self.assert_request = request
+                requests.append(request)
                 if request.get("fail"):
                     raise ValueError("run failed")
                 return self.loras
@@ -48,13 +49,65 @@ class LoRAWorkerTests(unittest.TestCase):
                     request = {"task": "generate", "precision": "int8", "loras": selection}
                     core.atomic_json(job / "request.json", request)
                     self.assertEqual(worker.resident_run(payload), selection)
-                    self.assertEqual(worker._RUNNER.assert_request, request)
+                    self.assertEqual(requests[-1], request)
                 self.assertEqual(events, ["load", "close", "load", "close", "load", "close", "load"])
                 core.atomic_json(job / "request.json", {**request, "fail": True})
                 with self.assertRaisesRegex(ValueError, "run failed"):
                     worker.resident_run(payload)
-                self.assertIsNone(worker._RUNNER)
-                self.assertIsNone(worker._KEY)
+                core.atomic_json(job / "request.json", request)
+                self.assertEqual(worker.resident_run(payload), [])
+                self.assertEqual(events[-2:], ["close", "load"])
+
+    def test_loading_failures_retry_with_a_fresh_runner(self):
+        for failure in ("constructor", "apply", "changed_checkpoint"):
+            with self.subTest(failure=failure):
+                self.assert_loading_retry(failure)
+
+    def assert_loading_retry(self, failure):
+        with tempfile.TemporaryDirectory() as root:
+            spec = importlib.util.spec_from_file_location("iris_retry_worker", core.ROOT / "tools/iris_worker.py")
+            worker = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(worker)
+            events = []
+            attempts = []
+
+            class FakeRunner:
+                def __init__(self, *args):
+                    attempts.append(self)
+                    events.append("load")
+                    if failure == "constructor" and len(attempts) == 1:
+                        raise ValueError("constructor failed")
+
+                def set_loras(self, loras):
+                    events.append("apply")
+                    if failure == "apply" and len(attempts) == 1:
+                        raise ValueError("apply failed")
+
+                def close(self):
+                    events.append("close")
+
+                def run(self, directory, request=None):
+                    events.append("run")
+                    return {"status": "complete"}
+
+            job = Path(root) / "job"
+            core.atomic_json(job / "request.json", {"task": "generate", "precision": "int8", "loras": []})
+            identities = (
+                [{"sha256": "base"}, {"sha256": "changed"}, {"sha256": "base"}, {"sha256": "base"}]
+                if failure == "changed_checkpoint"
+                else None
+            )
+            with (
+                patch.object(runtime, "Runner", FakeRunner),
+                patch.object(worker, "checkpoint_identity", return_value={"sha256": "base"}, side_effect=identities),
+            ):
+                payload = {"root": root, "job_dir": str(job)}
+                with self.assertRaises(ValueError):
+                    worker.resident_run(payload)
+                self.assertEqual(worker.resident_run(payload), {"status": "complete"})
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(events.count("run"), 1)
+            self.assertEqual(events.count("close"), 0 if failure == "constructor" else 1)
 
     def test_changed_lora_is_rejected_before_runner_use(self):
         spec = importlib.util.spec_from_file_location("iris_changed_lora_worker", core.ROOT / "tools/iris_worker.py")
