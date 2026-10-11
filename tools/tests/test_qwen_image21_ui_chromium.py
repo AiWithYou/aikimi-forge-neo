@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -49,6 +50,42 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
         fixture.save(cls.output)
         (cls.directory / "result.json").write_text(json.dumps({"seed": 123}), encoding="utf-8")
         cls.ui = load_ui()
+        cls.setting_events = []
+        originals = {
+            name: getattr(cls.ui, name)
+            for name in ("load_model_selection", "profile_settings", "fun_acc_settings", "save_model_selection")
+        }
+
+        def record_settings(name, args, request):
+            event = {
+                "sequence": len(cls.setting_events),
+                "session": request.session_hash,
+                "callback": name,
+                "inputs": args,
+                "started": time.monotonic(),
+            }
+            cls.setting_events.append(event)
+            result = originals[name](*args)
+            event["result"] = result
+            event["finished"] = time.monotonic()
+            return result
+
+        def recorded_load(request: gr.Request):
+            return record_settings("load_model_selection", (), request)
+
+        def recorded_profile(precision, previous_precision, fun_acc, request: gr.Request):
+            return record_settings("profile_settings", (precision, previous_precision, fun_acc), request)
+
+        def recorded_acc(enabled, precision, normal_steps, request: gr.Request):
+            return record_settings("fun_acc_settings", (enabled, precision, normal_steps), request)
+
+        def recorded_save(model, components, precision, loras, rows, request: gr.Request):
+            return record_settings("save_model_selection", (model, components, precision, loras, rows), request)
+
+        for name, recorded in zip(
+            originals, (recorded_load, recorded_profile, recorded_acc, recorded_save), strict=True
+        ):
+            cls.enterClassContext(patch.object(cls.ui, name, recorded))
         cls.enterClassContext(patch.object(local_assets, "LIBRARY", cls.directory / "library.json"))
         cls.enterClassContext(patch.object(local_assets, "HASH_CACHE", cls.directory / "hashes.json"))
         local_assets.save_selection("qwen21", {"precision": "bf16"})
@@ -132,6 +169,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                     self._assert_fun_controlnet_inputs_render(restored=restored)
 
     def _assert_fun_controlnet_inputs_render(self, *, restored):
+        first_event = len(self.setting_events)
         with cdp_page(self.chromium, self.url) as page:
             self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 25000), timeout=30))
             self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
@@ -142,9 +180,10 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             if restored:
                 self.assertTrue(
                     page.evaluate(
-                        _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')")
+                        _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
+                        timeout=20,
                     ),
-                    page.exceptions,
+                    self._settings_diagnostics(page, first_event),
                 )
                 self.assertTrue(
                     page.evaluate(_wait_expression("#qwen21-lora-strengths", "true", 3000)), page.exceptions
@@ -175,9 +214,10 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             self.assertIn("前処理済みの制御画像", page.evaluate("document.body.innerText"))
             self.assertTrue(
                 page.evaluate(
-                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')")
+                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
+                    timeout=20,
                 ),
-                page.exceptions,
+                self._settings_diagnostics(page, first_event),
             )
             self.assertTrue(
                 page.evaluate(
@@ -185,7 +225,8 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                         "#qwen21-lora-strengths",
                         "JSON.stringify(Array.from(element.querySelectorAll('.header-cell[data-heading]'))"
                         ".map(header => header.getAttribute('title'))) === '[\"LoRA\",\"強度\"]'",
-                    )
+                    ),
+                    timeout=20,
                 ),
                 page.exceptions,
             )
@@ -195,6 +236,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             self.assertFalse(page.exceptions)
 
     def test_fun_acc_switch_keeps_selected_model_and_uses_four_steps(self):
+        first_event = len(self.setting_events)
         with cdp_page(self.chromium, self.url) as page:
             self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 45000), timeout=50))
             self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
@@ -204,9 +246,10 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-fun-acc input", "true", 15000)))
             self.assertTrue(
                 page.evaluate(
-                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')")
+                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
+                    timeout=20,
                 ),
-                page.exceptions,
+                self._settings_diagnostics(page, first_event),
             )
             # Confirm the empty LoRA table is mounted after restoring the
             # saved model before changing Fun Acc settings.
@@ -215,6 +258,10 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             self.assertTrue(selected_model)
             page.evaluate("document.querySelector('#qwen21-fun-acc input').click()")
             self.assertTrue(
+                page.evaluate("document.querySelector('#qwen21-fun-acc input').checked"),
+                self._settings_diagnostics(page, first_event),
+            )
+            self.assertTrue(
                 page.evaluate(
                     _wait_expression(
                         "#qwen21-steps",
@@ -222,7 +269,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                         10000,
                     )
                 ),
-                str(page.exceptions) + str(page.evaluate("document.querySelector('#qwen21-steps')?.outerHTML")),
+                self._settings_diagnostics(page, first_event),
             )
             self.assertTrue(
                 page.evaluate(
@@ -236,6 +283,26 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 page.exceptions,
             )
             self.assertFalse(page.exceptions)
+
+    def _settings_diagnostics(self, page, first_event):
+        state = page.evaluate("""(() => {
+            const model=document.querySelector('#qwen21-precision input[role=listbox]');
+            const accelerated=document.querySelector('#qwen21-fun-acc input');
+            const steps=document.querySelector('#qwen21-steps input');
+            return {
+                model: {value: model?.value, disabled: model?.disabled},
+                fun_acc: {checked: accelerated?.checked, disabled: accelerated?.disabled},
+                steps: {value: steps?.value, disabled: steps?.disabled}
+            };
+        })()""")
+        return str(
+            {
+                "exceptions": page.exceptions,
+                "inputs": state,
+                "saved_precision": local_assets.selection("qwen21").get("precision"),
+                "callbacks": self.setting_events[first_event:],
+            }
+        )
 
     def test_completed_result_has_png_and_json_downloads_after_each_generation(self):
         with cdp_page(self.chromium, self.url) as page:

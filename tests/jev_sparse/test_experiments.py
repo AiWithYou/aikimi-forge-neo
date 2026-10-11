@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import copy
+import errno
 import importlib.util
+import io
 import json
 import subprocess
 import sys
 import types
 from dataclasses import dataclass, replace
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 import torch
@@ -157,6 +160,89 @@ def test_sdk_cancellation_reaps_child(monkeypatch, mock_sdk):
         client.decide({}, {"0": (50, 100)}, 100)
     assert child.children[0].poll() is not None and client.closed
     assert client.calls == 1 and not client._thread.is_alive()
+
+
+def _sdk_client_with_buffered_close_error(error):
+    writes = []
+
+    class ClosedWorkerPipe(io.RawIOBase):
+        def writable(self):
+            return True
+
+        def write(self, data):
+            writes.append(bytes(data))
+            raise error
+
+    stdin = io.TextIOWrapper(io.BufferedWriter(ClosedWorkerPipe()), encoding="utf-8", newline="\n")
+    stdin.write("pending SDK request\n")
+    assert not writes
+    proc = Mock(stdin=stdin, stdout=Mock())
+    proc.poll.return_value = 0
+    client = common.JevClient(
+        Path(sys.executable), 1, environment={"AIKIMI_JEV_ALLOW_CLOUD": "1", "TYPESAFE_API_KEY": "fake-key"}
+    )
+    client._proc = proc
+    client._thread = Mock()
+    return client, proc, writes
+
+
+def test_sdk_cancellation_preserves_error_after_buffered_broken_pipe(monkeypatch):
+    client, proc, writes = _sdk_client_with_buffered_close_error(BrokenPipeError(errno.EPIPE, "worker stopped"))
+    client._proc = None
+    client.cancelled = lambda: client._proc is not None
+    monkeypatch.setattr(client, "_start", lambda: setattr(client, "_proc", proc))
+    proc.poll.return_value = None
+    with pytest.raises(common.ExperimentCancelled, match="Generation cancelled"):
+        client.decide({}, {"0": (50, 100)}, 100)
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_called_once_with(timeout=1.0)
+    proc.stdout.close.assert_called_once_with()
+    client._thread.join.assert_called_once_with(timeout=1.0)
+    assert writes and all(data == b"pending SDK request\n" for data in writes)
+    assert proc.stdin.closed and client.closed and not client.env
+
+
+def test_sdk_graceful_eof_waits_after_buffered_broken_pipe():
+    client, proc, writes = _sdk_client_with_buffered_close_error(BrokenPipeError(errno.EPIPE, "worker stopped"))
+    proc.poll.return_value = None
+    client.close()
+    proc.wait.assert_called_once_with(timeout=1.0)
+    proc.kill.assert_not_called()
+    proc.stdout.close.assert_called_once_with()
+    assert writes and proc.stdin.closed and client.closed and not client.env
+
+
+@pytest.mark.parametrize("stream", ["stdin", "stdout"])
+def test_sdk_pipe_cleanup_preserves_unrelated_oserror(stream):
+    error = OSError(errno.EIO, "unrelated pipe failure")
+    client, proc, _ = _sdk_client_with_buffered_close_error(
+        error if stream == "stdin" else BrokenPipeError(errno.EPIPE, "worker stopped")
+    )
+    if stream == "stdout":
+        proc.stdout.close.side_effect = error
+    with pytest.raises(OSError) as raised:
+        client.close()
+    assert raised.value is error
+    proc.wait.assert_called_once_with(timeout=1.0)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        BrokenPipeError(errno.EPIPE, "wait failed"),
+        OSError(errno.EIO, "wait failed"),
+        subprocess.TimeoutExpired("SDK", 1),
+    ],
+)
+def test_sdk_pipe_cleanup_preserves_reap_failure(error):
+    client, proc, _ = _sdk_client_with_buffered_close_error(BrokenPipeError(errno.EPIPE, "worker stopped"))
+    proc.wait.side_effect = error
+    with pytest.raises(type(error)) as raised:
+        client.close()
+    assert raised.value is error
+    assert proc.wait.call_count == (2 if isinstance(error, subprocess.TimeoutExpired) else 1)
+    proc.stdout.close.assert_called_once_with()
+    assert proc.stdin.closed and not client.env
 
 
 def test_sdk_timeout_has_bounded_single_attempt(monkeypatch, mock_sdk):

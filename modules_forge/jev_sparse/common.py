@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -404,7 +405,8 @@ class JevClient:
                     if self._inflight:
                         proc.kill()
                     else:
-                        proc.stdin.close()
+                        with suppress(BrokenPipeError):
+                            proc.stdin.close()
                 try:
                     proc.wait(timeout=1.0)
                 except subprocess.TimeoutExpired:
@@ -420,7 +422,9 @@ class JevClient:
             if proc is not None:
                 for stream in (proc.stdin, proc.stdout):
                     if stream is not None:
-                        stream.close()
+                        # close() flushes text buffered before the worker exited.
+                        with suppress(BrokenPipeError):
+                            stream.close()
             self.env.clear()
 
     def __enter__(self):

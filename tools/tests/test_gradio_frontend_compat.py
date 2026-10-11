@@ -22,6 +22,233 @@ from modules.aikimi_security.gradio_file_guard import install_gradio_file_url_gu
 
 
 class GradioFrontendCompatibilityTests(unittest.TestCase):
+    def test_apptree_pending_updates_keep_newer_values_and_partial_fields(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node.js is required to execute the compiled app tree registration")
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.APPTREE_ASSET_NAME
+        original = path.read_text(encoding="utf-8")
+        served = module.build_patched_apptree_asset().content.decode("utf-8")
+        script = (
+            "import assert from 'node:assert/strict';\n"
+            + "const originalSource = "
+            + json.dumps(original)
+            + ";\nconst servedSource = "
+            + json.dumps(served)
+            + ";\n"
+            + r"""
+            function makeTree(source, family = 'dropdown') {
+                const start = source.indexOf('const q=');
+                const end = source.lastIndexOf('export{');
+                assert.ok(start > 0 && end > start);
+                // Run the actual compiled AppTree. Signals and the delayed tick
+                // are controlled, without assuming browser/Svelte render timing.
+                const pendingTicks = [];
+                const factory = new Function('u', `
+                    const R=()=>({value:undefined}),U=x=>x.value,W=(x,v)=>{x.value=v};
+                    const I=()=>[new Set(),new Set()],A=null;
+                    const k=['visible','interactive','label','loading_status','register_component','dispatcher'];
+                    const L=(id,interactive)=>interactive??true,f=()=>({component:{},runtime:false});
+                    const j=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+                    ${source.slice(start,end)}
+                    return Q;
+                `);
+                const AppTree = factory(() => new Promise(resolve => pendingTicks.push(resolve)));
+                const nested = family !== 'dropdown';
+                const components = [{id:1,type:family,props:{visible:true,value:'initial',
+                    row_count:[0,'fixed'],col_count:[2,'fixed']}}];
+                if (nested) components.push({id:2,type:family === 'tabs' ? 'tabitem' : 'dropdown',
+                    props:{visible:true,id:'pane',label:'initial-child'}});
+                const tree = new AppTree(components,
+                    {id:0,children:[{id:1,children:nested ? [{id:2,children:[]}] : []}]},[],
+                    {root:'http://localhost:7860',api_prefix:'/gradio_api'},{},x=>x,()=>{});
+                return {tree, pendingTicks, async flush() {
+                    for (const resolve of pendingTicks.splice(0)) resolve();
+                    await Promise.resolve();
+                    await Promise.resolve();
+                }};
+            }
+            function mount(tree, state = {}, id = 1) {
+                const calls = [];
+                tree.register_component(id, patch => {
+                    calls.push({...patch});
+                    Object.assign(state, patch);
+                }, () => state);
+                return {state, calls};
+            }
+            async function overlap(source) {
+                const {tree, flush} = makeTree(source);
+                await tree.update_state(1,{value:'pending-old',choices:['old'],label:'保留',
+                    row_count:[0,'fixed'],col_count:[2,'fixed']},false);
+                const mounted = mount(tree);
+                const immediate = tree.update_state(1,{value:'new',choices:['new']},false);
+                assert.equal(mounted.state.value,'new');
+                await immediate;
+                await flush();
+                return mounted.state;
+            }
+            // The wheel sequence is a counterexample, not a copied replacement.
+            assert.equal((await overlap(originalSource)).value,'pending-old');
+            const newest = await overlap(servedSource);
+            assert.equal(newest.value,'new');
+            assert.deepEqual(newest.choices,['new']);
+            assert.equal(newest.label,'保留');
+            assert.deepEqual(newest.row_count,[0,'fixed']);
+            assert.deepEqual(newest.col_count,[2,'fixed']);
+            {
+                const {tree, flush} = makeTree(servedSource);
+                await tree.update_state(1,{choices:['retained'],label:'pending'},false);
+                const mounted = mount(tree);
+                await tree.update_state(1,{value:'new-only',row_count:[3,'dynamic']},false);
+                await flush();
+                assert.deepEqual(mounted.state,{choices:['retained'],label:'pending',
+                    value:'new-only',row_count:[3,'dynamic']});
+            }
+            {
+                const {tree, pendingTicks, flush} = makeTree(servedSource);
+                const mounted = mount(tree);
+                await tree.update_state(1,{value:'ordinary'},false);
+                assert.equal(pendingTicks.length,0);
+                await flush();
+                assert.deepEqual(mounted.calls,[{value:'ordinary'}]);
+            }
+            {
+                const {tree, flush} = makeTree(servedSource);
+                await tree.update_state(1,{value:'old',label:'retained'},false);
+                const first = mount(tree);
+                tree.update_state(1,{value:'intermediate'},false);
+                const latest = mount(tree);
+                tree.update_state(1,{value:'newest'},false);
+                await flush();
+                assert.deepEqual(first.calls,[{value:'intermediate'}]);
+                assert.deepEqual(latest.calls,[{value:'newest'},{value:'newest',label:'retained'}]);
+                const remounted = mount(tree);
+                await flush();
+                assert.deepEqual(remounted.calls,[]);
+            }
+            {
+                const {tree, pendingTicks, flush} = makeTree(servedSource);
+                await tree.update_state(1,{loading_status:{status:'pending'}},false);
+                const mounted = mount(tree);
+                assert.equal(pendingTicks.length,0);
+                await flush();
+                assert.deepEqual(mounted.calls,[]);
+            }
+            {
+                const {tree, flush} = makeTree(servedSource);
+                await tree.update_state(1,{value:'old',loading_status:{status:'pending'}},false);
+                const mounted = mount(tree);
+                tree.update_state(1,{value:'new',loading_status:{status:'complete'}},false);
+                tree.update_state(1,{loading_status:{status:null}},false);
+                await flush();
+                assert.equal(mounted.state.value,'new');
+                assert.deepEqual(mounted.state.loading_status,{status:null});
+                assert.equal(Object.hasOwn(mounted.calls.at(-1),'loading_status'),false);
+            }
+            {
+                const {tree, flush} = makeTree(servedSource);
+                await tree.update_state(1,{value:'old',label:'trigger'},false);
+                const state = {}, calls = [];
+                tree.register_component(1, patch => {
+                    calls.push({...patch});
+                    Object.assign(state,patch);
+                    if (patch.label === 'trigger') tree.update_state(1,{value:'reentrant'},false);
+                }, () => state);
+                tree.update_state(1,{value:'before-flush'},false);
+                await flush();
+                assert.equal(state.value,'reentrant');
+                assert.equal(calls.length,3);
+                mount(tree);
+                await flush();
+                assert.equal(calls.length,3);
+            }
+            {
+                const {tree, flush} = makeTree(servedSource);
+                await tree.update_state(1,{value:'old',row_count:[0,'fixed']},false);
+                const mounted = mount(tree);
+                const tuple = [3,'dynamic'];
+                tree.update_state(1,{value:undefined,row_count:null,col_count:tuple},false);
+                await flush();
+                assert.equal(Object.hasOwn(mounted.state,'value'),true);
+                assert.equal(mounted.state.value,undefined);
+                assert.equal(mounted.state.row_count,null);
+                assert.equal(mounted.state.col_count,tuple);
+            }
+            {
+                const {tree, flush} = makeTree(servedSource);
+                await tree.update_state(1,{value:'old'},false);
+                const mounted = mount(tree), value = {headers:['LoRA','強度'],data:[]};
+                tree.update_state(1,{value},false);
+                await flush();
+                assert.equal(mounted.state.value,value);
+                assert.equal(mounted.calls.at(-1).value,value);
+            }
+            async function visibility(source) {
+                const {tree, flush} = makeTree(source,'column');
+                await tree.update_state(2,{visible:false},false);
+                mount(tree);
+                const parentUpdate = tree.update_state(1,{visible:true});
+                const child = mount(tree,{},2);
+                await flush();
+                await parentUpdate;
+                return child;
+            }
+            assert.equal((await visibility(originalSource)).state.visible,false);
+            const visible = await visibility(servedSource);
+            assert.equal(visible.state.visible,true);
+            assert.deepEqual(visible.calls,[{visible:true},{visible:true}]);
+            async function tabParent(source) {
+                const {tree, flush} = makeTree(source,'tabs');
+                await tree.update_state(1,{initial_tabs:[{component_id:2,id:'pane',label:'old'}]},false);
+                const mounted = mount(tree);
+                await tree.update_state(2,{label:'latest-child'},false);
+                await flush();
+                return {label:mounted.state.initial_tabs[0].label,
+                    latestReference:mounted.state.initial_tabs === tree.root.children[0].props.props.initial_tabs};
+            }
+            // The wheel mutates the old array's child label in place, but still
+            // replays the old array reference after the new array was applied.
+            assert.deepEqual(await tabParent(originalSource),{label:'latest-child',latestReference:false});
+            assert.deepEqual(await tabParent(servedSource),{label:'latest-child',latestReference:true});
+            console.log('compiled app tree pending-update cases passed');
+        """
+        )
+        result = subprocess.run(  # noqa: S603 - execute the audited frontend snippet
+            [node, "--input-type=module", "-"],
+            input=script,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_apptree_pending_update_snippets_fail_closed_when_missing_or_duplicated(self):
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.APPTREE_ASSET_NAME
+        source = path.read_bytes()
+        snippets = (
+            b"r&&(this.#r.delete(s),u().then(()=>{const n=this.#s.get(s);n&&n(r)}))",
+            b"const o=this.#s.get(s);if(o)o&&o(i);else{",
+            b"s.children.forEach(e=>{const r=this.#s.get(e.id);r&&r(i),this.update_visibility(e,i)})",
+            b"const h=this.#s.get(e.id);h&&h({initial_tabs:e.props.props.initial_tabs})",
+            b"prepare(){const[s,i]=I(this.#e);this.#l=s,this.#c=i}",
+        )
+        for snippet in snippets:
+            self.assertEqual(source.count(snippet), 1)
+            for name, replacement in (("missing", b""), ("duplicated", snippet * 2)):
+                changed = source.replace(snippet, replacement, 1)
+                with (
+                    self.subTest(snippet=snippet, mutation=name),
+                    patch.object(Path, "read_bytes", return_value=changed),
+                    patch.object(module, "APPTREE_ORIGINAL_SHA256", hashlib.sha256(changed).hexdigest()),
+                    self.assertRaisesRegex(
+                        module.GradioFrontendCompatibilityError, "snippet was not found exactly once"
+                    ),
+                ):
+                    module.build_patched_apptree_asset()
+
     def test_dataframe_row_count_preserves_compiled_empty_row_semantics(self):
         node = shutil.which("node")
         if node is None:

@@ -32,6 +32,27 @@ _REACTIVE_APPTREE_VISIBILITY_SYNC = (
     b'r&&"visible"in i&&(r.original_visibility=i.visible,i.visible===!1&&this.#n.delete(s));let n=!1;'
 )
 
+# Keep pending partial updates until registration's tick, merging newer mounted
+# updates before replay. All callback sites share this path; loading status stays
+# outside the buffer, as in the wheel's original unmounted update path.
+_ORIGINAL_APPTREE_PENDING_REPLAY = b"r&&(this.#r.delete(s),u().then(()=>{const n=this.#s.get(s);n&&n(r)}))"
+_COALESCED_APPTREE_PENDING_REPLAY = (
+    b"r&&u().then(()=>{const r=this.#r.get(s);r&&this.#s.get(s)&&(this.#r.delete(s),this.#v(s,r))})"
+)
+_ORIGINAL_APPTREE_REGISTERED_UPDATE = b"const o=this.#s.get(s);if(o)o&&o(i);else{"
+_COALESCED_APPTREE_REGISTERED_UPDATE = b"if(!this.#v(s,i)){"
+_ORIGINAL_APPTREE_CHILD_UPDATE = (
+    b"s.children.forEach(e=>{const r=this.#s.get(e.id);r&&r(i),this.update_visibility(e,i)})"
+)
+_COALESCED_APPTREE_CHILD_UPDATE = b"s.children.forEach(e=>{this.#v(e.id,i),this.update_visibility(e,i)})"
+_ORIGINAL_APPTREE_TAB_PARENT_UPDATE = b"const h=this.#s.get(e.id);h&&h({initial_tabs:e.props.props.initial_tabs})"
+_COALESCED_APPTREE_TAB_PARENT_UPDATE = b"this.#v(e.id,{initial_tabs:e.props.props.initial_tabs})"
+_ORIGINAL_APPTREE_PREPARE = b"prepare(){const[s,i]=I(this.#e);this.#l=s,this.#c=i}"
+_COALESCED_APPTREE_PREPARE = (
+    b"#v(s,i){const e=this.#s.get(s);if(!e)return!1;const r=this.#r.get(s);"
+    b"if(r){const{loading_status:n,...o}=i;Object.assign(r,o)}return e(i),!0}" + _ORIGINAL_APPTREE_PREPARE
+)
+
 # The virtualizer changes its count but only notifies Svelte for the first 0->N
 # transition. Notify on every count change so later additions/removals render.
 _ORIGINAL_TABLE_RESIZE = b"r===0&&o>0&&n.measure(),r=o"
@@ -202,7 +223,7 @@ def install_gradio_tabs_compatibility_route(
 
 
 def build_patched_apptree_asset() -> PatchedFrontendAsset:
-    """Keep backend visibility distinct from lazy mounting's internal hiding."""
+    """Keep backend visibility and pending updates synchronized during lazy mounting."""
     if gradio.__version__ != SUPPORTED_VERSION:
         raise GradioFrontendCompatibilityError("Unsupported Gradio version for the app tree compatibility patch.")
     path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / APPTREE_ASSET_NAME
@@ -212,6 +233,14 @@ def build_patched_apptree_asset() -> PatchedFrontendAsset:
     patched = _replace_exact(
         source, _ORIGINAL_APPTREE_VISIBILITY_SYNC, _REACTIVE_APPTREE_VISIBILITY_SYNC, "visibility sync"
     )
+    for old, new, description in (
+        (_ORIGINAL_APPTREE_PENDING_REPLAY, _COALESCED_APPTREE_PENDING_REPLAY, "pending replay"),
+        (_ORIGINAL_APPTREE_REGISTERED_UPDATE, _COALESCED_APPTREE_REGISTERED_UPDATE, "registered update"),
+        (_ORIGINAL_APPTREE_CHILD_UPDATE, _COALESCED_APPTREE_CHILD_UPDATE, "child update"),
+        (_ORIGINAL_APPTREE_TAB_PARENT_UPDATE, _COALESCED_APPTREE_TAB_PARENT_UPDATE, "tab-parent update"),
+        (_ORIGINAL_APPTREE_PREPARE, _COALESCED_APPTREE_PREPARE, "pending-update helper"),
+    ):
+        patched = _replace_exact(patched, old, new, description)
     return PatchedFrontendAsset(APPTREE_ASSET_NAME, patched, APPTREE_ORIGINAL_SHA256, _sha256(patched))
 
 
