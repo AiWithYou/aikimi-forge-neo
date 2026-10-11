@@ -6,6 +6,7 @@ import gradio as gr
 
 from modules import script_callbacks
 from modules_forge import local_assets, model_catalog
+from modules_forge.iris import lora as iris_lora
 from modules_forge.iris.core import (
     GENERATION_SIZES,
     PRECISIONS,
@@ -133,12 +134,112 @@ def switch(state, task, precision, checkpoint="base", *, persist=True, saved=Non
     )
 
 
-def start(state, task, precision, prompt, image, seed, size, steps, cfg, negative, checkpoint="base"):
+def lora_sampling(loras):
+    active = [{**item, "metadata": iris_lora.inspect(RUNTIME, item["name"])} for item in loras if item["strength"] != 0]
+    sampling = iris_lora.sampling_settings(active)
+    if sampling["mode"] == "turbo":
+        return {**sampling, "turbo_name": next(item["name"] for item in active if item["metadata"].get("turbo_steps"))}
+    return sampling
+
+
+def lora_controls(state, task, names, rows, standard, steps, cfg, negative, *, persist=True):
+    names = list(names or [])
+    rows = local_assets.lora_rows(names, rows)
+    standard = dict(standard or {})
+    if task == "generate" and standard.get("mode", "standard") == "standard":
+        standard.update(steps=steps, cfg=cfg, negative=negative)
+    sampling = None
+    message = ""
+    try:
+        settings = list(local_assets.lora_settings(names, rows))
+        if persist and local_assets.selection("iris_lora") != {"loras": settings}:
+            local_assets.save_selection("iris_lora", {"loras": settings})
+        if task == "generate":
+            sampling = lora_sampling(settings)
+    except ValueError as exc:
+        message = str(exc)
+    update_sampling = sampling is not None and sampling["mode"] == "standard"
+    if sampling is not None:
+        if sampling["mode"] == "turbo":
+            update_sampling = standard.get("turbo_name") != sampling["turbo_name"]
+            if update_sampling:
+                steps, cfg, negative = sampling["default_steps"], 1, ""
+            standard["turbo_name"] = sampling["turbo_name"]
+            message = f"Turbo · 推奨 {sampling['default_steps']}ステップ・CFG 1"
+        else:
+            if standard.get("mode") == "turbo":
+                steps, cfg, negative = standard["steps"], standard["cfg"], standard["negative"]
+            standard.pop("turbo_name", None)
+        standard["mode"] = sampling["mode"]
+    editable = task == "generate" and not (state or {}).get("job")
+    sampling_editable = task == "generate"
+    choices = list(dict.fromkeys([*iris_lora.inventory(RUNTIME), *names]))
+    return (
+        standard,
+        gr.update(choices=choices, value=names, interactive=editable),
+        gr.update(
+            value=rows, row_count=(len(rows), "fixed"), visible=True if names else "hidden", interactive=editable
+        ),
+        gr.update(interactive=editable),
+        message,
+        gr.update(**({"value": steps} if update_sampling else {}), interactive=sampling_editable),
+        gr.update(**({"value": cfg} if update_sampling else {}), interactive=sampling_editable),
+        gr.update(**({"value": negative} if update_sampling else {}), interactive=sampling_editable),
+        gr.update(visible=task == "generate"),
+    )
+
+
+def sync_loras(state, task, names, rows, standard, steps, cfg, negative):
+    updates = list(lora_controls(state, task, names, rows, standard, steps, cfg, negative, persist=False))
+    updates[1].pop("value")
+    return tuple(updates)
+
+
+def edit_loras(state, task, names, rows, standard, steps, cfg, negative):
+    if (standard or {}).get("initialized") is False:
+        return tuple(gr.skip() for _ in range(9))
+    updates = list(lora_controls(state, task, names, rows, standard, steps, cfg, negative))
+    updates[1] = gr.skip()
+    return tuple(updates)
+
+
+def load_loras(state=None, task="generate"):
+    settings = local_assets.selection("iris_lora").get("loras", [])
+    settings = [item for item in settings if isinstance(item, dict) and isinstance(item.get("name"), str)]
+    names = [item["name"] for item in settings]
+    rows = [[item["name"], item.get("strength", 1)] for item in settings]
+    updates = list(
+        lora_controls(state, task, names, rows, {"initialized": True, "mode": "standard"}, 100, 3, "", persist=False)
+    )
+    for index, value in zip((5, 6, 7), (100, 3, ""), strict=True):
+        updates[index].setdefault("value", value)
+    return tuple(updates)
+
+
+def start(
+    state,
+    task,
+    precision,
+    prompt,
+    image,
+    seed,
+    size,
+    steps,
+    cfg,
+    negative,
+    checkpoint="base",
+    lora_names=None,
+    lora_rows=None,
+):
     state = dict(state or {})
     checkpoint = checkpoint if task == "generate" else "base"
     try:
         if state.get("job"):
             return gr.skip(), gr.skip(), gr.skip(), gr.skip(), "実行中です。", gr.skip(), gr.skip(), gr.skip()
+        loras = []
+        if task == "generate":
+            loras = list(local_assets.lora_settings(lora_names, lora_rows))
+            lora_sampling(loras)
         if checkpoint != "base":
             try:
                 source = resolve(RUNTIME, checkpoint)
@@ -164,6 +265,7 @@ def start(state, task, precision, prompt, image, seed, size, steps, cfg, negativ
                     "steps": steps,
                     "cfg": cfg,
                     "negative_prompt": negative,
+                    **({"loras": loras} if task == "generate" else {}),
                 }
             )
             kind = "run"
@@ -187,6 +289,13 @@ def start(state, task, precision, prompt, image, seed, size, steps, cfg, negativ
         )
     except Exception as exc:
         return gr.skip(), gr.skip(), gr.skip(), gr.skip(), str(exc), gr.skip(), gr.skip(), gr.skip()
+
+
+def start_with_loras(*args):
+    result = start(*args)
+    current = result[0] if isinstance(result[0], dict) and "__type__" not in result[0] else args[0]
+    editable = args[1] == "generate" and not (current or {}).get("job")
+    return (*result, *(gr.update(interactive=editable) for _ in range(3)))
 
 
 def cancel(state):
@@ -257,6 +366,14 @@ def poll(state):
     )
 
 
+def poll_with_loras(state):
+    result = poll(state)
+    current = result[0]
+    if not isinstance(current, dict) or "__type__" in current or current.get("job"):
+        return (*result, *(gr.skip(),) * 3)
+    return (*result, *(gr.update(interactive=current["task"] == "generate") for _ in range(3)))
+
+
 def load_selection():
     saved = local_assets.selection("iris")
     selected = saved.get("checkpoint", "base")
@@ -285,11 +402,13 @@ def load_selection():
 
 def on_ui_tabs():
     initial_view = load_selection()
+    initial_loras = load_loras(initial_view[14])
     initial_precision = initial_view[12]["value"]
     selected = initial_view[13]["value"]
     choices = initial_view[13]["choices"]
     with gr.Blocks() as ui:
         state = gr.State(initial_view[14])
+        standard_sampling = gr.State({**initial_loras[0], "initialized": False})
         timer = gr.Timer(0.5, active=False)
         with gr.Row():
             task = gr.Radio(
@@ -322,6 +441,37 @@ def on_ui_tabs():
                         label="プロンプト（英語）", lines=5, placeholder="a red fox sleeping in fresh snow, golden hour"
                     )
                     seed = gr.Number(label="Seed（-1でランダム）", value=-1, precision=0)
+                with gr.Group() as lora_group:
+                    with gr.Row():
+                        loras = gr.Dropdown(
+                            initial_loras[1]["choices"],
+                            value=initial_loras[1]["value"],
+                            multiselect=True,
+                            allow_custom_value=True,
+                            label="LoRA（複数選択・フルパスも入力可）",
+                            elem_id="iris-loras",
+                            scale=4,
+                            min_width=240,
+                        )
+                        lora_refresh = gr.Button("一覧を更新", scale=1, elem_id="iris-lora-refresh")
+                    lora_strengths = gr.Dataframe(
+                        value=initial_loras[2]["value"],
+                        headers=["LoRA", "強度"],
+                        datatype=["str", "number"],
+                        type="array",
+                        static_columns=[0],
+                        column_count=(2, "fixed"),
+                        row_count=len(initial_loras[2]["value"]),
+                        interactive=True,
+                        visible=initial_loras[2]["visible"],
+                        label="強度（−2〜2・0で無効）",
+                        column_widths=["75%", "25%"],
+                        max_chars=64,
+                        max_height=240,
+                        buttons=[],
+                        elem_id="iris-lora-strengths",
+                    )
+                    lora_information = gr.Markdown(initial_loras[4], elem_id="iris-lora-information")
                 with gr.Group(visible=False) as image_input:
                     image = gr.Image(label="入力画像", type="pil", height=320)
                     upscale_limit = gr.Markdown("入力を短辺512・長辺1024以内に収めてから4倍にします。", visible=False)
@@ -339,9 +489,28 @@ def on_ui_tabs():
                 with gr.Accordion("詳細設定", open=False) as detail:
                     size = gr.Dropdown(list(GENERATION_SIZES), value="1024×1024", label="生成サイズ")
                     with gr.Row():
-                        steps = gr.Slider(1, 200, value=100, step=1, label="ステップ数")
-                        cfg = gr.Slider(1, 15, value=3, step=0.1, label="CFG")
-                    negative = gr.Textbox(label="ネガティブプロンプト（英語）", lines=2)
+                        steps = gr.Slider(
+                            1,
+                            200,
+                            value=initial_loras[5]["value"],
+                            step=1,
+                            label="ステップ数",
+                            interactive=initial_loras[5]["interactive"],
+                        )
+                        cfg = gr.Slider(
+                            1,
+                            15,
+                            value=initial_loras[6]["value"],
+                            step=0.1,
+                            label="CFG",
+                            interactive=initial_loras[6]["interactive"],
+                        )
+                    negative = gr.Textbox(
+                        label="ネガティブプロンプト（CFG > 1で反映）",
+                        lines=2,
+                        value=initial_loras[7]["value"],
+                        interactive=initial_loras[7]["interactive"],
+                    )
                 with gr.Accordion("モデルの準備", open=False):
                     gr.Markdown(
                         "選択した処理・モデルに必要なファイルを取得します。"
@@ -377,8 +546,29 @@ def on_ui_tabs():
             checkpoint,
             state,
         ]
-        ui.load(load_selection, [], [*change_outputs, task], queue=False, show_progress="hidden")
-        task.change(switch, [state, task, precision, checkpoint], change_outputs, queue=False)
+        lora_inputs = [state, task, loras, lora_strengths, standard_sampling, steps, cfg, negative]
+        lora_outputs = [
+            standard_sampling,
+            loras,
+            lora_strengths,
+            lora_refresh,
+            lora_information,
+            steps,
+            cfg,
+            negative,
+            lora_group,
+        ]
+        for component in (loras, lora_strengths):
+            model_catalog.configure_component(component)
+        loras.change(edit_loras, lora_inputs, lora_outputs, queue=False, trigger_mode="always_last")
+        lora_strengths.input(edit_loras, lora_inputs, lora_outputs, queue=False)
+        lora_refresh.click(sync_loras, lora_inputs, lora_outputs, queue=False)
+        ui.load(load_selection, [], [*change_outputs, task], queue=False, show_progress="hidden").then(
+            load_loras, [state, task], lora_outputs, queue=False, show_progress="hidden"
+        )
+        task.change(switch, [state, task, precision, checkpoint], change_outputs, queue=False).then(
+            sync_loras, lora_inputs, lora_outputs, queue=False
+        )
         precision.input(switch, [state, task, precision, checkpoint], change_outputs, queue=False)
         checkpoint.input(switch, [state, task, precision, checkpoint], change_outputs, queue=False)
 
@@ -394,19 +584,33 @@ def on_ui_tabs():
 
         to_depth.click(lambda state: send(state, "depth"), [state], [task, image], queue=False).then(
             switch, [state, task, precision, checkpoint], change_outputs, queue=False
-        )
+        ).then(sync_loras, lora_inputs, lora_outputs, queue=False)
         to_upscale.click(lambda state: send(state, "upscale"), [state], [task, image], queue=False).then(
             switch, [state, task, precision, checkpoint], change_outputs, queue=False
-        )
+        ).then(sync_loras, lora_inputs, lora_outputs, queue=False)
         run.click(
-            start,
-            [state, task, precision, prompt, image, seed, size, steps, cfg, negative, checkpoint],
-            [state, task, precision, run, status, stop, timer, checkpoint],
+            start_with_loras,
+            [
+                state,
+                task,
+                precision,
+                prompt,
+                image,
+                seed,
+                size,
+                steps,
+                cfg,
+                negative,
+                checkpoint,
+                loras,
+                lora_strengths,
+            ],
+            [state, task, precision, run, status, stop, timer, checkpoint, loras, lora_strengths, lora_refresh],
             queue=False,
         )
         stop.click(cancel, [state], [status, stop], queue=False)
         timer.tick(
-            poll,
+            poll_with_loras,
             [state],
             [
                 state,
@@ -422,6 +626,9 @@ def on_ui_tabs():
                 files,
                 information,
                 checkpoint,
+                loras,
+                lora_strengths,
+                lora_refresh,
             ],
             queue=False,
         )

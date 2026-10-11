@@ -103,6 +103,14 @@ class Runner:
         self.model, self.cfg, self.settings = load_model(root, precision, task, checkpoint)
         self.encoder = None
         self.source_identity = None
+        self.loras = []
+
+    def set_loras(self, loras):
+        from .lora import apply, verify_sources
+
+        apply(self.model, loras)
+        verify_sources(loras)
+        self.loras = loras
 
     def close(self):
         self.model = self.encoder = None
@@ -142,27 +150,40 @@ class Runner:
             positive = self.encoder.encode([request["prompt"]])
             # Same upstream template as null(); avoid its cache filename built
             # from an absolute Windows model path (which contains a colon).
-            negative = self.encoder.encode([request["negative_prompt"]])
+            negative = (
+                self.encoder.encode([request["negative_prompt"]])
+                if request.get("sampling", {}).get("mode") != "turbo" or request["cfg"] != 1
+                else None
+            )
 
             def cpu(encoding):
                 return TextEncoding(encoding.embeddings.cpu(), encoding.mask.cpu())
 
-            return PreparedText(cpu(positive), cpu(negative))
+            return PreparedText(cpu(positive), cpu(negative) if negative is not None else None)
         finally:
             self.encoder.to("cpu")
             gc.collect()
             torch.cuda.empty_cache()
 
     @torch.inference_mode()
-    def run(self, directory):
+    def run(self, directory, request=None):
         directory = Path(directory)
-        request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
+        if request is None:
+            request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
+        from .lora import verify_sources
+
+        loras = getattr(self, "loras", [])
+        if request.get("loras", []) != loras:
+            raise ValueError("読み込み済みLoRAと実行条件が一致しません。")
+        verify_sources(loras)
         if self.source_identity is None:
             self.source_identity = checkpoint_identity(self.root, self.precision, self.task, self.checkpoint)
         begin = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
         calls = 0
         total = request.get("steps", 1) if self.task == "generate" else 1
+        if request.get("sampling", {}).get("mode") == "turbo" and request["cfg"] != 1:
+            total *= 2
 
         def progress(module, args):
             nonlocal calls
@@ -185,22 +206,40 @@ class Runner:
                 text = self.prepare_text(request)
                 self.model.cuda()
                 with torch.autocast("cuda", dtype=torch.bfloat16):
-                    pixels = generate(
-                        self.model,
-                        text,
-                        [request["prompt"]],
-                        height=request["height"],
-                        width=request["width"],
-                        steps=request["steps"],
-                        order=2,
-                        cfg_scale=request["cfg"],
-                        cfg_interval=tuple(self.cfg.sample.cfg_interval),
-                        shift=self.cfg.flow.shift,
-                        negative_prompt=request["negative_prompt"],
-                        generator=torch.Generator(device="cuda").manual_seed(request["seed"]),
-                        num_train_timesteps=self.cfg.flow.num_train_timesteps,
-                        prediction=self.cfg.flow.prediction,
-                    )
+                    if request.get("sampling", {}).get("mode") == "turbo":
+                        from .turbo import generate_turbo
+
+                        if self.cfg.flow.prediction != "v" or self.cfg.flow.num_train_timesteps != 1000:
+                            raise ValueError("Turbo LoRAには標準のIris flow設定が必要です。")
+                        pixels = generate_turbo(
+                            self.model,
+                            text,
+                            [request["prompt"]],
+                            request["height"],
+                            request["width"],
+                            request["steps"],
+                            request["sampling"]["shift"],
+                            torch.Generator(device="cuda").manual_seed(request["seed"]),
+                            cfg_scale=request["cfg"],
+                            negative_prompt=request["negative_prompt"],
+                        )
+                    else:
+                        pixels = generate(
+                            self.model,
+                            text,
+                            [request["prompt"]],
+                            height=request["height"],
+                            width=request["width"],
+                            steps=request["steps"],
+                            order=2,
+                            cfg_scale=request["cfg"],
+                            cfg_interval=tuple(self.cfg.sample.cfg_interval),
+                            shift=self.cfg.flow.shift,
+                            negative_prompt=request["negative_prompt"],
+                            generator=torch.Generator(device="cuda").manual_seed(request["seed"]),
+                            num_train_timesteps=self.cfg.flow.num_train_timesteps,
+                            prediction=self.cfg.flow.prediction,
+                        )
                 if not torch.isfinite(pixels).all():
                     raise ValueError("生成結果に非有限値が含まれています。")
                 image = Image.fromarray(
@@ -246,6 +285,7 @@ class Runner:
                     image = restorer(image)
             if checkpoint_identity(self.root, self.precision, self.task, self.checkpoint) != self.source_identity:
                 raise ValueError("実行中にモデルが更新されました。再実行してください。")
+            verify_sources(loras)
             atomic_json(directory / "progress.json", {"stage": "結果を保存中"})
             image.save(directory / "result.png")
             files.insert(0, str(directory / "result.png"))

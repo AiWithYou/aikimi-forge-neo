@@ -50,6 +50,12 @@ QwenのINT8 ConvRot実行には専用環境の`comfy-kitchen==0.2.31`を利用�
 
 SenseNova runtimeは、固定commit`e6dfd45762eb46f805067fe079c14bcb643ccccd`から取得します。runtime directoryへApache-2.0の`LICENSE`も配置します。
 
+## Iris-3B Turbo sampler
+
+`modules_forge/iris/turbo.py`は、pentaCoxianの[Iris-3B Turbo Spaceの`iris3b/distill.py`](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo/blob/5243039779e896b9dc884433e76b33cbe9f4f5e7/iris3b/distill.py)、commit `5243039779e896b9dc884433e76b33cbe9f4f5e7`のsamplerを基にしています。NeoのIris推論へ統合し、任意の手動CFG・Negative Prompt指定を追加しました。
+
+配布元の[Apache-2.0 LICENSE](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo/blob/5243039779e896b9dc884433e76b33cbe9f4f5e7/LICENSE)全文を[modules_forge/iris/LICENSE.turbo](modules_forge/iris/LICENSE.turbo)へ同梱します。TurboのLoRA重みは固定revision・SHA-256で別途取得し、Gitには含めません。[使い方・導入](docs/iris-studio.md#任意のloraとturbo)
+
 ## fontとUI asset
 
 `modules/Roboto-Regular.ttf`は、font metadataでApache-2.0を示しています。`modules/web/fonts/sourcesanspro`にはSource Sans Proのwoff2が含まれます。release担当者は、fontの配布元と必要なlicense本文をrelease前に再確認してください。

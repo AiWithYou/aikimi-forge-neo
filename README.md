@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.0.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.0.1)** · [変更履歴](CHANGELOG.md)
+**[v4.1.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.1.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -56,7 +56,7 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | 画像生成・編集・透過PNG・拡張。専用画面を使用 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | 作曲・ABC楽譜編集。**YuE2 Music** タブを使用 | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1：公式Python** |
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
-| [Iris-3B](extensions-builtin/iris-studio/README.md) | 画像生成・相対深度推定・復元と4倍拡大。上部 **Iris** で通常版／INT8／W4A8を選択 | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
+| [Iris-3B](extensions-builtin/iris-studio/README.md) | 画像生成・相対深度推定・復元と4倍拡大。通常版／INT8／W4A8、互換LoRAと4ステップTurbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
 
 初回はモデルと必要な実行環境のダウンロード・変換に時間がかかります。Qwenの既定モデルは通常版Q4_K_Mです。Irisは選択した用途の重みを取得し、INT8・W4A8はHugging Faceの変換済み配布を使います。W4A8は画像生成用のテキストエンコーダーも圧縮します。[Irisの導入・検証](docs/iris-studio.md)
 
@@ -158,6 +158,7 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 | Forge `txt2img` / `img2img` | `models/Lora/` | **LoRAを組み合わせる** で選択、または `<lora:名前:0.8>` |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → 一覧更新 → 複数選択** |
 | Ming Image | `models/Ming-Image/loras/` | **LoRA** で選択 |
+| Iris（画像生成） | `models/Iris-3B/loras/` | **LoRA → 一覧を更新 → 複数選択**。[対応形式・Turbo](docs/iris-studio.md#任意のloraとturbo) |
 
 強度は−2〜2で指定します。0は無効、×は選択解除です。同じLoRAを選択欄とプロンプトの両方へ指定しないでください。モデルの世代や形式が異なると使えません。[対応形式と外部モデルの指定方法](docs/local-models.md) · [Qwen追加LoRAガイド](extensions-builtin/qwen-image21-studio/README.md#追加lora)
 

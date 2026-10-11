@@ -22,10 +22,20 @@ class Service:
         self.worker = ResidentWorker("iris", ROOT / "cache" / "iris-worker")
         self.jobs = {}
 
-    def start(self, request):
+    def start(self, value):
         from modules_forge.gpu_ownership import GPUOwnership
 
-        request = validate_request(request)
+        request = validate_request(value)
+        if request["task"] == "generate":
+            from .lora import sampling_settings, snapshot
+
+            request["loras"] = snapshot(self.root, request.get("loras", []))
+            request["sampling"] = sampling_settings(request["loras"])
+            if request["sampling"]["mode"] == "turbo":
+                if "steps" not in value:
+                    request["steps"] = request["sampling"]["default_steps"]
+                if "cfg" not in value:
+                    request["cfg"] = 1.0
         if request.get("checkpoint", "base") != "base":
             request["checkpoint"] = str(
                 model_files(self.root, request["precision"], request["task"], request["checkpoint"])[0]

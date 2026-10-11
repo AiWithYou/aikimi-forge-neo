@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v4.0.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.0.1)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.1.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.1.0)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -52,7 +52,7 @@ For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choos
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | Image generation, editing, transparent PNG, and outpainting | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | Music composition and ABC score editing in **YuE2 Music** | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1: Official Python** |
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | Image, text, and JSON evaluation; image curation and per-criterion probabilities | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
-| [Iris-3B](extensions-builtin/iris-studio/README.md) | Image generation, relative depth, restoration, and 4× upscaling; standard, INT8, and W4A8 modes | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
+| [Iris-3B](extensions-builtin/iris-studio/README.md) | Image generation, relative depth, restoration, and 4× upscaling; standard, INT8, and W4A8 modes, compatible LoRAs, and 4-step Turbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
 
 The initial download and runtime setup or conversion can take time. Qwen defaults to the standard Q4_K_M model. Iris downloads weights for the selected task; INT8 and W4A8 use preconverted Hugging Face distributions. W4A8 also compresses the text encoder for image generation. See the [Iris guide](docs/iris-studio.md).
 
@@ -152,6 +152,7 @@ Place compatible LoRAs in the directories below, or enter a full path in the sel
 | Forge `txt2img` / `img2img` | `models/Lora/` | Select in the LoRA combination control, or use `<lora:name:0.8>` |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → Refresh → select multiple** |
 | Ming Image | `models/Ming-Image/loras/` | Select under **Model / LoRA** |
+| Iris (image generation) | `models/Iris-3B/loras/` | **LoRA → Refresh → select multiple**. See [supported formats and Turbo (Japanese)](docs/iris-studio.md#任意のloraとturbo) |
 
 Strength ranges from −2 to 2. A value of 0 disables the LoRA; × removes the selection. Do not specify the same LoRA in both the selector and prompt. Different model generations or formats may be incompatible. See [Supported formats and external paths](docs/local-models.md) and the [Qwen LoRA guide](extensions-builtin/qwen-image21-studio/README.md#追加lora).
 

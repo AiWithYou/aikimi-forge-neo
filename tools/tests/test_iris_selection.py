@@ -233,7 +233,10 @@ class SelectionTests(unittest.TestCase):
                 def close(self):
                     events.append("close")
 
-                def run(self, directory):
+                def set_loras(self, loras):
+                    self.loras = loras
+
+                def run(self, directory, request=None):
                     raise AssertionError("changed model must not run")
 
             with patch.object(runtime, "Runner", MutatingRunner):
@@ -318,7 +321,10 @@ class SelectionTests(unittest.TestCase):
             def close(self):
                 events.append("close")
 
-            def run(self, directory):
+            def set_loras(self, loras):
+                self.loras = loras
+
+            def run(self, directory, request=None):
                 return "result"
 
         with tempfile.TemporaryDirectory() as folder, patch.object(runtime, "Runner", FakeRunner):

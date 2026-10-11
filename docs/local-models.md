@@ -14,6 +14,7 @@ models/
 ├─ Qwen-Image-2.1/checkpoints/
 ├─ Ming-Image/checkpoints/
 ├─ Iris-3B/checkpoints/
+├─ Iris-3B/loras/             # 画像生成用の互換LoRA（下位フォルダーで整理可能）
 ├─ Clef/checkpoints/
 ├─ SenseNova-U1/checkpoints/
 ├─ MiniMax-H3/checkpoints/
@@ -64,7 +65,7 @@ Qwenは `models/Qwen-Image-2.1/loras/`、Mingは `models/Ming-Image/loras/` と�
 
 ForgeでPNGの生成情報を読み込むと、LoRA選択欄は空に戻ります。保存されたプロンプトのLoRAタグを使用するため、前回の選択が二重に適用されません。
 
-IrisはFull FTの本体選択に対応し、LoRA単体の選択・適用には対応していません。ほかの専用Studioでは、それぞれのLoRA機能と対応形式を使います。すべてのLoRA形式や異なるモデル間の組み合わせを一律に適用できるものではありません。
+Irisは `models/Iris-3B/loras/` と下位フォルダーの互換LoRAを複数選択し、各強度を指定できます。通常版・INT8・W4A8と互換Full FTに対応します。Iris-3B Turboの蒸留LoRAでは専用の少ステップ生成を使います。[対応形式と導入](iris-studio.md#任意のloraとturbo)。ほかの専用Studioでは、それぞれのLoRA機能と対応形式を使います。すべてのLoRA形式や異なるモデル間の組み合わせを一律に適用できるものではありません。
 
 本体やLoRAの変更、同名ファイルの上書きは必要に応じて再読み込みします。専用Studioでは受付時のLoRAを生成中も確認し、待機中や読み込み中にファイルが変わった場合は再実行を求めます。量子化キャッシュは元モデルと変換条件ごとに分離し、元ファイルには書き込みません。初回の本体識別ではSHA-256の計算に時間がかかる場合があります。生成情報にモデルのパスや識別情報が含まれるため、共有する際は保存場所を確認してください。
 

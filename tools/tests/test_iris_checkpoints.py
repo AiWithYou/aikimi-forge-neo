@@ -120,7 +120,10 @@ class CheckpointTests(unittest.TestCase):
             def close(self):
                 events.append(("close", self.checkpoint))
 
-            def run(self, directory):
+            def set_loras(self, loras):
+                self.loras = loras
+
+            def run(self, directory, request=None):
                 return self.checkpoint
 
         with tempfile.TemporaryDirectory() as temporary, patch.object(runtime, "Runner", FakeRunner):
