@@ -25,6 +25,30 @@ DATAFRAME_ROUTE_NAME = "aikimi_gradio_dataframe_compat"
 APPTREE_ASSET_NAME = "index-DT-PGBOg.js"
 APPTREE_ORIGINAL_SHA256 = "d9705297a4819b6c0e003703334615718c7daf00c1e0024a9b8ca50da745ea33"
 APPTREE_ROUTE_NAME = "aikimi_gradio_apptree_compat"
+COMPONENT_STATE_ASSET_NAME = "i18n-Cp0K4Pzb.js"
+COMPONENT_STATE_ORIGINAL_SHA256 = "99437b42b17ce80dbfbeefd72eca67ab4bf971a8e3e6ef350be6eab9e69997a6"
+COMPONENT_STATE_ROUTE_NAME = "aikimi_gradio_component_state_compat"
+
+# Component callbacks update mounted state separately from the source props.
+# Reapplying unchanged source fields would overwrite newer callback/user values.
+# Snapshot raw source fields after initialization and compare only source changes.
+# Reusing a wrapper for another component ID still applies all new source fields.
+_ORIGINAL_COMPONENT_STATE_SYNC = (
+    b"this.register_component(t.shared_props.id,this.set_data.bind(this),this.get_data.bind(this)),"
+    b"Le(()=>{for(const n in t.shared_props)this._is_i18n_managed(`shared.${n}`,t.shared_props[n])"
+    b'||(this.shared[n]=t.shared_props[n]);for(const n in t.props)n!=="i18n_store"&&'
+    b"(this._is_i18n_managed(`props.${n}`,t.props[n])||(this.props[n]=t.props[n]));"
+)
+_CHANGED_COMPONENT_STATE_SYNC = (
+    b"this.register_component(t.shared_props.id,this.set_data.bind(this),this.get_data.bind(this));"
+    b"let o={...t.shared_props},a={...t.props};"
+    b"Le(()=>{const r=!Object.is(o.id,t.shared_props.id);"
+    b"for(const n in t.shared_props)(r||!Object.hasOwn(o,n)||!Object.is(o[n],t.shared_props[n]))&&"
+    b"(this._is_i18n_managed(`shared.${n}`,t.shared_props[n])||(this.shared[n]=t.shared_props[n]));"
+    b'for(const n in t.props)n!=="i18n_store"&&(r||!Object.hasOwn(a,n)||!Object.is(a[n],t.props[n]))&&'
+    b"(this._is_i18n_managed(`props.${n}`,t.props[n])||(this.props[n]=t.props[n]));"
+    b"o={...t.shared_props},a={...t.props};"
+)
 
 _ORIGINAL_APPTREE_VISIBILITY_SYNC = b"async update_state(s,i,e=!0){const r=_(this.root,s);let n=!1;"
 _REACTIVE_APPTREE_VISIBILITY_SYNC = (
@@ -262,6 +286,22 @@ def build_patched_dataframe_asset() -> PatchedFrontendAsset:
     return PatchedFrontendAsset(DATAFRAME_ASSET_NAME, patched, DATAFRAME_ORIGINAL_SHA256, _sha256(patched))
 
 
+def build_patched_component_state_asset() -> PatchedFrontendAsset:
+    """Keep newer mounted values when unchanged source props are synchronized."""
+    if gradio.__version__ != SUPPORTED_VERSION:
+        raise GradioFrontendCompatibilityError(
+            "Unsupported Gradio version for the component state compatibility patch."
+        )
+    path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / COMPONENT_STATE_ASSET_NAME
+    source = path.read_bytes()
+    if _sha256(source) != COMPONENT_STATE_ORIGINAL_SHA256:
+        raise GradioFrontendCompatibilityError("The Gradio component state asset does not match the audited SHA-256.")
+    patched = _replace_exact(
+        source, _ORIGINAL_COMPONENT_STATE_SYNC, _CHANGED_COMPONENT_STATE_SYNC, "component state sync"
+    )
+    return PatchedFrontendAsset(COMPONENT_STATE_ASSET_NAME, patched, COMPONENT_STATE_ORIGINAL_SHA256, _sha256(patched))
+
+
 def _install_asset_route(app: FastAPI, asset: PatchedFrontendAsset, route_name: str) -> PatchedFrontendAsset:
 
     async def serve_patched_tabs(request: Request) -> Response:
@@ -300,5 +340,6 @@ def create_gradio_compatibility_app(
     prepared_kwargs.setdefault("default_response_class", ORJSONResponse)
     prepared_app = App(debug=debug, **prepared_kwargs)
     _install_asset_route(prepared_app, build_patched_dataframe_asset(), DATAFRAME_ROUTE_NAME)
+    _install_asset_route(prepared_app, build_patched_component_state_asset(), COMPONENT_STATE_ROUTE_NAME)
     install_gradio_tabs_compatibility_route(prepared_app, asset)
     return prepared_app

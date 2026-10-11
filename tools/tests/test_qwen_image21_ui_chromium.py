@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import tempfile
 import time
@@ -20,6 +21,40 @@ from modules_forge import local_assets
 from tools.tests.chromium_helpers import chromium_memory_usage, find_chromium, reserve_local_port
 from tools.tests.test_gradio_frontend_compat_chromium import _wait_expression, cdp_page
 from tools.tests.test_qwen_image21_service import load_ui
+
+
+def _callback_summaries(events, first_event):
+    summaries = {}
+    profile_runs = {}
+    for event in events[first_event:]:
+        session = event["session"]
+        summary = summaries.setdefault(session, {"callback_counts": {}, "max_identical_profile_calls": 0})
+        name = event["callback"]
+        counts = summary["callback_counts"]
+        counts[name] = counts.get(name, 0) + 1
+        if name == "profile_settings":
+            inputs = event["inputs"]
+            previous = profile_runs.get(session)
+            run = previous[1] + 1 if previous is not None and previous[0] == inputs else 1
+            profile_runs[session] = (inputs, run)
+            summary["max_identical_profile_calls"] = max(summary["max_identical_profile_calls"], run)
+    return list(summaries.values())
+
+
+def _record_settings_event(events, name, callback, args, request):
+    event = {
+        "sequence": len(events),
+        "session": request.session_hash,
+        "callback": name,
+        "inputs": args,
+        "started": time.monotonic(),
+        "selection_before": copy.deepcopy(local_assets.selection("qwen21")),
+    }
+    events.append(event)
+    result = callback(*args)
+    event["result"] = copy.deepcopy(result)
+    event["finished"] = time.monotonic()
+    return result
 
 
 class QwenImage21DownloadChromiumTests(unittest.TestCase):
@@ -57,18 +92,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
         }
 
         def record_settings(name, args, request):
-            event = {
-                "sequence": len(cls.setting_events),
-                "session": request.session_hash,
-                "callback": name,
-                "inputs": args,
-                "started": time.monotonic(),
-            }
-            cls.setting_events.append(event)
-            result = originals[name](*args)
-            event["result"] = result
-            event["finished"] = time.monotonic()
-            return result
+            return _record_settings_event(cls.setting_events, name, originals[name], args, request)
 
         def recorded_load(request: gr.Request):
             return record_settings("load_model_selection", (), request)
@@ -236,6 +260,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 page.evaluate("document.querySelectorAll('#qwen21-lora-strengths .virtual-row').length"), 0
             )
             self.assertFalse(page.exceptions)
+            self._report_callback_counts(page, first_event)
 
     def test_fun_acc_switch_keeps_selected_model_and_uses_four_steps(self):
         first_event = len(self.setting_events)
@@ -288,11 +313,20 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 page.exceptions,
             )
             self.assertFalse(page.exceptions)
+            self._report_callback_counts(page, first_event)
 
     def _assert_setting_result(self, page, result, first_event):
         # Preserve the interaction timing: diagnostic CDP calls run only on failure.
         if not result:
             self.fail(self._settings_diagnostics(page, first_event))
+        summaries = _callback_summaries(self.setting_events, first_event)
+        if any(summary["max_identical_profile_calls"] >= 50 for summary in summaries):
+            self.fail("Qwen profile callback recursion: " + self._settings_diagnostics(page, first_event))
+
+    def _report_callback_counts(self, page, first_event):
+        for summary in _callback_summaries(self.setting_events, first_event):
+            print(f"Qwen callback counts: {json.dumps(summary, sort_keys=True)}")  # noqa: T201 - bounded fixture diagnostic
+        self._assert_setting_result(page, True, first_event)
 
     def _settings_diagnostics(self, page, first_event):
         state = page.evaluate("""(() => {
@@ -533,6 +567,122 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             for label, value in (("RSS", peak_rss), ("USS", peak_private)):
                 measured = f"{value / 2**20:.1f} MiB" if value is not None else "unavailable"
                 print(f"Isolated drawing browser peak {label}: {measured}")  # noqa: T201 - regression measurement
+
+
+class QwenSettingsRecordingTests(unittest.TestCase):
+    def test_identical_profile_callback_budget_has_exact_fifty_boundary(self):
+        page = object()
+        for count in (49, 50):
+            with self.subTest(count=count):
+                checker = QwenImage21DownloadChromiumTests("test_fun_controlnet_inputs_render_in_qwen_tab")
+                checker.setting_events = [
+                    {"session": "private-session", "callback": "profile_settings", "inputs": ("bf16", "bf16", False)}
+                    for _ in range(count)
+                ]
+                with patch.object(checker, "_settings_diagnostics", return_value="recorded diagnostics") as diagnostics:
+                    if count < 50:
+                        checker._assert_setting_result(page, True, 0)
+                        diagnostics.assert_not_called()
+                    else:
+                        with self.assertRaisesRegex(AssertionError, "profile callback recursion"):
+                            checker._assert_setting_result(page, True, 0)
+                        diagnostics.assert_called_once_with(page, 0)
+
+    def test_callback_summary_keeps_sessions_and_event_windows_separate(self):
+        events = [
+            {"session": "private-session-before", "callback": "profile_settings", "inputs": ("private-input",)}
+            for _ in range(50)
+        ]
+        first_event = len(events)
+        events.extend(
+            [
+                {"session": "private-session-a", "callback": "load_model_selection"},
+                {"session": "private-session-b", "callback": "fun_acc_settings"},
+            ]
+        )
+        for _ in range(49):
+            for session in ("private-session-a", "private-session-b"):
+                events.append({"session": session, "callback": "profile_settings", "inputs": ("private-input",)})
+        summaries = _callback_summaries(events, first_event)
+        self.assertEqual(
+            summaries,
+            [
+                {
+                    "callback_counts": {"load_model_selection": 1, "profile_settings": 49},
+                    "max_identical_profile_calls": 49,
+                },
+                {"callback_counts": {"fun_acc_settings": 1, "profile_settings": 49}, "max_identical_profile_calls": 49},
+            ],
+        )
+        checker = QwenImage21DownloadChromiumTests("test_fun_controlnet_inputs_render_in_qwen_tab")
+        checker.setting_events = events
+        with patch("builtins.print") as output, patch.object(checker, "_settings_diagnostics") as diagnostics:
+            checker._report_callback_counts(object(), first_event)
+        diagnostics.assert_not_called()
+        self.assertEqual(output.call_count, 2)
+        printed = "\n".join(str(call.args[0]) for call in output.call_args_list)
+        self.assertNotIn("private-session", printed)
+        self.assertNotIn("private-input", printed)
+        self.assertIn('"profile_settings": 49', printed)
+
+    def test_changed_profile_input_resets_run_without_using_total_count(self):
+        events = []
+        for inputs, count in (
+            (("bf16", "bf16", False), 49),
+            (("base_q4_k_m", "bf16", False), 3),
+            (("bf16", "bf16", False), 2),
+        ):
+            for _ in range(count):
+                events.extend(
+                    [
+                        {"session": "fixture-session", "callback": "profile_settings", "inputs": inputs},
+                        {"session": "fixture-session", "callback": "save_model_selection"},
+                    ]
+                )
+        self.assertEqual(
+            _callback_summaries(events, 0),
+            [
+                {
+                    "callback_counts": {"profile_settings": 54, "save_model_selection": 54},
+                    "max_identical_profile_calls": 49,
+                }
+            ],
+        )
+
+    def test_recorded_result_survives_gradio_postprocessing(self):
+        from gradio.blocks import postprocess_update_dict
+
+        events = []
+        result = (gr.update(value="base_q4_k_m"),)
+        request = SimpleNamespace(session_hash="recording-session")
+        with patch.object(local_assets, "selection", return_value={"precision": "base_q4_k_m"}):
+            returned = _record_settings_event(events, "load_model_selection", lambda: result, (), request)
+        self.assertIs(returned, result)
+        component = gr.Dropdown(choices=["bf16", "base_q4_k_m"], value="bf16")
+        processed = postprocess_update_dict(component, returned[0])
+        self.assertNotIn("value", returned[0])
+        self.assertEqual(processed["value"], "base_q4_k_m")
+        self.assertEqual(events[0]["result"][0]["value"], "base_q4_k_m")
+        self.assertEqual(events[0]["session"], request.session_hash)
+
+    def test_recorded_selection_captures_library_before_callback(self):
+        events = []
+        selection = {"precision": "base_q4_k_m", "style_loras": [{"name": "style.safetensors", "strength": 0.5}]}
+        request = SimpleNamespace(session_hash="recording-session")
+        result = (gr.update(value="base_q4_k_m"),)
+
+        def callback():
+            selection["precision"] = "bf16"
+            selection["style_loras"][0]["strength"] = 0.25
+            return result
+
+        with patch.object(local_assets, "selection", return_value=selection) as read:
+            returned = _record_settings_event(events, "load_model_selection", callback, (), request)
+        read.assert_called_once_with("qwen21")
+        self.assertIs(returned, result)
+        self.assertEqual(events[0]["selection_before"]["precision"], "base_q4_k_m")
+        self.assertEqual(events[0]["selection_before"]["style_loras"][0]["strength"], 0.5)
+        self.assertLessEqual(events[0]["started"], events[0]["finished"])
 
 
 if __name__ == "__main__":

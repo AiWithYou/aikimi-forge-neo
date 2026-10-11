@@ -224,6 +224,321 @@ class GradioFrontendCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_apptree_mounted_updates_survive_actual_component_prop_sync(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node.js is required to execute the compiled component property sync")
+        module = gradio_frontend_compat
+        assets = Path(gradio.__file__).resolve().parent / "templates/frontend/assets"
+        original = (assets / module.APPTREE_ASSET_NAME).read_text(encoding="utf-8")
+        common = (assets / "i18n-Cp0K4Pzb.js").read_text(encoding="utf-8")
+        dropdown = (assets / "Dropdown-BNDKcPry.js").read_text(encoding="utf-8")
+        script = (
+            "import assert from 'node:assert/strict';\n"
+            + "const originalSource = "
+            + json.dumps(original)
+            + ";\nconst servedSource = "
+            + json.dumps(module.build_patched_apptree_asset().content.decode("utf-8"))
+            + ";\nconst componentSource = "
+            + json.dumps(common)
+            + ";\nconst servedComponentSource = "
+            + json.dumps(module.build_patched_component_state_asset().content.decode("utf-8"))
+            + ";\nconst dropdownSource = "
+            + json.dumps(dropdown)
+            + ";\n"
+            + r"""
+            // Evaluate the wheel's AppTree, component state and Dropdown change
+            // effect. Only signals/ticks are controlled; no browser scheduling
+            // or DOM behavior is inferred from this contract.
+            const sharedKeys = JSON.parse(componentSource.match(/As=(\[[^\]]+\]);/)[1]);
+            const translatedKeys = JSON.parse(componentSource.match(/xs=(\[[^\]]+\]);/)[1]);
+            const changeStart = dropdownSource.indexOf('let p=_(ve(f()));ae(()=>');
+            const changeEnd = dropdownSource.indexOf(';var w=', changeStart);
+            assert.ok(changeStart > 0 && changeEnd > changeStart);
+            function make(source, family = 'dropdown', stateSource = servedComponentSource, formatter = x=>x) {
+                const effects = [], ticks = [], events = [];
+                const stateStart = stateSource.indexOf('class iu{');
+                const stateEnd = stateSource.indexOf('const ou=', stateStart);
+                assert.ok(stateStart > 0 && stateEnd > stateStart);
+                const signal = value => ({value});
+                const read = slot => slot.value;
+                const write = (slot, value) => {slot.value = value};
+                const treeStart = source.indexOf('const q='), treeEnd = source.lastIndexOf('export{');
+                const AppTree = new Function('R','U','W','u','k', `
+                    const I=()=>[new Set(),new Set()],A=null;
+                    const L=(id,interactive)=>interactive??true,f=()=>({component:{},runtime:false});
+                    const j=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+                    ${source.slice(treeStart, treeEnd)}return Q;
+                `)(signal,read,write,()=>new Promise(resolve=>ticks.push(resolve)),sharedKeys);
+                const State = new Function('pt','L','te','Le','As','xs', `
+                    const Lt=value=>value,Z=fn=>fn();
+                    const Ps=()=>false,io=value=>value;
+                    ${stateSource.slice(stateStart, stateEnd)}return iu;
+                `)(signal,read,write,fn=>effects.push(fn),sharedKeys,translatedKeys);
+                const nested = family !== 'dropdown';
+                const components = [{id:1,type:family,props:{visible:true,interactive:true,value:'bf16',
+                    label:'initial',choices:[['BF16','bf16'],['Q4','base_q4_k_m']]}}];
+                if (nested) components.push({id:2,type:'dropdown',props:{visible:true,interactive:true,value:'child'}});
+                const tree = new AppTree(components,
+                    {id:0,children:[{id:1,children:nested ? [{id:2,children:[]}] : []}]},[],
+                    {root:'http://localhost:7860',api_prefix:'/gradio_api'},{},formatter,
+                    (id,event,value)=>events.push({id,event,value}));
+                function mount(id = 1) {
+                    const config = id === 1 ? tree.root.children[0].props : tree.root.children[0].children[0].props;
+                    const firstEffect = effects.length;
+                    const state = new State(config);
+                    const sync = effects[firstEffect];
+                    assert.equal(typeof sync,'function');
+                    const changes = [];
+                    const changeEffects = [];
+                    new Function('_','ve','f','ae','e','t','l',
+                        dropdownSource.slice(changeStart, changeEnd)
+                    )(signal,value=>value,()=>state.props.value,fn=>changeEffects.push(fn),read,write,
+                        {on_change:value=>changes.push(value)});
+                    return {state,config,changes,sync,
+                        checkChange(){for(const effect of changeEffects)effect()}};
+                }
+                return {tree,mount,events,async flush(){
+                    for(const resolve of ticks.splice(0))resolve();
+                    await Promise.resolve();await Promise.resolve();
+                }};
+            }
+            async function restore(source, stateSource) {
+                const fixture = make(source,'dropdown',stateSource), mounted = fixture.mount();
+                mounted.sync();
+                await fixture.tree.update_state(1,{value:'base_q4_k_m',interactive:false,label:'updated'},false);
+                mounted.checkChange();
+                assert.equal(mounted.state.props.value,'base_q4_k_m');
+                mounted.sync();mounted.checkChange();
+                return mounted;
+            }
+            const old = await restore(originalSource,componentSource);
+            assert.equal(old.state.props.value,'bf16');
+            assert.deepEqual(old.changes,['base_q4_k_m','bf16']);
+            const current = await restore(servedSource);
+            assert.equal(current.state.props.value,'base_q4_k_m');
+            assert.equal(current.state.shared.interactive,false);
+            assert.equal(current.state.shared.label,'updated');
+            assert.deepEqual(current.changes,['base_q4_k_m']);
+            {
+                const fixture = make(servedSource), mounted = fixture.mount();
+                mounted.sync();
+                const value = {headers:['LoRA','強度'],data:[]};
+                await fixture.tree.update_state(1,{value},false);
+                await fixture.tree.update_state(1,{label:'partial'},false);
+                mounted.sync();
+                assert.equal(mounted.state.props.value,value);
+                assert.equal(mounted.state.shared.label,'partial');
+                assert.deepEqual(mounted.state.props.choices,[['BF16','bf16'],['Q4','base_q4_k_m']]);
+            }
+            {
+                const fixture = make(servedSource);
+                await fixture.tree.update_state(1,{value:'base_q4_k_m'},false);
+                await fixture.tree.update_state(1,{value:'base_q4_k_m'},false);
+                assert.deepEqual(fixture.events,[{id:1,event:'change',value:null}]);
+                const mounted = fixture.mount();
+                mounted.sync();await fixture.flush();mounted.checkChange();
+                assert.equal(mounted.state.props.value,'base_q4_k_m');
+                assert.deepEqual(mounted.changes,[]);
+            }
+            {
+                const fixture = make(servedSource,'column');
+                const parent = fixture.mount(), child = fixture.mount(2);
+                parent.sync();child.sync();
+                await fixture.tree.update_state(2,{visible:false},false);
+                child.sync();
+                assert.equal(child.state.shared.visible,false);
+                const update = fixture.tree.update_state(1,{visible:true});
+                await fixture.flush();await update;
+                assert.equal(child.state.shared.visible,true);
+                assert.equal(fixture.tree.root.children[0].children[0].original_visibility,false);
+                child.sync();
+                assert.equal(child.state.shared.visible,true);
+            }
+            {
+                const fixture = make(servedSource), mounted = fixture.mount();
+                mounted.sync();
+                let reentered = false;
+                fixture.tree.register_component(1, patch=>{
+                    mounted.state.set_data(patch);
+                    if(!reentered){reentered=true;fixture.tree.update_state(1,{value:'reentrant'},false)}
+                },mounted.state.get_data.bind(mounted.state));
+                await fixture.tree.update_state(1,{value:'outer'},false);
+                mounted.sync();
+                assert.equal(mounted.state.props.value,'reentrant');
+            }
+            {
+                const fixture = make(servedSource), mounted = fixture.mount();
+                // A local input can precede the first source effect. Unchanged
+                // construction props must preserve it even on that first flush.
+                const custom = {token:'local'};
+                mounted.state.set_data({value:'base_q4_k_m',interactive:false,custom});
+                mounted.sync();mounted.checkChange();
+                assert.equal(mounted.state.props.value,'base_q4_k_m');
+                assert.equal(mounted.state.shared.interactive,false);
+                assert.equal(mounted.state.props.custom,custom);
+                mounted.config.shared_props.loading_status = {status:'pending'};
+                mounted.sync();mounted.checkChange();
+                assert.equal(mounted.state.props.value,'base_q4_k_m');
+                assert.equal(mounted.state.shared.interactive,false);
+                assert.deepEqual(mounted.changes,['base_q4_k_m']);
+                assert.deepEqual(mounted.state.shared.loading_status,{status:'pending'});
+                mounted.config.props.value = 'explicit-new';
+                mounted.sync();mounted.checkChange();
+                assert.equal(mounted.state.props.value,'explicit-new');
+                assert.equal(mounted.state.shared.interactive,false);
+                // Same-valued backend output still applies through set_data.
+                mounted.state.set_data({value:'local-again'});
+                await fixture.tree.update_state(1,{value:'explicit-new'},false);
+                mounted.sync();
+                assert.equal(mounted.state.props.value,'explicit-new');
+            }
+            {
+                const fixture = make(servedSource), mounted = fixture.mount();
+                mounted.sync();
+                const value = {headers:['LoRA'],data:[]};
+                mounted.config.props.value = value;
+                mounted.config.props.new_undefined = undefined;
+                mounted.config.props.nan = NaN;
+                mounted.sync();
+                assert.equal(mounted.state.props.value,value);
+                assert.equal(Object.hasOwn(mounted.state.props,'new_undefined'),true);
+                mounted.state.set_data({nan:'local'});
+                mounted.sync();
+                assert.equal(mounted.state.props.nan,'local');
+                delete mounted.config.props.new_undefined;
+                mounted.sync();
+                mounted.state.set_data({new_undefined:'local'});
+                mounted.config.props.new_undefined = undefined;
+                mounted.sync();
+                assert.equal(mounted.state.props.new_undefined,undefined);
+            }
+            {
+                const fixture = make(servedSource), mounted = fixture.mount();
+                mounted.sync();
+                // A registered component can outlive replacement of its node.
+                fixture.tree.root.children = [];
+                await fixture.tree.update_state(1,{value:'detached'},false);
+                assert.equal(mounted.state.props.value,'detached');
+            }
+            {
+                const fixture = make(servedSource);
+                await fixture.tree.update_state(1,{value:'unmounted-old'},false);
+                const mounted = fixture.mount();
+                await fixture.tree.update_state(1,{value:'mounted-new'},false);
+                mounted.sync();
+                await fixture.flush();mounted.sync();
+                assert.equal(mounted.state.props.value,'mounted-new');
+            }
+            {
+                const fixture = make(servedSource,'dropdown',servedComponentSource,
+                    value=>value === 'initial' ? 'translated initial' : value);
+                const mounted = fixture.mount();
+                assert.equal(mounted.state.shared.label,'translated initial');
+                mounted.sync();
+                assert.equal(mounted.state.shared.label,'translated initial');
+                await fixture.tree.update_state(1,{label:'explicit label'},false);
+                mounted.sync();
+                assert.equal(mounted.state.shared.label,'explicit label');
+                mounted.config.shared_props.label = 'source label';
+                mounted.sync();
+                assert.equal(mounted.state.shared.label,'source label');
+            }
+            {
+                const oldFixture = make(originalSource,'dropdown',componentSource);
+                const oldMounted = oldFixture.mount();
+                oldMounted.sync();
+                oldMounted.state.set_data({value:'base_q4_k_m',interactive:false});
+                oldMounted.config.shared_props.id = 2;
+                oldMounted.sync();
+                assert.equal(oldMounted.state.props.value,'bf16');
+                assert.equal(oldMounted.state.shared.interactive,true);
+                const fixture = make(servedSource), mounted = fixture.mount();
+                mounted.sync();
+                mounted.state.set_data({value:'base_q4_k_m',interactive:false});
+                mounted.checkChange();
+                mounted.config.shared_props.id = 2;
+                mounted.sync();mounted.checkChange();
+                // The original effect also registers the same wrapper under
+                // the new ID. A different component must receive its source
+                // fields even when their raw values match the previous ID.
+                assert.equal(mounted.state.shared.id,2);
+                assert.equal(mounted.state.props.value,'bf16');
+                assert.equal(mounted.state.shared.interactive,true);
+                assert.equal((await fixture.tree.get_state(2)).value,'bf16');
+                assert.deepEqual(mounted.changes,['base_q4_k_m','bf16']);
+                mounted.state.set_data({value:'local second',interactive:false});
+                mounted.config.shared_props.loading_status = {status:'pending'};
+                mounted.sync();
+                assert.equal(mounted.state.props.value,'local second');
+                assert.equal(mounted.state.shared.interactive,false);
+                mounted.config.shared_props.id = 1;
+                mounted.sync();
+                assert.equal(mounted.state.props.value,'bf16');
+                assert.equal(mounted.state.shared.interactive,true);
+            }
+            console.log('compiled mounted component prop sync cases passed');
+        """
+        )
+        result = subprocess.run(  # noqa: S603 - execute the audited frontend snippet
+            [node, "--input-type=module", "-"],
+            input=script,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_component_state_sync_snippet_and_hash_fail_closed(self):
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.COMPONENT_STATE_ASSET_NAME
+        source = path.read_bytes()
+        snippet = module._ORIGINAL_COMPONENT_STATE_SYNC
+        self.assertEqual(source.count(snippet), 1)
+        for name, replacement in (("missing", b""), ("duplicated", snippet * 2)):
+            changed = source.replace(snippet, replacement, 1)
+            with (
+                self.subTest(mutation=name),
+                patch.object(Path, "read_bytes", return_value=changed),
+                patch.object(module, "COMPONENT_STATE_ORIGINAL_SHA256", hashlib.sha256(changed).hexdigest()),
+                self.assertRaisesRegex(module.GradioFrontendCompatibilityError, "snippet was not found exactly once"),
+            ):
+                module.build_patched_component_state_asset()
+        with (
+            patch.object(Path, "read_bytes", return_value=source + b" "),
+            self.assertRaisesRegex(module.GradioFrontendCompatibilityError, "audited SHA-256"),
+        ):
+            module.build_patched_component_state_asset()
+
+    def test_component_state_route_is_verified_and_keeps_the_wheel(self):
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.COMPONENT_STATE_ASSET_NAME
+        before = path.read_bytes()
+        asset = module.build_patched_component_state_asset()
+        self.assertEqual(before, path.read_bytes())
+        self.assertEqual(hashlib.sha256(before).hexdigest(), asset.original_sha256)
+        self.assertEqual(hashlib.sha256(asset.content).hexdigest(), asset.patched_sha256)
+        self.assertNotIn(module._ORIGINAL_COMPONENT_STATE_SYNC, asset.content)
+        self.assertEqual(asset.content.count(module._CHANGED_COMPONENT_STATE_SYNC), 1)
+        app = module.create_gradio_compatibility_app(module.build_patched_tabs_asset())
+        client = TestClient(app)
+        url = f"/assets/{asset.filename}"
+        response = client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, asset.content)
+        self.assertEqual(response.headers["etag"], f'"{asset.patched_sha256}"')
+        head = client.head(url)
+        self.assertEqual(head.status_code, 200)
+        self.assertEqual(head.content, b"")
+        self.assertEqual(head.headers["content-length"], str(len(asset.content)))
+        cached = client.get(url, headers={"If-None-Match": f'"{asset.patched_sha256}"'})
+        self.assertEqual(cached.status_code, 304)
+        self.assertEqual(cached.content, b"")
+        with patch.object(gradio, "__version__", "6.29.0"):
+            with self.assertRaises(module.GradioFrontendCompatibilityError):
+                module.build_patched_component_state_asset()
+
     def test_apptree_pending_update_snippets_fail_closed_when_missing_or_duplicated(self):
         module = gradio_frontend_compat
         path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.APPTREE_ASSET_NAME
