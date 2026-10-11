@@ -151,15 +151,21 @@ class ClipCachePolicyTests(unittest.TestCase):
 
     def test_missing_installation_fails_before_process_start(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             (root / "main.py").touch()
             (root / "models").mkdir()
-            with mock.patch.object(bridge.subprocess, "Popen") as popen:
+            with (
+                mock.patch.object(bridge.subprocess, "Popen") as popen,
+                mock.patch.object(bridge.orbit_assets, "trusted_runtime_root", return_value=root) as trusted,
+                mock.patch.object(bridge, "server_runtime_root", return_value=None),
+            ):
                 with self.assertRaisesRegex(bridge.H3BridgeError, "未導入"):
                     bridge.start_runtime(
                         root, "http://127.0.0.1:8199", root / "logs", acceleration=H3Acceleration(clip_cache="auto")
                     )
+                trusted.assert_called_once_with(root)
                 popen.assert_not_called()
+                self.assertFalse((root / "logs").exists())
 
 
 class ClipCacheInstallTests(unittest.TestCase):
