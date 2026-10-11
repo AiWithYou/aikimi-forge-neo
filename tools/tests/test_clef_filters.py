@@ -108,10 +108,17 @@ def test_filter_callbacks_keep_controls_visible_and_do_not_start_inference(tmp_p
 
     import modules_forge.clef.workspace_ui as workspace
 
+    checkpoint_value = str(tmp_path / "checkpoint")
     monkeypatch.setattr(workspace, "history_for", lambda: [])
     monkeypatch.setattr(workspace, "environment_status", lambda: "test")
+    monkeypatch.setattr(workspace, "load_selection", lambda: (checkpoint_value, "", "flash-int8"))
+    monkeypatch.setattr(workspace, "checkpoint_choices", lambda **kwargs: [("test", checkpoint_value)])
+    monkeypatch.setattr(workspace, "compatible_profiles", lambda _: ["flash-int8"])
     with gr.Blocks() as app:
         workspace.build(outputs=tmp_path / "outputs")
+    components = {getattr(component, "label", ""): component for component in app.blocks.values()}
+    checkpoint = components["チェックポイント"]
+    context = components["補足の文章・JSON"]
     panels = [
         component
         for component in app.blocks.values()
@@ -126,10 +133,9 @@ def test_filter_callbacks_keep_controls_visible_and_do_not_start_inference(tmp_p
     callback = next(
         function
         for function in app.fns.values()
-        if function.fn
-        and function.fn.__name__ == "change_filters"
-        and getattr(function.inputs[3], "label", "") == "補足の文章・JSON"
+        if function.fn and function.fn.__name__ == "change_filters" and context in function.inputs
     )
+    assert checkpoint in callback.inputs, "Filter refresh must use the current checkpoint selection"
     assert callback.trigger_mode == "multiple", "A submitted condition snapshot must not be dropped while busy"
     from modules_forge.clef.core import sha256
     from modules_forge.clef.filters import filter_state
@@ -138,7 +144,9 @@ def test_filter_callbacks_keep_controls_visible_and_do_not_start_inference(tmp_p
     Image.new("RGB", (16, 16)).save(path)
     run = mixed_run()
     run["status"] = "complete"
-    run["request"].update(profile="flash-int8", state="evaluate", max_pixels=262144, max_length=4096)
+    run["request"].update(
+        profile="flash-int8", checkpoint=checkpoint_value, state="evaluate", max_pixels=262144, max_length=4096
+    )
     for index, item in enumerate(run["items"]):
         item.update(name=f"{index}.png", kind="image", path=str(path), sha256=sha256(path))
         item["answers"]["style"].update(choice="photo", confidence=0.85)
@@ -152,13 +160,35 @@ def test_filter_callbacks_keep_controls_visible_and_do_not_start_inference(tmp_p
     event["revision"] = 1
     event["rows"][0].update(enabled=True, target="photo", minimum=0.7)
     event["rows"][1].update(enabled=True, target="2+", minimum=0.8)
-    current = ["flash-int8", "evaluate", run["request"]["questions"], 262144, 4096, {"items": run["items"]}]
+    current = [
+        "flash-int8",
+        checkpoint_value,
+        "evaluate",
+        run["request"]["questions"],
+        262144,
+        4096,
+        {"items": run["items"]},
+    ]
     output = callback.fn(run, None, *current, ["入力順", "候補だけ", state, 1], gr.EventData(None, event))
-    assert "候補 1" in output[9] and len(output[1]["data"]) == 1
-    panel_index = next(
-        index
-        for index, component in enumerate(callback.outputs)
-        if (getattr(component, "elem_id", None) or "").startswith("clef-filters-")
+    values = dict(zip(callback.outputs, output, strict=True))
+    counts = next(
+        component for component in callback.outputs if getattr(component, "value", None) == "採用 0件 · 保留 0件"
     )
-    assert output[panel_index] == gr.skip(), "Editing conditions must preserve the native controls and focus"
-    assert output[-1][2]["revision"] == 1
+    results = next(component for component in callback.outputs if getattr(component, "elem_id", None) == "clef-results")
+    heading = next(
+        component for component in callback.outputs if getattr(component, "value", None) == "まだ判定していません"
+    )
+    view = callback.inputs[-1]
+    assert "候補 1" in values[counts] and len(values[results]["data"]) == 1
+    assert "不一致" not in values[heading]
+    assert values[panels[0]] == gr.skip(), "Editing conditions must preserve the native controls and focus"
+    assert values[view][2]["revision"] == 1
+
+    event = copy.deepcopy(values[view][2])
+    event["revision"] = 2
+    current[current.index(checkpoint_value)] = str(tmp_path / "another-checkpoint")
+    output = callback.fn(run, None, *current, values[view], gr.EventData(None, event))
+    changed = dict(zip(callback.outputs, output, strict=True))
+    assert "現在の入力と不一致" in changed[heading], "Changing only the checkpoint must invalidate saved conditions"
+    assert "候補 1" in changed[counts] and len(changed[results]["data"]) == 1
+    assert changed[panels[0]] == gr.skip()
