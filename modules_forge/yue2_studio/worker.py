@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import signal
@@ -15,8 +16,15 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from modules_forge.studio_checkpoints import result_identity, verify_snapshot  # noqa: E402
 from modules_forge.yue2_studio.core import (  # noqa: E402
-    Request, YuE2Error, atomic_json, cpp_command, read_json, runtime_manifest, safe_environment,
+    Request,
+    YuE2Error,
+    atomic_json,
+    cpp_command,
+    read_json,
+    runtime_manifest,
+    safe_environment,
 )
 
 
@@ -72,12 +80,14 @@ def join_windows_job(name):
         kernel.CloseHandle(handle)
 
 
-def native(request: Request, entry: dict, directory: Path, plan_only: bool, report, cancelled, cache=None, stage_callback=None):
+def native(request: Request, entry: dict, directory: Path, plan_only: bool, report, cancelled, cache=None, stage_callback=None, checkpoint_snapshot=None):
     import torch
     from yue2 import YuE2Pipeline
     from yue2.pipeline import SongResult
     from yue2.protocol import GenerationConfig, SongRequest
     from yue2.storage import identity
+
+    result_identity(request.checkpoint, checkpoint_snapshot)
 
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         raise YuE2Error("CUDA/BF16対応GPUが見つかりません。専用PythonのPyTorchとドライバーを確認してください。")
@@ -89,18 +99,24 @@ def native(request: Request, entry: dict, directory: Path, plan_only: bool, repo
     if stage_callback:
         stage_callback("loading")
     report("モデルを検証・読み込み中")
-    key = (tuple(sorted(entry.items())), request.steps, request.max_tokens, budget, request.offload, request.fp8)
+    key = (json.dumps(entry, sort_keys=True), request.steps, request.max_tokens, budget, request.offload, request.fp8)
     if cache is not None and cache.get("key") != key:
         if cache.get("pipe") is not None:
             cache["pipe"].close()
         cache.clear()
     pipe = cache.get("pipe") if cache is not None else None
     if pipe is None:
+        verify_snapshot(checkpoint_snapshot)
         pipe = YuE2Pipeline.from_pretrained(
             entry["model"], vae=entry["vae"], device="cuda", backend="torch-eager",
             generation_config=config, memory_budget_gib=budget, offload_ar=request.offload,
             quantization="fp8" if request.fp8 else "none", local_files_only=True,
         )
+        try:
+            verify_snapshot(checkpoint_snapshot)
+        except ValueError:
+            pipe.close()
+            raise
         if cache is not None:
             cache.update(key=key, pipe=pipe)
     with nullcontext(pipe) if cache is not None else pipe:
@@ -141,10 +157,11 @@ def native(request: Request, entry: dict, directory: Path, plan_only: bool, repo
                 truncated = any(result.truncated.values())
             if cancelled():
                 raise InterruptedError("停止しました。")
-            finish_take(out, request, index, truncated, plan_only, entry)
+            finish_take(out, request, index, truncated, plan_only, entry, checkpoint_snapshot)
 
 
-def finish_take(out: Path, request: Request, index: int, truncated, plan_only: bool, entry: dict):
+def finish_take(out: Path, request: Request, index: int, truncated, plan_only: bool, entry: dict, checkpoint_snapshot=None):
+    result_identity(request.checkpoint, checkpoint_snapshot)
     effective = replace(request, seed=request.song(index)["seed"], candidates=1)
     atomic_json(out / "project.json", {"schema": 1, "request": asdict(effective)})
     atomic_json(out / "studio-result.json", {
@@ -155,10 +172,12 @@ def finish_take(out: Path, request: Request, index: int, truncated, plan_only: b
     final = out.parent / f"take-{index + 1}"
     if final.exists():
         raise FileExistsError("既存の候補を上書きしません。")
+    verify_snapshot(checkpoint_snapshot)
     out.rename(final)
 
 
-def cpp(request: Request, entry: dict, directory: Path, plan_only: bool, report, cancelled):
+def cpp(request: Request, entry: dict, directory: Path, plan_only: bool, report, cancelled, checkpoint_snapshot=None):
+    result_identity(request.checkpoint, checkpoint_snapshot)
     if plan_only:
         raise YuE2Error("audio.cppでは楽譜のみの生成に対応していません。")
     for index in range(request.candidates):
@@ -169,7 +188,8 @@ def cpp(request: Request, entry: dict, directory: Path, plan_only: bool, report,
         command = cpp_command(Path(entry["binary"]), Path(entry["models"]), request, out, index)
         atomic_json(out / "command.json", {"argv": command})
         report(f"候補 {index + 1}/{request.candidates} · audio.cppで生成中（詳細はログ）")
-        process = subprocess.Popen(command, env=safe_environment(), cwd=Path(entry["binary"]).parent,
+        verify_snapshot(checkpoint_snapshot)
+        process = subprocess.Popen(command, env=safe_environment(), cwd=Path(entry["binary"]).parent,  # noqa: S603 - cpp_command validates the native binary and model package.
                                    stdin=subprocess.DEVNULL, stdout=sys.stdout, stderr=sys.stderr, close_fds=True)
         try:
             while process.poll() is None:
@@ -190,7 +210,7 @@ def cpp(request: Request, entry: dict, directory: Path, plan_only: bool, report,
         if header[:4] not in {b"RIFF", b"RF64"} or header[8:12] != b"WAVE":
             raise YuE2Error("出力がWAV形式ではありません。")
         # v0.8.0 does not expose a reliable truncation flag. Never label it false.
-        finish_take(out, request, index, None, False, entry)
+        finish_take(out, request, index, None, False, entry, checkpoint_snapshot)
 
 
 _PIPE_CACHE = {}
@@ -211,14 +231,24 @@ def resident_run(payload):
         request = Request.from_dict(project["request"])
         if request.seed < 0:
             raise YuE2Error("Seedが未確定です。")
-        entry = runtime_manifest(runtime, request.engine)
-        cancelled = lambda: (directory / "cancel").exists()
+        checkpoint_snapshot = project.get("checkpoint_snapshot")
+        entry = project.get("runtime_entry")
+        if entry is None:
+            if request.checkpoint:
+                raise YuE2Error("選択したモデルの開始時情報がありません。実行し直してください。")
+            entry = runtime_manifest(runtime, request.engine)
+        result_identity(request.checkpoint, checkpoint_snapshot)
+        if checkpoint_snapshot is not None and entry.get("checkpoint_identity") != checkpoint_snapshot["identity"]:
+            raise YuE2Error("選択したモデルの開始時情報が一致しません。実行し直してください。")
+        snapshot_options = {"checkpoint_snapshot": checkpoint_snapshot} if checkpoint_snapshot is not None else {}
+        def cancelled():
+            return (directory / "cancel").exists()
         runner = native if request.engine == "official" else cpp
         if runner is native:
-            runner(request, entry, directory, project.get("plan_only", False), report, cancelled, _PIPE_CACHE, set_stage)
+            runner(request, entry, directory, project.get("plan_only", False), report, cancelled, _PIPE_CACHE, set_stage, **snapshot_options)
         else:
             set_stage("generating")
-            runner(request, entry, directory, project.get("plan_only", False), report, cancelled)
+            runner(request, entry, directory, project.get("plan_only", False), report, cancelled, **snapshot_options)
         report("完了しました。履歴から候補を試聴・比較できます。", "complete")
         return 0
     except InterruptedError as exc:

@@ -440,13 +440,16 @@ def run_generation(
         gpu_residency.register("ming_image", lambda: bridge._release_retained_runtime(SERVER_URL), "ming_image")
         seed = request.resolved_seed()
         graph = build_workflow(request, seed)
-        from modules_forge.local_assets import save_selection
+        from modules_forge import local_assets
 
-        save_selection(
+        local_assets.save_selection(
             "ming",
             {
-                key: asdict(request)[key]
-                for key in ("model_path", "text_encoder_path", "vae_path", "loras", "precision")
+                **local_assets.selection("ming"),
+                **{
+                    key: asdict(request)[key]
+                    for key in ("model_path", "text_encoder_path", "vae_path", "loras", "precision")
+                },
             },
         )
         assets = None

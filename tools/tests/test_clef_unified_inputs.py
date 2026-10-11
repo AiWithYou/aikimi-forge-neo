@@ -40,6 +40,7 @@ def test_parent_result_visibility_cannot_override_independent_image_controls(tmp
     rendered = callback(app, "return_current").fn(
         run["id"],
         "flash-int8",
+        "official:flash-int8",
         "",
         run["request"]["questions"],
         262144,
@@ -175,6 +176,7 @@ def test_submit_captures_client_source_and_fresh_draft_instead_of_preview(
         data,
         json_mode,
         "flash-int8",
+        "official:flash-int8",
         "画像専用の補足は混ぜない",
         schema,
         262144,
@@ -194,6 +196,7 @@ def test_submit_captures_client_source_and_fresh_draft_instead_of_preview(
             "invalid",
             "json",
             "flash-int8",
+            "official:flash-int8",
             "",
             schema,
             262144,
@@ -216,6 +219,7 @@ def test_record_result_is_rendered_from_its_snapshot_even_on_image_input(tmp_pat
     monkeypatch.setattr(workspace, "_read_run", lambda _: copy.deepcopy(run))
     current = [
         "flash-int8",
+        "official:flash-int8",
         "画像の補足",
         run["request"]["questions"],
         262144,
@@ -258,6 +262,7 @@ def test_completed_poll_does_not_enable_invalid_input_or_take_over_history(tmp_p
     )
     current = [
         "flash-int8",
+        "official:flash-int8",
         "画像の補足",
         run["request"]["questions"],
         1048576,

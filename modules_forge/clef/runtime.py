@@ -12,7 +12,7 @@ from functools import partial
 import torch
 
 from .bundle import bundle_manifest, read_bundle
-from .core import PREPROCESSING_VERSION, PROFILES
+from .core import PREPROCESSING_VERSION, PROFILES, read_source
 
 
 class LexicalRows:
@@ -138,7 +138,12 @@ class Runner:
             raise RuntimeError(
                 f"{self.settings['label']}のGPUメモリが不足しています。16GB設定またはFlashを選んでください。"
             )
-        source, _ = read_bundle(directory, profile) if directory is not None else bundle_manifest(root, profile)
+        if directory is None:
+            source, _ = bundle_manifest(root, profile)
+        elif self.settings["precision"] == "bf16":
+            source, _ = read_source(directory, self.settings["model"])
+        else:
+            source, _ = read_bundle(directory, profile)
         spec = importlib.util.spec_from_file_location(
             "clef_release_" + self.settings["model"].replace("-", "_"), source / "joint_schema_model.py"
         )

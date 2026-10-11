@@ -16,6 +16,15 @@ from tools.tests.resident_fixtures import worker_script
 
 
 class SenseNovaRequestTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(
+            bridge.local_assets, "file_identity", side_effect=lambda path: {
+                "path": str(Path(path).resolve()), "size": 4, "sha256": bridge.CONVROT_SHA256,
+            },
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_reference_profile_limits_are_explicit(self):
         request = bridge.SenseNovaRequest(
             mode=bridge.MODE_EDIT, prompt="Combine references", generation_profile=bridge.PROFILE_QUALITY,
@@ -289,6 +298,8 @@ class SenseNovaRuntimeTests(unittest.TestCase):
             with (
                 mock.patch.object(bridge, "CONVROT_EXPECTED_BYTES", checkpoint.stat().st_size),
                 mock.patch.object(bridge, "EXPECTED_CONVROT_LAYERS", 1),
+                mock.patch.object(bridge, "DEFAULT_CHECKPOINT_PATH", checkpoint),
+                mock.patch.object(bridge, "compatible_checkpoint", return_value=True),
                 mock.patch.object(bridge, "environment_status", return_value=(True, "ready")),
             ):
                 status = bridge.inspect_runtime(source, checkpoint=checkpoint)
@@ -327,6 +338,14 @@ class SenseNovaRuntimeTests(unittest.TestCase):
 
 class SenseNovaWorkerBridgeTests(unittest.TestCase):
     def setUp(self):
+        patcher = mock.patch.object(
+            bridge.local_assets, "file_identity", side_effect=lambda path: {
+                "path": str(Path(path).resolve()), "size": 4, "sha256": bridge.CONVROT_SHA256,
+            },
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
         self.enterContext(mock.patch.object(gpu_residency, "policy", return_value="release"))
         self.addCleanup(bridge._shutdown_active_worker)
         worker_python = mock.patch.object(bridge, "WORKER_PYTHON", Path(sys.executable))

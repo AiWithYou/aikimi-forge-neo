@@ -421,6 +421,7 @@ def validate_request(request: H3Request, *, require_media: bool = True) -> None:
         if not isinstance(request.acceleration, H3Acceleration):
             raise ValueError("H3 高速化設定の形式が不正です。")
         request.acceleration.validate()
+        request.acceleration.checkpoint_for_mode(request.mode)
         if not isinstance(request.control, fun_control.H3FunControl):
             raise ValueError("Fun ControlNet設定の形式が不正です。")
         request.control.validate()
@@ -554,7 +555,7 @@ def model_file_status(runtime_root: Path | None, acceleration: H3Acceleration | 
     except ValueError as exc:
         raise H3BridgeError(str(exc)) from exc
     return {
-        name: (models / directory / filename).is_file()
+        name: (Path(acceleration.checkpoint).is_file() if acceleration and acceleration.checkpoint and filename == Path(acceleration.checkpoint).name else (models / directory / filename).is_file())
         for name, (directory, filename) in files.items()
     }
 
@@ -620,6 +621,7 @@ def _runtime_arguments_are_allowed(arguments: Sequence[str]) -> bool:
         "--reserve-vram",
         "--vram-headroom",
         "--whitelist-custom-nodes",
+        "--extra-model-paths-config",
     }
     flag_options = {
         "--cache-classic",
@@ -659,6 +661,16 @@ def _runtime_arguments_are_allowed(arguments: Sequence[str]) -> bool:
             continue
         if option not in value_options:
             return False
+        if option == "--extra-model-paths-config":
+            if has_equals:
+                index += 1
+                continue
+            index += 1
+            if index >= len(arguments) or arguments[index].startswith("--"):
+                return False
+            while index < len(arguments) and not arguments[index].startswith("--"):
+                index += 1
+            continue
         if option == "--whitelist-custom-nodes":
             index += 1
             while index < len(arguments) and not arguments[index].startswith("--"):
@@ -1192,6 +1204,7 @@ def start_runtime(
     initial_readiness: RuntimeReadiness | None = None,
     acceleration: H3Acceleration | None = None,
     log_prefix: str = "minimax-h3",
+    extra_model_configs: tuple[str, ...] = (),
 ) -> RuntimeReadiness:
     if _RUNTIME_SETUP_ACTIVE:
         raise H3BridgeError("H3のセットアップが完了するまでお待ちください。")
@@ -1203,10 +1216,12 @@ def start_runtime(
     runtime_root = resolve_runtime_root(runtime_root)
     try:
         with setup_lock(runtime_root):
-            return _start_runtime_locked(
+            readiness = _start_runtime_locked(
                 runtime_root, server_url, log_directory, runtime_profile, wait_seconds, initial_readiness, acceleration,
                 log_prefix,
+                extra_model_configs,
             )
+            return require_checkpoint_registration(readiness, runtime_root, acceleration or H3Acceleration())
     except ValueError as exc:
         raise H3BridgeError(str(exc)) from exc
 
@@ -1220,6 +1235,7 @@ def _start_runtime_locked(
     initial_readiness: RuntimeReadiness | None = None,
     acceleration: H3Acceleration | None = None,
     log_prefix: str = "minimax-h3",
+    extra_model_configs: tuple[str, ...] = (),
 ) -> RuntimeReadiness:
     global _MANAGED_PROCESS, _MANAGED_PROCESS_IDENTITY
     acceleration = acceleration or H3Acceleration()
@@ -1285,6 +1301,12 @@ def _start_runtime_locked(
         extra_nodes += (ming_local.NODE_NAME,)
     command = _runtime_command(python, port, runtime_profile, acceleration=acceleration,
                                trusted_custom_nodes=extra_nodes)
+    if extra_model_configs:
+        command.extend(["--extra-model-paths-config", *extra_model_configs])
+    selected_checkpoint = acceleration.checkpoint or acceleration.model_path
+    if selected_checkpoint:
+        from modules_forge.studio_checkpoints import write_comfy_config
+        command.extend(["--extra-model-paths-config", str(write_comfy_config(runtime_root, selected_checkpoint))])
 
     spawned = None
     with _PROCESS_LOCK:
@@ -1482,9 +1504,12 @@ def _restart_runtime_locked(
     wait_seconds: float = 120.0,
     acceleration: H3Acceleration | None = None,
     log_prefix: str = "minimax-h3",
+    extra_model_configs: tuple[str, ...] = (),
 ) -> RuntimeReadiness:
     runtime_root = resolve_runtime_root(runtime_root)
     log_options = {"log_prefix": log_prefix} if log_prefix != "minimax-h3" else {}
+    if extra_model_configs:
+        log_options["extra_model_configs"] = extra_model_configs
     normalized_url = normalize_loopback_url(server_url)
     active_generations = _active_generation_count()
     if active_generations:
@@ -1663,6 +1688,9 @@ def _ensure_ready_locked(
     if runtime_profile not in RUNTIME_PROFILES:
         raise H3BridgeError(f"未対応のH3 runtime profileです: {runtime_profile}")
     readiness = inspect_readiness(runtime_root, server_url, acceleration=acceleration)
+    if readiness.connected:
+        acceleration = acceleration or H3Acceleration()
+        readiness = ensure_checkpoint_registration(readiness, runtime_root, server_url, log_directory, acceleration, runtime_profile)
     if not readiness.connected:
         readiness = start_runtime(
             runtime_root,
@@ -1672,7 +1700,35 @@ def _ensure_ready_locked(
             initial_readiness=readiness,
             acceleration=acceleration,
         )
+    require_checkpoint_registration(readiness, runtime_root, acceleration or H3Acceleration())
     return validate_readiness(readiness, runtime_profile)
+
+
+def require_checkpoint_registration(readiness, runtime_root, acceleration):
+    from modules_forge.studio_checkpoints import config_loaded
+
+    if not config_loaded(readiness, runtime_root, acceleration.checkpoint or acceleration.model_path):
+        raise H3BridgeError("選択した本体に対応する探索先の登録を確認できません。実行環境の起動引数を確認してください。")
+    return readiness
+
+
+def ensure_checkpoint_registration(readiness, runtime_root, server_url, log_directory, acceleration, runtime_profile=RUNTIME_PROFILE_FAST, log_prefix="minimax-h3"):
+    from modules_forge.studio_checkpoints import config_loaded, user_comfy_configs
+
+    checkpoint = acceleration.checkpoint or acceleration.model_path
+    if config_loaded(readiness, runtime_root, checkpoint):
+        return readiness
+    identity = (runtime_root, normalize_loopback_url(server_url))
+    with _PROCESS_LOCK:
+        managed = _MANAGED_PROCESS is not None and _MANAGED_PROCESS.poll() is None and _MANAGED_PROCESS_IDENTITY == identity
+    if not managed:
+        if not checkpoint:
+            raise H3BridgeError("接続中の外部ComfyUIの起動引数から .neo-checkpoints-*.json の追加設定だけを取り除き、再起動してください。")
+        from modules_forge.studio_checkpoints import write_comfy_config
+        config = write_comfy_config(runtime_root, checkpoint)
+        raise H3BridgeError(f'接続中の外部ComfyUIへ選択モデルを登録してください。起動引数に --extra-model-paths-config "{config}" を追加して再起動します。')
+    readiness = _restart_runtime_locked(runtime_root, server_url, log_directory, runtime_profile=runtime_profile, acceleration=acceleration, log_prefix=log_prefix, extra_model_configs=user_comfy_configs(readiness))
+    return require_checkpoint_registration(readiness, runtime_root, acceleration)
 
 
 def ensure_ready(
@@ -2271,7 +2327,10 @@ def mirror_result(
     prompt_id: str,
     seed: int,
     readiness: RuntimeReadiness,
+    *, checkpoint_snapshot: dict | None = None,
 ) -> Path:
+    from modules_forge.studio_checkpoints import result_identity, verify_snapshot
+    checkpoint_identity = result_identity(request.acceleration.checkpoint, checkpoint_snapshot)
     output_directory.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     token = uuid.uuid4().hex
@@ -2308,6 +2367,7 @@ def mirror_result(
         "selected_models": {
             name: filename for name, (_, filename) in request.acceleration.model_files(MODEL_FILES).items()
         },
+        "checkpoint_identity": checkpoint_identity,
         "video_decoder": "MiniMaxH3FastVAEDecode" if request.acceleration.decode_mode == "fast" else "VAEDecode",
         "comfyui_version": readiness.comfy_version,
         "comfy_kitchen_version": readiness.package_versions.get("comfy-kitchen"),
@@ -2326,6 +2386,7 @@ def mirror_result(
             encoding="utf-8",
             newline="\n",
         )
+        verify_snapshot(checkpoint_snapshot)
         os.replace(staged_metadata, metadata_path)
         try:
             os.replace(staged_video, target)
@@ -2470,6 +2531,8 @@ def run_generation(
     runtime_profile: str = RUNTIME_PROFILE_FAST,
     poll_seconds: float | None = None,
 ) -> Iterator[dict[str, Any]]:
+    from modules_forge.studio_checkpoints import snapshot_checkpoint
+    checkpoint_snapshot = snapshot_checkpoint(request.acceleration.checkpoint)
     ownership = GPUOwnership()
     ownership.engine = "h3"
     waiting_id = str(uuid.uuid4())
@@ -2482,7 +2545,7 @@ def run_generation(
         if _is_cancelled_job(waiting_id):
             raise H3GenerationCancelled("生成を停止しました。")
         release_forge_vram()
-        yield from _run_generation(request, runtime_root, server_url, log_directory, output_directory, runtime_profile, poll_seconds, ownership, waiting_id)
+        yield from _run_generation(request, runtime_root, server_url, log_directory, output_directory, runtime_profile, poll_seconds, ownership, waiting_id, checkpoint_snapshot)
     finally:
         with _ACTIVE_GENERATION_LOCK:
             retained = ownership in _GPU_OWNERSHIPS.values()
@@ -2531,7 +2594,10 @@ def _run_generation(
     poll_seconds: float | None,
     ownership: GPUOwnership,
     submission_id: str,
+    checkpoint_snapshot: dict | None = None,
 ) -> Iterator[dict[str, Any]]:
+    from modules_forge.studio_checkpoints import result_identity, verify_snapshot
+    result_identity(request.acceleration.checkpoint, checkpoint_snapshot)
     validate_request(request)
     yield {
         "stage": "runtime",
@@ -2539,6 +2605,7 @@ def _run_generation(
         "progress": 0.03,
         "prompt_id": submission_id,
     }
+    verify_snapshot(checkpoint_snapshot)
     readiness = ensure_ready(
         runtime_root,
         server_url,
@@ -2561,6 +2628,7 @@ def _run_generation(
         seed = request.resolved_seed
         workflow = build_workflow(request, prepared, seed=seed)
         with _RUNTIME_LIFECYCLE_LOCK:
+            verify_snapshot(checkpoint_snapshot)
             readiness = ensure_ready(
                 runtime_root,
                 server_url,
@@ -2579,6 +2647,7 @@ def _run_generation(
             server_process = _loopback_server_process(server_url)
             if server_process is None:
                 raise H3BridgeError("H3の送信先processを確認できません。")
+            verify_snapshot(checkpoint_snapshot)
             pending_jobs.write({
                 "version": 1, "prompt_id": submission_id,
                 "runtime_root": os.fspath(runtime_root.resolve()),
@@ -2671,7 +2740,9 @@ def _run_generation(
                         )
                 else:  # pragma: no cover - loop either breaks or raises
                     raise H3BridgeError(f"完成済みH3ジョブの結果を取得できません: {history_error}")
-                target = mirror_result(source, output_directory, request, prompt_id, seed, readiness)
+                verify_snapshot(checkpoint_snapshot)
+                snapshot_options = {"checkpoint_snapshot": checkpoint_snapshot} if checkpoint_snapshot is not None else {}
+                target = mirror_result(source, output_directory, request, prompt_id, seed, readiness, **snapshot_options)
                 handoff_warning = workflow_handoff.finish_generation(target, handoff_record, handoff_warning, source=source)
                 yield {
                     "stage": "complete",

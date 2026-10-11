@@ -9,6 +9,7 @@ import threading
 import uuid
 from dataclasses import replace
 from functools import partial
+from pathlib import Path
 
 import gradio as gr
 
@@ -428,33 +429,101 @@ def _restore_assets(record):
     )
 
 
-def on_ui_tabs():
+def model_candidate(path):
+    from modules_forge.ming_local import validate_denoiser
+
+    try:
+        validate_denoiser(path)
+        return True
+    except (OSError, ValueError, TypeError, KeyError):
+        return False
+
+
+def model_choices(directory="", current=""):
+    from modules_forge import local_assets, model_catalog
+
+    roots = model_catalog.checkpoint_roots(
+        "Ming-Image", (studio.runtime_root() / "models/diffusion_models",), directory
+    )
+    paths = model_catalog.discover_files(roots, suffixes=(".safetensors",), validator=model_candidate)
+    paths.extend(path for path in local_assets.library().get("ming_model", []) if model_candidate(Path(path)))
+    return [("公式モデル", ""), *model_catalog.choice_labels(paths, roots, current)]
+
+
+def save_model_selection(precision, model, encoder, vae, directory, loras, rows):
+    from modules_forge import local_assets
+
+    model = str(Path(model.strip().strip('"')).expanduser().resolve()) if model else ""
+    local_assets.save_selection(
+        "ming",
+        {
+            **local_assets.selection("ming"),
+            "model_path": model,
+            "text_encoder_path": encoder,
+            "vae_path": vae,
+            "precision": precision,
+            "directory": directory,
+            "loras": list(local_assets.lora_settings(loras, local_assets.lora_rows(loras, rows))),
+        },
+    )
+
+
+def load_model_selection():
     from modules_forge import local_assets
 
     saved = local_assets.selection("ming")
+    model, directory = saved.get("model_path", ""), saved.get("directory", "")
+    loras = saved.get("loras", [])
+    names = [item["name"] for item in loras]
+    rows = local_assets.lora_rows(names, [[item["name"], item["strength"]] for item in loras])
+    return (
+        gr.update(choices=model_choices(directory, model), value=model),
+        gr.update(value=saved.get("text_encoder_path", "")),
+        gr.update(value=saved.get("vae_path", "")),
+        gr.update(value=saved.get("precision") or default_precision()),
+        gr.update(value=directory),
+        gr.update(value=names),
+        gr.update(value=rows, visible=bool(names)),
+    )
+
+
+def default_precision():
     root = studio.runtime_root()
-    initial_precision = "int8"
-    if not studio.model_ready(root, verify_hash=False) and studio.model_ready(
-        root, verify_hash=False, precision="w4a8"
-    ):
-        initial_precision = "w4a8"
-    initial_precision = saved.get("precision", initial_precision)
+    return (
+        "w4a8"
+        if not studio.model_ready(root, verify_hash=False)
+        and studio.model_ready(root, verify_hash=False, precision="w4a8")
+        else "int8"
+    )
+
+
+def on_ui_tabs():
+    from modules_forge import local_assets, model_catalog
+
+    saved = local_assets.selection("ming")
+    root = studio.runtime_root()
+    initial_precision = saved.get("precision") or default_precision()
     saved_loras = saved.get("loras", [])
     with gr.Blocks(analytics_enabled=False) as tab:
         with gr.Row(elem_id="ming-workspace"):
             with gr.Column(scale=1, min_width=300, elem_id="ming-controls"):
                 gr.Markdown("### Ming Image Design", elem_id="ming-heading")
-                with gr.Accordion("モデル・LoRA", open=False, elem_id="ming-models") as model_section:
+                with gr.Row():
                     model_path = gr.Dropdown(
-                        label="本体モデル",
-                        choices=[
-                            ("標準モデル", ""),
-                            *local_assets.choices("ming_model", [root / "models/diffusion_models"]),
-                        ],
+                        label="チェックポイント",
+                        choices=model_choices(saved.get("directory", ""), saved.get("model_path", "")),
                         value=saved.get("model_path", ""),
                         allow_custom_value=True,
                         elem_id="ming-local-model",
-                        info="一覧から選択、または手元のMing .safetensorsのフルパスを貼り付けてEnter。",
+                        scale=4,
+                    )
+                    refresh_assets = gr.Button("一覧を更新", scale=1)
+                with gr.Accordion("LoRA・モデル詳細", open=False, elem_id="ming-models") as model_section:
+                    search_directory = gr.Textbox(
+                        value=saved.get("directory", ""),
+                        label="探索フォルダー",
+                        placeholder="models/Ming-Image/checkpoints",
+                        elem_id="ming-search-directory",
                     )
                     loras = gr.Dropdown(
                         label="追加LoRA（複数選択）",
@@ -495,7 +564,6 @@ def on_ui_tabs():
                             placeholder="空欄: 標準の共通部品",
                             elem_id="ming-local-vae",
                         )
-                    refresh_assets = gr.Button("モデル・LoRA一覧を更新", size="sm")
                 prompt = gr.Textbox(label="プロンプト", lines=7, placeholder=EXAMPLE, elem_id="ming-prompt")
                 hint = gr.Markdown("自然文・JSONを入力できます。", elem_id="ming-input-hint")
                 with gr.Accordion("画像に載せる文字 · 任意", open=False):
@@ -578,6 +646,16 @@ def on_ui_tabs():
         job = gr.State({})
         private = {"api_visibility": "private", "show_progress": "hidden"}
         source_inputs = [precision, model_path, text_encoder_path, vae_path]
+        selection_inputs = [*source_inputs, search_directory, loras, strengths]
+        for component in selection_inputs:
+            model_catalog.configure_component(component)
+            component.input(save_model_selection, inputs=selection_inputs, queue=False, **private)
+        tab.load(
+            load_model_selection,
+            outputs=[model_path, text_encoder_path, vae_path, precision, search_directory, loras, strengths],
+            queue=False,
+            **private,
+        )
         for component in [*source_inputs, loras]:
             component.do_not_save_to_config = True  # Do not replace the asset library with old UI defaults.
         inputs = [
@@ -688,14 +766,16 @@ def on_ui_tabs():
             **private,
         )
 
-        def refresh_choices(model, selected):
-            models = [("標準モデル", ""), *local_assets.choices("ming_model", [root / "models/diffusion_models"])]
+        def refresh_choices(model, selected, directory):
+            models = model_choices(directory, model)
             adapters = local_assets.choices(
                 "ming_lora", [root / "models/loras", local_assets.ROOT / "models/Lora/Ming"]
             )
             return gr.update(choices=models, value=model), gr.update(choices=adapters, value=selected)
 
-        refresh_assets.click(refresh_choices, inputs=[model_path, loras], outputs=[model_path, loras], **private)
+        refresh_assets.click(
+            refresh_choices, inputs=[model_path, loras, search_directory], outputs=[model_path, loras], **private
+        )
         record.change(_result_controls, inputs=record, outputs=[result_tools, background, double], **private)
         tab.load(_readiness, inputs=source_inputs, outputs=readiness_outputs, **private)
     return [(tab, "Ming Image", "ming_image_studio")]

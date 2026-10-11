@@ -591,9 +591,14 @@ class NegPiPUITests(unittest.TestCase):
         with gr.Blocks(analytics_enabled=False):
             duration = gr.Slider(5, 15, value=5, step=1)
             controls, buttons = create_acceleration_controls(duration)
-        self.assertEqual(len(controls), len(H3Acceleration().values()))
+        # The always-visible checkpoint selector lives outside the optional panel.
+        selected_checkpoint = ""
+        values = [c.value for c in controls] + [selected_checkpoint]
+        self.assertEqual(len(values), len(H3Acceleration().values()))
         self.assertEqual(len(buttons), 3)
-        self.assertEqual(H3Acceleration.from_values([c.value for c in controls]), H3Acceleration())
+        self.assertEqual(H3Acceleration.from_values(values), H3Acceleration())
+        values[-1] = str(ROOT / "models" / "missing_fl2va.safetensors")
+        self.assertEqual(H3Acceleration.from_values(values).checkpoint, values[-1])
 
     def test_image_ui_binds_negpip_to_generation_and_runtime_controls(self):
         package = ModuleType("modules")
@@ -612,13 +617,20 @@ class NegPiPUITests(unittest.TestCase):
             tabs = module.on_ui_tabs()
         blocks = tabs[0][0]
         functions = {entry.fn.__name__: entry for entry in blocks.fns.values() if entry.fn is not None}
-        self.assertEqual(len(functions["_generate"].inputs), 21)
-        self.assertEqual(len(functions["_runtime_action"].inputs), 11)
-        self.assertEqual(len(functions["_restart"].inputs), 11)
+        generate_inputs = functions["_generate"].inputs
+        runtime_inputs = functions["_runtime_action"].inputs
+        restart_inputs = functions["_restart"].inputs
+        self.assertEqual(len(generate_inputs), 3 + 10 + len(H3NegPiP().values()) + 1)
+        self.assertEqual(runtime_inputs[-len(H3NegPiP().values()) - 1:], generate_inputs[-len(H3NegPiP().values()) - 1:])
+        self.assertEqual(restart_inputs, runtime_inputs)
+        self.assertEqual(generate_inputs[-1].label, "チェックポイント")
+        selected_checkpoint = str(ROOT / "models" / "missing_fl2va.safetensors")
         request = module._request(
-            "text", "apple", None, 768, 768, 20, "-1", "simple", 0, False, *H3NegPiP(enabled=True).values()
+            "text", "apple", None, 768, 768, 20, "-1", "simple", 0, False, *H3NegPiP(enabled=True).values(), selected_checkpoint
         )
         self.assertTrue(request.negpip.enabled)
+        self.assertEqual(request.checkpoint, selected_checkpoint)
+        self.assertEqual(request.runtime_acceleration.checkpoint, selected_checkpoint)
 
 
 if __name__ == "__main__":

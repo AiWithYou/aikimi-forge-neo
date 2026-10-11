@@ -8,6 +8,7 @@ from PIL import Image
 
 from modules import script_callbacks
 from modules.paths import data_path
+from modules_forge.model_catalog import configure_component
 from modules_forge.sensenova_u15_bridge import (
     AUTO_RESOLUTION_PIXELS,
     DEFAULT_CHECKPOINT_PATH,
@@ -23,7 +24,9 @@ from modules_forge.sensenova_u15_bridge import (
     SenseNovaGenerationCancelled,
     SenseNovaRequest,
     cancel_generation,
+    checkpoint_choices,
     inspect_runtime,
+    load_checkpoint_selection,
     normalize_gallery_images,
     parse_resolution,
     progress_html,
@@ -32,6 +35,7 @@ from modules_forge.sensenova_u15_bridge import (
     resolution_choices,
     run_generation,
     runtime_status_html,
+    save_checkpoint_selection,
     validate_request,
 )
 from modules_forge.studio_dimensions import custom_dimensions
@@ -567,8 +571,19 @@ def _cancel(job_id: str):
     return progress_html("cancel", message, 0.0), gr.update(interactive=False)
 
 
+def _refresh_checkpoints(checkpoint, search_directory):
+    checkpoint = checkpoint or str(DEFAULT_CHECKPOINT_PATH)
+    return gr.update(choices=checkpoint_choices(search_directory, checkpoint), value=checkpoint)
+
+
+def _load_checkpoints():
+    checkpoint, search_directory = load_checkpoint_selection()
+    return _refresh_checkpoints(checkpoint, search_directory), gr.update(value=search_directory)
+
+
 def _build_ui():
-    initial_status = inspect_runtime(DEFAULT_SOURCE_PATH, checkpoint=DEFAULT_CHECKPOINT_PATH)
+    selected_checkpoint, selected_search = load_checkpoint_selection()
+    initial_status = inspect_runtime(DEFAULT_SOURCE_PATH, checkpoint=selected_checkpoint)
     initial_profile = (
         PROFILE_OFFICIAL_8STEP if initial_status.lora_ready else PROFILE_QUALITY
     )
@@ -578,6 +593,7 @@ def _build_ui():
         mode=MODE_TEXT,
         prompt="",
         generation_profile=initial_profile,
+        checkpoint=selected_checkpoint,
         vram_mode="reference",
         steps=initial_steps,
         cfg_scale=initial_cfg,
@@ -594,6 +610,15 @@ def _build_ui():
                 </section>
                 """
             )
+            with gr.Accordion("チェックポイント", open=True):
+                with gr.Row():
+                    checkpoint_path = configure_component(gr.Dropdown(
+                        choices=checkpoint_choices(selected_search, selected_checkpoint),
+                        value=selected_checkpoint, label="チェックポイント", scale=5,
+                    ))
+                    refresh_checkpoints = gr.Button("一覧を更新", scale=1)
+                with gr.Accordion("詳細", open=False):
+                    search_directory = configure_component(gr.Textbox(value=selected_search, label="探索フォルダー"))
             runtime_status = gr.HTML(
                 value=runtime_status_html(initial_status), elem_id="sn-runtime-status"
             )
@@ -884,10 +909,6 @@ def _build_ui():
                                 label="正式版モデルID",
                                 interactive=False,
                             )
-                            checkpoint_path = gr.Textbox(
-                                value=os.fspath(DEFAULT_CHECKPOINT_PATH),
-                                label="INT8 ConvRot checkpoint",
-                            )
                             source_path = gr.Textbox(
                                 value=os.fspath(DEFAULT_SOURCE_PATH),
                                 label="固定済みConvRotランタイム",
@@ -1176,7 +1197,19 @@ def _build_ui():
             show_progress="hidden",
             api_visibility="private",
         )
-        interface.load(
+        refresh_checkpoints.click(
+            _refresh_checkpoints, inputs=[checkpoint_path, search_directory], outputs=[checkpoint_path],
+            queue=False, show_progress="hidden", api_visibility="private",
+        )
+        for component in (checkpoint_path, search_directory):
+            component.input(
+                save_checkpoint_selection, inputs=[checkpoint_path, search_directory],
+                queue=False, show_progress="hidden", api_visibility="private",
+            )
+        checkpoint_load = interface.load(
+            _load_checkpoints, outputs=[checkpoint_path, search_directory], queue=False, show_progress="hidden", api_visibility="private",
+        )
+        checkpoint_load.then(
             _refresh_runtime,
             inputs=[source_path, checkpoint_path, mode, generation_profile],
             outputs=[
@@ -1188,7 +1221,11 @@ def _build_ui():
                 timestep_shift,
             ],
             queue=False,
+            show_progress="hidden",
         )
+
+        for component in interface.blocks.values():
+            configure_component(component)
 
     return [(interface, "SenseNova U1.5", "sensenova_u15_studio")]
 

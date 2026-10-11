@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields
+from pathlib import Path
 from typing import Any
 
 from modules_forge import minimax_h3_hybrid as hybrid
@@ -53,11 +54,20 @@ class H3Acceleration:
     jev_max_calls: int = 0
     jev_max_wait_seconds: float = 0.0
     compiler_mode: str = "on"
+    checkpoint: str = ""
+    model_path: str = ""  # Shared Comfy runtime registration for another Studio adapter.
+
+    def __post_init__(self):
+        if isinstance(self.checkpoint, str) and self.checkpoint:
+            from modules_forge.studio_checkpoints import h3_variant
+            object.__setattr__(self, "model_variant", h3_variant(self.checkpoint))
 
     def validate(self) -> None:
         from modules_forge.jev_sparse.common import JevBudget
 
         JevBudget(self.jev_max_calls, self.jev_max_wait_seconds)
+        if not isinstance(self.checkpoint, str) or not isinstance(self.model_path, str):
+            raise ValueError("チェックポイントの指定が不正です。")
         if not isinstance(self.jev_cadence, str) or self.jev_cadence not in {"once", "interval", "step"}:
             raise ValueError("Jevの再判定頻度が不正です。")
         interval = self.jev_interval
@@ -114,7 +124,7 @@ class H3Acceleration:
         if not values:
             return cls()
         previous_count = 8 + len(H3NegPiP().values())
-        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6, previous_count + 8, previous_count + 10, previous_count + 11):
+        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6, previous_count + 8, previous_count + 10, previous_count + 11, previous_count + 12):
             raise ValueError("H3 追加設定の項目数が一致しません。UIを再読み込みしてください。")
         result = cls(
             *values[:8], negpip=H3NegPiP.from_values(values[8:previous_count]),
@@ -125,6 +135,7 @@ class H3Acceleration:
             jev_max_calls=values[previous_count + 8] if len(values) >= previous_count + 10 else 0,
             jev_max_wait_seconds=values[previous_count + 9] if len(values) >= previous_count + 10 else 0.0,
             compiler_mode=values[previous_count + 10] if len(values) >= previous_count + 11 else "on",
+            checkpoint=values[previous_count + 11] or "" if len(values) >= previous_count + 12 else "",
         )
         result.validate()
         return result
@@ -133,7 +144,7 @@ class H3Acceleration:
         return asdict(self)
 
     def values(self) -> tuple:
-        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid", "jev_cadence", "jev_interval", "jev_max_calls", "jev_max_wait_seconds", "compiler_mode"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values() + (self.jev_cadence, self.jev_interval, self.jev_max_calls, self.jev_max_wait_seconds, self.compiler_mode)
+        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid", "jev_cadence", "jev_interval", "jev_max_calls", "jev_max_wait_seconds", "compiler_mode", "checkpoint", "model_path"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values() + (self.jev_cadence, self.jev_interval, self.jev_max_calls, self.jev_max_wait_seconds, self.compiler_mode, self.checkpoint)
 
 
     def runtime_packs(self) -> tuple[str, ...]:
@@ -148,7 +159,22 @@ class H3Acceleration:
                 result[mode] = ("diffusion_models", filename)
         if self.video_vae == "int8":
             result["Video VAE"] = ("vae", INT8_VIDEO_VAE)
+        if self.checkpoint:
+            from modules_forge.studio_checkpoints import h3_role
+            role = h3_role(Path(self.checkpoint))
+            for mode in (("FL2VA", "Ref2VA") if role == "both" else ("Ref2VA",) if role == "ref2va" else ("FL2VA",)):
+                result[mode] = ("diffusion_models", Path(self.checkpoint).name)
         return result
+
+    def checkpoint_for_mode(self, mode: str) -> str:
+        if not self.checkpoint:
+            return ""
+        from modules_forge.studio_checkpoints import h3_role
+        role = h3_role(Path(self.checkpoint))
+        required = "ref2va" if mode == "references" else "fl2va"
+        if role not in {required, "both"}:
+            raise ValueError(f"選択したチェックポイントは{'Ref2VA' if required == 'ref2va' else 'FL2VA'}生成に対応しません。")
+        return self.checkpoint
 
     def extra_nodes(self) -> set[str]:
         return ({FAST_VAE_NODE} if self.decode_mode == "fast" else set()) | ({SPARSE_NODE} if self.attention != "dense" else set()) | ({NEGPIP_NODE} if self.negpip.enabled else set()) | (({negpip_cache.NODE} if self.negpip.enabled else CLIP_CACHE_NODES) if self.clip_cache != "off" else set()) | (hybrid.NODES if self.hybrid.enabled else set())
@@ -156,6 +182,7 @@ class H3Acceleration:
     def apply_workflow(self, workflow: dict, base_files: Mapping, mode: str) -> None:
         """Patch only selected axes; the default graph stays byte-for-byte equal."""
         self.validate()
+        self.checkpoint_for_mode(mode)
         model_files = self.model_files(base_files)
         workflow["1"]["inputs"]["unet_name"] = model_files["Ref2VA" if mode == "references" else "FL2VA"][1]
         workflow["3"]["inputs"]["vae_name"] = model_files["Video VAE"][1]

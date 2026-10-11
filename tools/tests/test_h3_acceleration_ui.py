@@ -102,15 +102,38 @@ class H3AccelerationUITests(unittest.TestCase):
         for name, steps in (("_turbo_four_updates", 4), ("_turbo_eight_updates", 8)):
             index, fn = self.callback(name)
             self.assertEqual([item.elem_id for item in fn.outputs][:3], ["h3-model-variant", "h3-steps", "h3-scheduler"])
-            result = asyncio.run(self.demo.process_api(index, ["16:9", "native", 10.0, "match"]))
+            result = asyncio.run(self.demo.process_api(index, ["16:9", "native", 10.0, "match", ""]))
             data = result["data"]
             self.assertEqual(data[:3], ["fused_turbo", steps, "simple"])
             self.assertIn(f"{steps} steps", data[3])
             self.assertEqual(len(data), 5)
 
+    def test_saved_custom_w4a8_stays_derived_after_initialization(self):
+        self.assertTrue(self.by_id["h3-model-variant"].do_not_save_to_config)
+        _, synchronize = self.callback("_checkpoint_acceleration_updates")
+        self.assertEqual(synchronize.inputs[0].label, "チェックポイント")
+        self.assertEqual(synchronize.outputs[0], self.by_id["h3-model-variant"])
+        with patch.object(self.ui, "_initial_ui_updates", return_value=tuple(range(21))), patch("modules_forge.studio_checkpoints.h3_variant", return_value="w4a8"):
+            result = self.ui._initial_ui_with_acceleration("", "http://127.0.0.1:8188", "fast", "16:9", "custom.safetensors")
+            self.assertEqual(result[21]["value"], "w4a8")
+            self.assertFalse(result[21]["interactive"])
+            self.assertFalse(result[21 + CONTROL_COUNT]["interactive"])
+            self.assertFalse(result[22 + CONTROL_COUNT]["interactive"])
+            updates = self.ui._checkpoint_acceleration_updates("custom.safetensors")
+            self.assertEqual(updates[0]["value"], "w4a8")
+            self.assertFalse(updates[0]["interactive"])
+
+    def test_custom_base_rejects_turbo_preset(self):
+        with patch("modules_forge.studio_checkpoints.h3_variant", return_value="base"):
+            with self.assertRaisesRegex(ValueError, "Turbo"):
+                self.ui._turbo_four_updates("16:9", "native", 10.0, "match", "custom.safetensors")
+            updates = self.ui._checkpoint_acceleration_updates("custom.safetensors")
+            self.assertFalse(updates[1]["interactive"])
+            self.assertFalse(updates[2]["interactive"])
+
     def test_standard_reset_clears_every_acceleration_and_restores_twenty_steps(self):
         index, fn = self.callback("_reset_acceleration_updates")
-        result = asyncio.run(self.demo.process_api(index, ["9:16", "preview", 5.0, "match"]))
+        result = asyncio.run(self.demo.process_api(index, ["9:16", "preview", 5.0, "match", ""]))
         data = result["data"]
         self.assertEqual(tuple(data[:CONTROL_COUNT]), H3Acceleration().values())
         self.assertEqual(data[CONTROL_COUNT:CONTROL_COUNT + 2], [20, "simple"])

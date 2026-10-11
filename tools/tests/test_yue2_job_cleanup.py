@@ -23,7 +23,7 @@ class YuE2StartupCleanupTests(unittest.TestCase):
             lease = Mock()
             with patch.object(service, "runtime_manifest", side_effect=UnprintableError()):
                 with self.assertRaisesRegex(ValueError, "invalid exception message"):
-                    studio._run(job, SimpleNamespace(engine="official"), lease, None, None)
+                    studio._run(job, SimpleNamespace(engine="official", checkpoint=""), lease, None, None)
 
             self.assertTrue(job.done.is_set())
             self.assertEqual(job.final["state"], "failed")
@@ -77,7 +77,7 @@ class YuE2StartupCleanupTests(unittest.TestCase):
                     patch.object(service, "atomic_json", side_effect=atomic_json),
                     patch.object(service.time, "sleep") as sleep,
                 ):
-                    studio._run(job, SimpleNamespace(engine="official"), lease, None, runtime_lock)
+                    studio._run(job, SimpleNamespace(engine="official", checkpoint=""), lease, None, runtime_lock)
 
                 self.assertEqual(len(stop_attempts), 2)
                 sleep.assert_called_once_with(0.5)

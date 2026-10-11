@@ -185,11 +185,17 @@ class Studio:
                     local_assets.remember("qwen21_model", [request.local_model])
                 payload["runtime_root"] = str(self.runtime.resolve())
                 if request.operation == "generate":
-                    from modules_forge.local_assets import save_selection
+                    from modules_forge import local_assets
 
-                    save_selection(
+                    local_assets.save_selection(
                         "qwen21",
-                        {key: payload[key] for key in ("local_model", "local_components", "style_loras", "precision")},
+                        {
+                            **local_assets.selection("qwen21"),
+                            **{
+                                key: payload[key]
+                                for key in ("local_model", "local_components", "style_loras", "precision")
+                            },
+                        },
                     )
                 clean_paths = copy_inputs(request.input_images, directory)
                 if request.control_image:

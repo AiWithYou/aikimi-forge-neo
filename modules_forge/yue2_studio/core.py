@@ -103,8 +103,11 @@ class Request:
     offload: bool = True
     fp8: bool = False
     gguf: str = "q8_0"
+    checkpoint: str = ""
 
     def validate(self) -> Request:
+        if not isinstance(self.checkpoint, str) or "\x00" in self.checkpoint or "://" in self.checkpoint:
+            raise YuE2Error("チェックポイントにはローカルのモデルフォルダーを指定してください。")
         for label, value, limit in (
             ("曲名", self.title, 160), ("曲調", self.style, 2000),
             ("歌詞", self.lyrics, 8000), ("楽譜", self.abc, 100000),
@@ -174,7 +177,7 @@ def inside(root: Path, path: Path) -> Path:
     return path
 
 
-def runtime_manifest(root: Path, engine: str) -> dict:
+def runtime_manifest(root: Path, engine: str, checkpoint: str = "") -> dict:
     path = root / "runtime.json"
     if not path.is_file():
         raise YuE2Error("YuE2環境が未導入です。「実行環境」のセットアップを実行してください。")
@@ -184,7 +187,27 @@ def runtime_manifest(root: Path, engine: str) -> dict:
     entry = config.get(engine)
     if not isinstance(entry, dict):
         raise YuE2Error("選択したエンジンは未導入です。セットアップ後に再確認してください。")
+    if checkpoint:
+        from modules_forge import local_assets
+        selected = local_assets.local_path(checkpoint, directory=True)
+        if not model_directory_compatible(selected, engine):
+            raise YuE2Error("選択したエンジンに対応するYuE2モデル一式を指定してください。")
+        entry = dict(entry)
+        entry["model" if engine == "official" else "models"] = str(selected)
+        entry["checkpoint_identity"] = local_assets.identity(selected)
     return entry
+
+
+def model_directory_compatible(path: Path, engine: str) -> bool:
+    if not path.is_dir():
+        return False
+    if engine == "cpp":
+        return any(all(item.is_file() for item in required_cpp_files(path, quant)) for quant in GGUF_MODELS)
+    try:
+        config = read_json(path / "config.json")
+        return config.get("model_type") == "yue2" and all((path / name).is_file() for name in ("model.safetensors", "qwen.tiktoken", "weights_manifest.json"))
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def required_cpp_files(model_root: Path, quant: str) -> list[Path]:

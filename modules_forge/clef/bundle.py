@@ -36,7 +36,7 @@ def bundle_directory(root, profile):
     return converted.with_name(converted.name + "-bundle") if converted is not None else None
 
 
-def read_bundle(directory, profile, *, verify_hashes=False):
+def read_bundle(directory, profile, *, verify_hashes=False, verify_code=True):
     directory = Path(directory)
     try:
         manifest = json.loads((directory / "complete.json").read_text(encoding="utf-8"))
@@ -55,7 +55,7 @@ def read_bundle(directory, profile, *, verify_hashes=False):
                 or path.stat().st_size != item["size"]
             ):
                 raise ClefError(f"Clef量子化配布が不足・変更されています: {item['path']}")
-            if (verify_hashes or path.suffix == ".py") and sha256(path) != item["sha256"]:
+            if (verify_hashes or (verify_code and path.suffix == ".py")) and sha256(path) != item["sha256"]:
                 raise ClefError(f"ClefのSHA-256が一致しません: {item['path']}")
         index = json.loads((directory / "model.safetensors.index.json").read_text(encoding="utf-8"))["weight_map"]
         if (

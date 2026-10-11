@@ -1,5 +1,7 @@
 # Nanosaur2 Studio
 
+追加本体から「標準モデル」へ戻すと、Neoが追加した探索先を外して実行環境を再起動します。外部起動のComfyUIは自動停止せず、取り除く起動引数を案内します。生成開始後に選択した本体が上書きされた場合は生成をエラーにし、別の本体へ代替しません。
+
 [well9472/Nanosaur2-670M](https://huggingface.co/well9472/Nanosaur2-670M)をAikimi Forge Neoの`Nanosaur2`タブから使うテキスト画像生成機能です。完成したPNGと確定Seedを含む`parameters.json`を`outputs/nanosaur2/`へ保存します。画像参照編集とLoRA学習の操作は、このタブには実装していません。
 
 ## 導入
@@ -22,6 +24,8 @@ Windows・NVIDIA CUDA対応GPU・Git・インターネット接続が必要で�
 作者のノード5ファイルと重み3ファイルは[固定リビジョン](https://huggingface.co/well9472/Nanosaur2-670M/tree/dcd61cd6c3f9e2cc62619da620bd86219191c3ed)から取得し、サイズとSHA-256を確認します。ComfyUI本体は[固定コミット](https://github.com/Comfy-Org/ComfyUI/tree/912fca4f39b875a0360f2c5170568176ea813ded)を使用します。詳細は[manifest](../../tools/nanosaur2_manifest.json)に記載しています。既存のファイルが検証に失敗した場合は自動上書きを止めます。内容を確認して`--repair`を指定すると、そのファイルを退避して再取得できます。
 
 ## 画像を生成する
+
+画面先頭の「チェックポイント」で本体を選び、「一覧を更新」で追加ファイルを読み直せます。追加のNanosaur2互換本体は`models/Nanosaur2/checkpoints/`へ配置します。詳細の探索フォルダーには任意のローカルフォルダーも指定できます。既存の公式本体と共有のテキストエンコーダー・VAEはそのまま使えます。選択は再起動後も復元され、生成条件には使用した本体を保存します。別のアーキテクチャや単独のVAE・テキストエンコーダーは本体として選べません。
 
 1. `Nanosaur2`タブを開き、プロンプトを入力します。初回は「環境とモデルを準備」を実行してください。
 2. 解像度を選び、「画像を生成」を押します。`Seed=-1`は毎回ランダムです。

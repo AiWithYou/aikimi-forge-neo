@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os.path
 from collections import Counter, defaultdict
+from pathlib import Path
 
 import gradio as gr
 import torch
@@ -18,8 +19,8 @@ from modules import (
     sd_models,
     shared,
     shared_items,
-    ui_common,
 )
+from modules_forge import local_assets, model_catalog
 from modules_forge.presets import DEFAULT_CHECKPOINTS, PresetArch, is_video, use_distill, use_shift
 
 logger = logging.getLogger("ui_models")
@@ -411,28 +412,25 @@ def _register_configured_module_choices() -> None:
 
 def preset_checkpoint_selection(preset: str, *, warn: bool = False) -> dict:
     """Resolve saved aliases to dropdown values; only recover to a known preset default."""
-    use_short = shared.opts.sd_checkpoint_dropdown_use_short
-    choices = sorted(sd_models.checkpoint_tiles(use_short))
-    saved = (
+    remembered = local_assets.selection("forge").get("checkpoints", {})
+    saved = remembered.get(preset) or (
         shared.opts.sd_model_checkpoint
         if preset == shared.opts.forge_preset
         else getattr(shared.opts, f"forge_checkpoint_{preset}", None) or shared.opts.sd_model_checkpoint
     )
     info = sd_models.get_closet_checkpoint_match(saved)
-    if info is None:
+    if info is None and preset not in remembered:
         default = next((value for arch, value in DEFAULT_CHECKPOINTS.items() if arch.name == preset), None)
         info = sd_models.get_closet_checkpoint_match(default)
         if info is not None and warn:
             gr.Warning(f"Saved checkpoint is unavailable: {saved}. Using {info.name} for {preset}.")
     if info is not None:
-        value = info.short_title if use_short else info.name
+        value = info.filename
     else:
         # Keep the missing selection readable and let the validated loader report it.
         # An unrelated installed model must never be substituted for a saved preset.
         value = saved or None
-        if value is not None:
-            choices.append((f"Unavailable: {value}", value))
-    return {"choices": choices, "value": value}
+    return {"choices": sd_models.checkpoint_choices(value or ""), "value": value}
 
 
 def make_checkpoint_manager_ui():
@@ -457,12 +455,18 @@ def make_checkpoint_manager_ui():
 
     ui_forge_preset = gr.Dropdown(label="UI Preset", value=shared.opts.forge_preset, choices=PresetArch.choices(), elem_id="forge_ui_preset")
 
-    ui_checkpoint = gr.Dropdown(label="Checkpoint · フルパスも入力可", **checkpoint_selection, allow_custom_value=True, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"])
-
-    ui_vae = gr.Dropdown(label="VAE / Text Encoder · フルパスも入力可", value=module_value, choices=vae_list, multiselect=True, allow_custom_value=True, elem_id="setting_sd_modules", elem_classes=["model_selection"])
+    with gr.Row(elem_id="forge_checkpoint_selector"):
+        ui_checkpoint = model_catalog.configure_component(gr.Dropdown(label="チェックポイント", **checkpoint_selection, allow_custom_value=True, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"], scale=4))
+        refresh_button = gr.Button("一覧を更新", elem_id="forge_refresh_checkpoint", scale=0, min_width=105)
+    with gr.Accordion("モデル詳細", open=False, elem_id="forge_model_details"):
+        search_directory = model_catalog.configure_component(gr.Textbox(
+            value=local_assets.selection("forge").get("directory", ""), label="探索フォルダー", elem_id="forge-search-directory",
+        ))
+        ui_vae = gr.Dropdown(label="VAE / Text Encoder · フルパスも入力可", value=module_value, choices=vae_list, multiselect=True, allow_custom_value=True, elem_id="setting_sd_modules", elem_classes=["model_selection"])
 
     def refresh_model_list():
         _, vae_list = refresh_models()
+        refresh_model_loading_parameters()
         current_preset = shared.opts.forge_preset
         module_value = module_values_to_ui_selectors(
             getattr(
@@ -476,9 +480,19 @@ def make_checkpoint_manager_ui():
             gr.update(choices=vae_list, value=module_value),
         ]
 
-    refresh_button = ui_common.ToolButton(value=ui_common.refresh_symbol, elem_id="forge_refresh_checkpoint", tooltip="Refresh")
+    def save_directory(directory):
+        local_assets.save_selection("forge", {**local_assets.selection("forge"), "directory": directory})
+
+    search_directory.input(save_directory, inputs=search_directory, queue=False, show_progress="hidden")
     refresh_button.click(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
-    Context.root_block.load(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
+    Context.root_block.load(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False, show_progress="hidden")
+
+    value = checkpoint_selection["value"]
+    if value is not None:
+        if sd_models.get_closet_checkpoint_match(value) is not None:
+            checkpoint_change(value, current_preset, save=False, refresh=False)
+        else:
+            shared.opts.set("sd_model_checkpoint", value)
 
     ui_forge_unet_dtype = gr.Dropdown(label="Diffusion in Low Bits", value=None, choices=list(forge_unet_storage_dtype_options.keys()), elem_id="forge_ui_dtype")
 
@@ -502,8 +516,17 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
 
     from modules.sd_models import model_data, select_checkpoint
 
-    checkpoint_info = select_checkpoint()
+    try:
+        checkpoint_info = select_checkpoint()
+    except FileNotFoundError as exc:
+        model_data.forge_loading_parameters = {}
+        model_data.forge_hash = ""
+        model_data.last_load_error = f"{type(exc).__name__}: {exc}"
+        logger.warning(str(exc))
+        return
     if checkpoint_info is None:
+        model_data.forge_loading_parameters = {}
+        model_data.forge_hash = ""
         logger.critical('You do not have any model... Please download models to "models/Stable-diffusion"')
         return
 
@@ -536,19 +559,27 @@ def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> b
     if isinstance(candidate, str) and os.path.isabs(candidate) and os.path.isfile(candidate):
         from modules_forge.local_assets import local_path, remember
 
-        path = local_path(candidate)
-        info = sd_models.CheckpointInfo(str(path))
-        info.register()
-        remember("forge_checkpoint", [str(path)])
-        ckpt_name = info.name
+        path = local_path(candidate, suffixes=(".ckpt", ".safetensors", ".gguf"))
+        info = sd_models.get_closet_checkpoint_match(str(path))
+        if info is None:
+            info = sd_models.CheckpointInfo(str(path))
+            info.register()
+        if save:
+            remember("forge_checkpoint", [str(path)])
+        ckpt_name = str(path)
     new_ckpt_info = sd_models.get_closet_checkpoint_match(ckpt_name)
     if new_ckpt_info is None:
         raise ValueError(f"The selected checkpoint is not available: {ckpt_name}")
+    ckpt_name = new_ckpt_info.filename
     current_ckpt_info = sd_models.get_closet_checkpoint_match(getattr(shared.opts, "sd_model_checkpoint", ""))
     active_changed = new_ckpt_info != current_ckpt_info
     preset_name = f"forge_checkpoint_{preset}" if preset is not None else None
     preset_changed = preset_name is not None and ckpt_name != getattr(shared.opts, preset_name, None)
+    if save:
+        saved = local_assets.selection("forge")
+        local_assets.save_selection("forge", {**saved, "checkpoints": {**saved.get("checkpoints", {}), preset or shared.opts.forge_preset: str(Path(ckpt_name).resolve())}})
     if not active_changed and not preset_changed:
+        refresh_model_loading_parameters(refresh=refresh)
         return False
 
     if active_changed:

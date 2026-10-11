@@ -106,6 +106,8 @@ class Job:
     process: subprocess.Popen | None = None
     tree: ProcessTree | None = None
     guard: threading.Lock = field(default_factory=threading.Lock)
+    runtime_entry: dict | None = None
+    checkpoint_snapshot: dict | None = None
 
 
 class Studio:
@@ -119,7 +121,10 @@ class Studio:
         atexit.register(self.shutdown)
 
     def start(self, request: Request, owner: str, plan_only: bool = False) -> str:
+        from modules_forge.studio_checkpoints import snapshot_checkpoint, verify_snapshot
+
         request = request.resolved()
+        checkpoint_snapshot = snapshot_checkpoint(request.checkpoint, directory=True)
         if plan_only and (request.engine != "official" or request.cot == "off"):
             raise YuE2Error("楽譜だけの生成は公式Python・楽譜ありの方式で使用できます。")
         if self._ownership_factory is None:
@@ -135,7 +140,10 @@ class Studio:
             lease.engine = "yue2"
             job = None
             try:
-                runtime_manifest(self.runtime, request.engine)
+                entry = runtime_manifest(self.runtime, request.engine, request.checkpoint)
+                verify_snapshot(checkpoint_snapshot)
+                if checkpoint_snapshot is not None:
+                    entry["checkpoint_identity"] = checkpoint_snapshot["identity"]
                 if not lease.acquire(blocking=False):
                     raise YuE2Error("別の生成がGPUを使用中です。完了後に再実行してください。")
                 if self._runtime_lock is None:
@@ -147,8 +155,8 @@ class Studio:
                 lock = self._runtime_lock
                 directory = self.outputs / uuid.uuid4().hex
                 directory.mkdir(parents=True, exist_ok=False)
-                job = Job(directory.name, owner, directory)
-                atomic_json(directory / "project.json", {"schema": 1, "request": asdict(request), "plan_only": plan_only})
+                job = Job(directory.name, owner, directory, runtime_entry=entry, checkpoint_snapshot=checkpoint_snapshot)
+                atomic_json(directory / "project.json", {"schema": 1, "request": asdict(request), "plan_only": plan_only, "runtime_entry": entry, "checkpoint_snapshot": checkpoint_snapshot})
                 atomic_json(directory / "status.json", {"state": "running", "message": "実行環境を準備中"})
                 # A different browser may not have polled its terminal status yet.
                 # Retain a bounded history instead of discarding every finished job.
@@ -176,6 +184,7 @@ class Studio:
     def _run(self, job: Job, request: Request, lease, release, lock):
         from modules_forge import gpu_residency
         from modules_forge.resident_worker import ResidentWorker
+        from modules_forge.studio_checkpoints import verify_snapshot
 
         success = False
         final = {"state": "failed", "message": "処理が異常終了しました。"}
@@ -184,7 +193,12 @@ class Studio:
                 raise InterruptedError("開始前に停止しました。")
             if release is not None:
                 release()
-            entry = runtime_manifest(self.runtime, request.engine)
+            verify_snapshot(job.checkpoint_snapshot)
+            entry = job.runtime_entry
+            if entry is None:
+                if request.checkpoint:
+                    raise YuE2Error("選択したモデルの開始時情報がありません。実行し直してください。")
+                entry = runtime_manifest(self.runtime, request.engine)
             python = entry["python"] if request.engine == "official" else sys.executable
             if not Path(python).is_file():
                 raise YuE2Error("専用Pythonがありません。YuE2を再セットアップしてください。")

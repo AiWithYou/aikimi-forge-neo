@@ -66,6 +66,15 @@ on:
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
       - "modules_forge/local_assets.py"
+      - "modules_forge/model_catalog.py"
+      - "tools/tests/test_model_catalog.py"
+      - "modules_forge/studio_checkpoint_ui.py"
+      - "modules_forge/studio_checkpoints.py"
+      - "tools/tests/test_checkpoint_selector_ui.py"
+      - "tools/tests/test_sensenova_checkpoint_selection.py"
+      - "tools/tests/test_studio_checkpoint_routes.py"
+      - "tools/tests/test_checkpoint_snapshots.py"
+      - "tools/tests/test_forge_checkpoint_reload.py"
       - "modules_forge/ming_local.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
@@ -185,6 +194,15 @@ on:
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
       - "modules_forge/local_assets.py"
+      - "modules_forge/model_catalog.py"
+      - "tools/tests/test_model_catalog.py"
+      - "modules_forge/studio_checkpoint_ui.py"
+      - "modules_forge/studio_checkpoints.py"
+      - "tools/tests/test_checkpoint_selector_ui.py"
+      - "tools/tests/test_sensenova_checkpoint_selection.py"
+      - "tools/tests/test_studio_checkpoint_routes.py"
+      - "tools/tests/test_checkpoint_snapshots.py"
+      - "tools/tests/test_forge_checkpoint_reload.py"
       - "modules_forge/ming_local.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
@@ -332,6 +350,15 @@ jobs:
             tools/run_ci_tests.py
             tools/setup_minimax_h3.py
             modules_forge/local_assets.py
+            modules_forge/model_catalog.py
+            tools/tests/test_model_catalog.py
+            modules_forge/studio_checkpoint_ui.py
+            modules_forge/studio_checkpoints.py
+            tools/tests/test_checkpoint_selector_ui.py
+            tools/tests/test_sensenova_checkpoint_selection.py
+            tools/tests/test_studio_checkpoint_routes.py
+            tools/tests/test_checkpoint_snapshots.py
+            tools/tests/test_forge_checkpoint_reload.py
             modules_forge/ming_local.py
             scripts/local_lora_stack.py
             tools/tests/test_local_model_sources.py

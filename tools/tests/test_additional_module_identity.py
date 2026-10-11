@@ -103,13 +103,22 @@ def load_main_entry():
     shared.config_filename = "config.json"
     module_stubs["modules.paths"].models_path = "models"
     module_stubs["modules.sd_models"].get_closet_checkpoint_match = lambda value: (
-        SimpleNamespace(name=value, short_title=value.removesuffix(".safetensors"))
+        SimpleNamespace(name=value, filename=value, short_title=value.removesuffix(".safetensors"))
         if value in {"model.safetensors", "other.safetensors"}
         else None
     )
     module_stubs["modules.sd_models"].checkpoint_tiles = lambda short=False: (
         ["model", "other"] if short else ["model.safetensors", "other.safetensors"]
     )
+    module_stubs["modules.sd_models"].checkpoint_choices = lambda current="": [
+        "model.safetensors",
+        "other.safetensors",
+        *(
+            [(f"Unavailable: {current}", current)]
+            if current and current not in {"model.safetensors", "other.safetensors"}
+            else []
+        ),
+    ]
 
     presets = ModuleType("modules_forge.presets")
 
@@ -216,6 +225,10 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
         cls.main_entry, cls.opts, cls.shared = load_main_entry()
 
     def setUp(self):
+        from modules_forge import local_assets
+
+        directory = self.enterContext(TemporaryDirectory())
+        self.enterContext(mock.patch.object(local_assets, "LIBRARY", Path(directory) / "library.json"))
         self.opts.data = {
             "forge_additional_modules": [],
             "forge_additional_modules_sd": [],
@@ -576,7 +589,7 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
         self.opts.data["forge_checkpoint_krea"] = "model.safetensors"
         self.opts.sd_checkpoint_dropdown_use_short = True
         update = self.main_entry.on_preset_change("krea")[0]
-        self.assertEqual(update["value"], "model")
+        self.assertEqual(update["value"], "model.safetensors")
         self.assertIn(update["value"], update["choices"])
         self.assertEqual(self.opts.set_calls, [])
 

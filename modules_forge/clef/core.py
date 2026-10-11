@@ -295,13 +295,21 @@ def validate_request(request):
         raise ClefError("補足入力は文章またはJSONにしてください。")
     if len(json.dumps(state, ensure_ascii=False)) > 60_000:
         raise ClefError("補足入力は60,000文字以内にしてください。")
-    return {
+    validated = {
         "profile": profile,
         "questions": schema,
         "state": state,
         "max_pixels": integer(request.get("max_pixels", 262144), "画像の最大画素数", 65536, 1048576),
         "max_length": integer(request.get("max_length", 4096), "入力トークン上限", 512, 8192),
     }
+    checkpoint = request.get("checkpoint", "")
+    if not isinstance(checkpoint, str):
+        raise ClefError("チェックポイントを選んでください。")
+    if checkpoint.strip():
+        validated["checkpoint"] = checkpoint.strip()
+    if isinstance(request.get("model_identity"), dict):
+        validated["model_identity"] = request["model_identity"]
+    return validated
 
 
 def fingerprint(request, items):
@@ -405,6 +413,11 @@ def export_csv(run):
 
 def source_manifest(root, model, verify_hashes=False):
     directory = Path(root) / "source" / model
+    return read_source(directory, model, verify_hashes=verify_hashes)
+
+
+def read_source(directory, model, *, verify_hashes=False, verify_code=True):
+    directory = Path(directory)
     try:
         manifest = json.loads((directory / "release.json").read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -421,6 +434,6 @@ def source_manifest(root, model, verify_hashes=False):
             or path.stat().st_size != item["size"]
         ):
             raise ClefError(f"Clef配布物が不足・変更されています: {item['path']}")
-        if (verify_hashes or path.suffix == ".py") and sha256(path) != item["sha256"]:
+        if (verify_hashes or (verify_code and path.suffix == ".py")) and sha256(path) != item["sha256"]:
             raise ClefError(f"ClefのSHA-256が一致しません: {item['path']}")
     return directory, manifest

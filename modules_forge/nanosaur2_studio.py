@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from modules_forge.minimax_h3_runtime import REPOSITORY_ROOT, SERVER_URL
+from modules_forge.studio_checkpoints import nanosaur_compatible
 
 MANIFEST = REPOSITORY_ROOT / "tools/nanosaur2_manifest.json"
 OUTPUT = REPOSITORY_ROOT / "outputs/nanosaur2"
@@ -75,9 +76,12 @@ def source_ready(runtime_root: Path) -> bool:
     return all(_file_ready(folder / entry["path"], entry) for entry in _entries("source"))
 
 
-def model_ready(runtime_root: Path) -> bool:
+def model_ready(runtime_root: Path, checkpoint: str = "") -> bool:
     folder = Path(runtime_root) / "models"
-    return all(_file_ready(folder / entry["path"], entry) for entry in _entries("models"))
+    return all(
+        (nanosaur_compatible(Path(checkpoint)) if checkpoint and entry["path"].startswith("diffusion_models/") and Path(checkpoint).resolve() != (folder / entry["path"]).resolve() else _file_ready(folder / entry["path"], entry))
+        for entry in _entries("models")
+    )
 
 
 @dataclass(frozen=True)
@@ -91,8 +95,11 @@ class Nanosaur2Request:
     seed: int = -1
     guidance: str = "alternate"
     save_candidates: bool = False  # Common output validator only; this model emits one image.
+    checkpoint: str = ""
 
     def validate(self) -> None:
+        if self.checkpoint and not nanosaur_compatible(Path(self.checkpoint)):
+            raise Nanosaur2Error("Nanosaur2互換の本体を選択してください。")
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 20_000:
             raise Nanosaur2Error("プロンプトは1〜20,000文字で入力してください。")
         if not isinstance(self.negative_prompt, str) or len(self.negative_prompt) > 20_000:
@@ -131,7 +138,7 @@ def build_workflow(request: Nanosaur2Request, seed: int) -> dict[str, dict[str, 
     return {
         "loader": node(
             "Nanosaur2Loader",
-            unet_name="nanosaur2_diffusion_model.safetensors",
+            unet_name=Path(request.checkpoint).name if request.checkpoint else "nanosaur2_diffusion_model.safetensors",
             text_encoder_name="nanosaur2_text_encoder.safetensors",
             vae_name="nanosaur2_vae.safetensors",
             guidance=request.guidance,
@@ -157,7 +164,7 @@ def build_workflow(request: Nanosaur2Request, seed: int) -> dict[str, dict[str, 
     }
 
 
-def check_nodes(client: Any) -> None:
+def check_nodes(client: Any, checkpoint: str = "") -> None:
     schemas = client.object_info(REQUIRED_NODES, timeout=12.0)
     missing = REQUIRED_NODES - schemas.keys()
     if missing:
@@ -166,7 +173,7 @@ def check_nodes(client: Any) -> None:
     if not {"unet_name", "text_encoder_name", "vae_name", "guidance"} <= inputs.keys():
         raise Nanosaur2Error("Nanosaur2Loaderの入力仕様が変わっています。")
     for key, filename in (
-        ("unet_name", "nanosaur2_diffusion_model.safetensors"),
+        ("unet_name", Path(checkpoint).name if checkpoint else "nanosaur2_diffusion_model.safetensors"),
         ("text_encoder_name", "nanosaur2_text_encoder.safetensors"),
         ("vae_name", "nanosaur2_vae.safetensors"),
     ):
@@ -174,7 +181,7 @@ def check_nodes(client: Any) -> None:
             raise Nanosaur2Error(f"ComfyUIからモデルが見えません: {filename}")
 
 
-def ensure_runtime(*, restart: bool = False, selected_root: Path | None = None) -> Any:
+def ensure_runtime(*, restart: bool = False, selected_root: Path | None = None, checkpoint: str = "") -> Any:
     bridge = _bridge()
     root = bridge.resolve_runtime_root(selected_root or runtime_root())
     from tools.setup_nanosaur2 import runtime_ready
@@ -183,29 +190,39 @@ def ensure_runtime(*, restart: bool = False, selected_root: Path | None = None) 
         raise Nanosaur2Error("Nanosaur2専用ComfyUIのセットアップが未完了です。")
     if not source_ready(root):
         raise Nanosaur2Error("Nanosaur2ノードが未導入か破損しています。セットアップを実行してください。")
-    if not model_ready(root):
+    if not model_ready(root, checkpoint):
         raise Nanosaur2Error("Nanosaur2モデルが未導入か破損しています。セットアップを実行してください。")
     with bridge._RUNTIME_LIFECYCLE_LOCK:
+        from modules_forge.minimax_h3_acceleration import H3Acceleration
+        acceleration = H3Acceleration(model_path=checkpoint)
         if restart:
-            readiness = bridge._restart_runtime_locked(root, SERVER_URL, LOGS, log_prefix="nanosaur2")
+            readiness = bridge._restart_runtime_locked(root, SERVER_URL, LOGS, log_prefix="nanosaur2", acceleration=acceleration)
         else:
-            readiness = bridge.inspect_readiness(root, SERVER_URL)
+            readiness = bridge.inspect_readiness(root, SERVER_URL, acceleration=acceleration)
+            if readiness.connected:
+                readiness = bridge.ensure_checkpoint_registration(readiness, root, SERVER_URL, LOGS, acceleration, log_prefix="nanosaur2")
             if not readiness.connected:
                 readiness = bridge.start_runtime(
-                    root, SERVER_URL, LOGS, initial_readiness=readiness, log_prefix="nanosaur2"
+                    root, SERVER_URL, LOGS, initial_readiness=readiness, log_prefix="nanosaur2", acceleration=acceleration
                 )
+        bridge.require_checkpoint_registration(readiness, root, acceleration)
         client = bridge.ComfyH3Client(SERVER_URL)
         try:
-            check_nodes(client)
+            check_nodes(client, checkpoint)
         finally:
             client.close()
     return readiness
 
 
 def save_result(
-    source: Path, request: Nanosaur2Request, seed: int, prompt_id: str, readiness: Any, output_root: Path = OUTPUT
+    source: Path, request: Nanosaur2Request, seed: int, prompt_id: str, readiness: Any, output_root: Path = OUTPUT,
+    *, checkpoint_snapshot: dict | None = None,
 ) -> dict[str, Any]:
     from PIL import Image
+
+    from modules_forge.studio_checkpoints import result_identity, verify_snapshot
+
+    checkpoint_identity = result_identity(request.checkpoint, checkpoint_snapshot)
 
     output_root.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -222,6 +239,7 @@ def save_result(
         "cfg": request.cfg,
         "seed": seed,
         "guidance": request.guidance,
+        "checkpoint": checkpoint_identity if request.checkpoint else {"path": "nanosaur2_diffusion_model.safetensors", "sha256": next(entry["sha256"] for entry in _entries("models") if entry["path"] == "diffusion_models/nanosaur2_diffusion_model.safetensors")},
         "sampler": "euler",
         "scheduler": "simple",
         "prompt_id": prompt_id,
@@ -240,6 +258,7 @@ def save_result(
         (stage / "parameters.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
+        verify_snapshot(checkpoint_snapshot)
         os.replace(stage, target)
     finally:
         if stage.exists():
@@ -256,6 +275,9 @@ def run_generation(
 ) -> Iterator[dict[str, Any]]:
     request.validate()
     from modules_forge.gpu_ownership import GPUOwnership
+    from modules_forge.studio_checkpoints import snapshot_checkpoint, verify_snapshot
+
+    checkpoint_snapshot = snapshot_checkpoint(request.checkpoint)
 
     bridge = _bridge()
     ownership = GPUOwnership()
@@ -272,20 +294,23 @@ def run_generation(
             time.sleep(0.1)
         bridge.release_forge_vram()
         yield {"stage": "runtime", "message": "Nanosaur2実行環境を確認しています。", "prompt_id": prompt_id}
-        readiness = ensure_runtime()
+        verify_snapshot(checkpoint_snapshot)
+        readiness = ensure_runtime(checkpoint=request.checkpoint)
         from modules_forge import gpu_residency
 
         gpu_residency.register("nanosaur2", lambda: bridge._release_retained_runtime(SERVER_URL), "nanosaur2")
         seed = request.resolved_seed()
         graph = build_workflow(request, seed)
         with bridge._RUNTIME_LIFECYCLE_LOCK:
-            readiness = ensure_runtime()
+            verify_snapshot(checkpoint_snapshot)
+            readiness = ensure_runtime(checkpoint=request.checkpoint)
             client = bridge.ComfyH3Client(SERVER_URL)
             if bridge._is_cancelled_job(prompt_id):
                 raise Nanosaur2Cancelled("画像生成を停止しました。")
             process = bridge._loopback_server_process(SERVER_URL)
             if process is None:
                 raise Nanosaur2Error("送信先のComfyUI processを確認できません。")
+            verify_snapshot(checkpoint_snapshot)
             bridge.pending_jobs.write(
                 {
                     "version": 1,
@@ -338,7 +363,9 @@ def run_generation(
                 from modules_forge.minimax_h3_images import extract_image_outputs
 
                 primary, _ = extract_image_outputs(client.history(prompt_id), prompt_id, runtime_root(), request)
-                result = save_result(primary[0], request, seed, prompt_id, readiness, output_root)
+                verify_snapshot(checkpoint_snapshot)
+                snapshot_options = {"checkpoint_snapshot": checkpoint_snapshot} if checkpoint_snapshot is not None else {}
+                result = save_result(primary[0], request, seed, prompt_id, readiness, output_root, **snapshot_options)
                 yield {
                     "stage": "complete",
                     "message": "PNGと生成条件を保存しました。",

@@ -48,13 +48,20 @@ def _reference_tags(files):
     return f"アップロード順: {tags}" if tags else "参照画像を追加してください。"
 
 
+def _checkpoint_values(values):
+    if len(values) == len(H3NegPiP().values()) + 1:
+        return values[:-1], values[-1] or ""
+    return values, ""
+
+
 def _runtime_action(runtime, url, profile, *negpip_values, restart=False):
     bridge = images._bridge()
     try:
+        negpip_values, checkpoint = _checkpoint_values(negpip_values)
         root = bridge.resolve_runtime_root(runtime)
         with bridge._RUNTIME_LIFECYCLE_LOCK:
             action = bridge.restart_runtime if restart else bridge.ensure_ready
-            readiness = action(root, url, LOG_DIRECTORY, runtime_profile=profile, acceleration=H3Acceleration(negpip=H3NegPiP.from_values(negpip_values)))
+            readiness = action(root, url, LOG_DIRECTORY, runtime_profile=profile, acceleration=H3Acceleration(negpip=H3NegPiP.from_values(negpip_values), checkpoint=checkpoint))
             client = bridge.ComfyH3Client(url)
             try:
                 images.check_image_nodes(client)
@@ -74,6 +81,7 @@ def _restart(runtime, url, profile, *negpip_values):
 
 
 def _request(mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_values):
+    negpip_values, checkpoint = _checkpoint_values(negpip_values)
     return images.H3ImageRequest(
         mode=mode, prompt=prompt or "",
         reference_images=images._bridge().normalize_file_list(references) if mode == "references" else (),
@@ -85,6 +93,7 @@ def _request(mode, prompt, references, width, height, steps, seed, scheduler, fr
         frame_index=images.integer(frame, "採用フレーム", 0, 4),
         save_candidates=candidates,
         negpip=H3NegPiP.from_values(negpip_values),
+        checkpoint=checkpoint,
     )
 
 
@@ -143,6 +152,10 @@ def on_ui_tabs():
             "H3の最小5フレームから1枚を採用する実験的な静止画モードです。"
             "動画ファイルの生成・音声の復号は行いません。"
         )
+        from modules_forge.minimax_h3_runtime import configured_model_root
+        from modules_forge.studio_checkpoint_ui import create
+        from modules_forge.studio_checkpoints import h3_compatible
+        checkpoint, _, _ = create("h3", "MiniMax-H3", (configured_model_root() / "diffusion_models",), h3_compatible, gradio=gr, details="FL2VAはテキスト生成、Ref2VAは参照編集用です。役割はファイル名またはh3_roleメタデータで指定します。")
         with gr.Accordion("実行環境とモデル", open=False):
             runtime = gr.Textbox(value=_initial_runtime(), visible=False, interactive=False)
             url = gr.Textbox(value=SERVER_URL, visible=False, interactive=False)
@@ -154,7 +167,7 @@ def on_ui_tabs():
             )
             gr.Markdown(
                 "既存H3 Studioのモデル一式を再利用します。参照編集にはRef2VAが必要です。"
-                "この画像タブは標準モデル・通常VAE・Dense Attentionを使用します。"
+                "この画像タブは選択した互換本体・通常VAE・Dense Attentionを使用します。"
                 "動画側で別の高速化設定を使っている場合は、キューを空にして再起動してください。"
             )
             with gr.Row():
@@ -218,12 +231,12 @@ def on_ui_tabs():
             control.input(lambda: "カスタム", outputs=preset, queue=False, **private)
         for button, callback in ((connect, _runtime_action), (restart, _restart)):
             button.click(
-                callback, inputs=[runtime, url, profile, *negpip_controls], outputs=runtime_status,
+                callback, inputs=[runtime, url, profile, *negpip_controls, checkpoint], outputs=runtime_status,
                 concurrency_limit=1, concurrency_id="h3-runtime-control", trigger_mode="once", **private,
             )
         generate.click(
             _generate,
-            inputs=[runtime, url, profile, mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_controls],
+            inputs=[runtime, url, profile, mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_controls, checkpoint],
             outputs=[status, result, gallery, files, metadata, job, generate, cancel],
             concurrency_limit=1, concurrency_id="minimax-h3-generation", trigger_mode="once", **private,
         )

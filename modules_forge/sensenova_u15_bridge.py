@@ -27,7 +27,9 @@ from modules.aikimi_security.redaction import (
     redact_text,
     sanitized_subprocess_environment,
 )
+from modules_forge import local_assets
 from modules_forge.gpu_ownership import GPUOwnership, release_forge_vram
+from modules_forge.model_catalog import checkpoint_roots, choice_labels, discover_files
 from modules_forge.sensenova_u15_environment import WORKER_PYTHON, environment_status
 
 MODE_TEXT = "text"
@@ -43,6 +45,8 @@ CONVROT_FILE_NAME = "SenseNova-U1.5-8B-MoT-pruned-int8_convrot.safetensors"
 CONVROT_EXPECTED_BYTES = 17_734_813_848
 CONVROT_SHA256 = "cf6ed9ee3be516612b7fe083edfc7c9dd5d059cc759e300d2cf1f2726c0d250e"
 EXPECTED_CONVROT_LAYERS = 588
+# Names, dtypes and shapes of the pinned final/pruned release, excluding offsets and metadata.
+CONVROT_STRUCTURE_SHA256 = "fdb08c901ba1106956ff3c784fbd385b2752cc217f251ba7a0fbc92519489c3d"
 OFFICIAL_LORA_REVISION = "e909f4636d119d65fe4cba8770c19daff2ac102e"
 OFFICIAL_LORA_FILE_NAME = "SenseNova-U1.5-8B-MoT-LoRA-8step.safetensors"
 OFFICIAL_LORA_EXPECTED_BYTES = 814_867_236
@@ -388,25 +392,77 @@ def validate_request(request: SenseNovaRequest) -> None:
         raise SenseNovaBridgeError("計算精度の指定が不正です。")
 
 
-def _convrot_safetensors_header_is_valid(path: Path) -> bool:
-    try:
-        with path.open("rb") as stream:
-            length_bytes = stream.read(8)
-            if len(length_bytes) != 8:
-                return False
-            header_length = int.from_bytes(length_bytes, "little")
-            if header_length <= 2 or header_length > 256 * 1024 * 1024:
-                return False
-            header = stream.read(header_length)
-        return (
-            len(header) == header_length
-            and b".comfy_quant" in header
-            and header.count(b'.comfy_quant"') == EXPECTED_CONVROT_LAYERS
-            and b"fm_modules.vision_model_mot_gen.embeddings.patch_embedding.weight"
-            in header
-        )
-    except OSError:
+def compatible_checkpoint(path: Path) -> bool:
+    """Inspect only the safetensors header; custom bodies must match the final ConvRot structure."""
+    path = Path(path)
+    if path.suffix.lower() != ".safetensors":
         return False
+    try:
+        header = local_assets.read_header(path)
+        tensors = {name: item for name, item in header.items() if name != "__metadata__"}
+        if (
+            sum(name.endswith(".comfy_quant") for name in tensors) != EXPECTED_CONVROT_LAYERS
+            or any("lm_head" in name for name in tensors)
+        ):
+            return False
+        sizes = {"U8": 1, "I8": 1, "BF16": 2, "F16": 2, "F32": 4, "F64": 8, "I32": 4, "I64": 8}
+        intervals = []
+        signature = {}
+        for name, tensor in tensors.items():
+            shape = tensor["shape"]
+            if not isinstance(shape, list) or any(type(value) is not int or value < 0 for value in shape):
+                return False
+            count = 1
+            for dimension in shape:
+                count *= dimension
+            begin, end = tensor["data_offsets"]
+            if end - begin != count * sizes[tensor["dtype"]]:
+                return False
+            intervals.append((begin, end))
+            signature[name] = {"dtype": tensor["dtype"], "shape": shape}
+        end = 0
+        for begin, finish in sorted(intervals):
+            if begin != end:
+                return False
+            end = finish
+        with path.open("rb") as stream:
+            header_size = int.from_bytes(stream.read(8), "little")
+        if path.stat().st_size != 8 + header_size + end:
+            return False
+        digest = hashlib.sha256(json.dumps(signature, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return digest == CONVROT_STRUCTURE_SHA256
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
+def checkpoint_is_ready(path: Path) -> bool:
+    path = Path(path).expanduser().resolve()
+    if not compatible_checkpoint(path):
+        return False
+    if path != DEFAULT_CHECKPOINT_PATH.resolve():
+        return True
+    try:
+        sidecar = Path(str(path) + ".sha256").read_text(encoding="utf-8").strip().split()[0].lower()
+        return path.stat().st_size == CONVROT_EXPECTED_BYTES and sidecar == CONVROT_SHA256
+    except (OSError, IndexError):
+        return False
+
+
+def checkpoint_choices(search_directory="", current=""):
+    roots = checkpoint_roots("SenseNova-U1", roots=(DEFAULT_CHECKPOINT_PATH.parent,), search_directory=search_directory)
+    paths = discover_files(roots, suffixes=(".safetensors",), validator=compatible_checkpoint)
+    if DEFAULT_CHECKPOINT_PATH.is_file():
+        paths.append(str(DEFAULT_CHECKPOINT_PATH.resolve()))
+    return choice_labels(paths, roots=roots, current=current or str(DEFAULT_CHECKPOINT_PATH))
+
+
+def load_checkpoint_selection():
+    value = local_assets.selection("sensenova")
+    return str(value.get("checkpoint") or DEFAULT_CHECKPOINT_PATH), str(value.get("search_directory") or "")
+
+
+def save_checkpoint_selection(checkpoint, search_directory):
+    local_assets.save_selection("sensenova", {"checkpoint": checkpoint, "search_directory": search_directory})
 
 
 def _official_lora_header_is_valid(path: Path) -> bool:
@@ -504,24 +560,9 @@ def inspect_runtime(
             if path.is_file()
         )
         partial_bytes = max(partial_bytes, chunk_bytes)
-    sidecar = Path(str(checkpoint_path) + ".sha256") if checkpoint_path else None
-    try:
-        sidecar_sha256 = (
-            sidecar.read_text(encoding="utf-8").strip().split()[0].lower()
-            if sidecar and sidecar.is_file()
-            else ""
-        )
-    except (OSError, IndexError):
-        sidecar_sha256 = ""
-    checkpoint_ready = bool(
-        checkpoint_path
-        and checkpoint_path.is_file()
-        and checkpoint_path.stat().st_size == CONVROT_EXPECTED_BYTES
-        and _convrot_safetensors_header_is_valid(checkpoint_path)
-        and sidecar_sha256 == CONVROT_SHA256
-    )
+    checkpoint_ready = bool(checkpoint_path and checkpoint_is_ready(checkpoint_path))
     if checkpoint_ready:
-        messages.append("正式版INT8 ConvRot checkpointを確認しました。")
+        messages.append("対応する final/pruned INT8 ConvRot checkpointを確認しました。")
     elif partial_bytes:
         messages.append(
             "INT8 ConvRotをダウンロード中または中断中です: "
@@ -703,14 +744,19 @@ def _request_payload(
     output_path: Path,
     metadata_path: Path,
 ) -> dict[str, Any]:
+    checkpoint_path = Path(request.checkpoint).expanduser().resolve()
+    selected = local_assets.file_identity(checkpoint_path)
+    if checkpoint_path == DEFAULT_CHECKPOINT_PATH.resolve() and selected["sha256"] != CONVROT_SHA256:
+        raise SenseNovaBridgeError("公式チェックポイントのSHA-256が一致しません。セットアップで再検証してください。")
     return {
         "mode": request.mode,
         "prompt": request.prompt.strip(),
         "model_path": request.model_path.strip(),
         "quantization": request.quantization,
-        "checkpoint": os.fspath(Path(request.checkpoint).expanduser().resolve()),
-        "checkpoint_revision": CHECKPOINT_REVISION,
-        "checkpoint_sha256": CONVROT_SHA256,
+        "checkpoint": os.fspath(checkpoint_path),
+        "checkpoint_identity": selected,
+        "checkpoint_revision": CHECKPOINT_REVISION if selected["sha256"] == CONVROT_SHA256 else "local",
+        "checkpoint_sha256": selected["sha256"],
         "source_path": os.fspath(Path(request.source_path).expanduser().resolve()),
         "input_images": list(input_paths),
         "width": request.width,

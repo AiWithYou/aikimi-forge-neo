@@ -13,10 +13,18 @@ from modules_forge.clef.core import TEMPLATES, ClefError, atomic_json
 from modules_forge.clef.service import Studio, snapshot_inputs
 from tools.clef_worker import process_run
 
+MODEL_IDENTITY = {"path": "fixture-bundle", "sha256": "fixture-model-content"}
+
+
+@pytest.fixture(autouse=True)
+def selected_model_fixture(monkeypatch):
+    monkeypatch.setattr("modules_forge.clef.service.checkpoint_identity", lambda *args: MODEL_IDENTITY.copy())
+
 
 def request():
     return {
         "profile": "flash-int8",
+        "model_identity": MODEL_IDENTITY.copy(),
         "questions": TEMPLATES["画像の評価"],
         "state": "evaluate",
         "max_pixels": 262144,

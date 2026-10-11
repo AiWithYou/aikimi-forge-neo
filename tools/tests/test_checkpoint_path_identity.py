@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,7 +17,7 @@ class CheckpointPathIdentityTests(unittest.TestCase):
     def setUp(self):
         source = ROOT / "modules/sd_models.py"
         tree = ast.parse(source.read_text(encoding="utf-8"))
-        nodes = [node for node in tree.body if getattr(node, "name", None) in {"CheckpointInfo", "replace_key"}]
+        nodes = [node for node in tree.body if getattr(node, "name", None) in {"CheckpointInfo", "replace_key", "select_checkpoint"}]
         self.temp = tempfile.TemporaryDirectory(dir=ROOT)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -25,12 +26,14 @@ class CheckpointPathIdentityTests(unittest.TestCase):
         self.cmd_opts = SimpleNamespace(ckpt_dirs=[])
         self.namespace = {
             "os": os,
+            "sys": sys,
             "cmd_opts": self.cmd_opts,
             "model_path": str(self.models),
             "model_hash": lambda _filename: "fixture-hash",
             "hashes": SimpleNamespace(sha256_from_cache=lambda *_args: None),
             "checkpoints_list": {},
             "checkpoint_aliases": {},
+            "shared": SimpleNamespace(opts=SimpleNamespace(sd_model_checkpoint="")),
         }
         exec(  # noqa: S102 - execute only the extracted repository checkpoint class and helper
             compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec"), self.namespace
@@ -56,6 +59,22 @@ class CheckpointPathIdentityTests(unittest.TestCase):
         info = self.checkpoint_info(str(filename))
         self.assertEqual(info.name, os.path.join("nested", "model.ckpt"))
         self.assertEqual(info.name_for_extra, "model")
+
+    def test_duplicate_basename_alias_is_ambiguous_but_actual_paths_are_exact(self):
+        left = self.make_file(self.models / "left")
+        right = self.make_file(self.models / "right")
+        first, second = self.checkpoint_info(str(left)), self.checkpoint_info(str(right))
+        first.register()
+        second.register()
+        self.assertIsNone(self.namespace["checkpoint_aliases"]["model"])
+        self.assertIs(self.namespace["checkpoint_aliases"][str(left.resolve())], first)
+        self.assertIs(self.namespace["checkpoint_aliases"][str(right.resolve())], second)
+
+    def test_missing_selected_checkpoint_does_not_load_another_installed_model(self):
+        self.checkpoint_info(str(self.make_file(self.models))).register()
+        self.namespace["shared"].opts.sd_model_checkpoint = str(self.root / "missing/model.ckpt")
+        with self.assertRaisesRegex(FileNotFoundError, "selected checkpoint"):
+            self.namespace["select_checkpoint"]()
 
     def test_relative_custom_root_is_resolved_before_naming(self):
         custom = self.root / "custom"

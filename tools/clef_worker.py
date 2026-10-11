@@ -6,11 +6,13 @@ import argparse
 import json
 import sys
 import time
+from contextlib import suppress
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from modules_forge.clef.core import RUNTIME, atomic_json, export_csv, read_result  # noqa: E402
+from modules_forge.clef.local_source import checkpoint_identity  # noqa: E402
 
 _RUNNER = None
 _KEY = None
@@ -66,7 +68,14 @@ def resident_run(payload):
     from modules_forge.clef.runtime import Runner
 
     request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
-    key = (payload["root"], request["profile"])
+    expected = request.get("model_identity")
+    if not isinstance(expected, dict) or not expected:
+        raise RuntimeError("チェックポイントの開始時の識別情報がありません。新しい判定を開始してください。")
+    selected = checkpoint_identity(Path(payload["root"]), request["profile"], request.get("checkpoint", ""))
+    if expected != selected:
+        raise RuntimeError("選択したチェックポイントが開始後に変更されました。新しい判定を開始してください。")
+    snapshot = json.dumps(selected, sort_keys=True)
+    key = (selected["path"], selected["sha256"], request["profile"])
     if key != _KEY:
         if _RUNNER is not None:
             _RUNNER.close()
@@ -74,7 +83,18 @@ def resident_run(payload):
         _KEY = None
         begin = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
-        _RUNNER = Runner(Path(payload["root"]), request["profile"])
+        runner = Runner.from_directory(Path(selected["path"]), request["profile"])
+        try:
+            current = checkpoint_identity(Path(payload["root"]), request["profile"], selected["path"])
+            if json.dumps(current, sort_keys=True) != snapshot:
+                raise RuntimeError(
+                    "選択したチェックポイントが読み込み中に変更されました。新しい判定を開始してください。"
+                )
+        except BaseException:
+            with suppress(Exception):
+                runner.close()
+            raise
+        _RUNNER = runner
         _KEY = key
         atomic_json(
             directory / "loading.json",
@@ -88,6 +108,7 @@ def resident_run(payload):
         atomic_json(directory / "loading.json", {"seconds": 0, "reused": True})
     atomic_json(directory / "progress.json", {"message": "判定しています。"})
     result = process_run(directory, _RUNNER)
+    result["model"] = selected
     result["quantized_cache"] = (
         {"status": "ready", "path": str(_RUNNER.saved)} if _RUNNER.saved else {"status": "not-applicable"}
     )

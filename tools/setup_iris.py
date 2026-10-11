@@ -34,13 +34,20 @@ from modules_forge.iris.core import (  # noqa: E402
     sha256,
 )
 
+TEXT_PATTERNS = ["*.json", "*.safetensors", "*.txt", "*.model", "*.jinja"]
 
-def download_plan(precision, task):
+
+def download_plan(precision, task, components_only=False):
+    if components_only:
+        if task != "generate":
+            raise ValueError("共通部品だけの準備は画像生成（generate）に使用してください。")
+        if precision != "w4a8":
+            return {"repo": TEXT_REPO, "revision": TEXT_REVISION, "files": list(TEXT_PATTERNS), "text_encoder": True}
     folder = {"generate": "", "depth": "depth/", "upscale": "upscaler/"}[task]
-    files = [folder + "config.yaml", folder + "model.safetensors"]
+    files = [] if components_only else [folder + "config.yaml", folder + "model.safetensors"]
     if task != "generate":
         files.append(folder + "empty_prompt.safetensors")
-    if precision != "normal":
+    if precision != "normal" and not components_only:
         files.append(folder + "manifest.json")
     if precision == "w4a8" and task == "generate":
         files.extend("text-encoder/" + name for name in W4A8_TEXT_FILES)
@@ -116,45 +123,47 @@ def verify_manifest(directory):
     return manifest
 
 
-def fetch_model(root, precision, task):
+def fetch_model(root, precision, task, components_only=False):
+    plan = download_plan(precision, task, components_only)
     from huggingface_hub import HfApi, snapshot_download
 
-    plan = download_plan(precision, task)
     if len(plan["revision"]) != 40:
         raise ValueError("モデル配布の検証済み公開commitがまだ設定されていません。")
-    destination = model_directory(root, precision, "generate")
-    info = HfApi().model_info(plan["repo"], revision=plan["revision"], files_metadata=True)
-    snapshot_download(
-        plan["repo"], revision=plan["revision"], local_dir=destination, allow_patterns=plan["files"], max_workers=3
-    )
-    records = []
-    for name in plan["files"]:
-        remote = next(x for x in info.siblings if x.rfilename == name)
-        path = destination / name
-        digest = sha256(path)
-        if path.stat().st_size != remote.size or (remote.lfs and digest != remote.lfs.sha256):
-            raise ValueError(f"取得した重みの検証に失敗しました: {name}")
-        if path.name != "manifest.json":
-            records.append({"path": path.name, "size": remote.size, "sha256": digest})
-        print(f"検証済み: {name}", flush=True)  # noqa: T201
-    directory = model_directory(root, precision, task)
-    if precision == "normal":
-        atomic_json(
-            directory / "manifest.json",
-            {
-                "format": "official-fp32",
-                "task": task,
-                "source_repo": SOURCE_REPO,
-                "source_revision": SOURCE_REVISION,
-                "files": records,
-            },
+    if not components_only or precision == "w4a8":
+        destination = model_directory(root, precision, "generate")
+        info = HfApi().model_info(plan["repo"], revision=plan["revision"], files_metadata=True)
+        snapshot_download(
+            plan["repo"], revision=plan["revision"], local_dir=destination, allow_patterns=plan["files"], max_workers=3
         )
-    else:
-        verify_manifest(directory)
+        records = []
+        for name in plan["files"]:
+            remote = next(x for x in info.siblings if x.rfilename == name)
+            path = destination / name
+            digest = sha256(path)
+            if path.stat().st_size != remote.size or (remote.lfs and digest != remote.lfs.sha256):
+                raise ValueError(f"取得した重みの検証に失敗しました: {name}")
+            if path.name != "manifest.json":
+                records.append({"path": path.name, "size": remote.size, "sha256": digest})
+            print(f"検証済み: {name}", flush=True)  # noqa: T201
+        if not components_only:
+            directory = model_directory(root, precision, task)
+            if precision == "normal":
+                atomic_json(
+                    directory / "manifest.json",
+                    {
+                        "format": "official-fp32",
+                        "task": task,
+                        "source_repo": SOURCE_REPO,
+                        "source_revision": SOURCE_REVISION,
+                        "files": records,
+                    },
+                )
+            else:
+                verify_manifest(directory)
         if precision == "w4a8" and task == "generate":
             verify_manifest(destination / "text-encoder")
     if plan["text_encoder"]:
-        patterns = ["*.json", "*.safetensors", "*.txt", "*.model", "*.jinja"]
+        patterns = TEXT_PATTERNS
         info = HfApi().model_info(TEXT_REPO, revision=TEXT_REVISION, files_metadata=True)
         encoder = Path(root) / "text-encoder"
         snapshot_download(
@@ -181,11 +190,15 @@ def main():
     parser.add_argument("--root", type=Path, default=RUNTIME)
     parser.add_argument("--precision", choices=list(PRECISIONS), default="int8")
     parser.add_argument("--task", choices=["generate", "depth", "upscale", "all"], default="generate")
-    parser.add_argument("--runtime-only", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--runtime-only", action="store_true")
+    mode.add_argument("--components-only", action="store_true", help="画像生成の実行環境と共通エンコーダーだけを準備")
     parser.add_argument("--download-only", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--parent-guard", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.components_only and args.task != "generate":
+        parser.error("--components-onlyは--task generateに使用してください。")
     if args.parent_guard:
         from modules_forge.yue2_studio.worker import parent_guard
 
@@ -197,7 +210,9 @@ def main():
                 {
                     "root": str(args.root),
                     "code_revision": CODE_REVISION,  # noqa: T201
-                    "plans": [download_plan(args.precision, t) for t in tasks],
+                    "plans": []
+                    if args.runtime_only
+                    else [download_plan(args.precision, t, args.components_only) for t in tasks],
                 },
                 indent=2,
             )
@@ -209,7 +224,7 @@ def main():
     if not args.runtime_only:
         if args.download_only:
             for task in tasks:
-                fetch_model(args.root, args.precision, task)
+                fetch_model(args.root, args.precision, task, components_only=args.components_only)
         else:
             execute(
                 [
@@ -223,6 +238,7 @@ def main():
                     "--task",
                     args.task,
                 ]
+                + (["--components-only"] if args.components_only else [])
             )
     print("Irisの準備が完了しました。", flush=True)  # noqa: T201
 

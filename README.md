@@ -2,13 +2,13 @@
 
 [English](README.en.md) · 日本語
 
-**[v3.10.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.10.0)** · [変更履歴](CHANGELOG.md)
+**[v4.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.0.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
 **画像の生成・編集、音声付き動画、作曲、画像や文章の評価を、ひとつのWebUIから使えるWindows向けのForge Neo派生版です。** モデルの導入、高解像度処理、画像の仕上げも支援します。
 
-v3.10.0ではMiniMax H3に、写真一枚から無音の360°周回動画を作る実験モードを追加しました。通常生成と周回生成の設定を別々に保持します。Orbitの実モデルでの動画生成完走・周回品質・生成時間は未検証です。[Orbitの使い方と確認範囲](docs/minimax-h3-orbit-lora.md)。Krea2は生成中のテキスト融合結果を再利用し、Animaの参照画像と出力サイズが異なる場合のエラーも修正しました。[Krea2の動作・速度確認](docs/krea2-jev.md#テキスト融合の再利用)
+v4.0.0では、各Studioの先頭からチェックポイントを選べるようにし、ローカルモデルの配置と探索を揃えました。下位フォルダーでの整理、外部フォルダーの探索、選択の保存に対応します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデルの選択・配置と系列ごとの対応条件](docs/local-models.md)
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 
@@ -157,13 +157,13 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 |---|---|---|
 | Forge `txt2img` / `img2img` | `models/Lora/` | **LoRAを組み合わせる** で選択、または `<lora:名前:0.8>` |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → 一覧更新 → 複数選択** |
-| Ming Image | `models/Lora/Ming/` | **モデル・LoRA** で選択 |
+| Ming Image | `models/Lora/Ming/` | **LoRA** で選択 |
 
 強度は−2〜2で指定します。0は無効、×は選択解除です。同じLoRAを選択欄とプロンプトの両方へ指定しないでください。モデルの世代や形式が異なると使えません。[対応形式と外部モデルの指定方法](docs/local-models.md) · [Qwen追加LoRAガイド](extensions-builtin/qwen-image21-studio/README.md#追加lora)
 
 Qwenの画風・色・照明の編集で構図を保ちたい場合は、[Consistency LoRA](docs/qwen21-consistency-lora.md)をLoRA欄から準備できます。通常版1500を取得し、既存の選択と強度を保って追加します。新しいポーズへの変更を抑える場合があります。
 
-手元のQwen Image 2.1用GGUFやINT8 ConvRot本体は、**本体モデル**から選択できます。対応形式・共通部品・実生成の確認範囲は[ローカルモデルの使い方](docs/local-models.md)を参照してください。
+手元のQwen Image 2.1用GGUFやINT8 ConvRot本体は、**チェックポイント**から選択できます。配置・対応形式・共通部品は[ローカルモデルの使い方](docs/local-models.md)を参照してください。
 
 <details>
 <summary>タグ入力補助・高速化・詳細設定</summary>

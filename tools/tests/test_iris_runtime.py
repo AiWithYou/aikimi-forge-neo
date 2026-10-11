@@ -19,6 +19,7 @@ class RuntimeTests(unittest.TestCase):
         clock = [0.0]
         runner = Runner.__new__(Runner)
         runner.task, runner.precision = "generate", "int8"
+        runner.root, runner.checkpoint, runner.source_identity = Path("runtime"), "base", {"weights": {}, "config": {}}
         runner.model = torch.nn.Identity()
         runner.model.cuda = lambda: runner.model
         runner.cfg = SimpleNamespace(
@@ -54,6 +55,7 @@ class RuntimeTests(unittest.TestCase):
                 patch("torch.cuda.max_memory_reserved", return_value=0),
                 patch("torch.Generator"),
                 patch("torch.autocast"),
+                patch("modules_forge.iris.runtime.checkpoint_identity", return_value=runner.source_identity),
             ):
                 result = runner.run(path)
             self.assertEqual(result["seconds"], 10.0)

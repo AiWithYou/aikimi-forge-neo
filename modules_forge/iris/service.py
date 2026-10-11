@@ -11,7 +11,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from .core import ROOT, RUNTIME, IrisError, atomic_json, model_ready, python_path, validate_request
+from .core import ROOT, RUNTIME, IrisError, atomic_json, model_files, model_ready, python_path, validate_request
 
 
 class Service:
@@ -26,7 +26,11 @@ class Service:
         from modules_forge.gpu_ownership import GPUOwnership
 
         request = validate_request(request)
-        if not model_ready(self.root, request["precision"], request["task"]):
+        if request.get("checkpoint", "base") != "base":
+            request["checkpoint"] = str(
+                model_files(self.root, request["precision"], request["task"], request["checkpoint"])[0]
+            )
+        if not model_ready(self.root, request["precision"], request["task"], request.get("checkpoint", "base")):
             raise IrisError("選択したモデルを準備してください。")
         lease = GPUOwnership()
         lease.engine = "iris"

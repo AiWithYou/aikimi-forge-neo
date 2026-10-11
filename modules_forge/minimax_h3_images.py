@@ -79,16 +79,19 @@ class H3ImageRequest:
     frame_index: int = 0
     save_candidates: bool = False
     negpip: H3NegPiP = field(default_factory=H3NegPiP)
+    checkpoint: str = ""
 
     @property
     def runtime_acceleration(self) -> H3Acceleration:
-        return H3Acceleration(negpip=self.negpip)
+        from modules_forge.studio_checkpoints import h3_variant
+        return H3Acceleration(model_variant=h3_variant(self.checkpoint), negpip=self.negpip, checkpoint=self.checkpoint)
 
     def validate(self) -> None:
         try:
             if not isinstance(self.negpip, H3NegPiP):
                 raise ValueError("NegPiP設定の形式が不正です。")
             self.negpip.validate()
+            self.runtime_acceleration.checkpoint_for_mode(self.mode)
         except ValueError as exc:
             raise H3ImageError(str(exc)) from exc
         if self.mode not in {"text", "references"}:
@@ -152,6 +155,9 @@ def build_image_workflow(
     request.validate()
     seed = integer(seed, "生成Seed", 0, 2**63 - 1)
     names = model_names() if models is None else models
+    if request.checkpoint:
+        names = dict(names)
+        names["ref2va" if request.mode == "references" else "fl2va"] = Path(request.checkpoint).name
 
     def node(kind: str, **inputs: Any) -> dict[str, Any]:
         return {"class_type": kind, "inputs": inputs}
@@ -274,10 +280,14 @@ def extract_image_outputs(
 def save_image_result(
     primary: list[Path], candidates: list[Path], output_directory: Path,
     request: H3ImageRequest, seed: int, prompt_id: str, readiness: Any,
-    *, models: Mapping[str, str] | None = None,
+    *, models: Mapping[str, str] | None = None, checkpoint_snapshot: dict | None = None,
 ) -> dict[str, Any]:
     """Publish the entire PNG/JSON result directory only after every file verifies."""
     from PIL import Image
+
+    from modules_forge.studio_checkpoints import result_identity, verify_snapshot
+
+    checkpoint_identity = result_identity(request.checkpoint, checkpoint_snapshot)
 
     if len(primary) != 1 or len(candidates) != (FRAMES if request.save_candidates else 0):
         raise H3ImageError("保存する画像の枚数が不正です。")
@@ -285,6 +295,9 @@ def save_image_result(
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     target = output_directory / f"H3_Image_{stamp}_{uuid.uuid4().hex[:12]}"
     names = model_names() if models is None else models
+    if request.checkpoint:
+        names = dict(names)
+        names["ref2va" if request.mode == "references" else "fl2va"] = Path(request.checkpoint).name
     metadata = {
         "schema_version": 1, "output_kind": "image", "model_family": "MiniMax H3",
         "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -294,6 +307,7 @@ def save_image_result(
         "internal_frames": FRAMES, "selected_frame": request.frame_index,
         "save_candidates": request.save_candidates, "reference_count": len(request.reference_images),
         "models": dict(names), "diffusion_model": names["ref2va" if request.mode == "references" else "fl2va"],
+        "checkpoint_identity": checkpoint_identity,
         "attention": "comfy kitchen attention",
         "negpip": request.negpip.to_dict(),
         "comfyui_revision": readiness.core_revision, "comfyui_version": readiness.comfy_version,
@@ -313,6 +327,7 @@ def save_image_result(
         (stage / "parameters.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
         )
+        verify_snapshot(checkpoint_snapshot)
         os.replace(stage, target)
     finally:
         if stage.exists():
@@ -332,6 +347,9 @@ def run_image_generation(
 ) -> Iterator[dict[str, Any]]:
     request.validate()
     from modules_forge.gpu_ownership import GPUOwnership
+    from modules_forge.studio_checkpoints import snapshot_checkpoint
+
+    checkpoint_snapshot = snapshot_checkpoint(request.checkpoint)
 
     bridge = _bridge()
     ownership = GPUOwnership()
@@ -348,7 +366,7 @@ def run_image_generation(
         bridge.release_forge_vram()
         yield from _run_image_generation(request, runtime_root, server_url, log_directory,
                                          output_directory, runtime_profile, poll_seconds,
-                                         ownership, submission_id)
+                                         ownership, submission_id, checkpoint_snapshot)
     finally:
         with bridge._ACTIVE_GENERATION_LOCK:
             retained = ownership in bridge._GPU_OWNERSHIPS.values()
@@ -359,7 +377,9 @@ def run_image_generation(
 
 
 def _run_image_generation(request, runtime_root, server_url, log_directory, output_directory,
-                          runtime_profile, poll_seconds, ownership, submission_id):
+                          runtime_profile, poll_seconds, ownership, submission_id, checkpoint_snapshot=None):
+    from modules_forge.studio_checkpoints import result_identity, verify_snapshot
+    result_identity(request.checkpoint, checkpoint_snapshot)
     bridge = _bridge()
     root = bridge.resolve_runtime_root(runtime_root)
     url = bridge.normalize_loopback_url(server_url)
@@ -369,6 +389,7 @@ def _run_image_generation(request, runtime_root, server_url, log_directory, outp
         acceleration=request.runtime_acceleration,
     )
     yield {"stage": "runtime", "message": "画像生成用のH3環境を確認しています。", "prompt_id": submission_id}
+    verify_snapshot(checkpoint_snapshot)
     readiness = bridge.ensure_ready(root, url, log_directory, runtime_profile=runtime_profile, acceleration=request.runtime_acceleration)
     from modules_forge import gpu_residency
 
@@ -381,6 +402,7 @@ def _run_image_generation(request, runtime_root, server_url, log_directory, outp
         seed = request.resolved_seed()
         graph = build_image_workflow(request, prepared, seed)
         with bridge._RUNTIME_LIFECYCLE_LOCK:
+            verify_snapshot(checkpoint_snapshot)
             readiness = bridge.ensure_ready(root, url, log_directory, runtime_profile=runtime_profile, acceleration=request.runtime_acceleration)
             validate_image_runtime(request, readiness, runtime_profile)
             client = bridge.ComfyH3Client(url)
@@ -390,6 +412,7 @@ def _run_image_generation(request, runtime_root, server_url, log_directory, outp
             server_process = bridge._loopback_server_process(url)
             if server_process is None:
                 raise H3ImageError("H3の送信先processを確認できません。")
+            verify_snapshot(checkpoint_snapshot)
             bridge.pending_jobs.write({
                 "version": 1, "prompt_id": submission_id, "runtime_root": os.fspath(root.resolve()),
                 "server_url": url, "server_process": {"pid": server_process.pid, "created": server_process.create_time()},
@@ -439,7 +462,9 @@ def _run_image_generation(request, runtime_root, server_url, log_directory, outp
                         if attempt == 2:
                             raise
                         time.sleep(max(0.05, poll_seconds))
-                result = save_image_result(primary, candidates, output_directory, request, seed, prompt_id, readiness)
+                verify_snapshot(checkpoint_snapshot)
+                snapshot_options = {"checkpoint_snapshot": checkpoint_snapshot} if checkpoint_snapshot is not None else {}
+                result = save_image_result(primary, candidates, output_directory, request, seed, prompt_id, readiness, **snapshot_options)
                 yield {"stage": "complete", "message": "PNGと生成条件を保存しました。", "prompt_id": prompt_id, "seed": seed, "elapsed": elapsed, **result}
                 return
             if status in {"cancelled", "canceled"}:

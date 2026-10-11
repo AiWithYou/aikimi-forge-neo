@@ -199,9 +199,17 @@ def test_rendering_reads_latest_result_and_table_selection_changes_page(tmp_path
         for function in app.fns.values()
         if function.fn
         and function.fn.__name__ == "select"
-        and getattr(function.inputs[2], "label", "") == "補足の文章・JSON"
+        and any(getattr(component, "label", "") == "補足の文章・JSON" for component in function.inputs)
     )
-    current = ["flash-int8", "evaluate", request["questions"], 262144, 4096, {"items": latest["items"]}]
+    current = [
+        "flash-int8",
+        "official:flash-int8",
+        "evaluate",
+        request["questions"],
+        262144,
+        4096,
+        {"items": latest["items"]},
+    ]
     view = ["入力順", "すべて", None, 1]
     event = gr.SelectData(None, {"index": [24, 0], "value": "25", "row_value": [latest["id"] + ":24"]})
     output = select(stale, *current, view, event)
@@ -217,7 +225,7 @@ def test_rendering_reads_latest_result_and_table_selection_changes_page(tmp_path
         for function in app.fns.values()
         if function.fn
         and function.fn.__name__ == "review"
-        and getattr(function.inputs[4], "label", "") == "補足の文章・JSON"
+        and any(getattr(component, "label", "") == "補足の文章・JSON" for component in function.inputs)
     )
     output = review(stale, [latest["id"], "0"], [latest["id"], "24"], *current, output[-1])
     assert output[8] == [latest["id"], "24"]
@@ -307,7 +315,7 @@ def test_history_is_scanned_once_at_build_and_only_on_poll_completion(tmp_path, 
     poll = next(function.fn for function in app.fns.values() if function.fn and function.fn.__name__ == "poll")
     data = run()
     data["status"] = "running"
-    current = ["flash-int8", "", data["request"]["questions"], 262144, 4096, {"items": []}]
+    current = ["flash-int8", "official:flash-int8", "", data["request"]["questions"], 262144, 4096, {"items": []}]
     info = {"done": False, "result": data, "message": "running"}
     monkeypatch.setattr(workspace.STUDIO, "status", lambda *args: info)
     arguments = [data["id"], {"id": "viewing-history"}, None, *current, ["入力順", "すべて", None, 1]]

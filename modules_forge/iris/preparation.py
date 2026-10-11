@@ -17,7 +17,9 @@ class Preparation:
         self.guard = threading.Lock()
         atexit.register(self.shutdown)
 
-    def start(self, task, precision):
+    def start(self, task, precision, components_only=False):
+        if components_only and task != "generate":
+            raise IrisError("共通部品だけの準備は画像生成に使用してください。")
         with self.guard:
             if any(job["status"] == "running" for job in self.jobs.values()):
                 raise IrisError("Irisのモデルを準備中です。終了後に再実行してください。")
@@ -33,10 +35,10 @@ class Preparation:
                 "tree": None,
             }
             self.jobs[identifier] = job
-            threading.Thread(target=self.execute, args=(job, task, precision), daemon=True).start()
+            threading.Thread(target=self.execute, args=(job, task, precision, components_only), daemon=True).start()
             return identifier
 
-    def execute(self, job, task, precision):
+    def execute(self, job, task, precision, components_only=False):
         from pathlib import Path
 
         from modules_forge.yue2_studio.service import ProcessTree
@@ -54,7 +56,8 @@ class Preparation:
                         "--precision",
                         precision,
                         "--parent-guard",
-                    ],
+                    ]
+                    + (["--components-only"] if components_only else []),
                     cwd=ROOT,
                     stdin=subprocess.PIPE,
                     stdout=log,

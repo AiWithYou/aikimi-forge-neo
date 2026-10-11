@@ -19,7 +19,6 @@ from PIL import Image
 
 from .bundle import bundle_manifest
 from .core import (
-    MODELS,
     OUTPUTS,
     PREPROCESSING_VERSION,
     PROFILES,
@@ -34,6 +33,7 @@ from .core import (
     sha256,
     validate_request,
 )
+from .local_source import checkpoint_identity, checkpoint_manifest
 
 
 def snapshot_inputs(paths, directory):
@@ -166,8 +166,11 @@ class Studio:
         self.closed = False
         atexit.register(self.shutdown)
 
-    def _installed(self, profile):
-        bundle_manifest(self.runtime, profile)
+    def _installed(self, profile, checkpoint=""):
+        if checkpoint:
+            checkpoint_manifest(self.runtime, profile, checkpoint)
+        else:
+            bundle_manifest(self.runtime, profile)
         python = self.runtime / "worker-env" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         if not python.is_file():
             raise ClefError("Clefの専用Python環境がありません。aikimi-clef-setup.batを実行してください。")
@@ -190,7 +193,10 @@ class Studio:
             raise ClefError("Clefタブから操作してください。")
         if not paths and (request["state"] == "" or request["state"] is None):
             raise ClefError("画像または補足入力を指定してください。")
-        python = self._installed(request["profile"])
+        checkpoint = request.get("checkpoint", "")
+        python = self._installed(request["profile"], checkpoint) if checkpoint else self._installed(request["profile"])
+        selected = checkpoint_identity(self.runtime, request["profile"], checkpoint)
+        request["model_identity"] = selected
         self._dependencies()
         with self.guard:
             self._idle()
@@ -216,7 +222,7 @@ class Studio:
                     "created_at": datetime.now(UTC).isoformat(),
                     "status": "running",
                     "request": request,
-                    "model": MODELS[profile["model"]],
+                    "model": selected,
                     "profile": profile,
                     "preprocessing": PREPROCESSING_VERSION,
                     "fingerprint": fingerprint(request, items),
@@ -294,6 +300,10 @@ class Studio:
             if result["status"] == "running" and not execution_stopped(directory):
                 raise ClefError("この記録は実行中です。停止を確認してから再開してください。")
             request = validate_request(result["request"])
+            checkpoint = request.get("checkpoint", "")
+            selected = checkpoint_identity(self.runtime, request["profile"], checkpoint)
+            if request.get("model_identity") != selected:
+                raise ClefError("保存したチェックポイントが変更されています。再開せず新しい判定を開始してください。")
             for item in result["items"]:
                 if not item["path"]:
                     continue
@@ -317,7 +327,9 @@ class Studio:
                     item["status"] = "pending"
                     item.pop("error", None)
             result["status"] = "running"
-            python = self._installed(request["profile"])
+            python = (
+                self._installed(request["profile"], checkpoint) if checkpoint else self._installed(request["profile"])
+            )
             self._dependencies()
             return self._launch(result, directory, python, owner)
 

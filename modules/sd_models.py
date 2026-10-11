@@ -2,14 +2,25 @@ import gc
 import math
 import os.path
 import re
-import sys
 
 import torch
 
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.loader import forge_loader
-from modules import cache, errors, extra_networks, hashes, modelloader, paths, processing, script_callbacks, sd_unet, sd_vae, shared  # noqa
+from modules import (  # noqa
+    cache,
+    errors,
+    extra_networks,
+    hashes,
+    modelloader,
+    paths,
+    processing,
+    script_callbacks,
+    sd_unet,
+    sd_vae,
+    shared,
+)
 from modules.prompt_parser import DictWithShape, SdConditioning  # noqa
 from modules.shared import cmd_opts, opts
 from modules.timer import Timer
@@ -18,7 +29,7 @@ model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
 
 checkpoints_list: dict[str, "CheckpointInfo"] = {}
-checkpoint_aliases: dict[str, "CheckpointInfo"] = {}
+checkpoint_aliases: dict[str, "CheckpointInfo | None"] = {}
 
 
 def replace_key(d, key, new_key, value):
@@ -83,14 +94,18 @@ class CheckpointInfo:
         self.title = name if self.shorthash is None else f"{name} [{self.shorthash}]"
         self.short_title = self.name_for_extra if self.shorthash is None else f"{self.name_for_extra} [{self.shorthash}]"
 
-        self.ids = [self.hash, self.model_name, self.title, name, self.name_for_extra, f"{name} [{self.hash}]"]
+        self.ids = [abspath, self.hash, self.model_name, self.title, name, self.name_for_extra, f"{name} [{self.hash}]"]
         if self.shorthash:
             self.ids += [self.shorthash, self.sha256, f"{self.name} [{self.shorthash}]", f"{self.name_for_extra} [{self.shorthash}]"]
 
     def register(self):
-        checkpoints_list[self.title] = self
+        key = self.title
+        if key in checkpoints_list and checkpoints_list[key].filename != self.filename:
+            key = os.path.abspath(self.filename)
+        checkpoints_list[key] = self
         for id in self.ids:
-            checkpoint_aliases[id] = self
+            previous = checkpoint_aliases.get(id)
+            checkpoint_aliases[id] = self if id not in checkpoint_aliases or previous is self or previous is not None and previous.filename == self.filename else None
 
     def calculate_shorthash(self):
         self.sha256 = hashes.sha256(self.filename, f"checkpoint/{self.name}")
@@ -135,15 +150,33 @@ def list_models():
     checkpoint_aliases.clear()
     model_list: set[str] = set()
 
-    for _dir in (*cmd_opts.ckpt_dirs, model_path):
+    for _dir in checkpoint_roots():
         model_list.update(modelloader.load_models(model_path=_dir, ext_filter=[".ckpt", ".safetensors", ".gguf"], ext_blacklist=[".vae.ckpt", ".vae.safetensors"]))
-    from modules_forge.local_assets import library
+    from modules_forge.local_assets import library, selection
 
     model_list.update(path for path in library().get("forge_checkpoint", []) if os.path.isfile(path))
+    model_list.update(path for path in selection("forge").get("checkpoints", {}).values() if os.path.isfile(path))
 
     for filename in model_list:
         checkpoint_info = CheckpointInfo(filename)
         checkpoint_info.register()
+
+
+def checkpoint_roots():
+    from modules_forge import local_assets, model_catalog
+
+    roots = model_catalog.checkpoint_roots(
+        "Stable-diffusion", (*cmd_opts.ckpt_dirs, model_path), local_assets.selection("forge").get("directory", "")
+    )
+    for family in ("Anima", "Krea2", "SDXL", "SD", "Flux", "Flux.2", "Qwen-Image", "Qwen-Image-Edit", "Lumina-Image-2.0", "Z-Image", "Wan", "Ernie-Image", "PiD"):
+        roots += model_catalog.checkpoint_roots(family)
+    return tuple(dict.fromkeys(roots))
+
+
+def checkpoint_choices(current=""):
+    from modules_forge.model_catalog import choice_labels
+
+    return choice_labels([info.filename for info in checkpoints_list.values()], checkpoint_roots(), current)
 
 
 re_strip_checksum = re.compile(r"\s*\[[^]]+]\s*$")
@@ -164,9 +197,10 @@ def get_closet_checkpoint_match(search_string):
     if not search_string:
         return None
 
-    checkpoint_info = checkpoint_aliases.get(search_string, None)
-    if checkpoint_info is not None:
-        return checkpoint_info
+    if search_string in checkpoint_aliases:
+        return checkpoint_aliases[search_string]
+    if os.path.isabs(search_string):
+        return None
 
     found = sorted([info for info in checkpoints_list.values() if search_string in info.title], key=lambda x: len(x.title))
     if found:
@@ -202,15 +236,17 @@ def select_checkpoint():
 
     checkpoint_info = checkpoint_aliases.get(model_checkpoint, None)
     if checkpoint_info is not None:
+        if not os.path.isfile(checkpoint_info.filename):
+            raise FileNotFoundError(f"The selected checkpoint is not available: {checkpoint_info.filename}")
         return checkpoint_info
+
+    if model_checkpoint:
+        raise FileNotFoundError(f"The selected checkpoint is not available: {model_checkpoint}")
 
     if len(checkpoints_list) == 0:
         return None
 
     checkpoint_info = next(iter(checkpoints_list.values()))
-    if model_checkpoint is not None:
-        print(f"Checkpoint {model_checkpoint} not found; loading fallback {checkpoint_info.title}", file=sys.stderr)
-
     return checkpoint_info
 
 
@@ -327,17 +363,47 @@ def apply_token_merging(sd_model, token_merging_ratio):
         print(f"eps_scaling_factor = {opts.scaling_factor}")
 
 
+def loading_file_identity(parameters):
+    from pathlib import Path
+
+    from modules_forge.local_assets import file_identity, file_version
+
+    files = [parameters["checkpoint_info"].filename, *parameters.get("additional_modules", [])]
+    result = []
+    for filename in files:
+        path = Path(filename).resolve()
+        version = file_version(path)
+        # Volumes without a reliable change counter require content verification.
+        result.append((str(path), version if version[2] is not None else file_identity(path)["sha256"]))
+    return result
+
+
 @torch.inference_mode()
 def forge_model_reload():
-    current_hash = str(model_data.forge_loading_parameters)
-
-    if model_data.forge_hash == current_hash:
-        return model_data.sd_model, False
-
     model_data.forge_loading = True
-    model_data.last_load_seconds = None
-    model_data.last_load_error = None
     try:
+        try:
+            checkpoint_info = select_checkpoint()
+            if checkpoint_info is None:
+                raise ValueError("Failed to find available model...")
+            if not {"additional_modules", "unet_storage_dtype"} <= model_data.forge_loading_parameters.keys():
+                from modules_forge.main_entry import refresh_model_loading_parameters
+
+                refresh_model_loading_parameters()
+            parameters = model_data.forge_loading_parameters
+            parameters["checkpoint_info"] = checkpoint_info
+            parameters["file_identity"] = loading_file_identity(parameters)
+        except Exception:
+            model_data.forge_loading_parameters = {}
+            model_data.forge_hash = ""
+            raise
+        current_hash = str(parameters)
+
+        if model_data.forge_hash == current_hash:
+            return model_data.sd_model, False
+
+        model_data.last_load_seconds = None
+        model_data.last_load_error = None
         return _forge_model_reload(current_hash)
     except Exception as exc:
         model_data.last_load_error = f"{type(exc).__name__}: {exc}"

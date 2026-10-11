@@ -76,6 +76,10 @@ def validate_request(value):
         if not request.get("image"):
             raise IrisError("入力画像を選んでください。")
         return {"task": task, "precision": precision, "image": request["image"]}
+    checkpoint = request.get("checkpoint", "base")
+    if not isinstance(checkpoint, str) or not checkpoint.strip() or "://" in checkpoint:
+        raise IrisError("チェックポイントを選び直してください。")
+    request["checkpoint"] = checkpoint.strip().strip('"')
     request.pop("image", None)
     prompt = str(request.get("prompt", "")).strip()
     if not prompt or len(prompt) > 12000:
@@ -110,9 +114,32 @@ def validate_request(value):
     return request
 
 
-def model_directory(root, precision, task):
+def model_directory(root, precision, task, checkpoint="base"):
+    if checkpoint != "base":
+        return model_files(root, precision, task, checkpoint)[0].parent
     directory = Path(root) / {"int8": "int8", "w4a8": "w4a8", "normal": "official"}[precision]
     return directory / {"generate": "", "depth": "depth", "upscale": "upscaler"}[task]
+
+
+def model_files(root, precision, task, checkpoint="base"):
+    if checkpoint == "base":
+        directory = model_directory(root, precision, task, checkpoint)
+        return directory / "model.safetensors", directory / "config.yaml"
+    if task != "generate":
+        raise IrisError("画像生成のチェックポイントを選び直してください。")
+    from .local_source import resolve
+
+    source = resolve(root, checkpoint)
+    if source["precision"] != precision:
+        raise IrisError("選択したチェックポイントの保存形式が一致しません。")
+    return source["weights"], source["config"]
+
+
+def checkpoint_identity(root, precision, task, checkpoint="base"):
+    from modules_forge.local_assets import file_identity
+
+    weights, config = model_files(root, precision, task, checkpoint)
+    return {"weights": file_identity(weights), "config": file_identity(config)}
 
 
 def python_path(root=RUNTIME):
@@ -145,18 +172,22 @@ def files_ready(directory, manifest):
         return False
 
 
-def model_ready(root, precision, task):
+def model_ready(root, precision, task, checkpoint="base"):
     if not environment_ready(root):
         return False
-    directory = model_directory(root, precision, task)
     try:
-        manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
-        required = {"model.safetensors", "config.yaml"}
-        if task != "generate":
-            required.add("empty_prompt.safetensors")
-        if not required.issubset({record["path"] for record in manifest["files"]}) or not files_ready(
-            directory, manifest
-        ):
+        weights, config = model_files(root, precision, task, checkpoint)
+        directory = weights.parent
+        if checkpoint == "base":
+            manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+            required = {"model.safetensors", "config.yaml"}
+            if task != "generate":
+                required.add("empty_prompt.safetensors")
+            if not required.issubset({record["path"] for record in manifest["files"]}) or not files_ready(
+                directory, manifest
+            ):
+                return False
+        elif not weights.is_file() or not config.is_file():
             return False
         if task == "generate":
             if precision == "w4a8":
@@ -177,6 +208,21 @@ def model_ready(root, precision, task):
         return True
     except (OSError, ValueError, KeyError, TypeError):
         return False
+
+
+def checkpoint_choices(root=RUNTIME, search_directory=None, current="base"):
+    from modules_forge import local_assets, model_catalog
+
+    from .local_source import discover
+
+    if search_directory:
+        local_assets.local_path(search_directory, directory=True)
+    if Path(root).resolve() == Path(RUNTIME).resolve():
+        roots = model_catalog.checkpoint_roots("Iris-3B", (Path(root) / "checkpoints",), search_directory or "")
+    else:
+        roots = (Path(search_directory) if search_directory else Path(root) / "checkpoints",)
+    paths = [value for folder in roots if folder.is_dir() for _, value in discover(root, str(folder))]
+    return [("オリジナル", "base"), *model_catalog.choice_labels(paths, roots, current if current != "base" else "")]
 
 
 def runtime_status(root=RUNTIME):

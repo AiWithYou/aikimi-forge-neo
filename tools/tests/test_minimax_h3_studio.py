@@ -627,7 +627,22 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
             for dependency in dependencies
             if any(target[0] == initialize_id and target[1] == "click" for target in dependency["targets"])
         )
-        self.assertEqual(len(initialize["inputs"]), 4)
+        checkpoint_id = generate["inputs"][-1]
+        checkpoint = interface.blocks[checkpoint_id]
+        self.assertEqual(checkpoint.label, "チェックポイント")
+        self.assertTrue(checkpoint.do_not_save_to_config)
+        self.assertEqual(initialize["inputs"], [
+            component_ids["h3-runtime-path"], component_ids["h3-server-url"],
+            component_ids["h3-runtime-profile"], component_ids["h3-aspect"], checkpoint_id,
+        ])
+        synchronize = next(
+            function for function in interface.fns.values()
+            if function.name == "_checkpoint_acceleration_updates"
+        )
+        self.assertEqual(synchronize.inputs, [checkpoint])
+        self.assertEqual([control.elem_id for control in synchronize.outputs], [
+            "h3-model-variant", "h3-turbo-4", "h3-turbo-8",
+        ])
         self.assertEqual(len(initialize["outputs"]), 27 + control_count)
         self.assertEqual(initialize["outputs"][21:21 + control_count], generate["inputs"][-control_count:])
         self.assertEqual(initialize["trigger_mode"], "once")

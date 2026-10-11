@@ -2,13 +2,13 @@
 
 English · [日本語](README.md)
 
-**[v3.10.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v3.10.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.0.0)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
 **A Windows-focused Forge Neo fork for image generation and editing, video with audio, music composition, and image or text evaluation in one WebUI.** It also provides model setup, high-resolution workflows, and image finishing tools.
 
-v3.10.0 adds an experimental mode for silent 360° orbit videos from a single photo in MiniMax H3. Orbit and regular generation retain their settings separately. Completed real-model Orbit video generation, orbit quality, and generation time have not been validated. See the [Orbit guide and validation scope (Japanese)](docs/minimax-h3-orbit-lora.md). Krea2 reuses fused text conditioning during sampling, and Anima references are fitted to the output dimensions to prevent shape errors. [Krea2 behavior and timing (Japanese)](docs/krea2-jev.md#テキスト融合の再利用)
+v4.0.0 puts checkpoint selection at the top of each Studio and provides consistent local model discovery, folder organization, and saved selections. External folders and nested checkpoint folders are supported. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model selection, layout, and compatibility by family (Japanese)](docs/local-models.md).
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 
@@ -157,7 +157,7 @@ Strength ranges from −2 to 2. A value of 0 disables the LoRA; × removes the s
 
 For Qwen style, color, or lighting edits that preserve composition, prepare [Consistency LoRA](docs/qwen21-consistency-lora.md) from the LoRA panel. It downloads the standard 1500 variant and preserves existing selections and strengths. It may limit changes to pose.
 
-Select a compatible local Qwen Image 2.1 GGUF or INT8 ConvRot transformer under **Base model**. See [Local models](docs/local-models.md) for formats, shared components, and tested generation coverage.
+Select a compatible local Qwen Image 2.1 GGUF or INT8 ConvRot transformer under **Checkpoint**. See [Local models](docs/local-models.md) for model folders, formats, and shared components.
 
 <details>
 <summary>Tag completion, acceleration, and advanced settings</summary>

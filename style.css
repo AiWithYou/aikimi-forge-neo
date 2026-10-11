@@ -642,6 +642,46 @@ div.toprow-compact-tools {
     width: 12em;
 }
 
+#quicksettings > #forge_checkpoint_selector {
+    flex: 1 1 30rem;
+    width: auto;
+    min-width: 0 !important;
+    align-items: end;
+}
+
+#forge_checkpoint_selector > div {
+    flex: 1 1 0;
+    min-width: 0 !important;
+}
+
+#forge_checkpoint_selector #setting_sd_model_checkpoint input {
+    width: 100%;
+    min-width: 0;
+}
+
+#forge_checkpoint_selector #forge_refresh_checkpoint {
+    flex: 0 0 auto;
+    width: 105px;
+    margin: 0;
+}
+
+#quicksettings > #forge_model_details {
+    order: 1;
+    flex: 1 0 100%;
+    width: 100%;
+    min-width: 0 !important;
+}
+
+#quicksettings > #forge_model_details > .label-wrap {
+    box-sizing: border-box;
+    padding: 8px 12px;
+}
+
+#forge_model_details .form,
+#forge_model_details #setting_sd_modules .wrap-inner {
+    min-width: 0 !important;
+}
+
 @media (max-width: 640px) {
     #quicksettings {
         display: grid !important;
@@ -656,19 +696,21 @@ div.toprow-compact-tools {
     }
 
     #forge_ui_preset { grid-column: 1; }
-    #setting_sd_model_checkpoint { grid-column: 2; }
-    #setting_sd_modules { grid-column: 1 / -1; }
     #forge_ui_dtype { grid-column: 2; }
 
-    #forge_refresh_checkpoint {
-        grid-column: 1;
-        margin: 0;
-        justify-self: start;
-        align-self: end;
+    #forge_checkpoint_selector {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    #forge_model_details {
+        grid-column: 1 / -1;
+        grid-row: 3;
     }
 
     #forge_ui_preset input,
-    #setting_sd_model_checkpoint input {
+    #setting_sd_model_checkpoint input,
+    #forge_ui_dtype input {
         width: 100% !important;
     }
 }

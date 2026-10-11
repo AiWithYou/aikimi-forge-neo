@@ -2,6 +2,8 @@
 
 Iris-3Bの画像生成、相対深度推定、復元・4倍拡大を通常版／INT8／W4A8で使用します。既定はINT8です。
 
+画面先頭の**チェックポイント**と**一覧を更新**で本体を選びます。画像生成用FTは`models/Iris-3B/checkpoints/`へ配置し、`model/Iris-3B/`や**モデル詳細 → 探索フォルダー**の外部パスも使えます。下位フォルダーを相対パスで表示し、選択を保存します。FTは隣接する`config.yaml`が必要です。深度・復元は同じ位置に専用の公式モデルを表示します。
+
 `.\aikimi-iris-setup.bat`で画像生成用INT8を準備し、通常の`aikimi-launch.bat`で起動して上部の**Iris**を開きます。画面の**モデルを準備**でも選択中の処理に必要なモデルを取得できます。
 
 通常版の例: `.\aikimi-iris-setup.bat --precision normal --task generate`。深度は`--task depth`、復元は`--task upscale`、全処理は`--task all`です。INT8は[Hugging Face](https://huggingface.co/Aikimi/iris-3b-int8)の固定commitから取得し、利用時に変換しません。

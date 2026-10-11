@@ -179,16 +179,11 @@ def save_selection(engine: str, value: dict) -> None:
 
 
 def choices(category: str, roots=(), *, folders: bool = False, suffixes=(".safetensors", ".gguf")) -> list:
+    from modules_forge import model_catalog
+
     paths = list(library().get(category, []))
-    for root in roots:
-        root = Path(root)
-        if not root.is_dir():
-            continue
-        if folders:
-            paths.extend(str(p.parent) for p in root.rglob("model_index.json"))
-            paths.extend(str(p.parent) for p in root.rglob("config.json") if p.parent.name == "transformer")
-        paths.extend(str(p) for p in root.rglob("*") if p.is_file() and p.suffix.lower() in suffixes)
-    return [(str(Path(p).name) + " · " + str(Path(p).parent), p) for p in sorted(set(paths))]
+    paths.extend(model_catalog.discover_files(roots, folders=folders, suffixes=suffixes))
+    return model_catalog.choice_labels(paths, roots)
 
 
 def lora_label(name: str) -> str:

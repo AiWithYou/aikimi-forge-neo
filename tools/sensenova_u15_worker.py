@@ -17,7 +17,7 @@ import sys
 import time
 import traceback
 from collections.abc import Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -275,11 +275,24 @@ def _validate_payload(payload: dict[str, Any]) -> None:
         raise RuntimeError("This worker only accepts the final INT8 ConvRot checkpoint.")
     if payload.get("model_path") != FINAL_MODEL_ID:
         raise RuntimeError(f"This worker is fixed to the final model config: {FINAL_MODEL_ID}")
-    if payload.get("checkpoint_revision") != CHECKPOINT_REVISION:
+    if payload.get("checkpoint_revision") not in {CHECKPOINT_REVISION, "local"}:
         raise RuntimeError("The pinned INT8 ConvRot checkpoint revision does not match.")
     checkpoint = Path(str(payload.get("checkpoint", "")))
     if checkpoint.suffix.lower() != ".safetensors" or not checkpoint.is_file():
         raise RuntimeError(f"INT8 ConvRot checkpoint does not exist: {checkpoint}")
+    expected = payload.get("checkpoint_identity")
+    if not isinstance(expected, dict) or not expected:
+        raise RuntimeError("checkpoint_identity is required before loading.")
+    from modules_forge import local_assets
+    from modules_forge.sensenova_u15_bridge import compatible_checkpoint
+
+    if not compatible_checkpoint(checkpoint):
+        raise RuntimeError("Only matching final/pruned INT8 ConvRot checkpoint structures are supported.")
+    selected = local_assets.file_identity(checkpoint)
+    if expected != selected:
+        raise RuntimeError("The selected checkpoint changed after the request was prepared.")
+    if payload.get("checkpoint_sha256", selected["sha256"]) != selected["sha256"]:
+        raise RuntimeError("The selected checkpoint SHA-256 does not match its identity.")
     if "generation_profile" not in payload:
         raise RuntimeError("generation_profile is required.")
     profile = str(payload["generation_profile"])
@@ -501,17 +514,6 @@ def _load_runtime(payload: dict[str, Any]):
             "targets": len(lora.targets),
             "strength": lora.strength,
         }
-    emit(
-        "loaded",
-        "Final INT8 ConvRot model is ready",
-        0.28,
-        load_seconds=round(time.monotonic() - started, 3),
-        effective_attn_backend=sensenova_u1.effective_attn_backend(),
-        loaded_int8_layers=loaded_layers,
-        release_variant=engine.release_variant,
-        generation_profile=profile,
-        lora_targets=0 if lora_info is None else lora_info["targets"],
-    )
     return (
         sensenova_u1,
         smart_resize,
@@ -537,23 +539,54 @@ def resident_run(payload):
 
 def _runtime_for_request(payload):
     global _RESIDENT_RUNTIME, _RESIDENT_KEY
-    if not _RESIDENT_MODE:
-        return _load_runtime(payload)
-    keys = ("source_path", "checkpoint", "model_path", "generation_profile", "lora_path",
+    from modules_forge.local_assets import file_identity
+
+    files = tuple(Path(payload[name]).resolve() for name in ("checkpoint", "lora_path") if payload.get(name))
+    snapshots = tuple((path, json.dumps(file_identity(path), sort_keys=True)) for path in files)
+    expected = payload.get("checkpoint_identity")
+    if expected is not None and json.dumps(expected, sort_keys=True) != snapshots[0][1]:
+        raise RuntimeError("The selected checkpoint changed after the request was created.")
+    keys = ("source_path", "checkpoint", "checkpoint_sha256", "model_path", "generation_profile", "lora_path",
             "vram_mode", "attn_backend", "dtype", "device", "quantization")
-    key = tuple((name, payload.get(name)) for name in keys)
-    files = [Path(payload[name]) for name in ("checkpoint", "lora_path") if payload.get(name)]
-    key += tuple((str(path), path.stat().st_size, path.stat().st_mtime_ns) for path in files)
-    if _RESIDENT_RUNTIME is None or _RESIDENT_KEY != key:
+    key = tuple((name, payload.get(name)) for name in keys) + snapshots
+    if _RESIDENT_MODE and _RESIDENT_RUNTIME is not None and _RESIDENT_KEY == key:
+        _RESIDENT_RUNTIME[-1].clear()
+        emit("loading", "Loaded model reused", 0.30)
+        return (*_RESIDENT_RUNTIME[:6], 0.0, _RESIDENT_RUNTIME[-1])
+    if _RESIDENT_MODE:
         _RESIDENT_RUNTIME = None
+        _RESIDENT_KEY = None
         gc.collect()
         torch.cuda.empty_cache()
-        _RESIDENT_RUNTIME = _load_runtime(payload)
+    runtime = _load_runtime(payload)
+    try:
+        for path, snapshot in snapshots:
+            if json.dumps(file_identity(path), sort_keys=True) != snapshot:
+                raise RuntimeError("The selected checkpoint or LoRA changed while loading.")
+    except BaseException:
+        close = getattr(runtime[2], "close", None)
+        if callable(close):
+            with suppress(Exception):
+                close()
+        runtime = close = None
+        gc.collect()
+        torch.cuda.empty_cache()
+        raise
+    emit(
+        "loaded",
+        "Final INT8 ConvRot model is ready",
+        0.28,
+        load_seconds=runtime[6],
+        effective_attn_backend=runtime[0].effective_attn_backend(),
+        loaded_int8_layers=runtime[4],
+        release_variant=runtime[2].release_variant,
+        generation_profile=payload["generation_profile"],
+        lora_targets=0 if runtime[5] is None else runtime[5]["targets"],
+    )
+    if _RESIDENT_MODE:
+        _RESIDENT_RUNTIME = runtime
         _RESIDENT_KEY = key
-        return _RESIDENT_RUNTIME
-    _RESIDENT_RUNTIME[-1].clear()
-    emit("loading", "Loaded model reused", 0.30)
-    return (*_RESIDENT_RUNTIME[:6], 0.0, _RESIDENT_RUNTIME[-1])
+    return runtime
 
 
 def run_request(payload: dict[str, Any]) -> dict[str, Any]:
@@ -677,6 +710,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         "prompt": prompt,
         "quantization": str(payload["quantization"]),
         "checkpoint_file": Path(str(payload["checkpoint"])).name,
+        "checkpoint_identity": payload.get("checkpoint_identity"),
         "checkpoint_sha256": str(payload.get("checkpoint_sha256", "")),
         "runtime_revision": source_revision,
         "release_variant": engine.release_variant,

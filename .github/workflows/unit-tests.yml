@@ -79,6 +79,8 @@ jobs:
         run: node --test tools/tests/clef_clipboard.test.mjs
       - name: Run Clef contracts without model downloads
         run: python tools/run_ci_tests.py --pytest tools/tests/test_clef*.py -q
+      - name: Run SenseNova checkpoint contracts without model downloads
+        run: python tools/run_ci_tests.py --pytest tools/tests/test_sensenova_checkpoint_selection.py -q
       - name: Run YuE2 contracts without model downloads
         run: python tools/run_ci_tests.py --pytest tests/yue2 -q
       - name: Run Jev contracts without API calls or models

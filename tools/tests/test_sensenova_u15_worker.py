@@ -16,6 +16,15 @@ SPEC.loader.exec_module(worker)
 
 
 class SenseNovaWorkerTests(unittest.TestCase):
+    def validate_payload(self, payload):
+        from modules_forge import local_assets
+        from modules_forge import sensenova_u15_bridge as bridge
+
+        value = {**payload, "checkpoint_identity": local_assets.file_identity(Path(payload["checkpoint"]))}
+        # These tests exercise sampling/input contracts; structure validation has separate fixtures.
+        with mock.patch.object(bridge, "compatible_checkpoint", return_value=True):
+            worker._validate_payload(value)
+
     def test_auto_input_budget_obeys_final_multi_reference_contract(self):
         self.assertEqual(worker._auto_input_max_pixels(1), 2048 * 2048)
         self.assertEqual(worker._auto_input_max_pixels(2), 2048 * 2048)
@@ -98,7 +107,7 @@ class SenseNovaWorkerTests(unittest.TestCase):
             Image.new("RGB", (16, 16), (255, 0, 0)).save(first)
             Image.new("RGB", (16, 16), (0, 0, 255)).save(second)
             checkpoint.write_bytes(b"test")
-            worker._validate_payload(
+            self.validate_payload(
                 {
                     "mode": "edit",
                     "prompt": "combine",
@@ -150,14 +159,14 @@ class SenseNovaWorkerTests(unittest.TestCase):
                     worker, "_sha256", return_value=worker.OFFICIAL_LORA_SHA256
                 ),
             ):
-                worker._validate_payload(payload)
+                self.validate_payload(payload)
                 payload["cfg_norm"] = "global"
                 with self.assertRaisesRegex(RuntimeError, "cfg_norm none"):
-                    worker._validate_payload(payload)
+                    self.validate_payload(payload)
                 payload["cfg_norm"] = "none"
                 payload["steps"] = 7
                 with self.assertRaisesRegex(RuntimeError, "exactly 8 steps"):
-                    worker._validate_payload(payload)
+                    self.validate_payload(payload)
 
     def test_low_vram_payload_rejects_uncapped_four_megapixel_edit(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -181,18 +190,18 @@ class SenseNovaWorkerTests(unittest.TestCase):
                 "vram_mode": "low",
             }
             with self.assertRaisesRegex(RuntimeError, "24 GB safe profile"):
-                worker._validate_payload(payload)
+                self.validate_payload(payload)
 
             payload["vram_mode"] = "unrestricted"
-            worker._validate_payload(payload)
+            self.validate_payload(payload)
 
             payload.update(vram_mode="reference", width=2048, height=2048,
                            input_max_pixels=1024 * 1024, input_images=[str(image)] * 8)
-            worker._validate_payload(payload)
+            self.validate_payload(payload)
             for changes in ({"input_images": [str(image)] * 9}, {"input_max_pixels": "auto"},
                             {"input_max_pixels": 2048 * 2048}, {"width": 4096}):
                 with self.subTest(changes=changes), self.assertRaisesRegex(RuntimeError, "Reference profile"):
-                    worker._validate_payload({**payload, **changes})
+                    self.validate_payload({**payload, **changes})
 
             payload.update(
                 {
@@ -203,7 +212,7 @@ class SenseNovaWorkerTests(unittest.TestCase):
                     "input_images": [str(image), str(image)],
                 }
             )
-            worker._validate_payload(payload)
+            self.validate_payload(payload)
 
             payload.update(
                 {
@@ -215,7 +224,7 @@ class SenseNovaWorkerTests(unittest.TestCase):
                 }
             )
             with self.assertRaisesRegex(RuntimeError, "at most 2 references"):
-                worker._validate_payload(payload)
+                self.validate_payload(payload)
 
     def test_quality_profile_rejects_all_hidden_lora_provenance(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -237,14 +246,14 @@ class SenseNovaWorkerTests(unittest.TestCase):
             missing_profile = dict(payload)
             missing_profile.pop("generation_profile")
             with self.assertRaisesRegex(RuntimeError, "generation_profile is required"):
-                worker._validate_payload(missing_profile)
-            worker._validate_payload(payload)
+                self.validate_payload(missing_profile)
+            self.validate_payload(payload)
             for field in ("lora_path", "lora_revision", "lora_sha256"):
                 payload[field] = "hidden"
                 with self.assertRaisesRegex(
                     RuntimeError, "hidden LoRA provenance"
                 ):
-                    worker._validate_payload(payload)
+                    self.validate_payload(payload)
                 payload[field] = ""
 
     def test_normalized_tensor_is_converted_to_rgb_image(self):

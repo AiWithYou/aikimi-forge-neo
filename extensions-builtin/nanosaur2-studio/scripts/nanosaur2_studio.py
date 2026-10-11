@@ -33,7 +33,7 @@ def _integer(value, label: str, minimum: int, maximum: int) -> int:
     return result
 
 
-def _request(prompt, negative, width, height, steps, cfg, seed, guidance):
+def _request(prompt, negative, width, height, steps, cfg, seed, guidance, checkpoint=""):
     return studio.Nanosaur2Request(
         prompt=prompt or "",
         negative_prompt=negative or "",
@@ -43,6 +43,7 @@ def _request(prompt, negative, width, height, steps, cfg, seed, guidance):
         cfg=cfg,
         seed=_integer(seed, "Seed", -1, 2**53 - 1),
         guidance=guidance,
+        checkpoint=checkpoint or "",
     )
 
 
@@ -79,10 +80,10 @@ def _setup_state():
         return "**準備状態を確認できません:** " + html.escape(str(exc))
 
 
-def _connect(restart=False):
+def _connect(restart=False, checkpoint=""):
     yield "再起動しています…" if restart else "接続・起動しています… 初回は少し時間がかかります。"
     try:
-        readiness = studio.ensure_runtime(restart=restart)
+        readiness = studio.ensure_runtime(restart=restart, **({"checkpoint": checkpoint} if checkpoint else {}))
         yield (
             "Nanosaur2の接続準備ができています。 "
             f"ComfyUI: {html.escape(readiness.comfy_version or '不明')} / "
@@ -92,11 +93,15 @@ def _connect(restart=False):
         yield "**起動に失敗しました:** " + html.escape(str(exc))
 
 
-def _restart():
-    yield from _connect(True)
+def _restart(checkpoint=""):
+    yield from _connect(True, checkpoint)
 
 
-def _generate(prompt, negative, width, height, steps, cfg, seed, guidance):
+def _connect_selected(checkpoint):
+    yield from _connect(checkpoint=checkpoint)
+
+
+def _generate(prompt, negative, width, height, steps, cfg, seed, guidance, checkpoint=""):
     notification_id = uuid.uuid4().hex
 
     def notify(stage, message):
@@ -120,7 +125,7 @@ def _generate(prompt, negative, width, height, steps, cfg, seed, guidance):
         gr.update(interactive=False),
     )
     try:
-        request = _request(prompt, negative, width, height, steps, cfg, seed, guidance)
+        request = _request(prompt, negative, width, height, steps, cfg, seed, guidance, checkpoint)
         for event in studio.run_generation(request):
             complete = event["stage"] == "complete"
             job = {"prompt_id": event["prompt_id"]} if event.get("prompt_id") and not complete else {}
@@ -163,6 +168,8 @@ def on_ui_tabs():
         gr.Markdown(
             "## Nanosaur2\nイラスト向けテキスト画像生成。モデル配布元は[well9472/Nanosaur2-670M](https://huggingface.co/well9472/Nanosaur2-670M)です。"
         )
+        from modules_forge.studio_checkpoint_ui import create
+        checkpoint, _, _ = create("nanosaur2", "Nanosaur2", (studio.runtime_root() / "models/diffusion_models",), studio.nanosaur_compatible, gradio=gr)
         with gr.Accordion("実行環境とモデル", open=False):
             gr.Markdown("専用ComfyUI・Python・Nanosaur2の3モデルを準備します。H3のモデルは不要です。")
             with gr.Row():
@@ -225,7 +232,8 @@ def on_ui_tabs():
             **private,
         )
         connect.click(
-            _connect,
+            _connect_selected,
+            inputs=checkpoint,
             outputs=setup_status,
             concurrency_limit=1,
             concurrency_id="h3-runtime-control",
@@ -234,6 +242,7 @@ def on_ui_tabs():
         )
         restart.click(
             _restart,
+            inputs=checkpoint,
             outputs=setup_status,
             concurrency_limit=1,
             concurrency_id="h3-runtime-control",
@@ -242,7 +251,7 @@ def on_ui_tabs():
         )
         generate.click(
             _generate,
-            inputs=[prompt, negative, width, height, steps, cfg, seed, guidance],
+            inputs=[prompt, negative, width, height, steps, cfg, seed, guidance, checkpoint],
             outputs=[status, result, files, metadata, job, generate, cancel],
             concurrency_limit=1,
             concurrency_id="minimax-h3-generation",

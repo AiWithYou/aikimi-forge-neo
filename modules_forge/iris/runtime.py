@@ -12,7 +12,17 @@ import torch
 from PIL import Image
 from safetensors.torch import load_file
 
-from .core import CODE_REVISION, SOURCE_REPO, SOURCE_REVISION, TEXT_REVISION, atomic_json, model_directory, sha256
+from .core import (
+    CODE_REVISION,
+    SOURCE_REPO,
+    SOURCE_REVISION,
+    TEXT_REVISION,
+    atomic_json,
+    checkpoint_identity,
+    model_directory,
+    model_files,
+    sha256,
+)
 from .quantization import load_int8
 
 
@@ -36,15 +46,27 @@ class PreparedText:
         return self.negative
 
 
-def load_model(root, precision, task):
+def load_model(root, precision, task, checkpoint="base"):
     from iris3b.config import inference_config
     from iris3b.models.dit import IrisDiT
     from omegaconf import OmegaConf
 
-    directory = model_directory(root, precision, task)
-    raw = OmegaConf.to_container(OmegaConf.load(directory / "config.yaml"))
+    weights, config = model_files(root, precision, task, checkpoint)
+    raw = OmegaConf.to_container(OmegaConf.load(config))
     settings = raw.pop("task", {})
     cfg = inference_config(raw, [])
+    if checkpoint != "base":
+
+        def check_keys(value, schema, prefix):
+            for name, item in value.items():
+                if not hasattr(schema, name):
+                    raise ValueError(f"非対応の推論設定です: {prefix}.{name}")
+                if isinstance(item, dict):
+                    check_keys(item, getattr(schema, name), f"{prefix}.{name}")
+
+        for section in ("model", "text_encoder", "flow"):
+            if section in raw:
+                check_keys(raw[section], getattr(cfg, section), section)
     if task == "depth":
         from iris3b.downstream.depth import IrisDepth
 
@@ -55,26 +77,32 @@ def load_model(root, precision, task):
         with torch.device("meta"):
             model = IrisDiT(cfg.model)
     if precision == "int8":
-        model = load_int8(model, directory / "model.safetensors")
+        model = load_int8(model, weights)
     elif precision == "w4a8":
         from .w4a8 import load_w4a8
 
-        model = load_w4a8(model, directory / "model.safetensors")
+        model = load_w4a8(model, weights)
     else:
-        model.load_state_dict(load_file(directory / "model.safetensors"), strict=True, assign=True)
+        model.load_state_dict(load_file(weights), strict=True, assign=True)
+    if precision != "w4a8":
+        # Colab full fine-tunes are stored in BF16. Upstream keeps master
+        # parameters in FP32 while autocast handles the inference computation.
+        model.float()
     model.eval().requires_grad_(False)
     return model, cfg, settings
 
 
 class Runner:
-    def __init__(self, root, precision, task):
+    def __init__(self, root, precision, task, checkpoint="base"):
         if precision == "w4a8":
             from .w4a8 import require_native_cuda
 
             require_native_cuda()
         self.root, self.precision, self.task = Path(root), precision, task
-        self.model, self.cfg, self.settings = load_model(root, precision, task)
+        self.checkpoint = checkpoint
+        self.model, self.cfg, self.settings = load_model(root, precision, task, checkpoint)
         self.encoder = None
+        self.source_identity = None
 
     def close(self):
         self.model = self.encoder = None
@@ -129,6 +157,8 @@ class Runner:
     def run(self, directory):
         directory = Path(directory)
         request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
+        if self.source_identity is None:
+            self.source_identity = checkpoint_identity(self.root, self.precision, self.task, self.checkpoint)
         begin = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
         calls = 0
@@ -214,6 +244,8 @@ class Runner:
                         tile_positions(image.width * 4, restorer.tile, restorer.tile // 2)
                     )
                     image = restorer(image)
+            if checkpoint_identity(self.root, self.precision, self.task, self.checkpoint) != self.source_identity:
+                raise ValueError("実行中にモデルが更新されました。再実行してください。")
             atomic_json(directory / "progress.json", {"stage": "結果を保存中"})
             image.save(directory / "result.png")
             files.insert(0, str(directory / "result.png"))
@@ -233,8 +265,9 @@ class Runner:
             metadata = {
                 "task": self.task,
                 "precision": self.precision,
-                "source_repo": SOURCE_REPO,
-                "source_revision": SOURCE_REVISION,
+                "source_repo": SOURCE_REPO if self.checkpoint == "base" else None,
+                "source_revision": SOURCE_REVISION if self.checkpoint == "base" else None,
+                "model_source": self.source_identity,
                 "code_revision": CODE_REVISION,
                 "text_revision": TEXT_REVISION if self.task == "generate" else None,
                 "settings": {k: v for k, v in request.items() if k != "image"},

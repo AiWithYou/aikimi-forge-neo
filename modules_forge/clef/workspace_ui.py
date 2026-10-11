@@ -13,6 +13,8 @@ from pathlib import Path
 import gradio as gr
 from PIL import Image, ImageOps
 
+from modules_forge.model_catalog import configure_component
+
 from .collection import generation_metadata, merge_images, parse_records, scan_files, scan_folder, thumbnails
 from .core import (
     OUTPUTS,
@@ -28,6 +30,7 @@ from .core import (
 )
 from .curation import REVIEW_LABELS, copy_accepted, latest_export, matching_ids, read_review, set_decision
 from .filters import active_rules, apply_filter_event, filter_payload, filter_state
+from .local_source import checkpoint_choices, compatible_profiles, load_selection, save_selection
 from .service import STUDIO, execution_stopped
 from .ui import (
     COMPARISON_NOTE,
@@ -131,9 +134,9 @@ def resolve_input(source, images, text, text_mode, json_data, json_mode):
     }
 
 
-def current_request(profile, context, schema, pixels, length, collection):
+def current_request(profile, context, schema, pixels, length, collection, checkpoint=""):
     image = (collection or {}).get("source", "image") == "image"
-    return _request(profile, context if image else "", schema, pixels if image else 262144, length)
+    return _request(profile, context if image else "", schema, pixels if image else 262144, length, checkpoint)
 
 
 def is_image_run(run):
@@ -298,7 +301,7 @@ def schema_editor(initial, schema, selector, schema_table, outputs_root, notice)
     return outputs
 
 
-def workbench(profile, outputs_root):
+def workbench(profile, outputs_root, checkpoint):
     saved_choices = history_for()
     completed_history = set()
     initial = copy.deepcopy(TEMPLATES["人物イラストの仕分け"])
@@ -558,7 +561,7 @@ def workbench(profile, outputs_root):
                     )
 
     filters = [order, visibility, result_page]
-    current = [profile, context, schema, pixels, length, collection]
+    current = [profile, checkpoint, context, schema, pixels, length, collection]
     source_inputs = [source, images, text, text_mode, json_data, json_mode]
     result_outputs = [
         displayed,
@@ -595,6 +598,7 @@ def workbench(profile, outputs_root):
         run,
         token,
         profile,
+        checkpoint,
         context,
         schema,
         pixels,
@@ -632,7 +636,7 @@ def workbench(profile, outputs_root):
             json.dumps(record, ensure_ascii=False, indent=2) if item and item.get("kind") == "record" else None
         )
         try:
-            request = current_request(profile, context, schema, pixels, length, collection)
+            request = current_request(profile, context, schema, pixels, length, collection, checkpoint)
         except ClefError:
             request = None
         label = run_heading(run, request)
@@ -695,6 +699,7 @@ def workbench(profile, outputs_root):
         json_data,
         json_mode,
         profile,
+        checkpoint,
         context,
         schema,
         pixels,
@@ -705,7 +710,7 @@ def workbench(profile, outputs_root):
         if not (collection or {}).get("items"):
             raise ClefError("実行する入力がありません。フォルダまたは入力を確認してください。")
         identifier = STUDIO.start(
-            current_request(profile, context, schema, pixels, length, collection),
+            current_request(profile, context, schema, pixels, length, collection, checkpoint),
             collection["items"],
             request.session_hash,
         )
@@ -726,7 +731,7 @@ def workbench(profile, outputs_root):
 
     judge.click(
         submit,
-        [*source_inputs, profile, context, schema, pixels, length],
+        [*source_inputs, profile, checkpoint, context, schema, pixels, length],
         [active_job, status, judge, stop, timer, selection_state, selection, displayed, history, compare, collection],
         **view_events,
     )
@@ -737,6 +742,7 @@ def workbench(profile, outputs_root):
         run,
         token,
         profile,
+        checkpoint,
         context,
         schema,
         pixels,
@@ -751,6 +757,7 @@ def workbench(profile, outputs_root):
         done = info["done"]
         values = [
             profile,
+            checkpoint,
             context,
             schema,
             pixels,
@@ -819,9 +826,25 @@ def workbench(profile, outputs_root):
         **view_events,
     )
 
-    def refresh_view(run, token, profile, context, schema, pixels, length, collection, view, order, visibility, page):
+    def refresh_view(
+        run, token, profile, checkpoint, context, schema, pixels, length, collection, view, order, visibility, page
+    ):
         return (
-            paint(run, token, profile, context, schema, pixels, length, collection, order, visibility, view[2], page)
+            paint(
+                run,
+                token,
+                profile,
+                checkpoint,
+                context,
+                schema,
+                pixels,
+                length,
+                collection,
+                order,
+                visibility,
+                view[2],
+                page,
+            )
             if run
             else [gr.update()] * len(result_outputs)
         )
@@ -835,11 +858,27 @@ def workbench(profile, outputs_root):
         )
 
     @guarded
-    def change_filters(run, token, profile, context, schema, pixels, length, collection, view, event: gr.EventData):
+    def change_filters(
+        run, token, profile, checkpoint, context, schema, pixels, length, collection, view, event: gr.EventData
+    ):
         conditions = apply_filter_event(run, view[2], event._data)
         if conditions is None:
             return [gr.skip()] * len(result_outputs)
-        return paint(run, token, profile, context, schema, pixels, length, collection, view[0], view[1], conditions, 1)
+        return paint(
+            run,
+            token,
+            profile,
+            checkpoint,
+            context,
+            schema,
+            pixels,
+            length,
+            collection,
+            view[0],
+            view[1],
+            conditions,
+            1,
+        )
 
     filter_panel.input(
         change_filters,
@@ -918,7 +957,7 @@ def workbench(profile, outputs_root):
         )
 
     @guarded
-    def select(run, profile, context, schema, pixels, length, collection, view, event: gr.SelectData):
+    def select(run, profile, checkpoint, context, schema, pixels, length, collection, view, event: gr.SelectData):
         token = selected_token(run, event.row_value)
         run = _read_run(run["id"])
         review = read_review(outputs_root / run["id"], run)
@@ -930,15 +969,17 @@ def workbench(profile, outputs_root):
             raise ClefError("表示が更新されています。現在の一覧から選び直してください。")
         if is_image_run(run):
             view = [order, visibility, conditions, ids.index(token[1]) // 12 + 1]
-        return paint(run, token, profile, context, schema, pixels, length, collection, *view)
+        return paint(run, token, profile, checkpoint, context, schema, pixels, length, collection, *view)
 
     @guarded
-    def select_image(run, previews, profile, context, schema, pixels, length, collection, view, event: gr.SelectData):
+    def select_image(
+        run, previews, profile, checkpoint, context, schema, pixels, length, collection, view, event: gr.SelectData
+    ):
         index = int(event.index)
         if not previews or not 0 <= index < len(previews):
             raise ClefError("現在の画像一覧から選び直してください。")
         token = gallery_token(run, previews[index][0])
-        return paint(run, token, profile, context, schema, pixels, length, collection, *view)
+        return paint(run, token, profile, checkpoint, context, schema, pixels, length, collection, *view)
 
     results.select(select, [displayed, *current, view_state], result_outputs, **view_events)
     result_gallery.select(
@@ -958,11 +999,11 @@ def workbench(profile, outputs_root):
             review, [displayed, selection, selection_state, *current, view_state], result_outputs, **view_events
         )
 
-    def dirty_heading(run, profile, context, schema, pixels, length, collection):
+    def dirty_heading(run, profile, checkpoint, context, schema, pixels, length, collection):
         label = "まだ判定していません"
         if run:
             try:
-                request = current_request(profile, context, schema, pixels, length, collection)
+                request = current_request(profile, context, schema, pixels, length, collection, checkpoint)
             except ClefError:
                 request = None
             label = run_heading(run, request)
@@ -1239,15 +1280,54 @@ def metadata_tab(collection, outputs_root):
     )
 
 
+def _checkpoint_updates(checkpoint, search_directory, profile):
+    profiles = compatible_profiles(checkpoint) or list(PROFILES)
+    profile = profile if profile in profiles else profiles[0]
+    return (
+        gr.update(choices=checkpoint_choices(search_directory=search_directory, current=checkpoint), value=checkpoint),
+        gr.update(choices=[(PROFILES[key]["label"], key) for key in profiles], value=profile),
+    )
+
+
+def _load_checkpoints():
+    checkpoint, search_directory, profile = load_selection()
+    selected, execution = _checkpoint_updates(checkpoint, search_directory, profile)
+    return selected, gr.update(value=search_directory), execution
+
+
+def _select_checkpoint(checkpoint, search_directory, profile):
+    profiles = compatible_profiles(checkpoint) or list(PROFILES)
+    profile = profile if profile in profiles else profiles[0]
+    save_selection(checkpoint, search_directory, profile)
+    return gr.update(choices=[(PROFILES[key]["label"], key) for key in profiles], value=profile)
+
+
 def build(outputs=OUTPUTS):
+    selected, search_directory, execution = load_selection()
     with gr.Column(elem_id="clef-studio") as studio:
         gr.Markdown("# Clef\n画像・文章・JSONデータを、共通の質問で判定します。")
+        with gr.Accordion("チェックポイント", open=True):
+            with gr.Row():
+                checkpoint = configure_component(
+                    gr.Dropdown(
+                        choices=checkpoint_choices(search_directory=search_directory, current=selected),
+                        value=selected,
+                        label="チェックポイント",
+                        scale=5,
+                    )
+                )
+                refresh_checkpoints = gr.Button("一覧を更新", scale=1)
+            with gr.Accordion("詳細", open=False):
+                search = configure_component(gr.Textbox(value=search_directory, label="探索フォルダー"))
         with gr.Row(elem_classes=["clef-toolbar"]):
-            profile = gr.Dropdown(
-                [(value["label"], key) for key, value in PROFILES.items()],
-                value="flash-int8",
-                label="実行モデル",
-                scale=4,
+            profiles = compatible_profiles(selected) or list(PROFILES)
+            profile = configure_component(
+                gr.Dropdown(
+                    [(PROFILES[key]["label"], key) for key in profiles],
+                    value=execution,
+                    label="実行設定",
+                    scale=4,
+                )
             )
             unload = gr.Button("Clefモデルを解放", size="sm", scale=1)
         with gr.Accordion("実行環境", open=False):
@@ -1257,7 +1337,25 @@ def build(outputs=OUTPUTS):
             gr.Info(STUDIO.unload())
 
         unload.click(release, queue=False, **PRIVATE)
-        workbench(profile, outputs)
+        refresh_checkpoints.click(
+            _checkpoint_updates,
+            [checkpoint, search, profile],
+            [checkpoint, profile],
+            queue=False,
+            show_progress="hidden",
+            **PRIVATE,
+        )
+        checkpoint.input(
+            _select_checkpoint, [checkpoint, search, profile], [profile], queue=False, show_progress="hidden", **PRIVATE
+        )
+        for component in (search, profile):
+            component.input(
+                save_selection, [checkpoint, search, profile], queue=False, show_progress="hidden", **PRIVATE
+            )
+        gr.on(
+            fn=_load_checkpoints, outputs=[checkpoint, search, profile], queue=False, show_progress="hidden", **PRIVATE
+        )
+        workbench(profile, outputs, checkpoint)
 
     def exclude_defaults(block):
         block.do_not_save_to_config = True

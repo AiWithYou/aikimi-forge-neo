@@ -174,7 +174,8 @@ def detail_html(run, index):
 def run_heading(run, current, paths=None):
     if not run:
         return "まだ判定していません"
-    mismatch = canonical_hash(run["request"]) != canonical_hash(current)
+    executed = {key: value for key, value in run["request"].items() if key != "model_identity"}
+    mismatch = canonical_hash(executed) != canonical_hash(current)
     if paths is not None:
         try:
             hashes = [
@@ -220,14 +221,21 @@ def _history():
     return result
 
 
-def _request(profile, state, schema, pixels, length):
+def _request(profile, state, schema, pixels, length, checkpoint=""):
     if (state or "").lstrip().startswith(("{", "[")):
         try:
             state = json.loads(state)
         except json.JSONDecodeError as exc:
             raise ClefError(f"補足JSONの{exc.lineno}行目を確認してください。") from exc
     return validate_request(
-        {"profile": profile, "state": state or "", "questions": schema, "max_pixels": pixels, "max_length": length}
+        {
+            "profile": profile,
+            "checkpoint": checkpoint,
+            "state": state or "",
+            "questions": schema,
+            "max_pixels": pixels,
+            "max_length": length,
+        }
     )
 
 

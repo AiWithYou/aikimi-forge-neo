@@ -24,7 +24,7 @@ class IrisUITests(unittest.TestCase):
         components = blocks.get_config_file()["components"]
         task = next(x for x in components if x.get("props", {}).get("elem_id") == "iris-task")
         self.assertEqual(len(task["props"]["choices"]), 3)
-        precision = next(x for x in components if x.get("props", {}).get("label") == "モデル")
+        precision = next(x for x in components if x.get("props", {}).get("label") == "保存形式")
         self.assertEqual(precision["props"]["choices"], [("INT8", "int8"), ("W4A8", "w4a8"), ("通常版", "normal")])
         self.assertEqual(precision["props"]["value"], "int8")
         preparation = "\n".join(x.get("props", {}).get("value", "") for x in components if x["type"] == "markdown")
