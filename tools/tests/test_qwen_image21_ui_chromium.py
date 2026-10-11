@@ -178,12 +178,13 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             )
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-generate", "true")))
             if restored:
-                self.assertTrue(
+                self._assert_setting_result(
+                    page,
                     page.evaluate(
                         _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
                         timeout=20,
                     ),
-                    self._settings_diagnostics(page, first_event),
+                    first_event,
                 )
                 self.assertTrue(
                     page.evaluate(_wait_expression("#qwen21-lora-strengths", "true", 3000)), page.exceptions
@@ -212,12 +213,13 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             })()""")
             self.assertTrue(visible, page.exceptions)
             self.assertIn("前処理済みの制御画像", page.evaluate("document.body.innerText"))
-            self.assertTrue(
+            self._assert_setting_result(
+                page,
                 page.evaluate(
                     _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
                     timeout=20,
                 ),
-                self._settings_diagnostics(page, first_event),
+                first_event,
             )
             self.assertTrue(
                 page.evaluate(
@@ -244,12 +246,13 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-fun-acc input", "true", 15000)))
-            self.assertTrue(
+            self._assert_setting_result(
+                page,
                 page.evaluate(
                     _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
                     timeout=20,
                 ),
-                self._settings_diagnostics(page, first_event),
+                first_event,
             )
             # Confirm the empty LoRA table is mounted after restoring the
             # saved model before changing Fun Acc settings.
@@ -257,11 +260,13 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             selected_model = page.evaluate("document.querySelector('#qwen21-precision input[role=listbox]')?.value")
             self.assertTrue(selected_model)
             page.evaluate("document.querySelector('#qwen21-fun-acc input').click()")
-            self.assertTrue(
+            self._assert_setting_result(
+                page,
                 page.evaluate("document.querySelector('#qwen21-fun-acc input').checked"),
-                self._settings_diagnostics(page, first_event),
+                first_event,
             )
-            self.assertTrue(
+            self._assert_setting_result(
+                page,
                 page.evaluate(
                     _wait_expression(
                         "#qwen21-steps",
@@ -269,7 +274,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                         10000,
                     )
                 ),
-                self._settings_diagnostics(page, first_event),
+                first_event,
             )
             self.assertTrue(
                 page.evaluate(
@@ -283,6 +288,11 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 page.exceptions,
             )
             self.assertFalse(page.exceptions)
+
+    def _assert_setting_result(self, page, result, first_event):
+        # Preserve the interaction timing: diagnostic CDP calls run only on failure.
+        if not result:
+            self.fail(self._settings_diagnostics(page, first_event))
 
     def _settings_diagnostics(self, page, first_event):
         state = page.evaluate("""(() => {
