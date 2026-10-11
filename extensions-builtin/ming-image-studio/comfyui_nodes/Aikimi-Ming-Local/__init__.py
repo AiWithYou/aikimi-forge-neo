@@ -108,6 +108,7 @@ class MingVAE(LocalFile):
 def linear_patches(model, weights):
     """Only complete, shape-compatible linear pairs are accepted; no ignored keys."""
     import comfy.lora
+    import torch
 
     key_map = comfy.lora.model_lora_keys_unet(model.model, {})
     state = model.model.state_dict()
@@ -153,6 +154,8 @@ def linear_patches(model, weights):
             raise ValueError(f"Unsupported LoRA shape: {target}")
         if (up.shape[0], down.shape[1]) != tuple(shape):
             raise ValueError(f"LoRA dimensions do not match: {target}")
+        if not torch.isfinite(down).all() or not torch.isfinite(up).all():
+            raise ValueError(f"Non-finite LoRA values: {target}")
         base = target.removesuffix(".weight")
         canonical[base + ".lora_down.weight"] = down
         canonical[base + ".lora_up.weight"] = up
@@ -187,6 +190,7 @@ class MingLoRA(LocalFile):
         if strength == 0:
             return (model,)
         weights = comfy.utils.load_torch_file(checked_file(path, sha256), safe_load=True)
+        checked_file(path, sha256)
         patches = linear_patches(model, weights)
         result = model.clone()
         applied = result.add_patches(patches, strength)

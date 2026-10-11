@@ -1250,7 +1250,14 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         client.history.side_effect = None
         client.history.return_value = {"ok": True}
         extract.side_effect = None
-        with mock.patch.object(h3_bridge, "validate_orbit_runtime"):
+        orbit_identity = {"path": "orbit.safetensors", "size": 1, "sha256": "a" * 64}
+        orbit_snapshot = {"identity": orbit_identity}
+        with (
+            mock.patch.object(h3_bridge, "validate_orbit_runtime"),
+            mock.patch.object(h3_bridge.orbit_assets, "snapshot", return_value=orbit_snapshot),
+            mock.patch.object(h3_bridge.orbit_assets, "verify", return_value=orbit_identity),
+            mock.patch.object(h3_bridge.orbit_assets, "receipt_identity", return_value=orbit_identity),
+        ):
             orbit_updates = list(
                 run_generation(
                     H3Request(mode="orbit", prompt="A camera orbit", first_frame="photo.png", duration_seconds=3),

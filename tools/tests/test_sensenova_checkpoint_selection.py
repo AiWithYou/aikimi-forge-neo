@@ -78,6 +78,29 @@ def test_official_default_still_requires_pinned_sha_record(tmp_path):
         assert bridge.checkpoint_is_ready(path)
 
 
+def test_catalog_scans_managed_subfolders_and_keeps_only_explicit_official_and_current(tmp_path, monkeypatch):
+    from modules_forge import model_catalog
+
+    storage = tmp_path / "models" / "SenseNova-U1"
+    managed = storage / "checkpoints" / "nested" / "custom.safetensors"
+    managed.parent.mkdir(parents=True)
+    signature = checkpoint(managed)
+    official = storage / "official.safetensors"
+    unselected = storage / "another.safetensors"
+    remembered = tmp_path / "remembered.safetensors"
+    for path in (official, unselected, remembered):
+        checkpoint(path)
+    monkeypatch.setattr(model_catalog, "ROOT", tmp_path)
+    monkeypatch.setattr(bridge, "DEFAULT_CHECKPOINT_PATH", official)
+    monkeypatch.setattr(bridge, "CONVROT_STRUCTURE_SHA256", signature)
+    monkeypatch.setattr(bridge, "EXPECTED_CONVROT_LAYERS", 1)
+    monkeypatch.setattr(local_assets, "file_identity", mock.Mock(side_effect=AssertionError("listing must not hash")))
+
+    values = {value for _, value in bridge.checkpoint_choices(current=str(remembered))}
+    assert str(managed) in values and str(official) in values and str(remembered) in values
+    assert str(unselected) not in values, "Official asset storage must not be scanned for additional checkpoints"
+
+
 def test_custom_payload_uses_actual_file_identity_and_not_official_provenance(tmp_path):
     path = tmp_path / "custom.safetensors"
     checkpoint(path)
@@ -205,6 +228,7 @@ def test_worker_rejects_lora_changed_during_load(tmp_path, monkeypatch):
     checkpoint(path)
     lora = tmp_path / "official-lora.safetensors"
     lora.write_bytes(b"first")
+    monkeypatch.setattr(worker, "OFFICIAL_LORA_SHA256", hashlib.sha256(lora.read_bytes()).hexdigest())
     payload = {"checkpoint": str(path), "lora_path": str(lora), "generation_profile": worker.PROFILE_OFFICIAL_8STEP}
     engine = mock.Mock()
 
@@ -222,6 +246,57 @@ def test_worker_rejects_lora_changed_during_load(tmp_path, monkeypatch):
         worker._runtime_for_request(payload)
     engine.close.assert_called_once_with()
     assert worker._RESIDENT_RUNTIME is None and worker._RESIDENT_KEY is None
+
+
+@pytest.mark.parametrize("unreliable_counter", [False, True])
+def test_worker_rejects_lora_changed_after_validation_before_loading(tmp_path, monkeypatch, unreliable_counter):
+    from tools.tests.test_sensenova_u15_worker import worker
+
+    path = tmp_path / "custom.safetensors"
+    signature = checkpoint(path)
+    lora = tmp_path / "official-lora.safetensors"
+    lora.write_bytes(b"first")
+    digest = hashlib.sha256(lora.read_bytes()).hexdigest()
+    monkeypatch.setattr(bridge, "CONVROT_STRUCTURE_SHA256", signature)
+    monkeypatch.setattr(bridge, "EXPECTED_CONVROT_LAYERS", 1)
+    monkeypatch.setattr(worker, "OFFICIAL_LORA_EXPECTED_BYTES", lora.stat().st_size)
+    monkeypatch.setattr(worker, "OFFICIAL_LORA_SHA256", digest)
+    if unreliable_counter:
+        monkeypatch.setattr(local_assets, "file_version", lambda path: (Path(path).stat().st_size, 0, None, 0))
+    payload = {
+        "mode": "text",
+        "prompt": "test",
+        "input_images": [],
+        "quantization": bridge.QUANT_INT8_CONVROT,
+        "model_path": bridge.DEFAULT_MODEL_ID,
+        "checkpoint_revision": "local",
+        "checkpoint": str(path),
+        "checkpoint_identity": local_assets.file_identity(path),
+        "width": 512,
+        "height": 512,
+        "generation_profile": worker.PROFILE_OFFICIAL_8STEP,
+        "cfg_norm": "none",
+        "steps": 8,
+        "cfg_scale": 1.0,
+        "timestep_shift": 3.0,
+        "lora_path": str(lora),
+        "lora_revision": worker.OFFICIAL_LORA_REVISION,
+        "lora_sha256": digest,
+        "device": "cpu",
+        "source_path": str(tmp_path),
+    }
+    worker._validate_payload(payload)
+    # File identity is already cached; replacing equal-size bytes must still be rejected.
+    local_assets.file_identity(lora)
+    lora.write_bytes(b"other")
+    loaded = (mock.Mock(), None, mock.Mock(release_variant="final"), 1, 588, {"targets": 294}, 0.1, {})
+    loader = mock.Mock(return_value=loaded)
+    monkeypatch.setattr(worker, "_RESIDENT_MODE", False)
+    monkeypatch.setattr(worker, "_load_runtime", loader)
+    monkeypatch.setattr(worker, "emit", mock.Mock())
+    with pytest.raises(RuntimeError, match="LoRA.*SHA-256"):
+        worker._runtime_for_request(payload)
+    loader.assert_not_called()
 
 
 @pytest.mark.parametrize("resident", [False, True])
@@ -278,17 +353,29 @@ def test_catalog_and_ui_restore_selection_without_hashing_or_writing(tmp_path, m
     monkeypatch.setattr(
         local_assets, "selection", lambda _: {"checkpoint": str(path), "search_directory": str(tmp_path)}
     )
-    monkeypatch.setattr(
-        local_assets, "save_selection", mock.Mock(side_effect=AssertionError("initial load must not write"))
-    )
+    save = mock.Mock()
+    monkeypatch.setattr(local_assets, "save_selection", save)
     monkeypatch.setattr(local_assets, "file_identity", mock.Mock(side_effect=AssertionError("listing must not hash")))
-    choices = bridge.checkpoint_choices(str(tmp_path), str(path))
+    choices = bridge.checkpoint_choices(current=str(path))
     assert str(path.resolve()) in {value for _, value in choices}
     studio = load_studio_module()
     interface = studio._build_ui()[0][0]
     components = {getattr(component, "label", ""): component for component in interface.blocks.values()}
     assert components["チェックポイント"].value == str(path)
     assert components["チェックポイント"].do_not_save_to_config
-    assert components["探索フォルダー"].value == str(tmp_path)
-    assert studio._load_checkpoints()[0]["value"] == str(path)
-    local_assets.save_selection.assert_not_called()
+    assert "探索フォルダー" not in components
+    import gradio as gr
+
+    assert not any(
+        isinstance(component, gr.Accordion) and component.label == "チェックポイント"
+        for component in interface.blocks.values()
+    )
+    assert studio._load_checkpoints()["value"] == str(path)
+    loader = next(fn for fn in interface.fns.values() if fn.fn is studio._load_checkpoints)
+    selected = components["チェックポイント"]
+    assert loader.outputs == [selected] and loader.show_progress == "hidden"
+    save.assert_not_called()
+    saver = next(fn for fn in interface.fns.values() if fn.fn is bridge.save_checkpoint_selection)
+    assert saver.inputs == [selected]
+    saver.fn(str(path))
+    save.assert_called_once_with("sensenova", {"checkpoint": str(path)})

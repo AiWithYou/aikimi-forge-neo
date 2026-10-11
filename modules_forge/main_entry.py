@@ -436,6 +436,8 @@ def preset_checkpoint_selection(preset: str, *, warn: bool = False) -> dict:
 def make_checkpoint_manager_ui():
     global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype
 
+    model_catalog.prepare_directories()
+
     if shared.opts.sd_model_checkpoint in [None, "None", "none", ""]:
         if len(sd_models.checkpoints_list) == 0:
             sd_models.list_models()
@@ -459,9 +461,6 @@ def make_checkpoint_manager_ui():
         ui_checkpoint = model_catalog.configure_component(gr.Dropdown(label="チェックポイント", **checkpoint_selection, allow_custom_value=True, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"], scale=4))
         refresh_button = gr.Button("一覧を更新", elem_id="forge_refresh_checkpoint", scale=0, min_width=105)
     with gr.Accordion("モデル詳細", open=False, elem_id="forge_model_details"):
-        search_directory = model_catalog.configure_component(gr.Textbox(
-            value=local_assets.selection("forge").get("directory", ""), label="探索フォルダー", elem_id="forge-search-directory",
-        ))
         ui_vae = gr.Dropdown(label="VAE / Text Encoder · フルパスも入力可", value=module_value, choices=vae_list, multiselect=True, allow_custom_value=True, elem_id="setting_sd_modules", elem_classes=["model_selection"])
 
     def refresh_model_list():
@@ -480,10 +479,6 @@ def make_checkpoint_manager_ui():
             gr.update(choices=vae_list, value=module_value),
         ]
 
-    def save_directory(directory):
-        local_assets.save_selection("forge", {**local_assets.selection("forge"), "directory": directory})
-
-    search_directory.input(save_directory, inputs=search_directory, queue=False, show_progress="hidden")
     refresh_button.click(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
     Context.root_block.load(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False, show_progress="hidden")
 

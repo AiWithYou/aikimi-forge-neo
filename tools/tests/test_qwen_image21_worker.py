@@ -158,6 +158,62 @@ class WorkerJobTests(unittest.TestCase):
             result = worker.resident_run(self.payload)
         return result, loader
 
+    def test_lora_snapshot_is_checked_after_load_inference_and_during_save(self):
+        from modules_forge.local_assets import file_identity
+
+        folder = self.root / "loras"
+        folder.mkdir()
+        path = folder / "style.safetensors"
+        header = json.dumps(
+            {
+                "transformer_blocks.0.attn.to_q.lora_A.weight": {
+                    "dtype": "F32",
+                    "shape": [1, 3],
+                    "data_offsets": [0, 12],
+                },
+                "transformer_blocks.0.attn.to_q.lora_B.weight": {
+                    "dtype": "F32",
+                    "shape": [4, 1],
+                    "data_offsets": [12, 28],
+                },
+            }
+        ).encode()
+        original = len(header).to_bytes(8, "little") + header + bytes(28)
+        self.request["style_loras"] = [{"name": path.name, "strength": 0.5}]
+        original_save = Image.Image.save
+
+        def mutate():
+            path.write_bytes(original[:-1] + b"\x01")
+
+        for stage in ("load", "inference", "save"):
+            with self.subTest(stage=stage):
+                worker.clear_runtime()
+                path.write_bytes(original)
+                identity = file_identity(path)
+                self.request["lora_sources"] = [identity]
+                self.write_request()
+                self.runtime["style_loras"] = [{**identity, "name": path.name, "strength": 0.5}]
+                self.pipe.before_callback = mutate if stage == "inference" else None
+
+                def load(*args, stage=stage, **kwargs):
+                    if stage == "load":
+                        mutate()
+                    return self.runtime
+
+                def save(image, *args, stage=stage, **kwargs):
+                    original_save(image, *args, **kwargs)
+                    if stage == "save":
+                        mutate()
+
+                with (
+                    mock.patch.object(worker, "_load_runtime", side_effect=load),
+                    mock.patch("PIL.Image.Image.save", side_effect=save, autospec=True),
+                ):
+                    with self.assertRaisesRegex(ValueError, "LoRA.*changed"):
+                        worker.resident_run(self.payload)
+                self.assertFalse((self.job / "result.json").exists())
+                self.assertFalse((self.job / "output.png").exists())
+
     def test_pipeline_arguments_and_saved_png_retain_native_alpha(self):
         reference1, reference2 = self.root / "one.png", self.root / "two.png"
         Image.new("RGBA", (20, 30), (10, 20, 30, 37)).save(reference1)

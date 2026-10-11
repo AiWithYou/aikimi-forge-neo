@@ -171,7 +171,10 @@ def export_current(request, runtime_root, server_url, log_directory, runtime_pro
     prepared = bridge.prepare_media(request, root)
     try:
         seed = request.resolved_seed  # Resolve once, exactly as generation does.
-        prompt = bridge.build_workflow(request, prepared, seed=seed)
+        workflow_options = {}
+        if request.mode == bridge.MODE_ORBIT:
+            workflow_options["orbit_snapshot"] = bridge.orbit_assets.snapshot(root)
+        prompt = bridge.build_workflow(request, prepared, seed=seed, **workflow_options)
         record = create_snapshot(
             root / "input",
             prompt,

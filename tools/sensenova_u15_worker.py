@@ -543,6 +543,10 @@ def _runtime_for_request(payload):
 
     files = tuple(Path(payload[name]).resolve() for name in ("checkpoint", "lora_path") if payload.get(name))
     snapshots = tuple((path, json.dumps(file_identity(path), sort_keys=True)) for path in files)
+    if payload.get("generation_profile") == PROFILE_OFFICIAL_8STEP and (
+        not payload.get("lora_path") or json.loads(snapshots[-1][1])["sha256"] != OFFICIAL_LORA_SHA256
+    ):
+        raise RuntimeError("The official 8-step LoRA SHA-256 changed after validation.")
     expected = payload.get("checkpoint_identity")
     if expected is not None and json.dumps(expected, sort_keys=True) != snapshots[0][1]:
         raise RuntimeError("The selected checkpoint changed after the request was created.")

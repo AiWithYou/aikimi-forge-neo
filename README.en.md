@@ -2,13 +2,13 @@
 
 English · [日本語](README.md)
 
-**[v4.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.0.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.0.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.0.1)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
 **A Windows-focused Forge Neo fork for image generation and editing, video with audio, music composition, and image or text evaluation in one WebUI.** It also provides model setup, high-resolution workflows, and image finishing tools.
 
-v4.0.0 puts checkpoint selection at the top of each Studio and provides consistent local model discovery, folder organization, and saved selections. External folders and nested checkpoint folders are supported. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model selection, layout, and compatibility by family (Japanese)](docs/local-models.md).
+Each Studio has checkpoint selection at the top. Place additional models in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 
@@ -151,7 +151,7 @@ Place compatible LoRAs in the directories below, or enter a full path in the sel
 |---|---|---|
 | Forge `txt2img` / `img2img` | `models/Lora/` | Select in the LoRA combination control, or use `<lora:name:0.8>` |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → Refresh → select multiple** |
-| Ming Image | `models/Lora/Ming/` | Select under **Model / LoRA** |
+| Ming Image | `models/Ming-Image/loras/` | Select under **Model / LoRA** |
 
 Strength ranges from −2 to 2. A value of 0 disables the LoRA; × removes the selection. Do not specify the same LoRA in both the selector and prompt. Different model generations or formats may be incompatible. See [Supported formats and external paths](docs/local-models.md) and the [Qwen LoRA guide](extensions-builtin/qwen-image21-studio/README.md#追加lora).
 

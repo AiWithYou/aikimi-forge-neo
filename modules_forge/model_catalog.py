@@ -8,6 +8,30 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 _IGNORED = {".cache", ".git", "__pycache__", "worker-env", "venv", ".venv"}
+FORGE_FAMILIES = (
+    "Anima",
+    "Krea2",
+    "SDXL",
+    "SD",
+    "Flux",
+    "Flux.2",
+    "Qwen-Image",
+    "Qwen-Image-Edit",
+    "Lumina-Image-2.0",
+    "Z-Image",
+    "Wan",
+    "Ernie-Image",
+    "PiD",
+)
+STUDIO_FAMILIES = ("Qwen-Image-2.1", "Ming-Image", "Iris-3B", "Clef", "SenseNova-U1", "MiniMax-H3", "Nanosaur2", "YuE2")
+
+
+def prepare_directories():
+    """Prepare empty user-facing storage once during app startup; leave all weights in place."""
+    for family in ("Stable-diffusion", *FORGE_FAMILIES, *STUDIO_FAMILIES):
+        (ROOT / "models" / family / "checkpoints").mkdir(parents=True, exist_ok=True)
+    for relative in ("Lora", "Qwen-Image-2.1/loras", "Ming-Image/loras"):
+        (ROOT / "models" / relative).mkdir(parents=True, exist_ok=True)
 
 
 def _path(value) -> Path:
@@ -23,19 +47,12 @@ def _unique(paths):
     return tuple(result.values())
 
 
-def checkpoint_roots(family: str, roots=(), search_directory: str = "") -> tuple[Path, ...]:
-    """Keep official storage in place; add managed and optional external checkpoint roots."""
+def checkpoint_roots(family: str, roots=()) -> tuple[Path, ...]:
+    """Discover managed checkpoints while preserving explicitly known official storage."""
     if not family or family in {".", ".."} or any(char in family for char in "/\\:"):
         raise ValueError("モデル系列の名前が不正です。")
     managed = ROOT / "models" / family / "checkpoints"
-    legacy = ROOT / "model" / family
-    paths = [managed]
-    if legacy.is_dir():
-        paths.append(legacy)
-    paths.extend(roots)
-    if search_directory and search_directory.strip():
-        paths.append(search_directory)
-    return _unique(paths)
+    return _unique((managed, *roots))
 
 
 def discover_files(roots, *, suffixes=(".safetensors", ".gguf"), folders=False, validator=None) -> list[str]:

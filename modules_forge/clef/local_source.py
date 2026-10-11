@@ -87,8 +87,8 @@ def compatible_profiles(checkpoint, root=RUNTIME):
     return found
 
 
-def checkpoint_choices(root=RUNTIME, search_directory="", current=""):
-    roots = checkpoint_roots("Clef", roots=(root,), search_directory=search_directory)
+def checkpoint_choices(root=RUNTIME, current=""):
+    roots = checkpoint_roots("Clef")
     paths = discover_files(
         roots, suffixes=(), folders=True, validator=lambda path: path.is_dir() and bool(compatible_profiles(path, root))
     )
@@ -123,15 +123,12 @@ def checkpoint_identity(root, profile, checkpoint=""):
 def load_selection():
     value = local_assets.selection("clef")
     checkpoint = str(value.get("checkpoint") or DEFAULT_CHECKPOINT)
-    search_directory = str(value.get("search_directory") or "")
     profiles = compatible_profiles(checkpoint)
     profile = value.get("profile", "flash-int8")
     if profiles and profile not in profiles:
         profile = profiles[0]
-    return checkpoint, search_directory, profile if profile in PROFILES else "flash-int8"
+    return checkpoint, profile if profile in PROFILES else "flash-int8"
 
 
-def save_selection(checkpoint, search_directory, profile):
-    local_assets.save_selection(
-        "clef", {"checkpoint": checkpoint, "search_directory": search_directory, "profile": profile}
-    )
+def save_selection(checkpoint, profile):
+    local_assets.save_selection("clef", {"checkpoint": checkpoint, "profile": profile})

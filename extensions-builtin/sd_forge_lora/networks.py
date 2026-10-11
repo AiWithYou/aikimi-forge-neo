@@ -127,6 +127,12 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
     if current_sd is None:
         return
 
+    te_multipliers = [1.0] * len(names) if te_multipliers is None else te_multipliers
+    unet_multipliers = [1.0] * len(names) if unet_multipliers is None else unet_multipliers
+    if len(te_multipliers) != len(names) or len(unet_multipliers) != len(names):
+        raise ValueError("LoRAの名前と強度の数が一致していません。")
+    enabled = [(name, te, unet) for name, te, unet in zip(names, te_multipliers, unet_multipliers) if te != 0 or unet != 0]
+    names, te_multipliers, unet_multipliers = map(list, zip(*enabled)) if enabled else ([], [], [])
     loaded_networks.clear()
 
     unavailable_networks = []
@@ -143,6 +149,10 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
     if any(x is None for x in networks_on_disk):
         list_available_networks()
         networks_on_disk = [available_networks.get(name, None) if name.lower() in forbidden_network_aliases else available_network_aliases.get(name, None) for name in names]
+
+    missing = [name for name, entry in zip(names, networks_on_disk) if entry is None]
+    if missing:
+        raise ValueError("LoRAが見つかりません。一覧を更新して選び直してください: " + ", ".join(missing))
 
     for network_on_disk, name in zip(networks_on_disk, names):
         try:
@@ -193,15 +203,23 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
 
 def process_network_files(names: Optional[list[str]] = None):
     requested_names = set(names) if names else None
+    import hashlib
+
     candidates = itertools.chain.from_iterable(
-        shared.walk_files(_dir, allowed_extensions=[".pt", ".ckpt", ".safetensors"])
+        ((_dir, filename) for filename in shared.walk_files(_dir, allowed_extensions=[".pt", ".ckpt", ".safetensors"]))
         for _dir in [shared.cmd_opts.lora_dir, *shared.cmd_opts.lora_dirs]
     )
-
-    for filename in candidates:
-        if os.path.isdir(filename):
+    seen = set()
+    for root, filename in candidates:
+        canonical = os.path.normcase(os.path.realpath(filename))
+        if os.path.isdir(filename) or canonical in seen:
             continue
-        name = os.path.splitext(os.path.basename(filename))[0]
+        seen.add(canonical)
+        name = os.path.splitext(os.path.relpath(filename, root))[0].replace(os.sep, "/")
+        if name in available_networks and os.path.normcase(os.path.realpath(available_networks[name].filename)) != canonical:
+            name = os.path.basename(os.path.normpath(root)) + "/" + name
+            if name in available_networks:
+                name = "local_" + hashlib.sha256(canonical.encode()).hexdigest()[:16]
         # if names is provided, only load networks with names in the list
         if requested_names is not None and name not in requested_names:
             continue
@@ -213,19 +231,28 @@ def process_network_files(names: Optional[list[str]] = None):
 
         available_networks[name] = entry
 
-        if entry.alias in available_network_aliases:
-            forbidden_network_aliases.add(entry.alias.lower())
-
+        previous = available_network_aliases.get(name)
+        if previous is not None and previous is not entry and os.path.normcase(os.path.realpath(previous.filename)) != canonical:
+            forbidden_network_aliases.add(name.lower())
         available_network_aliases[name] = entry
-        available_network_aliases[entry.alias] = entry
+        previous = available_network_aliases.get(entry.alias)
+        if previous is not None and previous is not entry and os.path.normcase(os.path.realpath(previous.filename)) != canonical:
+            forbidden_network_aliases.add(entry.alias.lower())
+        else:
+            available_network_aliases[entry.alias] = entry
 
-    from modules_forge.local_assets import library
-    import hashlib
+    from modules_forge.local_assets import local_path, selection
 
-    for filename in library().get("forge_lora", []):
-        if not os.path.isfile(filename):
+    for item in selection("forge_lora").get("loras", []):
+        if item.get("strength", 1) == 0:
             continue
-        name = "local_" + hashlib.sha256(str(os.path.realpath(filename)).encode()).hexdigest()[:16]
+        try:
+            filename = str(local_path(item["name"], suffixes=(".safetensors",)))
+        except (KeyError, OSError, ValueError):
+            continue
+        if os.path.normcase(os.path.realpath(filename)) in seen:
+            continue
+        name = "local_" + hashlib.sha256(os.path.normcase(os.path.realpath(filename)).encode()).hexdigest()[:16]
         if requested_names is not None and name not in requested_names:
             continue
         entry = network.NetworkOnDisk(name, filename)

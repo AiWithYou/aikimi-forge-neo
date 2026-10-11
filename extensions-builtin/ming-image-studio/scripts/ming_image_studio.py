@@ -439,30 +439,33 @@ def model_candidate(path):
         return False
 
 
-def model_choices(directory="", current=""):
-    from modules_forge import local_assets, model_catalog
+def model_choices(current=""):
+    from modules_forge import model_catalog
 
-    roots = model_catalog.checkpoint_roots(
-        "Ming-Image", (studio.runtime_root() / "models/diffusion_models",), directory
-    )
+    roots = model_catalog.checkpoint_roots("Ming-Image")
     paths = model_catalog.discover_files(roots, suffixes=(".safetensors",), validator=model_candidate)
-    paths.extend(path for path in local_assets.library().get("ming_model", []) if model_candidate(Path(path)))
     return [("公式モデル", ""), *model_catalog.choice_labels(paths, roots, current)]
 
 
-def save_model_selection(precision, model, encoder, vae, directory, loras, rows):
+def lora_choices(current=()):
+    from modules_forge import local_assets, model_catalog
+
+    roots = [local_assets.ROOT / "models/Ming-Image/loras", studio.runtime_root() / "models/loras"]
+    paths = [*model_catalog.discover_files(roots, suffixes=(".safetensors",)), *current]
+    return model_catalog.choice_labels(paths, roots)
+
+
+def save_model_selection(precision, model, encoder, vae, loras, rows):
     from modules_forge import local_assets
 
     model = str(Path(model.strip().strip('"')).expanduser().resolve()) if model else ""
     local_assets.save_selection(
         "ming",
         {
-            **local_assets.selection("ming"),
             "model_path": model,
             "text_encoder_path": encoder,
             "vae_path": vae,
             "precision": precision,
-            "directory": directory,
             "loras": list(local_assets.lora_settings(loras, local_assets.lora_rows(loras, rows))),
         },
     )
@@ -472,17 +475,16 @@ def load_model_selection():
     from modules_forge import local_assets
 
     saved = local_assets.selection("ming")
-    model, directory = saved.get("model_path", ""), saved.get("directory", "")
+    model = saved.get("model_path", "")
     loras = saved.get("loras", [])
     names = [item["name"] for item in loras]
     rows = local_assets.lora_rows(names, [[item["name"], item["strength"]] for item in loras])
     return (
-        gr.update(choices=model_choices(directory, model), value=model),
+        gr.update(choices=model_choices(model), value=model),
         gr.update(value=saved.get("text_encoder_path", "")),
         gr.update(value=saved.get("vae_path", "")),
         gr.update(value=saved.get("precision") or default_precision()),
-        gr.update(value=directory),
-        gr.update(value=names),
+        gr.update(choices=lora_choices(names), value=names),
         gr.update(value=rows, visible=True if names else "hidden"),
     )
 
@@ -501,7 +503,6 @@ def on_ui_tabs():
     from modules_forge import local_assets, model_catalog
 
     saved = local_assets.selection("ming")
-    root = studio.runtime_root()
     initial_precision = saved.get("precision") or default_precision()
     saved_loras = saved.get("loras", [])
     with gr.Blocks(analytics_enabled=False) as tab:
@@ -511,7 +512,7 @@ def on_ui_tabs():
                 with gr.Row():
                     model_path = gr.Dropdown(
                         label="チェックポイント",
-                        choices=model_choices(saved.get("directory", ""), saved.get("model_path", "")),
+                        choices=model_choices(saved.get("model_path", "")),
                         value=saved.get("model_path", ""),
                         allow_custom_value=True,
                         elem_id="ming-local-model",
@@ -519,17 +520,9 @@ def on_ui_tabs():
                     )
                     refresh_assets = gr.Button("一覧を更新", scale=1)
                 with gr.Accordion("LoRA・モデル詳細", open=False, elem_id="ming-models") as model_section:
-                    search_directory = gr.Textbox(
-                        value=saved.get("directory", ""),
-                        label="探索フォルダー",
-                        placeholder="models/Ming-Image/checkpoints",
-                        elem_id="ming-search-directory",
-                    )
                     loras = gr.Dropdown(
                         label="追加LoRA（複数選択）",
-                        choices=local_assets.choices(
-                            "ming_lora", [root / "models/loras", local_assets.ROOT / "models/Lora/Ming"]
-                        ),
+                        choices=lora_choices([x["name"] for x in saved_loras]),
                         value=[x["name"] for x in saved_loras],
                         multiselect=True,
                         allow_custom_value=True,
@@ -646,13 +639,13 @@ def on_ui_tabs():
         job = gr.State({})
         private = {"api_visibility": "private", "show_progress": "hidden"}
         source_inputs = [precision, model_path, text_encoder_path, vae_path]
-        selection_inputs = [*source_inputs, search_directory, loras, strengths]
+        selection_inputs = [*source_inputs, loras, strengths]
         for component in selection_inputs:
             model_catalog.configure_component(component)
             component.input(save_model_selection, inputs=selection_inputs, queue=False, **private)
         tab.load(
             load_model_selection,
-            outputs=[model_path, text_encoder_path, vae_path, precision, search_directory, loras, strengths],
+            outputs=[model_path, text_encoder_path, vae_path, precision, loras, strengths],
             queue=False,
             **private,
         )
@@ -770,16 +763,12 @@ def on_ui_tabs():
             **private,
         )
 
-        def refresh_choices(model, selected, directory):
-            models = model_choices(directory, model)
-            adapters = local_assets.choices(
-                "ming_lora", [root / "models/loras", local_assets.ROOT / "models/Lora/Ming"]
-            )
+        def refresh_choices(model, selected):
+            models = model_choices(model)
+            adapters = lora_choices(selected or [])
             return gr.update(choices=models, value=model), gr.update(choices=adapters, value=selected)
 
-        refresh_assets.click(
-            refresh_choices, inputs=[model_path, loras, search_directory], outputs=[model_path, loras], **private
-        )
+        refresh_assets.click(refresh_choices, inputs=[model_path, loras], outputs=[model_path, loras], **private)
         record.change(_result_controls, inputs=record, outputs=[result_tools, background, double], **private)
         tab.load(_readiness, inputs=source_inputs, outputs=readiness_outputs, **private)
     return [(tab, "Ming Image", "ming_image_studio")]

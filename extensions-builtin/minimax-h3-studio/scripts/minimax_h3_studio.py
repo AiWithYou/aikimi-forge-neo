@@ -1408,10 +1408,9 @@ def _build_ui():
                 value=_runtime_checking_html(),
                 elem_id="h3-runtime-status",
             )
-            from modules_forge.minimax_h3_runtime import configured_model_root
             from modules_forge.studio_checkpoint_ui import create
             from modules_forge.studio_checkpoints import h3_compatible
-            checkpoint, _, _ = create("h3", "MiniMax-H3", (configured_model_root() / "diffusion_models",), h3_compatible, gradio=gr, details="本体のファイル名にFL2VA / Ref2VAを含めるか、h3_roleメタデータを指定します。共有VAE・テキストエンコーダーは既存フォルダーを使います。")
+            checkpoint, _ = create("h3", "MiniMax-H3", (), h3_compatible, gradio=gr, details="本体のファイル名にFL2VA / Ref2VAを含めるか、h3_roleメタデータを指定します。共有VAE・テキストエンコーダーは既存フォルダーを使います。")
 
             with gr.Row(elem_classes=["h3-main-grid"]):
                 with gr.Column(scale=6, min_width=420, elem_classes=["h3-compose"]):

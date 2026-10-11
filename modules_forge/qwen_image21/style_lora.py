@@ -36,11 +36,19 @@ def resolve(runtime: Path, name: str) -> Path:
 
 
 def inventory(runtime: Path) -> list[str]:
-    from modules_forge.local_assets import library
-
     root = directory(runtime)
-    local = [p.relative_to(root).as_posix() for p in root.rglob("*.safetensors") if p.is_file()]
-    return sorted(set(local + library().get("qwen21_lora", [])))
+    return sorted(p.relative_to(root).as_posix() for p in root.rglob("*.safetensors") if p.is_file())
+
+
+def verify_sources(sources: list[dict] | None) -> None:
+    from modules_forge.local_assets import file_identity
+
+    for source in sources or ():
+        try:
+            if file_identity(Path(source["path"])) != source:
+                raise ValueError("changed")
+        except (OSError, ValueError) as exc:
+            raise ValueError("The selected LoRA changed after submission. Select it again.") from exc
 
 
 def read_header(path: Path) -> dict:

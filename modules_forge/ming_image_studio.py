@@ -354,6 +354,10 @@ def save_result(
 ) -> dict[str, Any]:
     from PIL import Image
 
+    if assets:
+        from modules_forge.ming_local import verify_loras
+
+        verify_loras(assets["loras"])
     output_root.mkdir(parents=True, exist_ok=True)
     target = output_root / f"Ming_{datetime.now():%Y%m%d-%H%M%S}_{uuid.uuid4().hex[:10]}"
     stage = Path(tempfile.mkdtemp(prefix=".ming-", dir=output_root))
@@ -400,6 +404,8 @@ def save_result(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         (stage / "prompt.txt").write_text(metadata["effective_prompt"], encoding="utf-8")
+        if assets:
+            verify_loras(assets["loras"])
         os.replace(stage, target)
     finally:
         if stage.exists():
@@ -416,6 +422,9 @@ def run_generation(
 ) -> Iterator[dict[str, Any]]:
     request.validate()
     from modules_forge.gpu_ownership import GPUOwnership
+    from modules_forge.ming_local import selected_loras, verify_loras
+
+    lora_sources = selected_loras(request)
 
     bridge = _bridge()
     ownership = GPUOwnership()
@@ -430,6 +439,7 @@ def run_generation(
                 raise MingImageCancelled("画像生成を停止しました。")
             yield {"stage": "queued", "message": "GPUの使用終了を待っています。", "prompt_id": prompt_id}
             time.sleep(0.1)
+        verify_loras(lora_sources)
         bridge.release_forge_vram()
         yield {"stage": "runtime", "message": "Ming Image実行環境を確認しています。", "prompt_id": prompt_id}
         custom = request.uses_local_assets()
@@ -445,11 +455,8 @@ def run_generation(
         local_assets.save_selection(
             "ming",
             {
-                **local_assets.selection("ming"),
-                **{
-                    key: asdict(request)[key]
-                    for key in ("model_path", "text_encoder_path", "vae_path", "loras", "precision")
-                },
+                key: asdict(request)[key]
+                for key in ("model_path", "text_encoder_path", "vae_path", "loras", "precision")
             },
         )
         assets = None
@@ -458,12 +465,12 @@ def run_generation(
             from modules_forge.ming_local import apply_graph, selected_assets
 
             assets = selected_assets(request, runtime_root())
+            verify_loras(lora_sources)
+            assets["loras"] = lora_sources
             graph = apply_graph(graph, request, assets)
-            for kind in ("model", "text_encoder", "vae"):
-                local_assets.remember("ming_" + kind, [assets[kind]["path"]])
-            local_assets.remember("ming_lora", [x["path"] for x in assets["loras"]])
         with bridge._RUNTIME_LIFECYCLE_LOCK:
             readiness = ensure_runtime(**runtime_args)
+            verify_loras(lora_sources)
             client = bridge.ComfyH3Client(SERVER_URL)
             if bridge._is_cancelled_job(prompt_id):
                 raise MingImageCancelled("画像生成を停止しました。")

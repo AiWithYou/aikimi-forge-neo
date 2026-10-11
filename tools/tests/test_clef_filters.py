@@ -111,7 +111,7 @@ def test_filter_callbacks_keep_controls_visible_and_do_not_start_inference(tmp_p
     checkpoint_value = str(tmp_path / "checkpoint")
     monkeypatch.setattr(workspace, "history_for", lambda: [])
     monkeypatch.setattr(workspace, "environment_status", lambda: "test")
-    monkeypatch.setattr(workspace, "load_selection", lambda: (checkpoint_value, "", "flash-int8"))
+    monkeypatch.setattr(workspace, "load_selection", lambda: (checkpoint_value, "flash-int8"))
     monkeypatch.setattr(workspace, "checkpoint_choices", lambda **kwargs: [("test", checkpoint_value)])
     monkeypatch.setattr(workspace, "compatible_profiles", lambda _: ["flash-int8"])
     with gr.Blocks() as app:

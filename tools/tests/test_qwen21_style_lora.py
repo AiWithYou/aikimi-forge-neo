@@ -147,6 +147,41 @@ class StyleLoraTests(unittest.TestCase):
             load_adapters(model, self.root, values)
         self.assertIs(model.transformer_blocks[0].attn.to_q, base)
 
+    def test_file_changed_during_load_never_mutates_model_or_records_new_hash(self):
+        model, base = self.model()
+        original_load = style_lora_runtime.load_file
+
+        def changed_load(*args, **kwargs):
+            state = original_load(*args, **kwargs)
+            self.tensors[self.prefix + ".lora_up.weight"] *= 2
+            self.write()
+            return state
+
+        with patch.object(style_lora_runtime, "load_file", side_effect=changed_load):
+            with self.assertRaisesRegex(ValueError, "LoRA.*changed"):
+                load_adapters(model, self.root, self.options())
+        self.assertIs(model.transformer_blocks[0].attn.to_q, base)
+
+    def test_first_adapter_changed_while_loading_second_never_mutates_model(self):
+        second = self.root / "loras/second.safetensors"
+        save_file(self.tensors, second)
+        values = self.options()
+        values["style_loras"].append({"name": second.name, "strength": 1})
+        model, base = self.model()
+        original_load = style_lora_runtime.load_file
+
+        def changed_load(path, **kwargs):
+            state = original_load(path, **kwargs)
+            if Path(path) == second:
+                self.tensors[self.prefix + ".lora_up.weight"] *= 2
+                self.write()
+            return state
+
+        with patch.object(style_lora_runtime, "load_file", side_effect=changed_load):
+            with self.assertRaisesRegex(ValueError, "LoRA.*changed"):
+                load_adapters(model, self.root, values)
+        self.assertIs(model.transformer_blocks[0].attn.to_q, base)
+
     def test_zero_skips_loading_and_cache_tracks_files_instead_of_strength(self):
         model, base = self.model()
         with patch("modules_forge.qwen_image21.style_lora_runtime.load_file") as load:

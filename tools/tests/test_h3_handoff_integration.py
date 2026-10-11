@@ -147,9 +147,17 @@ class H3OrbitHandoffTests(unittest.TestCase):
         self.build.assert_not_called()
 
     def test_current_validates_orbit_runtime_and_records_adapter_identity(self):
-        with mock.patch.object(bridge, "validate_orbit_runtime") as validate:
+        accepted = {
+            "identity": {"path": str(self.root / "orbit.safetensors"), "sha256": bridge.orbit_assets.MODEL_SHA256}
+        }
+        with (
+            mock.patch.object(bridge, "validate_orbit_runtime") as validate,
+            mock.patch.object(bridge.orbit_assets, "snapshot", return_value=accepted) as snapshot,
+        ):
             record, url = handoff.export_current(self.request, self.root, bridge.H3_SERVER_URL, self.root, "fast")
         validate.assert_called_once_with(self.readiness)
+        snapshot.assert_called_once_with(self.root)
+        self.assertEqual(self.build.call_args.kwargs["orbit_snapshot"], accepted)
         self.assertEqual(record["metadata"]["orbit"], bridge.orbit_metadata(self.request))
         self.assertEqual(record["metadata"]["orbit"]["strength"], 0.75)
         self.assertEqual(record["metadata"]["frames"], 73)

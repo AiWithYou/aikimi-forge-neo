@@ -211,6 +211,7 @@ class ModelCacheTests(unittest.TestCase):
                 patch.object(worker, "_RESIDENT_RUNTIME", None),
                 patch.object(worker, "_RESIDENT_KEY", None),
                 patch.object(worker, "_load_runtime", side_effect=load_runtime) as load,
+                patch.object(worker, "OFFICIAL_LORA_SHA256", local_assets.file_identity(lora)["sha256"]),
                 patch.object(worker.torch.cuda, "empty_cache"),
                 patch.object(worker, "emit") as emitted,
             ):

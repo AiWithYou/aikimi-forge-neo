@@ -7,10 +7,13 @@ import sys
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 import gradio as gr
+
+from modules_forge import local_assets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -53,8 +56,9 @@ def load_ui_module():
 class AnimaUIRefreshTests(unittest.TestCase):
     def setUp(self):
         self.module, self.catalog = load_ui_module()
+        self.script = self.module.Anima3BScript()
         with gr.Blocks(analytics_enabled=False) as self.demo:
-            self.controls = self.module.Anima3BScript().ui(False)
+            self.controls = self.script.ui(False)
         self.addCleanup(self.demo.close)
 
     def callback(self, name):
@@ -81,8 +85,10 @@ class AnimaUIRefreshTests(unittest.TestCase):
         self.assertIn("Style A", warning.call_args.args[0])
 
     def test_programmatic_name_changes_only_update_visibility(self):
-        for name_control, weight in zip(self.controls[6::2], self.controls[7::2]):
-            callback = next(fn for fn in self.demo.fns.values() if fn.inputs == [name_control] and fn.outputs == [weight])
+        for name_control, weight in zip(self.controls[6::2], self.controls[7::2], strict=True):
+            callback = next(
+                fn for fn in self.demo.fns.values() if fn.inputs == [name_control] and fn.outputs == [weight]
+            )
             self.assertNotIn("value", callback.fn("Style B"))
             self.assertTrue(callback.fn("Style B")["visible"])
             self.assertFalse(callback.fn("None")["visible"])
@@ -100,6 +106,64 @@ class AnimaUIRefreshTests(unittest.TestCase):
         self.assertEqual([update["value"] for update in updates[1::2]], [1.0] * 4)
         self.assertTrue(all(not update["visible"] for update in updates[1::2]))
         self.assertEqual(callback.outputs, self.controls[6:])
+
+    def test_png_infotext_resets_all_names_and_strengths_without_saving(self):
+        fields = getattr(self.script, "infotext_fields", [])
+        self.assertEqual([component for component, _ in fields], self.controls[6:])
+        params = {"Prompt": "portrait <lora:Style A:0.7>", "Anima 3.8B standard LoRA": "Style A:0.7"}
+        with patch.object(local_assets, "save_selection", side_effect=AssertionError("PNG restore must not save")):
+            updates = [callback(params) for _, callback in fields]
+        self.assertEqual([update["value"] for update in updates[::2]], ["None"] * 4)
+        self.assertEqual([update["value"] for update in updates[1::2]], [1.0] * 4)
+        self.assertTrue(all(update["visible"] is False for update in updates[1::2]))
+        self.assertEqual(params["Prompt"], "portrait <lora:Style A:0.7>")
+
+    def test_png_prompt_tags_reproduce_without_previous_form_loras(self):
+        spec = importlib.util.spec_from_file_location(
+            "_anima_png_standard_lora", ROOT / "extensions-builtin/anima-3-8b/anima3b/standard_lora.py"
+        )
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        prompt = "portrait <lora:Style A:0.7>"
+        params = {"Prompt": prompt, "Anima 3.8B standard LoRA": "Style A:0.7"}
+        values = ["Style A", 0.7, "None", 1.0, "None", 1.0, "None", 1.0]
+        replacements = {
+            component: callback(params) for component, callback in getattr(self.script, "infotext_fields", [])
+        }
+        values = [
+            replacements[component]["value"] if component in replacements else value
+            for component, value in zip(self.controls[6:], values, strict=True)
+        ]
+        processing = SimpleNamespace(prompt=prompt, all_prompts=[prompt], extra_generation_params={})
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "style.safetensors"
+            path.touch()
+            with (
+                patch.object(self.module, "standard_anima_loras", return_value={"Style A": str(path)}),
+                patch.object(self.module, "apply_standard_lora_selections", helper.apply_standard_lora_selections),
+            ):
+                self.script.process(processing, True, "adapter", 1.0, False, 1.0, False, *values)
+        self.assertEqual(processing.prompt, prompt)
+        self.assertEqual(processing.all_prompts, [prompt])
+        self.assertEqual(processing.extra_generation_params, {})
+
+    def test_gallery_send_to_filters_all_target_slots_and_keeps_ui_transfer(self):
+        target = self.module.Anima3BScript()
+        with gr.Blocks(analytics_enabled=False) as demo:
+            target_controls = target.ui(True)
+        self.addCleanup(demo.close)
+        names = getattr(self.script, "paste_field_names", [])
+        target_fields = [(component, key) for component, key in target.infotext_fields if key in names]
+        self.assertEqual([component for component, _ in target_fields], target_controls[6:])
+        source_fields = [(component, key) for component, key in self.script.infotext_fields if key in names]
+        self.assertEqual([component for component, _ in source_fields], self.controls[6:])
+        self.assertEqual(len(names), 2)
+        self.assertEqual([key for _, key in source_fields], [key for _, key in target_fields])
+        params = {"Prompt": "portrait <lora:Style A:0.7>"}
+        updates = [key(params) for _, key in target_fields]
+        self.assertEqual([update["value"] for update in updates[::2]], ["None"] * 4)
+        self.assertEqual([update["value"] for update in updates[1::2]], [1.0] * 4)
+        self.assertTrue(all(update["visible"] is False for update in updates[1::2]))
 
     def test_adapter_refresh_retains_selection_and_discovers_downloads(self):
         self.catalog["adapters"].append("adapter-b.safetensors")

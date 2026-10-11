@@ -66,6 +66,7 @@ on:
       - "modules_forge/ming_local.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
+      - "tools/tests/test_forge_lora*.py"
       - "modules_forge/ming_image_studio.py"
       - "extensions-builtin/ming-image-studio/**"
       - "tools/*ming_image*.py"
@@ -193,6 +194,7 @@ on:
       - "modules_forge/ming_local.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
+      - "tools/tests/test_forge_lora*.py"
       - "modules_forge/ming_image_studio.py"
       - "extensions-builtin/ming-image-studio/**"
       - "tools/*ming_image*.py"
@@ -374,10 +376,13 @@ jobs:
           --module tools.tests.test_minimax_h3_studio
           --module tools.tests.test_h3_orbit
           --module tools.tests.test_h3_orbit_assets
+          --module tools.tests.test_h3_orbit_identity
           --module tools.tests.test_h3_orbit_ui
           --module tools.tests.test_comfy_startup_cleanup
           --module tools.tests.test_minimax_h3_setup
           --module tools.tests.test_local_model_sources
+          --module tools.tests.test_forge_lora_selection
+          --module tools.tests.test_forge_lora_ui
           --module tools.tests.test_ming_image_studio
           --module tools.tests.test_option_migrations
           --module tools.tests.test_patcher_cleanup

@@ -571,18 +571,17 @@ def _cancel(job_id: str):
     return progress_html("cancel", message, 0.0), gr.update(interactive=False)
 
 
-def _refresh_checkpoints(checkpoint, search_directory):
+def _refresh_checkpoints(checkpoint):
     checkpoint = checkpoint or str(DEFAULT_CHECKPOINT_PATH)
-    return gr.update(choices=checkpoint_choices(search_directory, checkpoint), value=checkpoint)
+    return gr.update(choices=checkpoint_choices(checkpoint), value=checkpoint)
 
 
 def _load_checkpoints():
-    checkpoint, search_directory = load_checkpoint_selection()
-    return _refresh_checkpoints(checkpoint, search_directory), gr.update(value=search_directory)
+    return _refresh_checkpoints(load_checkpoint_selection())
 
 
 def _build_ui():
-    selected_checkpoint, selected_search = load_checkpoint_selection()
+    selected_checkpoint = load_checkpoint_selection()
     initial_status = inspect_runtime(DEFAULT_SOURCE_PATH, checkpoint=selected_checkpoint)
     initial_profile = (
         PROFILE_OFFICIAL_8STEP if initial_status.lora_ready else PROFILE_QUALITY
@@ -610,15 +609,12 @@ def _build_ui():
                 </section>
                 """
             )
-            with gr.Accordion("チェックポイント", open=True):
-                with gr.Row():
-                    checkpoint_path = configure_component(gr.Dropdown(
-                        choices=checkpoint_choices(selected_search, selected_checkpoint),
-                        value=selected_checkpoint, label="チェックポイント", scale=5,
-                    ))
-                    refresh_checkpoints = gr.Button("一覧を更新", scale=1)
-                with gr.Accordion("詳細", open=False):
-                    search_directory = configure_component(gr.Textbox(value=selected_search, label="探索フォルダー"))
+            with gr.Row():
+                checkpoint_path = configure_component(gr.Dropdown(
+                    choices=checkpoint_choices(selected_checkpoint),
+                    value=selected_checkpoint, label="チェックポイント", scale=5,
+                ))
+                refresh_checkpoints = gr.Button("一覧を更新", scale=1)
             runtime_status = gr.HTML(
                 value=runtime_status_html(initial_status), elem_id="sn-runtime-status"
             )
@@ -1198,16 +1194,15 @@ def _build_ui():
             api_visibility="private",
         )
         refresh_checkpoints.click(
-            _refresh_checkpoints, inputs=[checkpoint_path, search_directory], outputs=[checkpoint_path],
+            _refresh_checkpoints, inputs=[checkpoint_path], outputs=[checkpoint_path],
             queue=False, show_progress="hidden", api_visibility="private",
         )
-        for component in (checkpoint_path, search_directory):
-            component.input(
-                save_checkpoint_selection, inputs=[checkpoint_path, search_directory],
-                queue=False, show_progress="hidden", api_visibility="private",
-            )
+        checkpoint_path.input(
+            save_checkpoint_selection, inputs=[checkpoint_path],
+            queue=False, show_progress="hidden", api_visibility="private",
+        )
         checkpoint_load = interface.load(
-            _load_checkpoints, outputs=[checkpoint_path, search_directory], queue=False, show_progress="hidden", api_visibility="private",
+            _load_checkpoints, outputs=[checkpoint_path], queue=False, show_progress="hidden", api_visibility="private",
         )
         checkpoint_load.then(
             _refresh_runtime,

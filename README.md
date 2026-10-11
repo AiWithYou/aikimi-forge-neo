@@ -2,13 +2,13 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.0.0)** · [変更履歴](CHANGELOG.md)
+**[v4.0.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.0.1)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
 **画像の生成・編集、音声付き動画、作曲、画像や文章の評価を、ひとつのWebUIから使えるWindows向けのForge Neo派生版です。** モデルの導入、高解像度処理、画像の仕上げも支援します。
 
-v4.0.0では、各Studioの先頭からチェックポイントを選べるようにし、ローカルモデルの配置と探索を揃えました。下位フォルダーでの整理、外部フォルダーの探索、選択の保存に対応します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデルの選択・配置と系列ごとの対応条件](docs/local-models.md)
+各Studioの先頭からチェックポイントを選べます。追加本体は `models/<系列>/checkpoints/` と下位フォルダーへ置き、一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 
@@ -157,7 +157,7 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 |---|---|---|
 | Forge `txt2img` / `img2img` | `models/Lora/` | **LoRAを組み合わせる** で選択、または `<lora:名前:0.8>` |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → 一覧更新 → 複数選択** |
-| Ming Image | `models/Lora/Ming/` | **LoRA** で選択 |
+| Ming Image | `models/Ming-Image/loras/` | **LoRA** で選択 |
 
 強度は−2〜2で指定します。0は無効、×は選択解除です。同じLoRAを選択欄とプロンプトの両方へ指定しないでください。モデルの世代や形式が異なると使えません。[対応形式と外部モデルの指定方法](docs/local-models.md) · [Qwen追加LoRAガイド](extensions-builtin/qwen-image21-studio/README.md#追加lora)
 

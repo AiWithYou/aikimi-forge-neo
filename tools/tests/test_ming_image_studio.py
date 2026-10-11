@@ -11,13 +11,14 @@ from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from PIL import Image
 
 from modules_forge import local_assets
 from modules_forge import ming_image_studio as studio
 from tools import quantize_ming_image, setup_ming_image
+from tools.tests.test_local_model_sources import tensor_file
 
 
 def load_ui():
@@ -148,6 +149,75 @@ class MingImageContracts(unittest.TestCase):
                     "job",
                     SimpleNamespace(core_revision="pin", comfy_version="0.37"),
                     root / "out",
+                )
+            self.assertEqual(list((root / "out").iterdir()), [])
+
+    def test_lora_identity_is_fixed_before_gpu_wait(self):
+        with TemporaryDirectory() as directory:
+            path = tensor_file(Path(directory) / "lora.safetensors")
+            request = studio.MingImageRequest("poster", loras=({"name": str(path), "strength": 0.5},))
+            bridge = MagicMock()
+            bridge._is_cancelled_job.return_value = False
+            bridge._GPU_OWNERSHIPS = {}
+            lease = Mock()
+            lease.acquire.side_effect = [False, True]
+            with (
+                patch.object(studio, "_bridge", return_value=bridge),
+                patch("modules_forge.gpu_ownership.GPUOwnership", return_value=lease),
+                patch.object(studio.time, "sleep"),
+            ):
+                run = studio.run_generation(request)
+                self.assertEqual(next(run)["stage"], "queued")
+                tensor_file(path, value=2)
+                with self.assertRaisesRegex(ValueError, "LoRA"):
+                    next(run)
+                bridge.release_forge_vram.assert_not_called()
+                lease.release.assert_called_once()
+
+    def test_changed_lora_is_rejected_before_result_publication(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = tensor_file(root / "lora.safetensors")
+            identity = local_assets.file_identity(path)
+            assets = {"model": {"path": str(root / "model.safetensors")}, "loras": [{**identity, "strength": 0.5}]}
+            source = root / "output.png"
+            Image.new("RGB", (256, 256)).save(source)
+            tensor_file(path, value=2)
+            with self.assertRaisesRegex(ValueError, "LoRA"):
+                studio.save_result(
+                    source,
+                    studio.MingImageRequest("poster", width=256, height=256),
+                    1,
+                    "job",
+                    SimpleNamespace(core_revision="pin", comfy_version="0.37"),
+                    root / "out",
+                    assets,
+                )
+            self.assertFalse((root / "out").exists())
+
+    def test_lora_change_during_saving_does_not_publish_result(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = tensor_file(root / "lora.safetensors")
+            identity = local_assets.file_identity(path)
+            assets = {"model": {"path": str(root / "model.safetensors")}, "loras": [{**identity, "strength": 0.5}]}
+            source = root / "output.png"
+            Image.new("RGB", (256, 256)).save(source)
+            original_open = Image.open
+
+            def changed_open(*args, **kwargs):
+                tensor_file(path, value=2)
+                return original_open(*args, **kwargs)
+
+            with patch("PIL.Image.open", side_effect=changed_open), self.assertRaisesRegex(ValueError, "LoRA"):
+                studio.save_result(
+                    source,
+                    studio.MingImageRequest("poster", width=256, height=256),
+                    1,
+                    "job",
+                    SimpleNamespace(core_revision="pin", comfy_version="0.37"),
+                    root / "out",
+                    assets,
                 )
             self.assertEqual(list((root / "out").iterdir()), [])
 

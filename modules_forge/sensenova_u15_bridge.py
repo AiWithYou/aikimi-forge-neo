@@ -448,8 +448,8 @@ def checkpoint_is_ready(path: Path) -> bool:
         return False
 
 
-def checkpoint_choices(search_directory="", current=""):
-    roots = checkpoint_roots("SenseNova-U1", roots=(DEFAULT_CHECKPOINT_PATH.parent,), search_directory=search_directory)
+def checkpoint_choices(current=""):
+    roots = checkpoint_roots("SenseNova-U1")
     paths = discover_files(roots, suffixes=(".safetensors",), validator=compatible_checkpoint)
     if DEFAULT_CHECKPOINT_PATH.is_file():
         paths.append(str(DEFAULT_CHECKPOINT_PATH.resolve()))
@@ -458,11 +458,11 @@ def checkpoint_choices(search_directory="", current=""):
 
 def load_checkpoint_selection():
     value = local_assets.selection("sensenova")
-    return str(value.get("checkpoint") or DEFAULT_CHECKPOINT_PATH), str(value.get("search_directory") or "")
+    return str(value.get("checkpoint") or DEFAULT_CHECKPOINT_PATH)
 
 
-def save_checkpoint_selection(checkpoint, search_directory):
-    local_assets.save_selection("sensenova", {"checkpoint": checkpoint, "search_directory": search_directory})
+def save_checkpoint_selection(checkpoint):
+    local_assets.save_selection("sensenova", {"checkpoint": checkpoint})
 
 
 def _official_lora_header_is_valid(path: Path) -> bool:

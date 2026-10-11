@@ -163,12 +163,10 @@ def list_models():
 
 
 def checkpoint_roots():
-    from modules_forge import local_assets, model_catalog
+    from modules_forge import model_catalog
 
-    roots = model_catalog.checkpoint_roots(
-        "Stable-diffusion", (*cmd_opts.ckpt_dirs, model_path), local_assets.selection("forge").get("directory", "")
-    )
-    for family in ("Anima", "Krea2", "SDXL", "SD", "Flux", "Flux.2", "Qwen-Image", "Qwen-Image-Edit", "Lumina-Image-2.0", "Z-Image", "Wan", "Ernie-Image", "PiD"):
+    roots = model_catalog.checkpoint_roots("Stable-diffusion", (*cmd_opts.ckpt_dirs, model_path))
+    for family in model_catalog.FORGE_FAMILIES:
         roots += model_catalog.checkpoint_roots(family)
     return tuple(dict.fromkeys(roots))
 

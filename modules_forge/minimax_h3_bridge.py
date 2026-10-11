@@ -641,7 +641,7 @@ def _runtime_arguments_are_allowed(arguments: Sequence[str]) -> bool:
     whitelist = custom_node_whitelist(arguments)
     from modules_forge.ming_local import NODE_NAME as MING_LOCAL_PACK
 
-    if whitelist is None or set(whitelist) - {HANDOFF_PACK, FAST_VAE_PACK, NEGPIP_PACK, CLIP_CACHE_PACK, negpip_cache.PACK, hybrid.PACK, MING_LOCAL_PACK}:
+    if whitelist is None or set(whitelist) - {HANDOFF_PACK, FAST_VAE_PACK, NEGPIP_PACK, CLIP_CACHE_PACK, negpip_cache.PACK, hybrid.PACK, MING_LOCAL_PACK, orbit_assets.PACK}:
         return False
     index = 0
     saw_main = False
@@ -1294,7 +1294,7 @@ def _start_runtime_locked(
     stderr_path = log_directory / f"{log_prefix}-{stamp}.stderr.log"
     from modules_forge.nanosaur2_studio import NODE_NAME, source_ready
 
-    extra_nodes = (NODE_NAME,) if source_ready(runtime_root) else ()
+    extra_nodes = (orbit_assets.PACK, *((NODE_NAME,) if source_ready(runtime_root) else ()))
     from modules_forge import ming_local
 
     if ming_local.source_ready(runtime_root):
@@ -1320,6 +1320,7 @@ def _start_runtime_locked(
         elif listening_root is None:
             try:
                 workflow_handoff.install_bundle(runtime_root)
+                orbit_assets.install_node(runtime_root)
             except (OSError, ValueError) as exc:
                 raise H3BridgeError(str(exc)) from exc
             if acceleration.negpip.enabled:
@@ -2093,7 +2094,7 @@ def validate_reference_prompt_tags(prompt: str, prepared_media: dict[str, Any]) 
         )
 
 
-def build_workflow(request: H3Request, prepared_media: dict[str, Any], seed: int | None = None) -> dict[str, Any]:
+def build_workflow(request: H3Request, prepared_media: dict[str, Any], seed: int | None = None, *, orbit_snapshot: dict | None = None) -> dict[str, Any]:
     validate_request(request)
     width, height = request.dimensions
     seed = request.resolved_seed if seed is None else int(seed)
@@ -2197,11 +2198,13 @@ def build_workflow(request: H3Request, prepared_media: dict[str, Any], seed: int
     if request.mode == MODE_ORBIT:
         if not prepared_media.get("first_frame"):
             raise H3BridgeError("360°周回の写真を準備できませんでした。")
+        if orbit_snapshot is None:
+            raise H3BridgeError("Orbit LoRAの受付時の実体情報がありません。")
         workflow["40"] = _node(
-            "LoraLoaderModelOnly",
+            orbit_assets.NODE,
             model=["1", 0],
-            lora_name=orbit_assets.MODEL_NAME,
             strength_model=request.orbit_strength,
+            **orbit_assets.node_inputs(orbit_snapshot),
         )
         workflow["15"]["inputs"]["model"] = ["40", 0]
         workflow["8"]["inputs"]["model"] = ["40", 0]
@@ -2327,10 +2330,12 @@ def mirror_result(
     prompt_id: str,
     seed: int,
     readiness: RuntimeReadiness,
-    *, checkpoint_snapshot: dict | None = None,
+    *, checkpoint_snapshot: dict | None = None, orbit_snapshot: dict | None = None, orbit_identity: dict | None = None,
 ) -> Path:
     from modules_forge.studio_checkpoints import result_identity, verify_snapshot
     checkpoint_identity = result_identity(request.acceleration.checkpoint, checkpoint_snapshot)
+    if request.mode == MODE_ORBIT and (orbit_snapshot is None or orbit_identity != orbit_assets.applied_identity(orbit_snapshot, request.orbit_strength)):
+        raise H3BridgeError("Orbit LoRAの読み込み結果を受付時の実体と照合できません。")
     output_directory.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     token = uuid.uuid4().hex
@@ -2362,7 +2367,8 @@ def mirror_result(
         "acceleration": request.acceleration.to_dict(),
         "fun_control": request.control.to_dict(),
         "fun_control_model": request.control.model_name if request.control.enabled else None,
-        "orbit": orbit_metadata(request),
+        "orbit": orbit_metadata(request, orbit_identity),
+        "orbit_identity": orbit_identity,
         "clip_cache_revision": CLIP_CACHE_REVISION if request.acceleration.clip_cache != "off" else None,
         "selected_models": {
             name: filename for name, (_, filename) in request.acceleration.model_files(MODEL_FILES).items()
@@ -2387,6 +2393,7 @@ def mirror_result(
             newline="\n",
         )
         verify_snapshot(checkpoint_snapshot)
+        orbit_assets.verify(orbit_snapshot)
         os.replace(staged_metadata, metadata_path)
         try:
             os.replace(staged_video, target)
@@ -2420,14 +2427,14 @@ def _estimated_required_free_gib(request: H3Request, runtime_profile: str, runti
     return decoded_video_gib + safety_gib + control_gib
 
 
-def orbit_metadata(request: H3Request) -> dict[str, Any] | None:
+def orbit_metadata(request: H3Request, identity: dict | None = None) -> dict[str, Any] | None:
     if request.mode != MODE_ORBIT:
         return None
     return {
         "strength": request.orbit_strength,
         "model": orbit_assets.MODEL_NAME,
         "revision": orbit_assets.REVISION,
-        "sha256": orbit_assets.MODEL_SHA256,
+        "sha256": identity["sha256"] if identity is not None else orbit_assets.MODEL_SHA256,
     }
 
 
@@ -2438,17 +2445,14 @@ def validate_orbit_runtime(readiness: RuntimeReadiness) -> None:
             raise ValueError("Orbitの実行環境を確認できません。")
         orbit_assets.validate_model(readiness.runtime_root)
         client = ComfyH3Client(readiness.server_url)
-        specs = client.object_info({"LoraLoaderModelOnly", "ImageScale"})
+        specs = client.object_info({orbit_assets.NODE, "ImageScale"})
         for node, required in (
-            ("LoraLoaderModelOnly", {"model", "lora_name", "strength_model"}),
+            (orbit_assets.NODE, {"model", "canonical_path", "size", "sha256", "version", "strength_model"}),
             ("ImageScale", {"image", "width", "height", "crop", "upscale_method"}),
         ):
             inputs = specs.get(node, {}).get("input", {}).get("required", {})
             if not required <= inputs.keys():
-                raise ValueError(f"Orbitに必要な{node}の入力仕様が一致しません。")
-        choices = specs["LoraLoaderModelOnly"]["input"]["required"]["lora_name"][0]
-        if not isinstance(choices, list) or orbit_assets.MODEL_NAME not in choices:
-            raise ValueError("Orbit LoRAが接続先に見つかりません。導入後に状態を再確認してください。")
+                raise ValueError("Orbit専用ノードが未導入、または入力仕様が異なります。同梱のAikimi-MiniMax-H3-Orbitを導入してComfyUIを再起動してください。")
     except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
         raise H3BridgeError(str(exc)) from exc
     finally:
@@ -2533,6 +2537,7 @@ def run_generation(
 ) -> Iterator[dict[str, Any]]:
     from modules_forge.studio_checkpoints import snapshot_checkpoint
     checkpoint_snapshot = snapshot_checkpoint(request.acceleration.checkpoint)
+    orbit_snapshot = orbit_assets.snapshot(runtime_root) if request.mode == MODE_ORBIT else None
     ownership = GPUOwnership()
     ownership.engine = "h3"
     waiting_id = str(uuid.uuid4())
@@ -2544,8 +2549,9 @@ def run_generation(
             time.sleep(0.1)
         if _is_cancelled_job(waiting_id):
             raise H3GenerationCancelled("生成を停止しました。")
+        orbit_assets.verify(orbit_snapshot)
         release_forge_vram()
-        yield from _run_generation(request, runtime_root, server_url, log_directory, output_directory, runtime_profile, poll_seconds, ownership, waiting_id, checkpoint_snapshot)
+        yield from _run_generation(request, runtime_root, server_url, log_directory, output_directory, runtime_profile, poll_seconds, ownership, waiting_id, checkpoint_snapshot, orbit_snapshot)
     finally:
         with _ACTIVE_GENERATION_LOCK:
             retained = ownership in _GPU_OWNERSHIPS.values()
@@ -2595,9 +2601,13 @@ def _run_generation(
     ownership: GPUOwnership,
     submission_id: str,
     checkpoint_snapshot: dict | None = None,
+    orbit_snapshot: dict | None = None,
 ) -> Iterator[dict[str, Any]]:
     from modules_forge.studio_checkpoints import result_identity, verify_snapshot
     result_identity(request.acceleration.checkpoint, checkpoint_snapshot)
+    if request.mode == MODE_ORBIT and orbit_snapshot is None:
+        raise H3BridgeError("Orbit LoRAの受付時の実体情報がありません。")
+    orbit_assets.verify(orbit_snapshot)
     validate_request(request)
     yield {
         "stage": "runtime",
@@ -2606,6 +2616,7 @@ def _run_generation(
         "prompt_id": submission_id,
     }
     verify_snapshot(checkpoint_snapshot)
+    orbit_assets.verify(orbit_snapshot)
     readiness = ensure_ready(
         runtime_root,
         server_url,
@@ -2626,9 +2637,11 @@ def _run_generation(
     deferred_cleanup_scheduled = False
     try:
         seed = request.resolved_seed
-        workflow = build_workflow(request, prepared, seed=seed)
+        workflow_options = {"orbit_snapshot": orbit_snapshot} if orbit_snapshot is not None else {}
+        workflow = build_workflow(request, prepared, seed=seed, **workflow_options)
         with _RUNTIME_LIFECYCLE_LOCK:
             verify_snapshot(checkpoint_snapshot)
+            orbit_assets.verify(orbit_snapshot)
             readiness = ensure_ready(
                 runtime_root,
                 server_url,
@@ -2648,6 +2661,7 @@ def _run_generation(
             if server_process is None:
                 raise H3BridgeError("H3の送信先processを確認できません。")
             verify_snapshot(checkpoint_snapshot)
+            orbit_assets.verify(orbit_snapshot)
             pending_jobs.write({
                 "version": 1, "prompt_id": submission_id,
                 "runtime_root": os.fspath(runtime_root.resolve()),
@@ -2742,6 +2756,12 @@ def _run_generation(
                     raise H3BridgeError(f"完成済みH3ジョブの結果を取得できません: {history_error}")
                 verify_snapshot(checkpoint_snapshot)
                 snapshot_options = {"checkpoint_snapshot": checkpoint_snapshot} if checkpoint_snapshot is not None else {}
+                if orbit_snapshot is not None:
+                    try:
+                        orbit_identity = orbit_assets.receipt_identity(history, prompt_id, orbit_snapshot, request.orbit_strength)
+                    except ValueError as exc:
+                        raise H3BridgeError(str(exc)) from exc
+                    snapshot_options.update(orbit_snapshot=orbit_snapshot, orbit_identity=orbit_identity)
                 target = mirror_result(source, output_directory, request, prompt_id, seed, readiness, **snapshot_options)
                 handoff_warning = workflow_handoff.finish_generation(target, handoff_record, handoff_warning, source=source)
                 yield {

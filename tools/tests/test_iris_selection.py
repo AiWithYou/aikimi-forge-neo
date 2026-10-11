@@ -79,7 +79,7 @@ class SelectionTests(unittest.TestCase):
             ):
                 view = module.load_selection()
             read.assert_called_once_with("iris")
-            self.assertEqual(len(view), 17)
+            self.assertEqual(len(view), 16)
             self.assertEqual(view[13]["value"], selected)
             self.assertIn(selected, [value for _, value in view[13]["choices"]])
             self.assertEqual(view[12]["value"], "normal")
@@ -87,8 +87,7 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(view[14]["selection_checkpoint"], selected)
             self.assertEqual(view[14]["base_precisions"]["generate"], "w4a8")
             self.assertIn(Path(selected).name, view[8])
-            self.assertEqual(view[15]["value"], str(directory))
-            self.assertEqual(view[16]["value"], "generate")
+            self.assertEqual(view[15]["value"], "generate")
             self.assertEqual(local_assets.LIBRARY.read_bytes(), before)
 
     def test_reload_keeps_missing_selection_and_saved_precision_without_fallback(self):
@@ -150,18 +149,18 @@ class SelectionTests(unittest.TestCase):
         load = loads[0]
         self.assertIs(root.fns[load["id"]].fn, module.load_selection)
         self.assertEqual(load["inputs"], [])
-        self.assertEqual(len(load["outputs"]), 17)
+        self.assertEqual(len(load["outputs"]), 16)
         self.assertFalse(load["queue"])
         self.assertEqual(load["show_progress"], "hidden")
         components = {item["id"]: item for item in config["components"]}
         self.assertEqual(components[load["outputs"][14]]["type"], "state")
-        self.assertEqual(components[load["outputs"][15]]["props"]["elem_id"], "iris-search-directory")
-        self.assertEqual(components[load["outputs"][16]]["props"]["elem_id"], "iris-task")
+        self.assertEqual(components[load["outputs"][15]]["props"]["elem_id"], "iris-task")
+        self.assertFalse(any(item["props"].get("label") == "探索フォルダー" for item in components.values()))
         targets = {(identifier, event) for item in dependencies for identifier, event in item["targets"]}
         for identifier in (load["outputs"][12], load["outputs"][13]):
             self.assertIn((identifier, "input"), targets)
             self.assertNotIn((identifier, "change"), targets)
-        self.assertIn((load["outputs"][16], "change"), targets)
+        self.assertIn((load["outputs"][15], "change"), targets)
 
     def test_forge_ui_defaults_cannot_replace_library_selection(self):
         module = screen_module()
@@ -197,10 +196,10 @@ class SelectionTests(unittest.TestCase):
             ]
             loadsave.add_block(blocks, "iris_studio")
             self.assertEqual(by_id["iris-checkpoint"].value, selected)
-            self.assertEqual(by_id["iris-search-directory"].value, folder)
+            self.assertNotIn("iris-search-directory", by_id)
             self.assertEqual(formats[0].value, "normal")
             self.assertFalse(formats[0].interactive)
-            for component in (by_id["iris-checkpoint"], by_id["iris-search-directory"], formats[0]):
+            for component in (by_id["iris-checkpoint"], formats[0]):
                 self.assertNotIn(component, loadsave.component_mapping.values())
 
     def test_refresh_during_job_keeps_run_button_disabled(self):
@@ -297,12 +296,13 @@ class SelectionTests(unittest.TestCase):
     def test_discovery_is_independent_of_environment_and_keeps_deleted_selection(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            path = artifact(root / "探す場所/deep")
-            self.assertIn(str(path), [value for _, value in core.checkpoint_choices(root, str(root / "探す場所"))])
+            path = artifact(root / "checkpoints/deep")
+            ignored = artifact(root / "outside")
+            values = [value for _, value in core.checkpoint_choices(root)]
+            self.assertIn(str(path), values)
+            self.assertNotIn(str(ignored), values)
             path.unlink()
-            self.assertIn(
-                str(path), [value for _, value in core.checkpoint_choices(root, str(root / "探す場所"), str(path))]
-            )
+            self.assertIn(str(path), [value for _, value in core.checkpoint_choices(root, current=str(path))])
             self.assertFalse(core.model_ready(root, "normal", "generate", str(path)))
 
     def test_worker_reloads_overwritten_weights_and_config(self):
@@ -340,20 +340,21 @@ class SelectionTests(unittest.TestCase):
             worker.resident_run(payload)
         self.assertEqual(events, ["load", "close", "load", "close", "load"])
 
-    def test_ui_search_and_selection_persist_without_fallback(self):
+    def test_ui_selection_persists_without_external_search_or_fallback(self):
         module = screen_module()
         with (
             tempfile.TemporaryDirectory() as folder,
             patch.object(local_assets, "LIBRARY", Path(folder) / "library.json"),
         ):
             selected = artifact(Path(folder) / "探索/子")
-            update = module.refresh_checkpoints(str(selected.parent.parent), str(selected))
+            local_assets.save_selection("iris", {"directory": "old external root"})
+            update = module.refresh_checkpoints(str(selected))
             self.assertEqual(update["value"], str(selected))
-            self.assertEqual(local_assets.selection("iris")["directory"], str(selected.parent.parent))
             module.switch({}, "generate", "int8", str(selected))
             self.assertEqual(local_assets.selection("iris")["checkpoint"], str(selected))
+            self.assertNotIn("directory", local_assets.selection("iris"))
             selected.unlink()
-            update = module.refresh_checkpoints(str(selected.parent.parent), str(selected))
+            update = module.refresh_checkpoints(str(selected))
             self.assertEqual(update["value"], str(selected))
             with patch.object(module.PREPARATION, "start") as download:
                 response = module.start(
@@ -362,7 +363,7 @@ class SelectionTests(unittest.TestCase):
             download.assert_not_called()
             self.assertIn("チェックポイント", response[4])
 
-    def test_real_ui_has_search_and_format_controls(self):
+    def test_real_ui_has_checkpoint_and_format_without_search_control(self):
         module = screen_module()
         with (
             tempfile.TemporaryDirectory() as folder,
@@ -371,7 +372,7 @@ class SelectionTests(unittest.TestCase):
             blocks, _, _ = module.on_ui_tabs()[0]
         components = blocks.get_config_file()["components"]
         props = {item.get("props", {}).get("elem_id"): item.get("props", {}) for item in components}
-        self.assertEqual(props["iris-search-directory"]["label"], "探索フォルダー")
+        self.assertNotIn("iris-search-directory", props)
         self.assertTrue(props["iris-checkpoint"]["allow_custom_value"])
         self.assertTrue(any(item.get("props", {}).get("label") == "保存形式" for item in components))
 

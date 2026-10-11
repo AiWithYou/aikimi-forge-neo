@@ -152,10 +152,9 @@ def on_ui_tabs():
             "H3の最小5フレームから1枚を採用する実験的な静止画モードです。"
             "動画ファイルの生成・音声の復号は行いません。"
         )
-        from modules_forge.minimax_h3_runtime import configured_model_root
         from modules_forge.studio_checkpoint_ui import create
         from modules_forge.studio_checkpoints import h3_compatible
-        checkpoint, _, _ = create("h3", "MiniMax-H3", (configured_model_root() / "diffusion_models",), h3_compatible, gradio=gr, details="FL2VAはテキスト生成、Ref2VAは参照編集用です。役割はファイル名またはh3_roleメタデータで指定します。")
+        checkpoint, _ = create("h3", "MiniMax-H3", (), h3_compatible, gradio=gr, details="FL2VAはテキスト生成、Ref2VAは参照編集用です。役割はファイル名またはh3_roleメタデータで指定します。")
         with gr.Accordion("実行環境とモデル", open=False):
             runtime = gr.Textbox(value=_initial_runtime(), visible=False, interactive=False)
             url = gr.Textbox(value=SERVER_URL, visible=False, interactive=False)

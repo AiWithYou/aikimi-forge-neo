@@ -169,7 +169,7 @@ def on_ui_tabs():
             "## Nanosaur2\nイラスト向けテキスト画像生成。モデル配布元は[well9472/Nanosaur2-670M](https://huggingface.co/well9472/Nanosaur2-670M)です。"
         )
         from modules_forge.studio_checkpoint_ui import create
-        checkpoint, _, _ = create("nanosaur2", "Nanosaur2", (studio.runtime_root() / "models/diffusion_models",), studio.nanosaur_compatible, gradio=gr)
+        checkpoint, _ = create("nanosaur2", "Nanosaur2", (), studio.nanosaur_compatible, gradio=gr)
         with gr.Accordion("実行環境とモデル", open=False):
             gr.Markdown("専用ComfyUI・Python・Nanosaur2の3モデルを準備します。H3のモデルは不要です。")
             with gr.Row():

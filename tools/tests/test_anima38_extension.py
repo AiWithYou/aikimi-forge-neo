@@ -5,7 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 import torch
@@ -303,10 +303,101 @@ class Anima38ExtensionTests(unittest.TestCase):
         self.assertEqual(
             found,
             {
+                "anima-28": str(root / "anima-28.safetensors"),
                 "anima-40": str(root / "anima-40.safetensors"),
                 "anima-52": str(root / "anima-52.safetensors"),
             },
         )
+
+    def test_standard_lora_discovery_keeps_nested_names_and_root_collisions_distinct(self):
+        import hashlib
+        import os
+
+        with TemporaryDirectory() as directory:
+            roots = [Path(directory) / part / "Lora" for part in ("one", "two", "three")]
+            tensors = {
+                f"diffusion_model.blocks.{block}.{module}.lora_A.weight": torch.ones(1)
+                for block in range(28)
+                for module in ("adaln_modulation_mlp.1", "cross_attn.q_proj", "self_attn.q_proj", "mlp.layer1")
+            }
+            paths = []
+            for root in roots:
+                for relative in ("portrait/style.safetensors", "landscape/style.safetensors"):
+                    path = root / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    save_file(tensors, path)
+                    paths.append(path)
+            with patch("anima3b.files.lora_roots", return_value=roots):
+                found = standard_anima_loras()
+            expected = {
+                "portrait/style": str(paths[0]),
+                "landscape/style": str(paths[1]),
+                "Lora/portrait/style": str(paths[2]),
+                "Lora/landscape/style": str(paths[3]),
+                **{
+                    "local_" + hashlib.sha256(os.path.normcase(os.path.realpath(path)).encode()).hexdigest()[:16]: str(
+                        path
+                    )
+                    for path in paths[4:]
+                },
+            }
+            self.assertEqual(found, expected)
+            processing = SimpleNamespace(prompt="portrait", all_prompts=["portrait"], extra_generation_params={})
+            self.assertTrue(apply_standard_lora_selections(processing, [(name, 0.5) for name in found], found))
+            self.assertEqual(processing.prompt.count("<lora:"), len(expected))
+
+    def test_standard_lora_names_match_actual_forge_registry_enumeration(self):
+        import itertools
+        import os
+        import re
+
+        from modules_forge import local_assets
+        from tools.tests.test_runtime_efficiency import load_definitions
+
+        with TemporaryDirectory() as directory:
+            roots = [Path(directory) / part / "Lora" for part in ("one", "two")]
+            tensors = {
+                f"diffusion_model.blocks.{block}.{module}.lora_A.weight": torch.ones(1)
+                for block in range(28)
+                for module in ("adaln_modulation_mlp.1", "cross_attn.q_proj", "self_attn.q_proj", "mlp.layer1")
+            }
+            for path in (roots[0] / "x.safetensors", roots[1] / "x.safetensors", roots[1] / "Lora/x.safetensors"):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                save_file(tensors, path)
+            shared = SimpleNamespace(
+                cmd_opts=SimpleNamespace(lora_dir=str(roots[0]), lora_dirs=[str(roots[1])]),
+                opts=SimpleNamespace(list_hidden_files=False),
+            )
+            walker = load_definitions(
+                "modules/util.py", {"natural_sort_key", "walk_files"}, {"os": os, "re": re, "shared": shared}
+            )
+            shared.walk_files = walker["walk_files"]
+            registry = load_definitions(
+                "extensions-builtin/sd_forge_lora/networks.py",
+                {"process_network_files"},
+                {
+                    "os": os,
+                    "itertools": itertools,
+                    "shared": shared,
+                    "network": SimpleNamespace(
+                        NetworkOnDisk=lambda name, filename: SimpleNamespace(name=name, filename=filename, alias=name)
+                    ),
+                    "errors": Mock(),
+                    "available_networks": {},
+                    "available_network_aliases": {},
+                    "forbidden_network_aliases": set(),
+                },
+            )
+            package = ModuleType("modules")
+            package.shared = shared
+            with (
+                patch.dict(sys.modules, {"modules": package}),
+                patch.object(local_assets, "selection", return_value={}),
+                patch("anima3b.files.lora_roots", return_value=roots),
+            ):
+                registry["process_network_files"]()
+                found = standard_anima_loras()
+            self.assertEqual(found, {name: entry.filename for name, entry in registry["available_networks"].items()})
 
     def test_standard_lora_selection_uses_forge_prompt_pipeline_once(self):
         with TemporaryDirectory() as directory:
@@ -314,7 +405,7 @@ class Anima38ExtensionTests(unittest.TestCase):
             path.touch()
             processing = SimpleNamespace(
                 prompt="portrait",
-                all_prompts=["styled portrait", "already <lora:regular-anima:0.5>"],
+                all_prompts=["styled portrait", "another portrait"],
                 extra_generation_params={},
             )
 
@@ -341,7 +432,7 @@ class Anima38ExtensionTests(unittest.TestCase):
             processing.all_prompts,
             [
                 "styled portrait <lora:regular-anima:1.25>",
-                "already <lora:regular-anima:0.5>",
+                "another portrait <lora:regular-anima:1.25>",
             ],
         )
         self.assertEqual(

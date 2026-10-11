@@ -22,12 +22,11 @@ from modules_forge.iris.service import SERVICE
 LABELS = {"generate": "生成", "depth": "深度を推定", "upscale": "拡大・復元"}
 
 
-def refresh_checkpoints(directory, current):
+def refresh_checkpoints(current):
     try:
-        choices = checkpoint_choices(RUNTIME, directory, current)
+        choices = checkpoint_choices(RUNTIME, current)
     except ValueError as exc:
         raise gr.Error(str(exc)) from exc
-    local_assets.save_selection("iris", {**local_assets.selection("iris"), "directory": directory})
     return gr.update(choices=choices, value=current or "base")
 
 
@@ -85,7 +84,7 @@ def switch(state, task, precision, checkpoint="base", *, persist=True, saved=Non
         local_assets.save_selection(
             "iris",
             {
-                **saved,
+                **{key: value for key, value in saved.items() if key != "directory"},
                 "base_precisions": base_precisions,
                 **({"checkpoint": checkpoint, "precision": precision} if task == "generate" else {}),
             },
@@ -102,7 +101,7 @@ def switch(state, task, precision, checkpoint="base", *, persist=True, saved=Non
         run_button["interactive"] = False
     if task == "generate":
         try:
-            choices = checkpoint_choices(RUNTIME, saved.get("directory", ""), selected)
+            choices = checkpoint_choices(RUNTIME, selected)
         except ValueError:
             choices = [
                 ("オリジナル", "base"),
@@ -261,7 +260,6 @@ def poll(state):
 def load_selection():
     saved = local_assets.selection("iris")
     selected = saved.get("checkpoint", "base")
-    directory = saved.get("directory", "")
     initial_precision = saved.get("precision", "int8")
     if selected == "base":
         initial_precision = saved.get("base_precisions", {}).get("generate", "int8")
@@ -275,14 +273,14 @@ def load_selection():
     view = switch(state, "generate", initial_precision, selected, persist=False, saved=saved)
     selected = view[13]["value"]
     try:
-        choices = checkpoint_choices(RUNTIME, directory, selected)
+        choices = checkpoint_choices(RUNTIME, selected)
     except ValueError:
         choices = [
             ("オリジナル", "base"),
             *model_catalog.choice_labels([], current=selected if selected != "base" else ""),
         ]
     view[13]["choices"] = choices
-    return (*view, gr.update(value=directory), gr.update(value="generate"))
+    return (*view, gr.update(value="generate"))
 
 
 def on_ui_tabs():
@@ -290,7 +288,6 @@ def on_ui_tabs():
     initial_precision = initial_view[12]["value"]
     selected = initial_view[13]["value"]
     choices = initial_view[13]["choices"]
-    directory = initial_view[15]["value"]
     with gr.Blocks() as ui:
         state = gr.State(initial_view[14])
         timer = gr.Timer(0.5, active=False)
@@ -316,14 +313,7 @@ def on_ui_tabs():
                     scale=4,
                 )
                 refresh = gr.Button("一覧を更新", scale=1)
-        with gr.Accordion("モデル詳細", open=False):
-            search_directory = gr.Textbox(
-                value=directory,
-                label="探索フォルダー",
-                placeholder="models/Iris-3B/checkpoints",
-                elem_id="iris-search-directory",
-            )
-        for component in (checkpoint, search_directory, precision):
+        for component in (checkpoint, precision):
             model_catalog.configure_component(component)
         with gr.Row():
             with gr.Column(scale=5, min_width=320):
@@ -387,12 +377,12 @@ def on_ui_tabs():
             checkpoint,
             state,
         ]
-        ui.load(load_selection, [], [*change_outputs, search_directory, task], queue=False, show_progress="hidden")
+        ui.load(load_selection, [], [*change_outputs, task], queue=False, show_progress="hidden")
         task.change(switch, [state, task, precision, checkpoint], change_outputs, queue=False)
         precision.input(switch, [state, task, precision, checkpoint], change_outputs, queue=False)
         checkpoint.input(switch, [state, task, precision, checkpoint], change_outputs, queue=False)
 
-        refresh.click(refresh_checkpoints, [search_directory, checkpoint], [checkpoint], queue=False).then(
+        refresh.click(refresh_checkpoints, [checkpoint], [checkpoint], queue=False).then(
             switch, [state, task, precision, checkpoint], change_outputs, queue=False
         )
 

@@ -917,31 +917,28 @@ def model_candidate(path):
         return False
 
 
-def model_choices(directory="", current=""):
-    roots = model_catalog.checkpoint_roots("Qwen-Image-2.1", (RUNTIME / "checkpoints",), directory)
+def model_choices(current=""):
+    roots = model_catalog.checkpoint_roots("Qwen-Image-2.1", (RUNTIME / "checkpoints",))
     paths = model_catalog.discover_files(roots, folders=True, validator=model_candidate)
-    paths.extend(path for path in local_assets.library().get("qwen21_model", []) if model_candidate(Path(path)))
     return [("公式モデル", ""), *model_catalog.choice_labels(paths, roots, current)]
 
 
-def save_model_selection(model, components, precision, directory, loras, rows):
+def save_model_selection(model, components, precision, loras, rows):
     model = str(Path(model.strip().strip('"')).expanduser().resolve()) if model else ""
     local_assets.save_selection(
         "qwen21",
         {
-            **local_assets.selection("qwen21"),
             "local_model": model,
             "local_components": components,
             "precision": precision,
-            "directory": directory,
             "style_loras": list(local_assets.lora_settings(loras, local_assets.lora_rows(loras, rows))),
         },
     )
 
 
-def model_input(model, components, precision, directory, loras, rows):
+def model_input(model, components, precision, loras, rows):
     update, status = local_model_selected(model, precision)
-    save_model_selection(model, components, update.get("value", precision), directory, loras, rows)
+    save_model_selection(model, components, update.get("value", precision), loras, rows)
     return update, status
 
 
@@ -949,17 +946,15 @@ def load_model_selection():
     saved = local_assets.selection("qwen21")
     model = saved.get("local_model", "")
     precision = saved.get("precision") or default_precision()
-    directory = saved.get("directory", "")
     loras = saved.get("style_loras", [])
     names = [item["name"] for item in loras]
     rows = local_assets.lora_rows(names, [[item["name"], item["strength"]] for item in loras])
     return (
-        gr.update(choices=model_choices(directory, model), value=model),
+        gr.update(choices=model_choices(model), value=model),
         gr.update(value=saved.get("local_components", "")),
         gr.update(value=precision),
-        gr.update(value=directory),
         local_model_selected(model, precision)[1],
-        gr.update(value=names),
+        refresh_loras(names),
         gr.update(value=rows, visible=True if names else "hidden"),
     )
 
@@ -1028,7 +1023,7 @@ def on_ui_tabs():
     with gr.Blocks(analytics_enabled=False, elem_id="qwen-image21-studio") as tab:
         with gr.Row():
             local_model = gr.Dropdown(
-                model_choices(saved_source.get("directory", ""), saved_source.get("local_model", "")),
+                model_choices(saved_source.get("local_model", "")),
                 value=saved_source.get("local_model", ""),
                 allow_custom_value=True,
                 label="チェックポイント",
@@ -1213,12 +1208,6 @@ def on_ui_tabs():
                             elem_id="qwen21-rewrite-edit-prompt",
                         )
                     with gr.Accordion("モデル詳細", open=False, elem_id="qwen21-local-source"):
-                        search_directory = gr.Textbox(
-                            value=saved_source.get("directory", ""),
-                            label="探索フォルダー",
-                            placeholder="models/Qwen-Image-2.1/checkpoints",
-                            elem_id="qwen21-search-directory",
-                        )
                         local_components = gr.Textbox(
                             label="共通部品フォルダー · 本体だけを選ぶ場合",
                             value=saved_source.get("local_components", ""),
@@ -1579,7 +1568,7 @@ def on_ui_tabs():
         tab.load(
             model_save_status, inputs=[precision, save_job, local_model], outputs=[save_status, save_model], **PRIVATE
         )
-        source_inputs = [local_model, local_components, precision, search_directory, style_loras, lora_strengths]
+        source_inputs = [local_model, local_components, precision, style_loras, lora_strengths]
         for component in source_inputs:
             model_catalog.configure_component(component)
         local_model.input(model_input, inputs=source_inputs, outputs=[precision, source_status], queue=False, **PRIVATE)
@@ -1591,7 +1580,6 @@ def on_ui_tabs():
                 local_model,
                 local_components,
                 precision,
-                search_directory,
                 source_status,
                 style_loras,
                 lora_strengths,
@@ -1603,8 +1591,8 @@ def on_ui_tabs():
             model_save_status, inputs=[precision, save_job, local_model], outputs=[save_status, save_model], **PRIVATE
         )
         source_refresh.click(
-            lambda directory, value: gr.update(choices=model_choices(directory, value), value=value),
-            inputs=[search_directory, local_model],
+            lambda value: gr.update(choices=model_choices(value), value=value),
+            inputs=local_model,
             outputs=local_model,
             **PRIVATE,
         )

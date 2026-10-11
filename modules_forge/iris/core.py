@@ -210,17 +210,15 @@ def model_ready(root, precision, task, checkpoint="base"):
         return False
 
 
-def checkpoint_choices(root=RUNTIME, search_directory=None, current="base"):
-    from modules_forge import local_assets, model_catalog
+def checkpoint_choices(root=RUNTIME, current="base"):
+    from modules_forge import model_catalog
 
     from .local_source import discover
 
-    if search_directory:
-        local_assets.local_path(search_directory, directory=True)
     if Path(root).resolve() == Path(RUNTIME).resolve():
-        roots = model_catalog.checkpoint_roots("Iris-3B", (Path(root) / "checkpoints",), search_directory or "")
+        roots = model_catalog.checkpoint_roots("Iris-3B", (Path(root) / "checkpoints",))
     else:
-        roots = (Path(search_directory) if search_directory else Path(root) / "checkpoints",)
+        roots = (Path(root) / "checkpoints",)
     paths = [value for folder in roots if folder.is_dir() for _, value in discover(root, str(folder))]
     return [("オリジナル", "base"), *model_catalog.choice_labels(paths, roots, current if current != "base" else "")]
 

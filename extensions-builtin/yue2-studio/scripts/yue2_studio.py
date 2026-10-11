@@ -178,7 +178,7 @@ def on_ui_tabs():
     with gr.Blocks(analytics_enabled=False, elem_id="aikimi-yue2") as tab:
         gr.Markdown("## YuE2 Music\n歌詞から作曲。楽譜を編集して、別のアレンジへ。")
         from modules_forge.studio_checkpoint_ui import create
-        checkpoint, checkpoint_search, _ = create("yue2", "YuE2", (RUNTIME / "models",), lambda path: model_directory_compatible(path, "official") or model_directory_compatible(path, "cpp"), gradio=gr, folders=True)
+        checkpoint, _ = create("yue2", "YuE2", (), lambda path: model_directory_compatible(path, "official") or model_directory_compatible(path, "cpp"), gradio=gr, folders=True)
         with gr.Accordion("実行環境・利用条件", open=False):
             gr.Markdown(
                 "初回のみリポジトリ直下の **`aikimi-yue2-setup.bat`** を実行します。"
@@ -262,10 +262,10 @@ def on_ui_tabs():
         engine.change(lambda mode: (gr.update(visible=mode == "official"), gr.update(visible=mode == "cpp"), False if mode == "cpp" else gr.update()),
                       inputs=engine, outputs=[native_controls, gguf, fp8], **PRIVATE)
         check.click(check_runtime, outputs=environment, **PRIVATE)
-        def refresh_checkpoint_engine(mode, selected, directory):
+        def refresh_checkpoint_engine(mode, selected):
             from modules_forge.studio_checkpoint_ui import inventory
-            return gr.update(choices=inventory("YuE2", (RUNTIME / "models",), lambda path: model_directory_compatible(path, mode), current=selected or "", search_directory=directory or "", folders=True), value=selected or "")
-        engine.change(refresh_checkpoint_engine, inputs=[engine, checkpoint, checkpoint_search], outputs=checkpoint, queue=False, **PRIVATE)
+            return gr.update(choices=inventory("YuE2", (), lambda path: model_directory_compatible(path, mode), current=selected or "", folders=True), value=selected or "")
+        engine.change(refresh_checkpoint_engine, inputs=[engine, checkpoint], outputs=checkpoint, queue=False, **PRIVATE)
     return [(tab, "YuE2 Music", "aikimi_yue2_studio")]
 
 

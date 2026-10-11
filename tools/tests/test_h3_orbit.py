@@ -1,6 +1,8 @@
 """Orbit uses one image at both ends; ordinary H3 keeps its AV contract."""
 
+import hashlib
 import json
+import struct
 import tempfile
 import unittest
 from dataclasses import replace
@@ -9,6 +11,7 @@ from unittest import mock
 
 from PIL import Image
 
+from modules_forge import local_assets
 from modules_forge import minimax_h3_bridge as bridge
 from modules_forge.minimax_h3_acceleration import H3Acceleration
 from modules_forge.minimax_h3_hybrid import H3Hybrid
@@ -37,6 +40,24 @@ class H3OrbitTests(unittest.TestCase):
             **changes,
         )
 
+    def orbit_snapshot(self):
+        models = self.root / "models"
+        path = models / "loras" / bridge.orbit_assets.MODEL_NAME
+        path.parent.mkdir(parents=True, exist_ok=True)
+        prefix = "diffusion_model.blocks.0.attn.out_proj"
+        header = {
+            prefix + ".lora_A.weight": {"dtype": "F32", "shape": [1, 1], "data_offsets": [0, 4]},
+            prefix + ".lora_B.weight": {"dtype": "F32", "shape": [1, 1], "data_offsets": [4, 8]},
+        }
+        encoded = json.dumps(header).encode()
+        data = struct.pack("<Q", len(encoded)) + encoded + b"\0" * 8
+        path.write_bytes(data)
+        self.enterContext(mock.patch.object(bridge.orbit_assets, "model_root", return_value=models))
+        self.enterContext(mock.patch.object(bridge.orbit_assets, "MODEL_BYTES", len(data)))
+        self.enterContext(mock.patch.object(bridge.orbit_assets, "MODEL_SHA256", hashlib.sha256(data).hexdigest()))
+        self.enterContext(mock.patch.object(local_assets, "HASH_CACHE", self.root / "hashes.json"))
+        return bridge.orbit_assets.snapshot(self.root)
+
     def test_author_recipe_uses_73_frames_and_preserves_normal_duration_bounds(self):
         request = self.request()
         bridge.validate_request(request)
@@ -63,11 +84,14 @@ class H3OrbitTests(unittest.TestCase):
 
     def test_graph_scales_once_and_patches_sampling_model_without_audio_output(self):
         request = self.request(orbit_strength=0.75)
-        graph = bridge.build_workflow(request, {"first_frame": "photo.png"}, seed=42)
+        snapshot = self.orbit_snapshot()
+        graph = bridge.build_workflow(request, {"first_frame": "photo.png"}, seed=42, orbit_snapshot=snapshot)
         nodes = {node["class_type"]: (key, node["inputs"]) for key, node in graph.items()}
-        lora_id, lora = nodes["LoraLoaderModelOnly"]
+        lora_id, lora = nodes[bridge.orbit_assets.NODE]
         self.assertEqual(lora["strength_model"], 0.75)
         self.assertEqual(lora["model"], ["1", 0])
+        self.assertEqual(lora["canonical_path"], snapshot["identity"]["path"])
+        self.assertEqual(lora["sha256"], snapshot["identity"]["sha256"])
         self.assertEqual(graph["15"]["inputs"]["model"], [lora_id, 0])
         self.assertEqual(graph["8"]["inputs"]["model"], [lora_id, 0])
         scale_id, scale = nodes["ImageScale"]
@@ -92,14 +116,19 @@ class H3OrbitTests(unittest.TestCase):
 
     def test_orbit_preserves_negpip_sparse_and_clip_cache_model_routing(self):
         acceleration = H3Acceleration(negpip=H3NegPiP(enabled=True), clip_cache="auto")
-        graph = bridge.build_workflow(self.request(acceleration=acceleration), {"first_frame": "photo.png"})
+        snapshot = self.orbit_snapshot()
+        graph = bridge.build_workflow(
+            self.request(acceleration=acceleration), {"first_frame": "photo.png"}, orbit_snapshot=snapshot
+        )
         self.assertEqual(graph["8"]["inputs"]["model"], ["17", 0])
         self.assertEqual(graph["9"]["inputs"]["model"], ["17", 0])
         self.assertEqual(graph["17"]["inputs"]["model"], ["15", 0])
         self.assertEqual(graph["15"]["inputs"]["model"], ["40", 0])
         self.assertEqual(graph["5"]["inputs"]["first_frame"], graph["5"]["inputs"]["last_frame"])
         graph = bridge.build_workflow(
-            self.request(acceleration=H3Acceleration(attention="sol")), {"first_frame": "photo.png"}
+            self.request(acceleration=H3Acceleration(attention="sol")),
+            {"first_frame": "photo.png"},
+            orbit_snapshot=snapshot,
         )
         self.assertEqual(graph["9"]["inputs"]["model"], ["16", 0])
         self.assertEqual(graph["16"]["inputs"]["model"], ["15", 0])
@@ -117,11 +146,10 @@ class H3OrbitTests(unittest.TestCase):
     def test_runtime_requires_the_verified_lora_to_be_visible_to_comfyui(self):
         ready = bridge.RuntimeReadiness(self.root, bridge.H3_SERVER_URL, connected=True)
         specs = {
-            "LoraLoaderModelOnly": {
+            bridge.orbit_assets.NODE: {
                 "input": {
                     "required": {
                         "model": ["MODEL"],
-                        "lora_name": [["different.safetensors"]],
                         "strength_model": ["FLOAT"],
                     }
                 }
@@ -135,9 +163,11 @@ class H3OrbitTests(unittest.TestCase):
             mock.patch.object(bridge, "ComfyH3Client") as api,
         ):
             api.return_value.object_info.return_value = specs
-            with self.assertRaisesRegex(bridge.H3BridgeError, "接続先"):
+            with self.assertRaisesRegex(bridge.H3BridgeError, "Orbit専用ノード"):
                 bridge.validate_orbit_runtime(ready)
-            specs["LoraLoaderModelOnly"]["input"]["required"]["lora_name"][0] = [bridge.orbit_assets.MODEL_NAME]
+            specs[bridge.orbit_assets.NODE]["input"]["required"].update(
+                {key: ["STRING"] for key in ("canonical_path", "sha256", "version")}, size=["INT"]
+            )
             bridge.validate_orbit_runtime(ready)
             self.assertEqual(api.return_value.close.call_count, 2)
 
@@ -147,10 +177,21 @@ class H3OrbitTests(unittest.TestCase):
         write_video(source, width=448, height=448, frames=73, audio=False)
         ready = bridge.RuntimeReadiness(self.root, bridge.H3_SERVER_URL, connected=True)
         output = self.root / "output"
-        target = bridge.mirror_result(source, output, request, "orbit-1", 42, ready)
+        snapshot = self.orbit_snapshot()
+        target = bridge.mirror_result(
+            source,
+            output,
+            request,
+            "orbit-1",
+            42,
+            ready,
+            orbit_snapshot=snapshot,
+            orbit_identity=bridge.orbit_assets.applied_identity(snapshot, request.orbit_strength),
+        )
         meta = json.loads(target.with_suffix(".json").read_text(encoding="utf-8"))
         self.assertEqual(meta["orbit"]["strength"], 1.0)
         self.assertEqual(len(meta["orbit"]["sha256"]), 64)
+        self.assertEqual(meta["orbit_identity"], bridge.orbit_assets.applied_identity(snapshot, request.orbit_strength))
         self.assertEqual(meta["output_validation"]["frames"], 73)
         self.assertEqual(meta["output_validation"]["audio_channels"], 0)
         items = bridge.list_history(self.root, output)

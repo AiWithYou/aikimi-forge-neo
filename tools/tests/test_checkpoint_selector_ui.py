@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import gradio as gr
 
-from modules_forge import local_assets
+from modules_forge import local_assets, model_catalog
 from tools.tests.test_additional_module_identity import load_main_entry
 from tools.tests.test_iris_selection import artifact, screen_module
 from tools.tests.test_local_model_sources import qwen_fixture, qwen_transformer, tensor_file
@@ -36,6 +36,8 @@ class CheckpointSelectorUiTests(unittest.TestCase):
         self.root = Path(self.folder.name)
         self.enterContext(patch.object(local_assets, "LIBRARY", self.root / "library.json"))
         self.enterContext(patch.object(local_assets, "HASH_CACHE", self.root / "hashes.json"))
+        self.enterContext(patch.object(local_assets, "ROOT", self.root))
+        self.enterContext(patch.object(model_catalog, "ROOT", self.root))
 
     def assert_selector_visible(self, tab, elem_id):
         config = tab.get_config_file()
@@ -65,15 +67,7 @@ class CheckpointSelectorUiTests(unittest.TestCase):
         self.addCleanup(tab.close)
         self.assert_selector_visible(tab, "qwen21-local-model")
         config = tab.get_config_file()
-        directory = next(
-            item for item in config["components"] if item["props"].get("elem_id") == "qwen21-search-directory"
-        )
-        self.assertTrue(
-            any(
-                item["type"] == "accordion" and item["id"] in ancestors(config, directory["id"])
-                for item in config["components"]
-            )
-        )
+        self.assertFalse(any(item["props"].get("label") == "探索フォルダー" for item in config["components"]))
 
     def test_ming_checkpoint_is_visible_with_refresh_and_details(self):
         ui = ming_ui()
@@ -82,24 +76,17 @@ class CheckpointSelectorUiTests(unittest.TestCase):
         self.addCleanup(tab.close)
         self.assert_selector_visible(tab, "ming-local-model")
         config = tab.get_config_file()
-        directory = next(
-            item for item in config["components"] if item["props"].get("elem_id") == "ming-search-directory"
-        )
-        self.assertTrue(
-            any(
-                item["type"] == "accordion" and item["id"] in ancestors(config, directory["id"])
-                for item in config["components"]
-            )
-        )
+        self.assertFalse(any(item["props"].get("label") == "探索フォルダー" for item in config["components"]))
 
     def test_qwen_catalog_accepts_bundles_and_excludes_their_parts_and_lora(self):
         ui = qwen_ui()
-        bundle = qwen_fixture(self.root / "explore/日本語 bundle")
-        weights = qwen_transformer(self.root / "explore/standalone") / "diffusion_pytorch_model.safetensors"
-        lora = tensor_file(self.root / "explore/lora.safetensors")
+        managed = self.root / "models/Qwen-Image-2.1/checkpoints"
+        bundle = qwen_fixture(managed / "日本語 bundle")
+        weights = qwen_transformer(managed / "standalone") / "diffusion_pytorch_model.safetensors"
+        lora = tensor_file(managed / "lora.safetensors")
         missing = self.root / "outside/missing.safetensors"
         with patch.object(local_assets, "file_identity", side_effect=AssertionError("discovery must not hash")):
-            choices = ui.model_choices(str(self.root / "explore"), str(missing))
+            choices = ui.model_choices(current=str(missing))
         values = [value for _, value in choices]
         self.assertIn(str(bundle.resolve()), values)
         self.assertNotIn(str(bundle / "transformer"), values)
@@ -112,14 +99,17 @@ class CheckpointSelectorUiTests(unittest.TestCase):
     def test_ming_catalog_filters_family_without_shared_parts(self):
         ui = ming_ui()
         selected = tensor_file(
-            self.root / "explore/新しい FT/model.safetensors",
+            self.root / "models/Ming-Image/checkpoints/新しい FT/model.safetensors",
             {"layers.0.weight": [1]},
             metadata={"config": '{"transformer":{"image_model":"ming_image"}}'},
         )
-        foreign = tensor_file(self.root / "explore/zimage.safetensors", {"layers.0.weight": [1], "cap_pad_token": [1]})
-        lora = tensor_file(self.root / "explore/lora.safetensors")
+        foreign = tensor_file(
+            self.root / "models/Ming-Image/checkpoints/zimage.safetensors",
+            {"layers.0.weight": [1], "cap_pad_token": [1]},
+        )
+        lora = tensor_file(self.root / "models/Ming-Image/checkpoints/lora.safetensors")
         with patch.object(local_assets, "file_identity", side_effect=AssertionError("discovery must not hash")):
-            choices = ui.model_choices(str(self.root / "explore"), str(selected))
+            choices = ui.model_choices(current=str(selected))
         self.assertIn(str(selected.resolve()), [value for _, value in choices])
         self.assertNotIn(str(foreign), [value for _, value in choices])
         self.assertNotIn(str(lora), [value for _, value in choices])
@@ -128,15 +118,62 @@ class CheckpointSelectorUiTests(unittest.TestCase):
     def test_qwen_input_selection_restores_latest_library_without_writing(self):
         ui = qwen_ui()
         selected = qwen_transformer(self.root / "FT") / "diffusion_pytorch_model.safetensors"
-        ui.save_model_selection(str(selected), "", "bf16", str(self.root), [], [])
+        local_assets.save_selection("qwen21", {"directory": "old external root"})
+        ui.save_model_selection(str(selected), "", "bf16", [], [])
         self.assertEqual(local_assets.selection("qwen21")["local_model"], str(selected.resolve()))
-        self.assertEqual(local_assets.selection("qwen21")["directory"], str(self.root))
+        self.assertNotIn("directory", local_assets.selection("qwen21"))
         before = local_assets.LIBRARY.read_bytes()
         with patch.object(local_assets, "save_selection", side_effect=AssertionError("load must be read-only")):
             view = ui.load_model_selection()
         self.assertEqual(view[0]["value"], str(selected.resolve()))
         self.assertEqual(view[2]["value"], "bf16")
         self.assertEqual(local_assets.LIBRARY.read_bytes(), before)
+
+    def test_managed_discovery_ignores_remembered_models_but_keeps_current_path(self):
+        for engine, ui, make in (
+            ("qwen21", qwen_ui(), lambda path: qwen_transformer(path)),
+            ("ming", ming_ui(), lambda path: tensor_file(path / "model.safetensors", {"layers.0.weight": [1]})),
+        ):
+            with self.subTest(engine=engine):
+                current = make(self.root / engine / "selected")
+                ignored = make(self.root / engine / "remembered")
+                local_assets.remember(engine + "_model", [str(ignored)])
+                choices = ui.model_choices(current=str(current))
+                self.assertIn(str(current.resolve()), [value for _, value in choices])
+                self.assertNotIn(str(ignored.resolve()), [value for _, value in choices])
+
+    def test_ming_loras_use_family_folder_and_shared_runtime_without_legacy_root(self):
+        ui = ming_ui()
+        managed = tensor_file(self.root / "models/Ming-Image/loras/日本語/style.safetensors")
+        runtime = self.root / "runtime"
+        shared = tensor_file(runtime / "models/loras/style.safetensors")
+        old = tensor_file(self.root / "models/Lora/Ming/old.safetensors")
+        with patch.object(ui.studio, "runtime_root", return_value=runtime):
+            tab = ui.on_ui_tabs()[0][0]
+        self.addCleanup(tab.close)
+        selector = next(item for item in tab.blocks.values() if getattr(item, "elem_id", None) == "ming-loras")
+        values = [value for _, value in selector.choices]
+        self.assertIn(str(managed), values)
+        self.assertIn(str(shared), values)
+        self.assertNotIn(str(old), values)
+
+    def test_lora_discovery_ignores_remembered_external_but_keeps_current(self):
+        from modules_forge.qwen_image21 import style_lora
+
+        current = tensor_file(self.root / "selected/style.safetensors")
+        ignored = tensor_file(self.root / "remembered/style.safetensors")
+        local_assets.remember("qwen21_lora", [str(ignored)])
+        local_assets.remember("ming_lora", [str(ignored)])
+        self.assertNotIn(str(ignored), style_lora.inventory(self.root))
+        qwen = qwen_ui()
+        with patch.object(qwen, "RUNTIME", self.root):
+            choices = qwen.refresh_loras([str(current)])["choices"]
+        self.assertIn(str(current), [value for _, value in choices])
+        ming = ming_ui()
+        with patch.object(ming.studio, "runtime_root", return_value=self.root / "runtime"):
+            choices = ming.lora_choices([str(current)])
+        self.assertNotIn(str(ignored), [value for _, value in choices])
+        self.assertIn(str(current), [value for _, value in choices])
 
     def test_qwen_lora_restore_keeps_empty_strength_table_mounted(self):
         ui = qwen_ui()
@@ -150,8 +187,10 @@ class CheckpointSelectorUiTests(unittest.TestCase):
     def test_ming_input_selection_restores_latest_library_without_writing(self):
         ui = ming_ui()
         selected = tensor_file(self.root / "FT/model.safetensors", {"layers.0.weight": [1]})
-        ui.save_model_selection("int8", str(selected), "", "", str(self.root), [], [])
+        local_assets.save_selection("ming", {"directory": "old external root"})
+        ui.save_model_selection("int8", str(selected), "", "", [], [])
         self.assertEqual(local_assets.selection("ming")["model_path"], str(selected.resolve()))
+        self.assertNotIn("directory", local_assets.selection("ming"))
         before = local_assets.LIBRARY.read_bytes()
         with patch.object(local_assets, "save_selection", side_effect=AssertionError("load must be read-only")):
             view = ui.load_model_selection()
@@ -275,7 +314,7 @@ class CheckpointSelectorUiTests(unittest.TestCase):
         self.assertEqual(selector["type"], "row")
         self.assertEqual(details["type"], "accordion")
         self.assertIn(selector["id"], ancestors(config, by_name["setting_sd_model_checkpoint"]["id"]))
-        self.assertIn(details["id"], ancestors(config, by_name["forge-search-directory"]["id"]))
+        self.assertNotIn("forge-search-directory", by_name)
         self.assertIn(details["id"], ancestors(config, by_name["setting_sd_modules"]["id"]))
         refresh = by_name["forge_refresh_checkpoint"]
         self.assertIn(selector["id"], ancestors(config, refresh["id"]))

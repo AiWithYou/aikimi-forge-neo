@@ -68,6 +68,7 @@ on:
       - "modules_forge/local_assets.py"
       - "modules_forge/model_catalog.py"
       - "tools/tests/test_model_catalog.py"
+      - "tools/tests/test_forge_lora*.py"
       - "modules_forge/studio_checkpoint_ui.py"
       - "modules_forge/studio_checkpoints.py"
       - "tools/tests/test_checkpoint_selector_ui.py"
@@ -87,6 +88,7 @@ on:
       - "tools/tests/test_minimax_h3_setup.py"
       - "modules_forge/minimax_h3_runtime.py"
       - "modules_forge/minimax_h3_orbit_assets.py"
+      - "extensions-builtin/minimax-h3-studio/comfyui_nodes/Aikimi-MiniMax-H3-Orbit/**"
       - "tools/prepare_minimax_h3_orbit.py"
       - "tools/tests/test_h3_orbit*.py"
       - "tools/tests/test_comfy_startup_cleanup.py"
@@ -196,6 +198,7 @@ on:
       - "modules_forge/local_assets.py"
       - "modules_forge/model_catalog.py"
       - "tools/tests/test_model_catalog.py"
+      - "tools/tests/test_forge_lora*.py"
       - "modules_forge/studio_checkpoint_ui.py"
       - "modules_forge/studio_checkpoints.py"
       - "tools/tests/test_checkpoint_selector_ui.py"
@@ -215,6 +218,7 @@ on:
       - "tools/tests/test_minimax_h3_setup.py"
       - "modules_forge/minimax_h3_runtime.py"
       - "modules_forge/minimax_h3_orbit_assets.py"
+      - "extensions-builtin/minimax-h3-studio/comfyui_nodes/Aikimi-MiniMax-H3-Orbit/**"
       - "tools/prepare_minimax_h3_orbit.py"
       - "tools/tests/test_h3_orbit*.py"
       - "tools/tests/test_comfy_startup_cleanup.py"
@@ -352,6 +356,7 @@ jobs:
             modules_forge/local_assets.py
             modules_forge/model_catalog.py
             tools/tests/test_model_catalog.py
+            tools/tests/test_forge_lora*.py
             modules_forge/studio_checkpoint_ui.py
             modules_forge/studio_checkpoints.py
             tools/tests/test_checkpoint_selector_ui.py
@@ -384,6 +389,7 @@ jobs:
             modules_forge/minimax_h3_handoff_store.py
             modules_forge/minimax_h3_union2_vae.py
             extensions-builtin/minimax-h3-studio/comfyui_nodes/Aikimi-H3-WorkflowBridge/__init__.py
+            extensions-builtin/minimax-h3-studio/comfyui_nodes/Aikimi-MiniMax-H3-Orbit
             tools/prepare_minimax_h3_union2.py
             tools/upgrade_minimax_h3_union2_vae.py
             tools/tests/test_h3_handoff_integration.py

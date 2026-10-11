@@ -1280,45 +1280,41 @@ def metadata_tab(collection, outputs_root):
     )
 
 
-def _checkpoint_updates(checkpoint, search_directory, profile):
+def _checkpoint_updates(checkpoint, profile):
     profiles = compatible_profiles(checkpoint) or list(PROFILES)
     profile = profile if profile in profiles else profiles[0]
     return (
-        gr.update(choices=checkpoint_choices(search_directory=search_directory, current=checkpoint), value=checkpoint),
+        gr.update(choices=checkpoint_choices(current=checkpoint), value=checkpoint),
         gr.update(choices=[(PROFILES[key]["label"], key) for key in profiles], value=profile),
     )
 
 
 def _load_checkpoints():
-    checkpoint, search_directory, profile = load_selection()
-    selected, execution = _checkpoint_updates(checkpoint, search_directory, profile)
-    return selected, gr.update(value=search_directory), execution
+    checkpoint, profile = load_selection()
+    return _checkpoint_updates(checkpoint, profile)
 
 
-def _select_checkpoint(checkpoint, search_directory, profile):
+def _select_checkpoint(checkpoint, profile):
     profiles = compatible_profiles(checkpoint) or list(PROFILES)
     profile = profile if profile in profiles else profiles[0]
-    save_selection(checkpoint, search_directory, profile)
+    save_selection(checkpoint, profile)
     return gr.update(choices=[(PROFILES[key]["label"], key) for key in profiles], value=profile)
 
 
 def build(outputs=OUTPUTS):
-    selected, search_directory, execution = load_selection()
+    selected, execution = load_selection()
     with gr.Column(elem_id="clef-studio") as studio:
         gr.Markdown("# Clef\n画像・文章・JSONデータを、共通の質問で判定します。")
-        with gr.Accordion("チェックポイント", open=True):
-            with gr.Row():
-                checkpoint = configure_component(
-                    gr.Dropdown(
-                        choices=checkpoint_choices(search_directory=search_directory, current=selected),
-                        value=selected,
-                        label="チェックポイント",
-                        scale=5,
-                    )
+        with gr.Row():
+            checkpoint = configure_component(
+                gr.Dropdown(
+                    choices=checkpoint_choices(current=selected),
+                    value=selected,
+                    label="チェックポイント",
+                    scale=5,
                 )
-                refresh_checkpoints = gr.Button("一覧を更新", scale=1)
-            with gr.Accordion("詳細", open=False):
-                search = configure_component(gr.Textbox(value=search_directory, label="探索フォルダー"))
+            )
+            refresh_checkpoints = gr.Button("一覧を更新", scale=1)
         with gr.Row(elem_classes=["clef-toolbar"]):
             profiles = compatible_profiles(selected) or list(PROFILES)
             profile = configure_component(
@@ -1339,22 +1335,17 @@ def build(outputs=OUTPUTS):
         unload.click(release, queue=False, **PRIVATE)
         refresh_checkpoints.click(
             _checkpoint_updates,
-            [checkpoint, search, profile],
+            [checkpoint, profile],
             [checkpoint, profile],
             queue=False,
             show_progress="hidden",
             **PRIVATE,
         )
         checkpoint.input(
-            _select_checkpoint, [checkpoint, search, profile], [profile], queue=False, show_progress="hidden", **PRIVATE
+            _select_checkpoint, [checkpoint, profile], [profile], queue=False, show_progress="hidden", **PRIVATE
         )
-        for component in (search, profile):
-            component.input(
-                save_selection, [checkpoint, search, profile], queue=False, show_progress="hidden", **PRIVATE
-            )
-        gr.on(
-            fn=_load_checkpoints, outputs=[checkpoint, search, profile], queue=False, show_progress="hidden", **PRIVATE
-        )
+        profile.input(save_selection, [checkpoint, profile], queue=False, show_progress="hidden", **PRIVATE)
+        gr.on(fn=_load_checkpoints, outputs=[checkpoint, profile], queue=False, show_progress="hidden", **PRIVATE)
         workbench(profile, outputs, checkpoint)
 
     def exclude_defaults(block):

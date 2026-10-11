@@ -398,6 +398,25 @@ class QwenServiceTests(unittest.TestCase):
         self.assertEqual(self.lease.releases, 0)
         self.assertFalse(self.worker.started.is_set())
 
+    def test_lora_snapshot_is_fixed_before_runtime_lock(self):
+        path = self.root / "style.safetensors"
+        path.write_bytes(b"original weights")
+        infos = [{"name": str(path), "path": str(path)}]
+
+        def changed_lock(runtime):
+            path.write_bytes(b"modified weights")
+            return core.runtime_lock(runtime)
+
+        with (
+            patch("modules_forge.qwen_image21.style_lora.validate_installed", return_value=infos),
+            patch.object(service, "runtime_lock", side_effect=changed_lock),
+        ):
+            with self.assertRaisesRegex(ValueError, "LoRA.*changed"):
+                self.studio.start(self.request(style_loras=({"name": str(path), "strength": 0.5},)), "owner")
+        self.assertFalse(self.worker.started.is_set())
+        self.assertFalse(self.lease.owned)
+        self.assertEqual(self.lease.releases, 1)
+
     def test_outpaint_feather_rejected_before_gpu_acquisition(self):
         source = self.root / "small-outpaint.png"
         for size, pads, feather in (

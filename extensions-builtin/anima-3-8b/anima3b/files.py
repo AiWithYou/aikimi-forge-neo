@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import re
+import sys
 from pathlib import Path
 
 from safetensors import SafetensorError, safe_open
@@ -92,18 +95,49 @@ def adapters() -> dict[str, str]:
     return dict(sorted(found.items()))
 
 
+def _lora_files(root: Path):
+    shared = getattr(sys.modules.get("modules"), "shared", None)
+    walker = getattr(shared, "walk_files", None)
+    if walker is not None:
+        yield from (Path(path) for path in walker(str(root), allowed_extensions=[".pt", ".ckpt", ".safetensors"]))
+        return
+
+    def natural_key(value):
+        return [
+            [int(text) if text.isdigit() else text.lower() for text in re.split(r"([0-9]+)", part)]
+            for part in os.path.splitext(str(value))
+        ]
+
+    for directory, _, filenames in sorted(os.walk(root, followlinks=True), key=lambda item: natural_key(item[0])):
+        if "/." in directory or "\\." in directory:
+            continue
+        yield from (Path(directory) / name for name in sorted(filenames, key=natural_key))
+
+
 def standard_anima_loras() -> dict[str, str]:
     """Find complete 28-, 40-, or 52-block Anima LoRAs from their headers."""
 
     candidates: dict[str, Path] = {}
+    seen: set[str] = set()
     for root in lora_roots():
-        for path in sorted(root.rglob("*.safetensors")):
-            # Forge's standard registry resolves duplicate stems to the last
-            # configured path. Mirror that behavior before compatibility checks.
-            candidates[path.stem] = path
+        for path in _lora_files(root):
+            if not path.is_file() or path.suffix.lower() not in {".pt", ".ckpt", ".safetensors"}:
+                continue
+            canonical = os.path.normcase(os.path.realpath(path))
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            name = os.path.splitext(os.path.relpath(path, root))[0].replace(os.sep, "/")
+            if name in candidates:
+                name = f"{root.name}/{name}"
+                if name in candidates:
+                    name = "local_" + hashlib.sha256(canonical.encode()).hexdigest()[:16]
+            candidates[name] = path
 
     found: dict[str, str] = {}
     for name, path in candidates.items():
+        if path.suffix.lower() != ".safetensors":
+            continue
         try:
             with safe_open(path, framework="pt", device="cpu") as checkpoint:
                 metadata = checkpoint.metadata() or {}

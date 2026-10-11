@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 import math
-from pathlib import Path
 import re
+import sys
+from collections.abc import Iterable, Mapping
+from pathlib import Path
 from typing import Any
-
 
 NO_STANDARD_LORA = "None"
 
@@ -53,25 +53,45 @@ def apply_standard_lora_selections(
 
     validated: list[tuple[str, float]] = []
     seen: set[str] = set()
+    paths: set[Path] = set()
+    local_paths = set(getattr(processing, "_local_lora_paths", ()))
+    own_paths = set(getattr(processing, "_anima_standard_lora_paths", ()))
+    prompts = processing.prompt if isinstance(processing.prompt, list) else [processing.prompt]
+    tags = re.findall(r"<lora:\s*([^:>]+?)\s*:", "\n".join([*prompts, *processing.all_prompts]))
+    networks = sys.modules.get("networks")
 
     for name, strength in selections:
         if name in {None, "", NO_STANDARD_LORA} or name in seen:
             continue
-        if name not in available:
-            raise FileNotFoundError(
-                f"Standard Anima LoRA '{name}' is unavailable. Refresh Forge and select it again."
-            )
-        path = Path(available[name])
-        if not path.is_file():
-            raise FileNotFoundError(
-                f"Standard Anima LoRA '{name}' no longer exists at {path}."
-            )
-
         strength = float(strength)
         if not math.isfinite(strength):
             raise ValueError("Standard Anima LoRA strength must be finite.")
+        if strength == 0:
+            continue
+        if name not in available:
+            raise FileNotFoundError(f"Standard Anima LoRA '{name}' is unavailable. Refresh Forge and select it again.")
+        path = Path(available[name]).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"Standard Anima LoRA '{name}' no longer exists at {path}.")
+
+        if path in paths or path in local_paths:
+            raise ValueError(f"Anima欄とLoRA選択欄に同じファイルがあります: {path.name}")
+        for tag in tags:
+            known = None
+            if networks is not None:
+                known = networks.available_networks.get(tag) or networks.available_network_aliases.get(tag)
+            tagged_path = (
+                Path(known.filename).resolve()
+                if known
+                else Path(available[tag]).resolve()
+                if tag in available
+                else None
+            )
+            if tagged_path == path and path not in own_paths:
+                raise ValueError(f"プロンプトとAnima欄に同じファイルがあります: {path.name}")
 
         seen.add(name)
+        paths.add(path)
         validated.append((name, strength))
 
     if not validated:
@@ -85,6 +105,7 @@ def apply_standard_lora_selections(
 
     processing.prompt = prompt
     processing.all_prompts = all_prompts
+    processing._anima_standard_lora_paths = tuple(paths)
     processing.extra_generation_params["Anima 3.8B standard LoRA"] = ", ".join(
         f"{name}:{strength:.12g}" for name, strength in validated
     )

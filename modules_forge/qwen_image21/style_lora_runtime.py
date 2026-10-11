@@ -8,8 +8,10 @@ from pathlib import Path
 import torch
 from safetensors.torch import load_file
 
+from modules_forge.local_assets import file_identity
+
 from .outpaint_runtime import OutpaintLinear
-from .style_lora import cache_key, fingerprint, validate_installed, validate_options
+from .style_lora import cache_key, validate_installed, validate_options, verify_sources
 
 
 class StyleLinear(OutpaintLinear):
@@ -29,11 +31,13 @@ class StyleLinear(OutpaintLinear):
 
 def load_adapters(transformer, runtime: Path, request: dict) -> list[dict]:
     infos = validate_installed(runtime, request)
+    sources = [file_identity(Path(info["path"])) for info in infos]
     replacements, applied = {}, []
     # Stage every adapter before mutating the model, including shared targets.
-    for info in infos:
+    for info, source in zip(infos, sources, strict=True):
         state = load_file(info["path"], device="cpu")
-        adapter_key = (str(Path(info["path"]).resolve()), fingerprint(Path(info["path"])))
+        verify_sources(sources)
+        adapter_key = (source["path"], source["sha256"])
         targets_seen = set()
         for name, group in info["groups"].items():
             down, up = state[group["down"]], state[group["up"]]
@@ -80,6 +84,7 @@ def load_adapters(transformer, runtime: Path, request: dict) -> list[dict]:
                 "experimental_base_mismatch": info["base_mismatch"],
             }
         )
+    verify_sources(sources)
     for target, module in replacements.items():
         parent, attribute = target.rsplit(".", 1)
         setattr(transformer.get_submodule(parent), attribute, module)

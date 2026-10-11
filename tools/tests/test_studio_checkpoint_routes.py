@@ -121,21 +121,111 @@ class SelectedCheckpointRoutes(unittest.TestCase):
                 patch.object(model_catalog, "ROOT", root),
             ):
                 with gr.Blocks() as app:
-                    checkpoint_ui, search, _ = studio_checkpoint_ui.create(
+                    checkpoint_ui, _ = studio_checkpoint_ui.create(
                         "nanosaur2", "Nanosaur2", (), lambda _: False, gradio=gr
                     )
                 selected = str(root / "missing.safetensors")
-                local_assets.save_selection("nanosaur2", {"checkpoint": selected, "search_directory": str(root)})
+                local_assets.save_selection("nanosaur2", {"checkpoint": selected})
                 before = local_assets.LIBRARY.read_bytes()
                 restore = [fn for fn in app.fns.values() if fn.fn and fn.fn.__name__ == "restore"]
                 self.assertEqual(len(restore), 1)
-                self.assertEqual(restore[0].outputs, [checkpoint_ui, search])
+                self.assertEqual(restore[0].outputs, [checkpoint_ui])
                 with patch.object(local_assets, "save_selection", side_effect=AssertionError("restore must only read")):
                     values = restore[0].fn()
-                self.assertEqual(values[0]["value"], selected)
-                self.assertEqual(values[1]["value"], str(root))
+                self.assertEqual(values["value"], selected)
                 self.assertEqual(local_assets.LIBRARY.read_bytes(), before)
                 app.close()
+
+    def test_h3_and_nanosaur_rescan_only_managed_nested_tree_and_keep_current(self):
+        from modules_forge import model_catalog, studio_checkpoint_ui
+
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            with (
+                patch.object(model_catalog, "ROOT", root),
+                patch.object(local_assets, "LIBRARY", root / "library.json"),
+            ):
+                for family, validator, names in (
+                    (
+                        "MiniMax-H3",
+                        studio_checkpoints.h3_compatible,
+                        ["audio_patch_proj.weight", "video_patch_proj.weight", "adaln_t_table"],
+                    ),
+                    (
+                        "Nanosaur2",
+                        studio_checkpoints.nanosaur_compatible,
+                        [
+                            "s_embedder.proj.weight",
+                            "final_layer.linear.weight",
+                            "blocks.0.attn.q_norm.weight",
+                            "blocks.0.mlp.w12.weight",
+                        ],
+                    ),
+                ):
+                    with self.subTest(family=family):
+                        managed = root / "models" / family / "checkpoints" / "finetunes"
+                        managed.mkdir(parents=True)
+                        first = checkpoint(managed / "one_fl2va.safetensors", names)
+                        old = root / "model" / family
+                        old.mkdir(parents=True)
+                        outside = checkpoint(old / "outside_fl2va.safetensors", names)
+                        local_assets.remember(family, [outside])
+                        initial = studio_checkpoint_ui.inventory(family, (), validator)
+                        self.assertEqual([value for _, value in initial], ["", str(Path(first).resolve())])
+                        second = checkpoint(managed / "two_fl2va.safetensors", names)
+                        with patch.object(
+                            local_assets, "file_identity", side_effect=AssertionError("rescan must not hash")
+                        ):
+                            values = studio_checkpoint_ui.inventory(family, (), validator, current=outside)
+                        self.assertEqual({value for _, value in values}, {"", first, second, outside})
+
+    def test_yue2_engine_refresh_binds_only_engine_and_selected_package(self):
+        import importlib.util
+        from types import ModuleType, SimpleNamespace
+
+        from modules_forge import model_catalog
+
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            modules = ModuleType("modules")
+            modules.script_callbacks = SimpleNamespace(on_ui_tabs=lambda callback: None)
+            paths = ModuleType("modules.paths")
+            paths.data_path = paths.script_path = str(root)
+            repository = Path(__file__).resolve().parents[2]
+            spec = importlib.util.spec_from_file_location(
+                "test_yue2_checkpoint_ui", repository / "extensions-builtin/yue2-studio/scripts/yue2_studio.py"
+            )
+            ui = importlib.util.module_from_spec(spec)
+            with patch.dict("sys.modules", {"modules": modules, "modules.paths": paths}):
+                spec.loader.exec_module(ui)
+            self.addCleanup(ui.STUDIO.shutdown)
+            with (
+                patch.object(model_catalog, "ROOT", root),
+                patch.object(local_assets, "LIBRARY", root / "library.json"),
+            ):
+                app = ui.on_ui_tabs()[0][0]
+                self.addCleanup(app.close)
+                refresh = next(fn for fn in app.fns.values() if fn.fn and fn.fn.__name__ == "refresh_checkpoint_engine")
+                self.assertEqual([component.label for component in refresh.inputs], ["エンジン", "チェックポイント"])
+                self.assertEqual(refresh.outputs, [refresh.inputs[1]])
+                package = root / "models/YuE2/checkpoints/native/selected"
+                package.mkdir(parents=True)
+                (package / "config.json").write_text('{"model_type":"yue2"}')
+                for name in ("model.safetensors", "qwen.tiktoken", "weights_manifest.json"):
+                    (package / name).write_text("{}")
+                selected = str(package.resolve())
+                values = refresh.fn("official", selected)
+                self.assertIn(selected, [value for _, value in values["choices"]])
+                self.assertEqual(values["value"], selected)
+                values = refresh.fn("cpp", selected)
+                self.assertEqual(values["value"], selected)
+                self.assertFalse(
+                    any(
+                        component.label == "探索フォルダー"
+                        for component in app.blocks.values()
+                        if hasattr(component, "label")
+                    )
+                )
 
     def test_renamed_h3_w4a8_keeps_runtime_precision_requirement(self):
         with TemporaryDirectory() as folder:

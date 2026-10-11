@@ -70,6 +70,31 @@ def validate_denoiser(path: Path) -> None:
         raise ValueError("Ming Imageと判定できません。Z-Image／Pixelモデルはここでは使用できません。")
 
 
+def selected_loras(request, *, verify_hash: bool = True) -> list[dict]:
+    records, seen = [], set()
+    for item in request.loras:
+        if item["strength"] == 0:
+            continue
+        path = local_assets.local_path(item["name"], suffixes=(".safetensors",))
+        if path in seen:
+            raise ValueError("同じ実ファイルのLoRAを二重に指定できません。")
+        seen.add(path)
+        local_assets.read_header(path)
+        record = local_assets.file_identity(path) if verify_hash else {"path": str(path)}
+        records.append({**record, "strength": item["strength"]})
+    return records
+
+
+def verify_loras(records: list[dict]) -> None:
+    for record in records:
+        try:
+            expected = {key: record[key] for key in ("path", "size", "sha256")}
+            if local_assets.file_identity(Path(record["path"])) != expected:
+                raise ValueError("content changed")
+        except (OSError, ValueError) as exc:
+            raise ValueError("選択したLoRAが受付後に変更されました。実行し直してください。") from exc
+
+
 def selected_assets(request, root: Path, *, verify_hash: bool = True) -> dict:
     from modules_forge import ming_image_studio as studio
 
@@ -95,18 +120,7 @@ def selected_assets(request, root: Path, *, verify_hash: bool = True) -> dict:
                 if verify_hash and local_assets.file_identity(path)["sha256"] != entry["sha256"]:
                     raise ValueError(f"標準ファイルの検証に失敗しました: {default}")
         result[kind] = local_assets.file_identity(path) if verify_hash else {"path": str(path)}
-    result["loras"] = []
-    seen = set()
-    for item in request.loras:
-        if item["strength"] == 0:
-            continue
-        path = local_assets.local_path(item["name"], suffixes=(".safetensors",))
-        if path in seen:
-            raise ValueError("同じ実ファイルのLoRAを二重に指定できません。")
-        seen.add(path)
-        local_assets.read_header(path)
-        record = local_assets.file_identity(path) if verify_hash else {"path": str(path)}
-        result["loras"].append({**record, "strength": item["strength"]})
+    result["loras"] = selected_loras(request, verify_hash=verify_hash)
     return result
 
 

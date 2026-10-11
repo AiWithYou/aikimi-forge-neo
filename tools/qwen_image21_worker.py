@@ -872,6 +872,9 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         rewrite = _rewrite_for_request(model_path, request, job)
         runtime, reused = _runtime_for_request(model_path, request, job)
         _check_cancel(job)
+        from modules_forge.qwen_image21.style_lora import verify_sources
+
+        verify_sources(request.get("lora_sources"))
 
         # Qwen's VAE otherwise decodes the entire 2K latent in one CUDA pass.
         # Tiling is supported by the pinned Qwen VAE and reduces decode peaks.
@@ -1059,6 +1062,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         partial = output_path.with_name(output_path.name + ".part")
         image.save(partial, format="PNG")
         _check_cancel(job)
+        verify_sources(request.get("lora_sources"))
         os.replace(partial, output_path)
         from modules_forge.qwen_image21.annotations import save_preserved_output
 

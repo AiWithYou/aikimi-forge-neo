@@ -15,6 +15,14 @@ from modules.ui_components import InputAccordion
 STANDARD_LORA_SLOT_COUNT = 4
 
 
+def _reset_standard_lora(_params):
+    return gr.update(value=NO_STANDARD_LORA)
+
+
+def _reset_standard_lora_strength(_params):
+    return gr.update(value=1.0, visible=False)
+
+
 def _standard_lora_selection_pairs(
     standard_lora: str | None,
     standard_lora_strength: float,
@@ -237,6 +245,15 @@ class Anima3BScript(scripts.Script):
             for pair in standard_lora_components[1:]
             for component in pair
         ]
+        self.infotext_fields = [
+            field
+            for name_control, strength_control in standard_lora_components
+            for field in (
+                (name_control, _reset_standard_lora),
+                (strength_control, _reset_standard_lora_strength),
+            )
+        ]
+        self.paste_field_names = [_reset_standard_lora, _reset_standard_lora_strength]
         return [
             enabled,
             adapter,

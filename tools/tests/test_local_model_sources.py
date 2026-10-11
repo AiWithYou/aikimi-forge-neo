@@ -264,6 +264,29 @@ class MingLocalSourceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 nodes.checked_file(str(path), digest)
 
+    def test_ming_lora_node_refuses_file_changed_during_load(self):
+        spec = importlib.util.spec_from_file_location("ming_local_load_guard", ming_local.NODE_SOURCE / "__init__.py")
+        nodes = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(nodes)
+        with TemporaryDirectory() as folder:
+            path = tensor_file(Path(folder) / "lora.safetensors")
+            digest = local_assets.file_identity(path)["sha256"]
+
+            def load(*args, **kwargs):
+                tensor_file(path, value=2)
+                return {}
+
+            comfy = ModuleType("comfy")
+            comfy.utils = SimpleNamespace(load_torch_file=load)
+            model = SimpleNamespace(clone=lambda: SimpleNamespace(add_patches=lambda *args: []))
+            with (
+                stub_modules({"comfy": comfy, "comfy.utils": comfy.utils}),
+                patch.object(nodes, "linear_patches", return_value={}) as patches,
+            ):
+                with self.assertRaisesRegex(ValueError, "changed"):
+                    nodes.MingLoRA().load(model, str(path), digest, 1)
+                patches.assert_not_called()
+
     def test_ming_lora_rejects_partial_pairs_unknown_targets_and_wrong_shapes(self):
         import torch
 
@@ -289,6 +312,8 @@ class MingLocalSourceTests(unittest.TestCase):
                 {down: good[down]},
                 {**good, "unknown.weight": torch.ones(1)},
                 {**good, up: torch.ones(5, 1)},
+                {**good, down: torch.full((1, 3), float("nan"))},
+                {**good, up: torch.full((4, 1), float("inf"))},
             ):
                 with self.assertRaises(ValueError):
                     nodes.linear_patches(model, weights)
@@ -340,6 +365,16 @@ class ForgeLocalSelectionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "同じファイル"):
                 picker.apply_selections(p, [a], [[a, 1]])
 
+            local_assets.save_selection(
+                "forge_lora",
+                {
+                    "loras": [
+                        {"name": a, "strength": 0.5},
+                        {"name": b, "strength": -0.7},
+                        {"name": "missing", "strength": 0},
+                    ]
+                },
+            )
             with patch.object(picker, "available", return_value=[(name, name) for name in (a, b, "missing")]):
                 with picker.gr.Blocks(analytics_enabled=False):
                     names, _rows = picker.Script().ui(False)

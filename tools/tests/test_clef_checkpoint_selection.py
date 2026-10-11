@@ -82,16 +82,24 @@ def test_broken_manifest_and_other_architecture_are_refused(tmp_path):
 
 
 def test_discovery_does_not_hash_weights_or_import_models(tmp_path, monkeypatch):
+    from modules_forge import model_catalog
     from modules_forge.clef import local_source
 
-    external = bundle(tmp_path / "external" / "chosen")
-    monkeypatch.setattr(local_source, "checkpoint_roots", lambda *args, **kwargs: (tmp_path / "external",))
+    managed = bundle(tmp_path / "models" / "Clef" / "checkpoints" / "nested" / "chosen")
+    runtime = tmp_path / "runtime"
+    unselected = bundle(runtime / "another-bundle")
+    remembered = bundle(tmp_path / "remembered")
+    monkeypatch.setattr(model_catalog, "ROOT", tmp_path)
     monkeypatch.setattr("modules_forge.clef.bundle.sha256", Mock(side_effect=AssertionError("listing must not hash")))
     monkeypatch.setattr(
         "modules_forge.local_assets.file_identity", Mock(side_effect=AssertionError("listing must not hash"))
     )
-    choices = local_source.checkpoint_choices(tmp_path / "runtime")
-    assert str(external.resolve()) in {value for _, value in choices}
+    choices = local_source.checkpoint_choices(runtime, current=str(remembered))
+    values = {value for _, value in choices}
+    assert str(managed.resolve()) in values
+    assert str(unselected.resolve()) not in values, "Runtime storage must not be scanned for additional bundles"
+    assert str(remembered.resolve()) in values, "A saved selection must not fall back to another model"
+    assert {"official:" + profile for profile in local_source.OFFICIAL} <= values
 
 
 def test_selection_content_identity_changes_when_weight_is_replaced(tmp_path):
@@ -278,18 +286,28 @@ def test_ui_restores_without_writing_and_passes_checkpoint_to_submit(tmp_path, m
         "modules_forge.local_assets.selection",
         lambda _: {"checkpoint": str(external), "search_directory": str(tmp_path), "profile": "flash-int8"},
     )
-    save = Mock(side_effect=AssertionError("initial load must not write"))
+    save = Mock()
     monkeypatch.setattr("modules_forge.local_assets.save_selection", save)
     monkeypatch.setattr(workspace_ui, "environment_status", lambda: "ready")
-    assert local_source.load_selection() == (str(external), str(tmp_path), "flash-int8")
+    assert local_source.load_selection() == (str(external), "flash-int8")
     with gr.Blocks() as app:
         workspace_ui.build(tmp_path / "outputs")
     components = {getattr(component, "label", ""): component for component in app.blocks.values()}
     selected = components["チェックポイント"]
     assert selected.value == str(external) and selected.do_not_save_to_config
-    assert components["探索フォルダー"].value == str(tmp_path)
+    assert "探索フォルダー" not in components
+    assert not any(
+        isinstance(component, gr.Accordion) and component.label == "チェックポイント"
+        for component in app.blocks.values()
+    )
     assert "実行設定" in components
     submits = [fn for fn in app.fns.values() if fn.fn and fn.fn.__name__ == "submit"]
     assert submits and all(selected in fn.inputs for fn in submits)
-    assert any(fn.fn and fn.fn.__name__ == "_load_checkpoints" for fn in app.fns.values())
+    loader = next(fn for fn in app.fns.values() if fn.fn and fn.fn.__name__ == "_load_checkpoints")
+    assert loader.outputs == [selected, components["実行設定"]] and loader.show_progress == "hidden"
+    assert loader.fn()[0]["value"] == str(external)
     save.assert_not_called()
+    saver = next(fn for fn in app.fns.values() if fn.fn is local_source.save_selection)
+    assert saver.inputs == [selected, components["実行設定"]]
+    saver.fn(str(external), "flash-int8")
+    save.assert_called_once_with("clef", {"checkpoint": str(external), "profile": "flash-int8"})
