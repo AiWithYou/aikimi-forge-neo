@@ -133,6 +133,14 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-generate", "true")))
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')")
+                ),
+                page.exceptions,
+            )
+            self.assertTrue(page.evaluate(_wait_expression("#qwen21-lora-strengths", "true", 3000)), page.exceptions)
+            self.assertFalse(page.exceptions, "Qwen initialization failed before ControlNet interaction")
             # Scroll into view before opening, matching the user's interaction.
             page.evaluate("document.querySelector('#qwen21-control-section').scrollIntoView({block: 'center'})")
             page.evaluate("document.querySelector('#qwen21-control-section .label-wrap').click()")
