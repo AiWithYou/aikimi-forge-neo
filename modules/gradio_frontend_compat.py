@@ -37,6 +37,11 @@ _REACTIVE_APPTREE_VISIBILITY_SYNC = (
 _ORIGINAL_TABLE_RESIZE = b"r===0&&o>0&&n.measure(),r=o"
 _REACTIVE_TABLE_RESIZE = b"r!==o&&n.measure(),r=o"
 
+# The compiled header calculation reads col_count[1] unconditionally. Preserve
+# explicit column settings and use the current headers only when they are absent.
+_ORIGINAL_DATAFRAME_COL_COUNT = b"get col_count(){return r.props.col_count}"
+_GUARDED_DATAFRAME_COL_COUNT = b'get col_count(){return r.props.col_count??[l(M).length,"fixed"]}'
+
 # Gradio 6.17.3 predates the upstream Tabs mount-storm fix in PR #13509.
 # These are exact compiled snippets from that one audited wheel. The bounded
 # workaround disables overflow measurement, batches initial_tabs updates, and
@@ -217,6 +222,9 @@ def build_patched_dataframe_asset() -> PatchedFrontendAsset:
     if _sha256(source) != DATAFRAME_ORIGINAL_SHA256 or source.count(_ORIGINAL_TABLE_RESIZE) != 1:
         raise GradioFrontendCompatibilityError("The Gradio dataframe asset does not match the audited SHA-256.")
     patched = source.replace(_ORIGINAL_TABLE_RESIZE, _REACTIVE_TABLE_RESIZE, 1)
+    patched = _replace_exact(
+        patched, _ORIGINAL_DATAFRAME_COL_COUNT, _GUARDED_DATAFRAME_COL_COUNT, "dataframe column-count getter"
+    )
     return PatchedFrontendAsset(DATAFRAME_ASSET_NAME, patched, DATAFRAME_ORIGINAL_SHA256, _sha256(patched))
 
 

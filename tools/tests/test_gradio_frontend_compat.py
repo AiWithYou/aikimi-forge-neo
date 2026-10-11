@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 import socket
 import subprocess
@@ -21,6 +22,185 @@ from modules.aikimi_security.gradio_file_guard import install_gradio_file_url_gu
 
 
 class GradioFrontendCompatibilityTests(unittest.TestCase):
+    def test_dataframe_column_count_preserves_compiled_header_semantics(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node.js is required to execute the compiled dataframe headers")
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.DATAFRAME_ASSET_NAME
+        source = path.read_text(encoding="utf-8")
+        asset = module.build_patched_dataframe_asset()
+        script = (
+            "import assert from 'node:assert/strict';\n"
+            + "const originalSource = "
+            + json.dumps(source)
+            + ";\nconst servedSource = "
+            + json.dumps(asset.content.decode("utf-8"))
+            + ";\n"
+            + r"""
+            function between(source, start, end) {
+                const offset = source.indexOf(start);
+                assert.notEqual(offset, -1, start);
+                assert.equal(source.indexOf(start, offset + 1), -1, start);
+                const finish = source.indexOf(end, offset + start.length);
+                assert.notEqual(finish, -1, end);
+                return source.slice(offset + start.length, finish);
+            }
+            function columnGetter(source) {
+                const matches = source.match(/get col_count\(\)\{return r\.props\.col_count[^}]*\}/g) ?? [];
+                assert.equal(matches.length, 1);
+                return matches[0];
+            }
+            const headerArrow = between(originalSource, 'M=R(', '),I=R(()=>r.props.value?.data??[])');
+            const headerDerived = '()=>{let f=o()??[];' + between(
+                originalSource, 'B=R(()=>{let f=o()??[];', '),ie=R(()=>l(B).map('
+            );
+            assert.equal(headerArrow, '()=>r.props.value?.headers??[]');
+            assert.equal(headerDerived, '()=>{let f=o()??[];' + between(
+                servedSource, 'B=R(()=>{let f=o()??[];', '),ie=R(()=>l(B).map('
+            ));
+            assert.equal(originalSource.split('get headers(){return l(M)}').length, 2);
+            // Evaluate the actual compiled expressions; this models lazy reads,
+            // not Svelte's scheduler or a browser mount lifecycle.
+            const R = fn => fn, l = signal => signal();
+            const make = source => new Function('r', 'R', 'l',
+                `const M=R(${headerArrow});return({get headers(){return l(M)},${columnGetter(source)}});`
+            );
+            const original = make(originalSource), guarded = make(servedSource);
+            const derive = new Function('o', 't', `return (${headerDerived})();`);
+            const evaluate = node => derive(() => node.headers, node);
+            const headers = Object.freeze(['LoRA', '強度']);
+            const data = Object.freeze([Object.freeze(['chosen', 0.5])]);
+            let cases = 0;
+            function check(run) { run(); cases++; }
+            for (const state of ['undefined', 'null', 'absent']) {
+                check(() => {
+                    const value = { headers, data };
+                    const props = { value };
+                    if (state !== 'absent') props.col_count = state === 'null' ? null : undefined;
+                    const before = JSON.stringify(props);
+                    const hadCount = Object.hasOwn(props, 'col_count');
+                    assert.throws(() => evaluate(original({ props }, R, l)),
+                        error => error instanceof TypeError && /reading '1'/.test(error.message));
+                    const node = guarded({ props }, R, l);
+                    assert.deepEqual(evaluate(node), ['LoRA', '強度']);
+                    assert.deepEqual(node.col_count, [2, 'fixed']);
+                    assert.equal(props.value, value);
+                    assert.equal(props.value.headers, headers);
+                    assert.equal(props.value.data, data);
+                    assert.equal(Object.hasOwn(props, 'col_count'), hadCount);
+                    assert.equal(JSON.stringify(props), before);
+                });
+            }
+            for (const tuple of [[2, 'fixed'], [4, 'fixed'], [4, 'dynamic'], [0, 'fixed']]) {
+                check(() => {
+                    const col_count = Object.freeze(tuple);
+                    const value = { headers, data };
+                    const props = { value, col_count };
+                    const before = JSON.stringify(props);
+                    const node = guarded({ props }, R, l);
+                    assert.equal(node.col_count, col_count);
+                    assert.deepEqual(evaluate(node), evaluate(original({ props }, R, l)));
+                    assert.equal(props.value, value);
+                    assert.equal(props.value.headers, headers);
+                    assert.equal(props.value.data, data);
+                    assert.equal(props.col_count, col_count);
+                    assert.equal(JSON.stringify(props), before);
+                });
+            }
+            for (const absent of [undefined, null]) {
+                for (const kind of ['fixed', 'dynamic']) {
+                    check(() => {
+                        const props = { value: { headers, data }, col_count: absent };
+                        const node = guarded({ props }, R, l);
+                        assert.deepEqual(evaluate(node), ['LoRA', '強度']);
+                        const restored = Object.freeze([4, kind]);
+                        props.col_count = restored;
+                        assert.equal(node.col_count, restored);
+                        assert.deepEqual(evaluate(node), kind === 'fixed'
+                            ? ['LoRA', '強度', '2', '3'] : ['LoRA', '強度']);
+                        assert.equal(props.value.headers, headers);
+                        assert.equal(props.value.data, data);
+                    });
+                }
+            }
+            for (const initial of [[], undefined, null]) {
+                check(() => {
+                    const value = { headers: initial, data };
+                    const props = { value };
+                    const node = guarded({ props }, R, l);
+                    assert.deepEqual(evaluate(node), []);
+                    for (const next of [headers, Object.freeze(['LoRA', '強度', 'Note']), [], null]) {
+                        value.headers = next;
+                        const expected = next ?? [];
+                        const before = JSON.stringify(props);
+                        assert.deepEqual(node.col_count, [expected.length, 'fixed']);
+                        assert.deepEqual(evaluate(node), expected);
+                        assert.equal(value.headers, next);
+                        assert.equal(value.data, data);
+                        assert.equal(props.value, value);
+                        assert.equal(Object.hasOwn(props, 'col_count'), false);
+                        assert.equal(JSON.stringify(props), before);
+                    }
+                    value.headers = headers;
+                    for (const kind of ['fixed', 'dynamic']) {
+                        const restored = Object.freeze([3, kind]);
+                        props.col_count = restored;
+                        assert.equal(node.col_count, restored);
+                        assert.deepEqual(evaluate(node), kind === 'fixed'
+                            ? ['LoRA', '強度', '2'] : ['LoRA', '強度']);
+                    }
+                });
+            }
+            for (const kind of ['fixed', 'dynamic']) {
+                check(() => {
+                    const empty = Object.freeze([]), col_count = Object.freeze([3, kind]);
+                    const props = { value: { headers: empty, data }, col_count };
+                    const node = guarded({ props }, R, l);
+                    assert.deepEqual(evaluate(node), ['0', '1', '2']);
+                    assert.deepEqual(evaluate(node), evaluate(original({ props }, R, l)));
+                    assert.equal(node.col_count, col_count);
+                    assert.equal(props.value.headers, empty);
+                    assert.equal(props.value.data, data);
+                });
+            }
+            for (const value of [undefined, null]) {
+                check(() => {
+                    const props = { value };
+                    assert.deepEqual(evaluate(guarded({ props }, R, l)), []);
+                    assert.equal(props.value, value);
+                    assert.equal(Object.hasOwn(props, 'col_count'), false);
+                });
+            }
+            console.log(`compiled dataframe col_count: ${cases} scenarios passed`);
+            """
+        )
+        result = subprocess.run(  # noqa: S603 - execute expressions extracted from the audited frontend asset
+            [node, "--input-type=module", "-"], input=script, text=True, capture_output=True, timeout=10
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("compiled dataframe col_count: 18 scenarios passed", result.stdout)
+
+    def test_dataframe_column_count_getter_missing_or_duplicated_fails_closed(self):
+        module = gradio_frontend_compat
+        path = Path(gradio.__file__).resolve().parent / "templates/frontend/assets" / module.DATAFRAME_ASSET_NAME
+        source = path.read_bytes()
+        getter = b"get col_count(){return r.props.col_count}"
+        self.assertEqual(source.count(getter), 1)
+        for name, modified in (
+            ("missing", source.replace(getter, b"get col_count(){return undefined}", 1)),
+            ("duplicated", source + getter),
+        ):
+            with (
+                self.subTest(snippet=name),
+                patch.object(module, "DATAFRAME_ORIGINAL_SHA256", hashlib.sha256(modified).hexdigest()),
+                patch.object(Path, "read_bytes", return_value=modified),
+            ):
+                with self.assertRaisesRegex(
+                    module.GradioFrontendCompatibilityError, "column-count getter snippet was not found exactly once"
+                ):
+                    module.build_patched_dataframe_asset()
+
     def test_tab_sync_preserves_registry_when_update_omits_initial_tabs(self):
         node = shutil.which("node")
         if node is None:
@@ -106,12 +286,29 @@ class GradioFrontendCompatibilityTests(unittest.TestCase):
         before = path.read_bytes()
         asset = module.build_patched_dataframe_asset()
         self.assertEqual(before, path.read_bytes())
+        self.assertEqual(hashlib.sha256(before).hexdigest(), asset.original_sha256)
+        self.assertEqual(hashlib.sha256(asset.content).hexdigest(), asset.patched_sha256)
+        self.assertEqual(before.count(b"get col_count(){return r.props.col_count}"), 1)
+        self.assertEqual(asset.content.count(b"get col_count(){return r.props.col_count}"), 0)
+        self.assertEqual(asset.content.count(b'get col_count(){return r.props.col_count??[l(M).length,"fixed"]}'), 1)
+        self.assertNotIn(module._ORIGINAL_TABLE_RESIZE, asset.content)
+        self.assertEqual(asset.content.count(module._REACTIVE_TABLE_RESIZE), 1)
         app = module.create_gradio_compatibility_app(module.build_patched_tabs_asset())
-        response = TestClient(app).get(f"/assets/{asset.filename}")
+        client = TestClient(app)
+        response = client.get(f"/assets/{asset.filename}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, asset.content)
         self.assertNotEqual(response.content, before)
         self.assertEqual(response.headers["etag"], f'"{asset.patched_sha256}"')
+        head = client.head(f"/assets/{asset.filename}")
+        self.assertEqual(head.status_code, 200)
+        self.assertEqual(head.content, b"")
+        self.assertEqual(head.headers["content-length"], str(len(asset.content)))
+        self.assertEqual(head.headers["etag"], f'"{asset.patched_sha256}"')
+        cached = client.get(f"/assets/{asset.filename}", headers={"If-None-Match": f'"{asset.patched_sha256}"'})
+        self.assertEqual(cached.status_code, 304)
+        self.assertEqual(cached.content, b"")
+        self.assertEqual(cached.headers["etag"], f'"{asset.patched_sha256}"')
         with patch.object(module, "DATAFRAME_ORIGINAL_SHA256", "0" * 64):
             with self.assertRaises(module.GradioFrontendCompatibilityError):
                 module.build_patched_dataframe_asset()

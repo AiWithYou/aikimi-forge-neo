@@ -126,6 +126,12 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
         cls.url = f"http://127.0.0.1:{cls.port}/"
 
     def test_fun_controlnet_inputs_render_in_qwen_tab(self):
+        for restored in (False, True):
+            for session in range(3):
+                with self.subTest(restored=restored, session=session):
+                    self._assert_fun_controlnet_inputs_render(restored=restored)
+
+    def _assert_fun_controlnet_inputs_render(self, *, restored):
         with cdp_page(self.chromium, self.url) as page:
             self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 25000), timeout=30))
             self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
@@ -133,13 +139,16 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-generate", "true")))
-            self.assertTrue(
-                page.evaluate(
-                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')")
-                ),
-                page.exceptions,
-            )
-            self.assertTrue(page.evaluate(_wait_expression("#qwen21-lora-strengths", "true", 3000)), page.exceptions)
+            if restored:
+                self.assertTrue(
+                    page.evaluate(
+                        _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')")
+                    ),
+                    page.exceptions,
+                )
+                self.assertTrue(
+                    page.evaluate(_wait_expression("#qwen21-lora-strengths", "true", 3000)), page.exceptions
+                )
             self.assertFalse(page.exceptions, "Qwen initialization failed before ControlNet interaction")
             # Scroll into view before opening, matching the user's interaction.
             page.evaluate("document.querySelector('#qwen21-control-section').scrollIntoView({block: 'center'})")
@@ -164,6 +173,25 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             })()""")
             self.assertTrue(visible, page.exceptions)
             self.assertIn("前処理済みの制御画像", page.evaluate("document.body.innerText"))
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')")
+                ),
+                page.exceptions,
+            )
+            self.assertTrue(
+                page.evaluate(
+                    _wait_expression(
+                        "#qwen21-lora-strengths",
+                        "JSON.stringify(Array.from(element.querySelectorAll('.header-cell[data-heading]'))"
+                        ".map(header => header.getAttribute('title'))) === '[\"LoRA\",\"強度\"]'",
+                    )
+                ),
+                page.exceptions,
+            )
+            self.assertEqual(
+                page.evaluate("document.querySelectorAll('#qwen21-lora-strengths .virtual-row').length"), 0
+            )
             self.assertFalse(page.exceptions)
 
     def test_fun_acc_switch_keeps_selected_model_and_uses_four_steps(self):
@@ -180,8 +208,8 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 ),
                 page.exceptions,
             )
-            # Empty LoRA rows stay mounted during restoration. Removing this
-            # Dataframe races its derived column metadata in Gradio 6.17.
+            # Confirm the empty LoRA table is mounted after restoring the
+            # saved model before changing Fun Acc settings.
             self.assertTrue(page.evaluate(_wait_expression("#qwen21-lora-strengths", "true", 3000)), page.exceptions)
             selected_model = page.evaluate("document.querySelector('#qwen21-precision input[role=listbox]')?.value")
             self.assertTrue(selected_model)
