@@ -44,9 +44,17 @@ def load_studio_module():
         "modules.script_callbacks": callbacks_module,
         "modules.paths": paths_module,
     }
-    with mock.patch.dict(sys.modules, stubs):
+    previous = {name: sys.modules.get(name) for name in stubs}
+    sys.modules.update(stubs)
+    try:
         assert spec.loader is not None
         spec.loader.exec_module(module)
+    finally:
+        for name, original in previous.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
     return module
 
 

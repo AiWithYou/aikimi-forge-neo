@@ -484,6 +484,10 @@ def create_ui():
         if shared.opts.paste_safe_guard:
             toprow.hook_paste_guard()
 
+        from modules_forge.image_workspace import forge_toolbar
+
+        forge_toolbar(txt2img_interface, "txt2img", scripts.scripts_txt2img.alwayson_scripts)
+
     scripts.scripts_current = scripts.scripts_img2img
     scripts.scripts_img2img.initialize_scripts(is_img2img=True)
 
@@ -839,6 +843,8 @@ def create_ui():
 
         if shared.opts.paste_safe_guard:
             toprow.hook_paste_guard()
+
+        forge_toolbar(img2img_interface, "img2img", scripts.scripts_img2img.alwayson_scripts)
 
     scripts.scripts_current = None
 

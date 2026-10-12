@@ -9,6 +9,8 @@ on:
       - "**/*.ps1"
       - "extensions-builtin/aikimi-ui/**/*.js"
       - "modules/aikimi_capabilities.py"
+      - "modules_forge/image_workspace.py"
+      - "tools/tests/test_image_workspace*.py"
       - "modules_forge/qwen_image21/**"
       - "modules_forge/clef/**"
       - "extensions-builtin/clef-studio/**"
@@ -139,6 +141,8 @@ on:
       - "**/*.ps1"
       - "extensions-builtin/aikimi-ui/**/*.js"
       - "modules/aikimi_capabilities.py"
+      - "modules_forge/image_workspace.py"
+      - "tools/tests/test_image_workspace*.py"
       - "modules_forge/qwen_image21/**"
       - "modules_forge/clef/**"
       - "extensions-builtin/clef-studio/**"
@@ -289,6 +293,8 @@ jobs:
         run: |
           files=(
             modules/aikimi_capabilities.py
+            modules_forge/image_workspace.py
+            tools/tests/test_image_workspace*.py
             modules_forge/qwen_image21
             modules_forge/clef
             extensions-builtin/clef-studio/scripts

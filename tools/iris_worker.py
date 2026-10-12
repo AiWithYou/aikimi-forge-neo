@@ -32,6 +32,8 @@ def resident_run(payload):
     if request.get("sampling", {"mode": "standard"}) != sampling:
         raise ValueError("LoRAと生成方式が一致しません。再実行してください。")
     if sampling["mode"] == "turbo":
+        if request.get("image_mode") == "img2img":
+            raise ValueError("img2imgではTurbo LoRAを外して通常サンプリングを使ってください。")
         steps, cfg = request.get("steps"), request.get("cfg")
         if type(steps) is not int or not 1 <= steps <= 200:
             raise ValueError("TurboのStepsは1〜200の整数で指定してください。")

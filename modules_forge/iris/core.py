@@ -80,7 +80,26 @@ def validate_request(value):
     if not isinstance(checkpoint, str) or not checkpoint.strip() or "://" in checkpoint:
         raise IrisError("チェックポイントを選び直してください。")
     request["checkpoint"] = checkpoint.strip().strip('"')
-    request.pop("image", None)
+    image_mode = request.get("image_mode", "txt2img")
+    if image_mode not in {"txt2img", "img2img"}:
+        raise IrisError("txt2imgまたはimg2imgを選び直してください。")
+    request["image_mode"] = image_mode
+    if image_mode == "img2img":
+        if request.get("image") is None:
+            raise IrisError("img2imgの入力画像を選んでください。")
+        try:
+            strength = request.get("strength", 0.5)
+            if isinstance(strength, bool):
+                raise ValueError
+            strength = float(strength)
+            if not math.isfinite(strength) or not 0 <= strength <= 1:
+                raise ValueError
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise IrisError("変更強度は0〜1の有限値で指定してください。") from exc
+        request["strength"] = strength
+    else:
+        request.pop("image", None)
+        request.pop("strength", None)
     prompt = str(request.get("prompt", "")).strip()
     if not prompt or len(prompt) > 12000:
         raise IrisError("プロンプトを1〜12000文字で入力してください。")

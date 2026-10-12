@@ -215,8 +215,8 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                 )
             self.assertFalse(page.exceptions, "Qwen initialization failed before ControlNet interaction")
             # Scroll into view before opening, matching the user's interaction.
-            page.evaluate("document.querySelector('#qwen21-control-section').scrollIntoView({block: 'center'})")
-            page.evaluate("document.querySelector('#qwen21-control-section .label-wrap').click()")
+            page.evaluate("document.querySelector('#qwen21-common-panel-1-toggle').scrollIntoView({block: 'center'})")
+            page.evaluate("document.querySelector('#qwen21-common-panel-1-toggle').click()")
             self.assertTrue(
                 page.evaluate(_wait_expression("#qwen21-control-kind", "true", 8000), timeout=10), page.exceptions
             )

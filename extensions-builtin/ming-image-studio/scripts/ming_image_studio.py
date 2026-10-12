@@ -577,7 +577,7 @@ def on_ui_tabs():
                     height = gr.Number(
                         label="高さ px", value=1024, precision=0, step=16, min_width=85, elem_id="ming-height"
                     )
-                with gr.Accordion("詳細設定", open=False):
+                with gr.Accordion("詳細設定", open=False) as advanced:
                     seed = gr.Textbox(label="Seed（-1でランダム）", value="-1", elem_id="ming-seed")
                     steps = gr.Slider(label="Steps", minimum=1, maximum=50, value=12, step=1)
                     gr.Markdown("既定は12 steps・CFG 1。まず1024相当で試せます。")
@@ -603,7 +603,7 @@ def on_ui_tabs():
                     setup = gr.Button("破損したモデルを退避して修復")
                     refresh = gr.Button("準備状態を更新")
                     gr.Markdown("テキストW4A8 · 専用ComfyUI。保存先: `outputs/ming-image/`")
-            with gr.Column(scale=2, min_width=300, elem_id="ming-output"):
+            with gr.Column(scale=2, min_width=300, elem_id="ming-output") as output_column:
                 background = gr.Radio(
                     ["チェック", "白", "黒"],
                     value="チェック",
@@ -635,6 +635,19 @@ def on_ui_tabs():
                     )
                     with gr.Accordion("この画像に使用したプロンプト", open=False):
                         effective = gr.Textbox(label="モデルへ送信した文", lines=5, interactive=False)
+        from modules_forge.image_workspace import ImageWorkspace
+
+        ImageWorkspace(
+            tab,
+            "ming-common",
+            models=[refresh_assets.parent],
+            prompts=[prompt],
+            actions=[generate, cancel, prepare, status],
+            settings=[steps, preset, swap.parent, seed],
+            outputs=[output_column],
+            panels={"LoRA": [model_section], "透過・文字": [transparent, text.parent], "生成詳細": [advanced]},
+            badges={"LoRA": loras, "透過・文字": transparent},
+        )
         record = gr.State({})
         job = gr.State({})
         private = {"api_visibility": "private", "show_progress": "hidden"}

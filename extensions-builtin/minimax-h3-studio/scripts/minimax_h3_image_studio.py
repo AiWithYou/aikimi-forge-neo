@@ -61,7 +61,13 @@ def _runtime_action(runtime, url, profile, *negpip_values, restart=False):
         root = bridge.resolve_runtime_root(runtime)
         with bridge._RUNTIME_LIFECYCLE_LOCK:
             action = bridge.restart_runtime if restart else bridge.ensure_ready
-            readiness = action(root, url, LOG_DIRECTORY, runtime_profile=profile, acceleration=H3Acceleration(negpip=H3NegPiP.from_values(negpip_values), checkpoint=checkpoint))
+            readiness = action(
+                root,
+                url,
+                LOG_DIRECTORY,
+                runtime_profile=profile,
+                acceleration=H3Acceleration(negpip=H3NegPiP.from_values(negpip_values), checkpoint=checkpoint),
+            )
             client = bridge.ComfyH3Client(url)
             try:
                 images.check_image_nodes(client)
@@ -83,7 +89,8 @@ def _restart(runtime, url, profile, *negpip_values):
 def _request(mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_values):
     negpip_values, checkpoint = _checkpoint_values(negpip_values)
     return images.H3ImageRequest(
-        mode=mode, prompt=prompt or "",
+        mode=mode,
+        prompt=prompt or "",
         reference_images=images._bridge().normalize_file_list(references) if mode == "references" else (),
         width=images.integer(width, "幅", 256, 2048),
         height=images.integer(height, "高さ", 256, 2048),
@@ -97,39 +104,89 @@ def _request(mode, prompt, references, width, height, steps, seed, scheduler, fr
     )
 
 
-def _generate(runtime, url, profile, mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_values):
+def _generate(
+    runtime,
+    url,
+    profile,
+    mode,
+    prompt,
+    references,
+    width,
+    height,
+    steps,
+    seed,
+    scheduler,
+    frame,
+    candidates,
+    *negpip_values,
+):
     # Keep the submitted URL in server-side State; changing a textbox must not
     # redirect a subsequent cancellation to another ComfyUI process.
     notification_id = uuid.uuid4().hex
+
     def notify(stage, message, progress=None):
-        return studio_status_html("minimax-h3-image", stage, message, job_id=notification_id,
-                                  model_name="MiniMax H3 Image", progress=progress,
-                                  result_id="h3-image-result" if stage == "complete" else "", visible=True)
+        return studio_status_html(
+            "minimax-h3-image",
+            stage,
+            message,
+            job_id=notification_id,
+            model_name="MiniMax H3 Image",
+            progress=progress,
+            result_id="h3-image-result" if stage == "complete" else "",
+            visible=True,
+        )
 
     yield (
-        notify("prepare", "入力を確認しています。"), None, [], [], None, {},
-        gr.update(interactive=False), gr.update(interactive=False),
+        notify("prepare", "入力を確認しています。"),
+        None,
+        [],
+        [],
+        None,
+        {},
+        gr.update(interactive=False),
+        gr.update(interactive=False),
     )
     try:
-        request = _request(mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_values)
+        request = _request(
+            mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_values
+        )
         for event in images.run_image_generation(
-            request, Path(runtime), url, LOG_DIRECTORY, OUTPUT_DIRECTORY, runtime_profile=profile,
+            request,
+            Path(runtime),
+            url,
+            LOG_DIRECTORY,
+            OUTPUT_DIRECTORY,
+            runtime_profile=profile,
         ):
             complete = event["stage"] == "complete"
-            job = {"prompt_id": event["prompt_id"], "server_url": url} if event.get("prompt_id") and not complete else {}
+            job = (
+                {"prompt_id": event["prompt_id"], "server_url": url} if event.get("prompt_id") and not complete else {}
+            )
             message = event["message"]
             if "elapsed" in event:
                 message += f" 経過 {event['elapsed']:.0f} 秒。"
             yield (
-                notify(event["stage"], message, event.get("progress")), event.get("path", gr.update()),
-                [(path, f"候補 {index}") for index, path in enumerate(event["candidates"])] if complete else gr.update(),
-                event.get("files", gr.update()), event.get("metadata", gr.update()), job,
-                gr.update(interactive=complete), gr.update(interactive=bool(job)),
+                notify(event["stage"], message, event.get("progress")),
+                event.get("path", gr.update()),
+                [(path, f"候補 {index}") for index, path in enumerate(event["candidates"])]
+                if complete
+                else gr.update(),
+                event.get("files", gr.update()),
+                event.get("metadata", gr.update()),
+                job,
+                gr.update(interactive=complete),
+                gr.update(interactive=bool(job)),
             )
     except Exception as exc:
         yield (
-            notify("cancelled" if isinstance(exc, images.H3ImageCancelled) else "error", str(exc)), gr.update(), gr.update(),
-            gr.update(), gr.update(), {}, gr.update(interactive=True), gr.update(interactive=False),
+            notify("cancelled" if isinstance(exc, images.H3ImageCancelled) else "error", str(exc)),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            {},
+            gr.update(interactive=True),
+            gr.update(interactive=False),
         )
 
 
@@ -154,7 +211,15 @@ def on_ui_tabs():
         )
         from modules_forge.studio_checkpoint_ui import create
         from modules_forge.studio_checkpoints import h3_compatible
-        checkpoint, _ = create("h3", "MiniMax-H3", (), h3_compatible, gradio=gr, details="FL2VAはテキスト生成、Ref2VAは参照編集用です。役割はファイル名またはh3_roleメタデータで指定します。")
+
+        checkpoint, checkpoint_refresh = create(
+            "h3",
+            "MiniMax-H3",
+            (),
+            h3_compatible,
+            gradio=gr,
+            details="FL2VAはテキスト生成、Ref2VAは参照編集用です。役割はファイル名またはh3_roleメタデータで指定します。",
+        )
         with gr.Accordion("実行環境とモデル", open=False):
             runtime = gr.Textbox(value=_initial_runtime(), visible=False, interactive=False)
             url = gr.Textbox(value=SERVER_URL, visible=False, interactive=False)
@@ -162,7 +227,8 @@ def on_ui_tabs():
             url.do_not_save_to_config = True
             profile = gr.Radio(
                 choices=[("高速（Pinned + Async 2）", "fast"), ("省RAM", "low_ram")],
-                value="fast", label="起動設定（H3動画と共通）",
+                value="fast",
+                label="起動設定（H3動画と共通）",
             )
             gr.Markdown(
                 "既存H3 Studioのモデル一式を再利用します。参照編集にはRef2VAが必要です。"
@@ -177,34 +243,61 @@ def on_ui_tabs():
             with gr.Column(scale=1, min_width=320):
                 mode = gr.Radio(
                     choices=[("テキスト → 画像", "text"), ("参照画像から編集", "references")],
-                    value="text", label="生成モード",
+                    value="text",
+                    label="生成モード",
                 )
                 prompt = gr.Textbox(
-                    label="プロンプト", lines=6,
+                    label="プロンプト",
+                    lines=6,
                     placeholder="完成させたい静止画を記述してください。参照編集例: <Picture 1>の人物を保ち、背景だけを夕暮れの街に変更する。",
                 )
                 with gr.Group(visible=False) as reference_group:
                     references = gr.File(
-                        label="参照画像（アップロード順・最大9枚）", file_count="multiple",
-                        file_types=[".png", ".jpg", ".jpeg", ".webp"], type="filepath",
+                        label="参照画像（アップロード順・最大9枚）",
+                        file_count="multiple",
+                        file_types=[".png", ".jpg", ".jpeg", ".webp"],
+                        type="filepath",
                     )
                     tags = gr.Markdown("参照画像を追加してください。")
-                    gr.Markdown("プロンプトで全画像のタグと役割を指定してください。画素や人物の完全な保持は保証しません。")
+                    gr.Markdown(
+                        "プロンプトで全画像のタグと役割を指定してください。画素や人物の完全な保持は保証しません。"
+                    )
                 preset = gr.Dropdown(
-                    choices=[*PRESETS, "カスタム"], value="正方形 · 768×768", label="解像度プリセット",
+                    choices=[*PRESETS, "カスタム"],
+                    value="正方形 · 768×768",
+                    label="解像度プリセット",
                 )
                 with gr.Row():
-                    width = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=32, label="幅 px", min_width=95, elem_id="h3-image-width")
+                    width = gr.Number(
+                        value=768,
+                        precision=0,
+                        minimum=256,
+                        maximum=2048,
+                        step=32,
+                        label="幅 px",
+                        min_width=95,
+                        elem_id="h3-image-width",
+                    )
                     swap_size = gr.Button("縦横入替", size="sm", scale=0, min_width=70, elem_id="h3-image-swap-size")
-                    height = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=32, label="高さ px", min_width=95, elem_id="h3-image-height")
-                with gr.Accordion("詳細設定", open=False):
+                    height = gr.Number(
+                        value=768,
+                        precision=0,
+                        minimum=256,
+                        maximum=2048,
+                        step=32,
+                        label="高さ px",
+                        min_width=95,
+                        elem_id="h3-image-height",
+                    )
+                with gr.Accordion("詳細設定", open=False) as advanced:
                     gr.Markdown("32の倍数で指定します。約1MPを超える直接生成は実験的で、負荷が増えます。")
                     steps = gr.Slider(1, 100, value=20, step=1, label="Steps（標準20）")
                     seed = gr.Textbox(value="-1", label="Seed（-1: 毎回ランダム）")
                     scheduler = gr.Dropdown(["simple", "beta", "normal"], value="simple", label="Scheduler")
                     frame = gr.Dropdown(
                         choices=[(f"候補 {i}" + ("（標準）" if i == 0 else ""), i) for i in range(5)],
-                        value=0, label="採用フレーム（0〜4）",
+                        value=0,
+                        label="採用フレーム（0〜4）",
                     )
                     candidates = gr.Checkbox(value=False, label="5候補もPNG保存して比較する")
                     gr.Markdown("5候補は同じ時間系列の画像で、独立した5シードのバッチではありません。")
@@ -213,31 +306,100 @@ def on_ui_tabs():
                     generate = gr.Button("画像を生成", variant="primary")
                     cancel = gr.Button("停止", interactive=False)
                 status = gr.HTML("未実行。", elem_id="h3-image-status")
-            with gr.Column(scale=1, min_width=320):
-                result = gr.Image(label="生成画像", type="filepath", format="png", interactive=False, elem_id="h3-image-result")
-                gallery = gr.Gallery(label="5フレームの候補（候補保存を有効にした場合）", columns=3, height=280, interactive=False)
+            with gr.Column(scale=1, min_width=320) as output_column:
+                result = gr.Image(
+                    label="生成画像", type="filepath", format="png", interactive=False, elem_id="h3-image-result"
+                )
+                gallery = gr.Gallery(
+                    label="5フレームの候補（候補保存を有効にした場合）", columns=3, height=280, interactive=False
+                )
                 files = gr.File(label="PNG・生成条件JSON", file_count="multiple", interactive=False)
                 gr.Markdown("保存先: `outputs/minimax_h3/images/`。原画像は上書きしません。")
                 with gr.Accordion("生成条件（確定Seedを含む）", open=False):
                     metadata = gr.JSON(label="生成条件")
+        from modules_forge.image_workspace import ImageWorkspace
+
+        workspace = ImageWorkspace(
+            tab,
+            "h3-image-common",
+            editable=True,
+            models=[checkpoint_refresh.parent],
+            prompts=[prompt],
+            actions=[generate, cancel, status],
+            settings=[steps, preset, swap_size.parent, seed],
+            references=[reference_group],
+            outputs=[output_column],
+            panels={"生成詳細": [advanced], "NegPiP": list(negpip_controls), "候補": [gallery]},
+            badges={"NegPiP": negpip_controls[0], "候補": candidates},
+            native_mode=mode,
+            mode_values=("text", "references"),
+        )
+        with workspace.output:
+            reuse = gr.Button("img2imgへ送る", interactive=False, elem_id="h3-image-reuse")
+        result.change(
+            lambda value: gr.update(interactive=bool(value)),
+            inputs=result,
+            outputs=reuse,
+            queue=False,
+            api_visibility="private",
+            show_progress="hidden",
+        )
+        reuse.click(
+            lambda value: ([value], "references"),
+            inputs=result,
+            outputs=[references, mode],
+            queue=False,
+            api_visibility="private",
+            show_progress="hidden",
+        )
         job = gr.State({})
         private = {"api_visibility": "private", "show_progress": "hidden"}
         mode.change(_mode, inputs=mode, outputs=reference_group, queue=False, **private)
         references.change(_reference_tags, inputs=references, outputs=tags, queue=False, **private)
         preset.change(_preset, inputs=preset, outputs=[width, height], queue=False, **private)
-        swap_size.click(lambda w, h: (h, w, "カスタム"), inputs=[width, height], outputs=[width, height, preset], queue=False, **private)
+        swap_size.click(
+            lambda w, h: (h, w, "カスタム"),
+            inputs=[width, height],
+            outputs=[width, height, preset],
+            queue=False,
+            **private,
+        )
         for control in (width, height):
             control.input(lambda: "カスタム", outputs=preset, queue=False, **private)
         for button, callback in ((connect, _runtime_action), (restart, _restart)):
             button.click(
-                callback, inputs=[runtime, url, profile, *negpip_controls, checkpoint], outputs=runtime_status,
-                concurrency_limit=1, concurrency_id="h3-runtime-control", trigger_mode="once", **private,
+                callback,
+                inputs=[runtime, url, profile, *negpip_controls, checkpoint],
+                outputs=runtime_status,
+                concurrency_limit=1,
+                concurrency_id="h3-runtime-control",
+                trigger_mode="once",
+                **private,
             )
         generate.click(
             _generate,
-            inputs=[runtime, url, profile, mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_controls, checkpoint],
+            inputs=[
+                runtime,
+                url,
+                profile,
+                mode,
+                prompt,
+                references,
+                width,
+                height,
+                steps,
+                seed,
+                scheduler,
+                frame,
+                candidates,
+                *negpip_controls,
+                checkpoint,
+            ],
             outputs=[status, result, gallery, files, metadata, job, generate, cancel],
-            concurrency_limit=1, concurrency_id="minimax-h3-generation", trigger_mode="once", **private,
+            concurrency_limit=1,
+            concurrency_id="minimax-h3-generation",
+            trigger_mode="once",
+            **private,
         )
         cancel.click(_cancel, inputs=job, outputs=[status, cancel], queue=False, **private)
     return [(tab, "H3 Image", "minimax_h3_image_studio")]

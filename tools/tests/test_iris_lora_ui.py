@@ -137,8 +137,15 @@ class IrisLoRAUITests(unittest.TestCase):
             for item in config["dependencies"]
             if any(identifier == dropdown["id"] and event == "change" for identifier, event in item["targets"])
         ]
-        self.assertEqual(len(changes), 1, "Gradio token removal and clear emit change, not input")
-        self.assertIs(blocks.fns[changes[0]["id"]].fn, self.module.edit_loras)
+        selection_changes = [item for item in changes if blocks.fns[item["id"]].fn is self.module.edit_loras]
+        self.assertEqual(len(selection_changes), 1, "Gradio token removal and clear emit one selection edit")
+        by_id = {item["id"]: item for item in config["components"]}
+        for item in changes:
+            if item not in selection_changes:
+                self.assertTrue(
+                    all(by_id[identifier]["type"] == "button" for identifier in item["outputs"]),
+                    "Other selection listeners may update disclosure badges only",
+                )
         previous = {"mode": "turbo", "steps": 80, "cfg": 4, "negative": "blurry"}
         result = self.module.edit_loras({}, "generate", [], [], previous, 4, 1, "")
         self.assertNotIn("value", result[1], "A user selection callback must not write an older selection back")
@@ -340,12 +347,13 @@ class IrisLoRAUITests(unittest.TestCase):
             started = self.module.start_with_loras(
                 {}, "generate", "int8", "fox", None, 1, "1024×1024", 80, 4, "", "base", [], []
             )
-        self.assertEqual(len(started), 11)
+        self.assertEqual(len(started), 14)
         self.assertTrue(all(not item["interactive"] for item in started[8:]))
         with patch.object(self.module.SERVICE, "poll", return_value={"status": "cancelled"}):
             stopped = self.module.poll_with_loras(started[0])
-        self.assertEqual(len(stopped), 16)
-        self.assertTrue(all(item["interactive"] for item in stopped[13:]))
+        self.assertEqual(len(stopped), 19)
+        self.assertTrue(all(item["interactive"] for item in stopped[13:16]))
+        self.assertTrue(all(not item["interactive"] for item in stopped[16:]))
 
     def test_invalid_turbo_does_not_start_a_job_or_preparation(self):
         for names, rows, error in (

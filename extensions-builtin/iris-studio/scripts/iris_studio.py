@@ -233,6 +233,9 @@ def start(
     checkpoint="base",
     lora_names=None,
     lora_rows=None,
+    image_mode="txt2img",
+    edit_image=None,
+    strength=0.5,
 ):
     state = dict(state or {})
     checkpoint = checkpoint if task == "generate" else "base"
@@ -261,7 +264,7 @@ def start(
                     "precision": precision,
                     "checkpoint": checkpoint,
                     "prompt": prompt,
-                    "image": image,
+                    "image": edit_image if task == "generate" and image_mode == "img2img" else image,
                     "seed": seed,
                     "width": width,
                     "height": height,
@@ -269,6 +272,7 @@ def start(
                     "cfg": cfg,
                     "negative_prompt": negative,
                     **({"loras": loras} if task == "generate" else {}),
+                    **({"image_mode": image_mode, "strength": strength} if task == "generate" else {}),
                 }
             )
             kind = "run"
@@ -279,7 +283,14 @@ def start(
                 else PREPARATION.start(task, precision, components_only=True)
             )
             kind = "setup"
-        state.update(job=identifier, kind=kind, task=task, precision=precision, checkpoint=checkpoint)
+        state.update(
+            job=identifier,
+            kind=kind,
+            task=task,
+            precision=precision,
+            checkpoint=checkpoint,
+            image_mode=image_mode if task == "generate" else None,
+        )
         return (
             state,
             gr.update(interactive=False),
@@ -298,7 +309,7 @@ def start_with_loras(*args):
     result = start(*args)
     current = result[0] if isinstance(result[0], dict) and "__type__" not in result[0] else args[0]
     editable = args[1] == "generate" and not (current or {}).get("job")
-    return (*result, *(gr.update(interactive=editable) for _ in range(3)))
+    return (*result, *(gr.update(interactive=editable) for _ in range(3)), *send_controls(current))
 
 
 def cancel(state):
@@ -343,6 +354,8 @@ def poll(state):
             information = f"{label} · {information}"
         if result.get("seed") is not None:
             information += f" · Seed {result['seed']}"
+        if result.get("image_mode") == "img2img":
+            information += f" · img2img · 変更強度 {result['strength']:g} · {result['executed_steps']} steps"
         state.setdefault("results", {})[task] = {"image": image, "files": files, "information": information}
         message = "完了"
     elif result["status"] == "complete":
@@ -373,8 +386,14 @@ def poll_with_loras(state):
     result = poll(state)
     current = result[0]
     if not isinstance(current, dict) or "__type__" in current or current.get("job"):
-        return (*result, *(gr.skip(),) * 3)
-    return (*result, *(gr.update(interactive=current["task"] == "generate") for _ in range(3)))
+        return (*result, *(gr.skip(),) * 6)
+    return (*result, *(gr.update(interactive=current["task"] == "generate") for _ in range(3)), *send_controls(current))
+
+
+def send_controls(state):
+    state = state or {}
+    available = not state.get("job") and bool(state.get("results", {}).get("generate", {}).get("image"))
+    return tuple(gr.update(interactive=available) for _ in range(3))
 
 
 def load_selection():
@@ -478,6 +497,9 @@ def on_ui_tabs():
                 with gr.Group(visible=False) as image_input:
                     image = gr.Image(label="入力画像", type="pil", height=320)
                     upscale_limit = gr.Markdown("入力を短辺512・長辺1024以内に収めてから4倍にします。", visible=False)
+                with gr.Group() as edit_input:
+                    edit_image = gr.Image(label="入力画像", type="pil", height=320, elem_id="iris-img2img-input")
+                    strength = gr.Slider(0, 1, value=0.5, step=0.01, label="変更強度", elem_id="iris-img2img-strength")
                 with gr.Row():
                     initial_button = initial_view[7]
                     run = gr.Button(
@@ -488,7 +510,9 @@ def on_ui_tabs():
                         scale=4,
                     )
                     stop = gr.Button("中断", interactive=False, scale=1)
-                status = gr.Textbox(value=initial_view[8], show_label=False, interactive=False, lines=2)
+                status = gr.Textbox(
+                    value=initial_view[8], show_label=False, interactive=False, lines=2, elem_id="iris-status"
+                )
                 with gr.Accordion("詳細設定", open=False) as detail:
                     size = gr.Dropdown(list(GENERATION_SIZES), value="1024×1024", label="生成サイズ")
                     with gr.Row():
@@ -524,14 +548,47 @@ def on_ui_tabs():
                 with gr.Group() as generation_group:
                     generation = gr.Image(label="生成結果", height=560, interactive=False)
                     with gr.Row():
-                        to_depth = gr.Button("深度推定へ送る")
-                        to_upscale = gr.Button("復元・4倍拡大へ送る")
+                        to_edit = gr.Button("img2imgへ送る", elem_id="iris-send-img2img", interactive=False)
+                        to_depth = gr.Button("深度推定へ送る", interactive=False)
+                        to_upscale = gr.Button("復元・4倍拡大へ送る", interactive=False)
                 with gr.Group(visible=False) as depth_group:
                     depth = gr.ImageSlider(label="元画像 ↔ 相対深度", height=560)
                 with gr.Group(visible=False) as upscale_group:
                     upscale = gr.ImageSlider(label="元画像 ↔ 復元・4倍拡大", height=560)
                 information = gr.Markdown()
                 files = gr.File(label="画像・数値データ・実行条件", file_count="multiple", interactive=False)
+        from modules_forge.image_workspace import ImageWorkspace
+
+        workspace = ImageWorkspace(
+            ui,
+            "iris-common",
+            editable=True,
+            models=[checkpoint_group, precision],
+            prompts=[text_input, negative],
+            actions=[run, stop, status],
+            settings=[steps, cfg, size, seed],
+            references=[edit_input],
+            outputs=[generation_group, depth_group, upscale_group, information, files],
+            panels={"LoRA": [lora_group], "画像処理": [task, image_input]},
+            badges={"LoRA": loras},
+        )
+        task.change(
+            lambda value: (
+                gr.update(visible=value == "generate"),
+                gr.update(visible=value == "generate"),
+                gr.update(visible=True if value == "generate" else "hidden"),
+            ),
+            inputs=task,
+            outputs=[workspace.prompts, workspace.settings, workspace.tabs],
+            queue=False,
+        )
+        processing_panel = workspace.panels["画像処理"]
+        task.change(
+            lambda value: processing_panel.reveal() if value != "generate" else (gr.skip(), gr.skip()),
+            inputs=task,
+            outputs=[processing_panel.state, processing_panel.group],
+            queue=False,
+        )
         change_outputs = [
             text_input,
             image_input,
@@ -580,17 +637,34 @@ def on_ui_tabs():
         )
 
         def send(state, destination):
+            if (state or {}).get("job"):
+                raise gr.Error("処理が終わってから画像を送ってください。")
             result = (state or {}).get("results", {}).get("generate")
             if not result:
                 raise gr.Error("画像を生成してから送ってください。")
             return destination, result["image"]
 
-        to_depth.click(lambda state: send(state, "depth"), [state], [task, image], queue=False).then(
+        to_depth.click(lambda state: send(state, "depth"), [state], [task, image], queue=False).success(
             switch, [state, task, precision, checkpoint], change_outputs, queue=False
-        ).then(sync_loras, lora_inputs, lora_outputs, queue=False)
-        to_upscale.click(lambda state: send(state, "upscale"), [state], [task, image], queue=False).then(
+        ).success(sync_loras, lora_inputs, lora_outputs, queue=False)
+        to_upscale.click(lambda state: send(state, "upscale"), [state], [task, image], queue=False).success(
             switch, [state, task, precision, checkpoint], change_outputs, queue=False
-        ).then(sync_loras, lora_inputs, lora_outputs, queue=False)
+        ).success(sync_loras, lora_inputs, lora_outputs, queue=False)
+        to_edit.click(
+            lambda state: send(state, "generate"),
+            [state],
+            [task, edit_image],
+            queue=False,
+            api_visibility="private",
+            show_progress="hidden",
+        ).success(switch, [state, task, precision, checkpoint], change_outputs, queue=False).success(
+            lambda: workspace.select_mode("img2img"),
+            [],
+            [workspace.mode, workspace.tabs, workspace.references],
+            queue=False,
+            api_visibility="private",
+            show_progress="hidden",
+        )
         run.click(
             start_with_loras,
             [
@@ -607,8 +681,26 @@ def on_ui_tabs():
                 checkpoint,
                 loras,
                 lora_strengths,
+                workspace.mode,
+                edit_image,
+                strength,
             ],
-            [state, task, precision, run, status, stop, timer, checkpoint, loras, lora_strengths, lora_refresh],
+            [
+                state,
+                task,
+                precision,
+                run,
+                status,
+                stop,
+                timer,
+                checkpoint,
+                loras,
+                lora_strengths,
+                lora_refresh,
+                to_edit,
+                to_depth,
+                to_upscale,
+            ],
             queue=False,
         )
         stop.click(cancel, [state], [status, stop], queue=False)
@@ -632,6 +724,9 @@ def on_ui_tabs():
                 loras,
                 lora_strengths,
                 lora_refresh,
+                to_edit,
+                to_depth,
+                to_upscale,
             ],
             queue=False,
         )

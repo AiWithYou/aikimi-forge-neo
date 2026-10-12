@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v4.1.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.1.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.5.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.5.0)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -52,7 +52,7 @@ For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choos
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | Image generation, editing, transparent PNG, and outpainting | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | Music composition and ABC score editing in **YuE2 Music** | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1: Official Python** |
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | Image, text, and JSON evaluation; image curation and per-criterion probabilities | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
-| [Iris-3B](extensions-builtin/iris-studio/README.md) | Image generation, relative depth, restoration, and 4× upscaling; standard, INT8, and W4A8 modes, compatible LoRAs, and 4-step Turbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
+| [Iris-3B](extensions-builtin/iris-studio/README.md) | Image generation, img2img, relative depth, restoration, and 4× upscaling; standard, INT8, and W4A8 modes, compatible full fine-tunes and LoRAs, and 4-step Turbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
 
 The initial download and runtime setup or conversion can take time. Qwen defaults to the standard Q4_K_M model. Iris downloads weights for the selected task; INT8 and W4A8 use preconverted Hugging Face distributions. W4A8 also compresses the text encoder for image generation. See the [Iris guide](docs/iris-studio.md).
 
@@ -139,7 +139,8 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 
 ### Everyday controls
 
-- Forge's `txt2img`, `img2img`, and Extras remain available. The top shortcuts open model-specific interfaces.
+- Choose an image model from the top navigation and use the shared `txt2img` / `img2img` layout. Buttons at the top show LoRA, ControlNet, and other model options. Reference-based editors use their own editing controls; Ming and Nanosaur2 offer text generation only. See the [shared image workspace guide (Japanese)](docs/image-workspace.md).
+- Iris img2img supports compatible full fine-tunes and strength from 0 to 1 with standard sampling. Strength 0 preserves the resized input; strength 1 matches txt2img with the same settings and seed. Turbo LoRAs must be removed for img2img. See the [Iris guide (Japanese)](docs/iris-studio.md#入力画像から描き直すimg2img).
 - Under **GPU / model retention**, choose the option that prioritizes consecutive generation to keep models loaded between jobs. Manual release is also available. See [Model retention](docs/model-retention.md).
 - Click **Chibi Aikimi** to view progress and the queue. Drag it to move it, and use the top menu to toggle its visibility.
 

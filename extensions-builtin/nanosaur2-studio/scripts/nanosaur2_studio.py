@@ -169,7 +169,8 @@ def on_ui_tabs():
             "## Nanosaur2\nイラスト向けテキスト画像生成。モデル配布元は[well9472/Nanosaur2-670M](https://huggingface.co/well9472/Nanosaur2-670M)です。"
         )
         from modules_forge.studio_checkpoint_ui import create
-        checkpoint, _ = create("nanosaur2", "Nanosaur2", (), studio.nanosaur_compatible, gradio=gr)
+
+        checkpoint, checkpoint_refresh = create("nanosaur2", "Nanosaur2", (), studio.nanosaur_compatible, gradio=gr)
         with gr.Accordion("実行環境とモデル", open=False):
             gr.Markdown("専用ComfyUI・Python・Nanosaur2の3モデルを準備します。H3のモデルは不要です。")
             with gr.Row():
@@ -185,12 +186,32 @@ def on_ui_tabs():
                     placeholder="newest, masterpiece, 青い目のキツネ耳の旅人、朝の森、柔らかな日光",
                 )
                 negative = gr.Textbox(label="ネガティブプロンプト", value="oldest, low quality", lines=2)
-                preset = gr.Dropdown(choices=[*PRESETS, "カスタム"], value="正方形 · 768×768", label="解像度プリセット", filterable=False)
+                preset = gr.Dropdown(
+                    choices=[*PRESETS, "カスタム"], value="正方形 · 768×768", label="解像度プリセット", filterable=False
+                )
                 with gr.Row():
-                    width = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=16, label="幅 px", min_width=95, elem_id="nanosaur2-width")
+                    width = gr.Number(
+                        value=768,
+                        precision=0,
+                        minimum=256,
+                        maximum=2048,
+                        step=16,
+                        label="幅 px",
+                        min_width=95,
+                        elem_id="nanosaur2-width",
+                    )
                     swap_size = gr.Button("縦横入替", size="sm", scale=0, min_width=70, elem_id="nanosaur2-swap-size")
-                    height = gr.Number(value=768, precision=0, minimum=256, maximum=2048, step=16, label="高さ px", min_width=95, elem_id="nanosaur2-height")
-                with gr.Accordion("詳細設定", open=False):
+                    height = gr.Number(
+                        value=768,
+                        precision=0,
+                        minimum=256,
+                        maximum=2048,
+                        step=16,
+                        label="高さ px",
+                        min_width=95,
+                        elem_id="nanosaur2-height",
+                    )
+                with gr.Accordion("詳細設定", open=False) as advanced:
                     steps = gr.Slider(1, 100, value=50, step=1, label="Steps")
                     cfg = gr.Slider(1, 12, value=4, step=0.1, label="CFG")
                     seed = gr.Textbox(value="-1", label="Seed（-1でランダム）")
@@ -202,7 +223,7 @@ def on_ui_tabs():
                     generate = gr.Button("画像を生成", variant="primary")
                     cancel = gr.Button("停止", interactive=False)
                 status = gr.HTML("未実行。", elem_id="nanosaur2-status")
-            with gr.Column(scale=1, min_width=320):
+            with gr.Column(scale=1, min_width=320) as output_column:
                 result = gr.Image(
                     label="生成画像", type="filepath", format="png", interactive=False, elem_id="nanosaur2-result"
                 )
@@ -210,6 +231,18 @@ def on_ui_tabs():
                 gr.Markdown("保存先: `outputs/nanosaur2/`")
                 with gr.Accordion("生成条件", open=False):
                     metadata = gr.JSON(label="生成条件")
+        from modules_forge.image_workspace import ImageWorkspace
+
+        ImageWorkspace(
+            tab,
+            "nanosaur2-common",
+            models=[checkpoint_refresh.parent],
+            prompts=[prompt, negative],
+            actions=[generate, cancel, status],
+            settings=[steps, cfg, preset, swap_size.parent, seed],
+            outputs=[output_column],
+            panels={"生成詳細": [advanced]},
+        )
         job = gr.State({})
         private = {"api_visibility": "private", "show_progress": "hidden"}
         tab.load(_setup_state, outputs=setup_status, **private)
@@ -220,7 +253,13 @@ def on_ui_tabs():
             queue=False,
             **private,
         )
-        swap_size.click(lambda w, h: (h, w, "カスタム"), inputs=[width, height], outputs=[width, height, preset], queue=False, **private)
+        swap_size.click(
+            lambda w, h: (h, w, "カスタム"),
+            inputs=[width, height],
+            outputs=[width, height, preset],
+            queue=False,
+            **private,
+        )
         for control in (width, height):
             control.input(lambda: "カスタム", outputs=preset, queue=False, **private)
         setup.click(

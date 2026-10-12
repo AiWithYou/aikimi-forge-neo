@@ -30,9 +30,9 @@ class Cancelled(RuntimeError):
     pass
 
 
-def check_restoration_output(module, args, output):
+def check_model_output(module, args, output):
     if not torch.isfinite(output.x).all():
-        raise ValueError("復元結果に非有限値が含まれています。")
+        raise ValueError("モデル出力に非有限値が含まれています。")
 
 
 class PreparedText:
@@ -182,6 +182,15 @@ class Runner:
         torch.cuda.reset_peak_memory_stats()
         calls = 0
         total = request.get("steps", 1) if self.task == "generate" else 1
+        image_mode = request.get("image_mode", "txt2img") if self.task == "generate" else None
+        image_plan = None
+        if image_mode == "img2img":
+            from .img2img import image_schedule
+
+            if request.get("sampling", {}).get("mode") == "turbo":
+                raise ValueError("img2imgではTurbo LoRAを外して通常サンプリングを使ってください。")
+            image_plan = image_schedule(request["steps"], request["strength"], self.cfg.flow.shift)
+            total = image_plan.steps
         if request.get("sampling", {}).get("mode") == "turbo" and request["cfg"] != 1:
             total *= 2
 
@@ -196,55 +205,81 @@ class Runner:
             )
 
         hook = self.model.register_forward_pre_hook(progress)
-        finite_hook = self.model.register_forward_hook(check_restoration_output) if self.task == "upscale" else None
+        finite_hook = self.model.register_forward_hook(check_model_output) if self.task != "depth" else None
         files = []
         try:
             if self.task == "generate":
                 from iris3b.sampling import generate
 
-                atomic_json(directory / "progress.json", {"stage": "プロンプトを読み込み中"})
-                text = self.prepare_text(request)
-                self.model.cuda()
-                with torch.autocast("cuda", dtype=torch.bfloat16):
-                    if request.get("sampling", {}).get("mode") == "turbo":
-                        from .turbo import generate_turbo
+                input_image = None
+                if image_plan is not None:
+                    from .img2img import image_pixels, resized_input
 
-                        if self.cfg.flow.prediction != "v" or self.cfg.flow.num_train_timesteps != 1000:
-                            raise ValueError("Turbo LoRAには標準のIris flow設定が必要です。")
-                        pixels = generate_turbo(
-                            self.model,
-                            text,
-                            [request["prompt"]],
-                            request["height"],
-                            request["width"],
-                            request["steps"],
-                            request["sampling"]["shift"],
-                            torch.Generator(device="cuda").manual_seed(request["seed"]),
-                            cfg_scale=request["cfg"],
-                            negative_prompt=request["negative_prompt"],
-                        )
-                    else:
-                        pixels = generate(
-                            self.model,
-                            text,
-                            [request["prompt"]],
-                            height=request["height"],
-                            width=request["width"],
-                            steps=request["steps"],
-                            order=2,
-                            cfg_scale=request["cfg"],
-                            cfg_interval=tuple(self.cfg.sample.cfg_interval),
-                            shift=self.cfg.flow.shift,
-                            negative_prompt=request["negative_prompt"],
-                            generator=torch.Generator(device="cuda").manual_seed(request["seed"]),
-                            num_train_timesteps=self.cfg.flow.num_train_timesteps,
-                            prediction=self.cfg.flow.prediction,
-                        )
-                if not torch.isfinite(pixels).all():
-                    raise ValueError("生成結果に非有限値が含まれています。")
-                image = Image.fromarray(
-                    ((pixels[0].float().clamp(-1, 1) + 1) * 127.5).round().byte().permute(1, 2, 0).cpu().numpy()
-                )
+                    input_image = resized_input(request["image"], request["width"], request["height"])
+                if image_plan is not None and image_plan.steps == 0:
+                    image = input_image
+                else:
+                    atomic_json(directory / "progress.json", {"stage": "プロンプトを読み込み中"})
+                    text = self.prepare_text(request)
+                    self.model.cuda()
+                    with torch.autocast("cuda", dtype=torch.bfloat16):
+                        if request.get("sampling", {}).get("mode") == "turbo":
+                            from .turbo import generate_turbo
+
+                            if self.cfg.flow.prediction != "v" or self.cfg.flow.num_train_timesteps != 1000:
+                                raise ValueError("Turbo LoRAには標準のIris flow設定が必要です。")
+                            pixels = generate_turbo(
+                                self.model,
+                                text,
+                                [request["prompt"]],
+                                request["height"],
+                                request["width"],
+                                request["steps"],
+                                request["sampling"]["shift"],
+                                torch.Generator(device="cuda").manual_seed(request["seed"]),
+                                cfg_scale=request["cfg"],
+                                negative_prompt=request["negative_prompt"],
+                            )
+                        elif image_plan is not None:
+                            from .img2img import generate_img2img
+
+                            pixels = generate_img2img(
+                                self.model,
+                                text,
+                                [request["prompt"]],
+                                image_pixels(input_image),
+                                image_plan,
+                                cfg_scale=request["cfg"],
+                                cfg_interval=tuple(self.cfg.sample.cfg_interval),
+                                negative_prompt=request["negative_prompt"],
+                                generator=torch.Generator(device="cuda").manual_seed(request["seed"]),
+                                num_train_timesteps=self.cfg.flow.num_train_timesteps,
+                                prediction=self.cfg.flow.prediction,
+                            )
+                        else:
+                            pixels = generate(
+                                self.model,
+                                text,
+                                [request["prompt"]],
+                                height=request["height"],
+                                width=request["width"],
+                                steps=request["steps"],
+                                order=2,
+                                cfg_scale=request["cfg"],
+                                cfg_interval=tuple(self.cfg.sample.cfg_interval),
+                                shift=self.cfg.flow.shift,
+                                negative_prompt=request["negative_prompt"],
+                                generator=torch.Generator(device="cuda").manual_seed(request["seed"]),
+                                num_train_timesteps=self.cfg.flow.num_train_timesteps,
+                                prediction=self.cfg.flow.prediction,
+                            )
+                    if not torch.isfinite(pixels).all():
+                        raise ValueError("生成結果に非有限値が含まれています。")
+                    image = Image.fromarray(
+                        ((pixels[0].float().clamp(-1, 1) + 1) * 127.5).round().byte().permute(1, 2, 0).cpu().numpy()
+                    )
+                if image_plan is not None:
+                    files.append(request["image"])
             else:
                 with Image.open(request["image"]) as source:
                     image = source.convert("RGB")
@@ -323,6 +358,16 @@ class Runner:
                         "sha256": sha256(request["image"]),
                         "size": list(input_image.size),
                     }
+            if image_plan is not None:
+                metadata["schedule"] = image_plan.metadata()
+                metadata["schedule"].update(
+                    forward_calls=calls,
+                    prediction=self.cfg.flow.prediction,
+                    num_train_timesteps=self.cfg.flow.num_train_timesteps,
+                    cfg_interval=list(self.cfg.sample.cfg_interval),
+                )
+                metadata["input"]["resize"] = {"mode": "resize", "resample": "bicubic", "size": result["size"]}
+                result.update(image_mode=image_mode, strength=request["strength"], executed_steps=total)
             atomic_json(directory / "progress.json", {"stage": "終了処理中"})
         finally:
             hook.remove()
@@ -331,6 +376,6 @@ class Runner:
             self.offload()
         result["seconds"] = metadata["seconds"] = time.perf_counter() - begin
         atomic_json(directory / "metadata.json", metadata)
-        result["files"] = files + [str(directory / "metadata.json")]
+        result["files"].append(str(directory / "metadata.json"))
         atomic_json(directory / "result.json", result)
         return result

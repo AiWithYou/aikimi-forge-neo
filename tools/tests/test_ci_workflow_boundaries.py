@@ -7,6 +7,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CiWorkflowBoundaryTests(unittest.TestCase):
+    def test_shared_image_workspace_is_linted_in_ci(self):
+        lint = self.workflow("lint.yml")
+        for path in (
+            "modules_forge/image_workspace.py",
+            "tools/tests/test_image_workspace*.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(lint.count(f'"{path}"'), 2)
+                self.assertIn(f"            {path}\n", lint)
+
     def test_krea_text_conditioning_cache_is_checked_in_ci(self):
         lint = self.workflow("lint.yml")
         windows = self.workflow("windows-smoke.yml")

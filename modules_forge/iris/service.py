@@ -32,6 +32,8 @@ class Service:
             request["loras"] = snapshot(self.root, request.get("loras", []))
             request["sampling"] = sampling_settings(request["loras"])
             if request["sampling"]["mode"] == "turbo":
+                if request["image_mode"] == "img2img":
+                    raise IrisError("img2imgではTurbo LoRAを外して通常サンプリングを使ってください。")
                 if "steps" not in value:
                     request["steps"] = request["sampling"]["default_steps"]
                 if "cfg" not in value:
@@ -50,7 +52,7 @@ class Service:
         directory = ROOT / "outputs" / "iris" / identifier
         try:
             directory.mkdir(parents=True)
-            if request["task"] != "generate":
+            if request["task"] != "generate" or request.get("image_mode") == "img2img":
                 image = request["image"]
                 if not isinstance(image, Image.Image):
                     raise IrisError("入力画像をアップロードしてください。")

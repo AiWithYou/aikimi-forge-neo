@@ -550,6 +550,16 @@ def continue_canvas(identifier, request: gr.Request, variant="preferred"):
     return gallery, selected, controls, target, background, foreground, panel, title, view
 
 
+def canvas_inputs_for_mode(mode, gallery, annotation_target, preserve_unmasked, control_inpaint, resolution):
+    if mode == "txt2img":
+        return [], "", False, False, "custom" if resolution == "reference" else resolution
+    if mode != "img2img":
+        raise QwenImage21Error("生成モードを選択してください。")
+    if not reference_paths(gallery):
+        raise QwenImage21Error("img2imgの参照画像を追加してください。")
+    return gallery, annotation_target, preserve_unmasked, control_inpaint, resolution
+
+
 def start_canvas(
     prompt,
     gallery,
@@ -591,10 +601,24 @@ def start_canvas(
     allow_lora_base_mismatch=False,
     local_model="",
     local_components="",
+    image_mode=None,
 ):
     # Keep the bridge files alive until Studio.start snapshots the request.
     # The original reference is still read from Gallery, never from this preview.
     try:
+        if image_mode is not None:
+            gallery, annotation_target, preserve_unmasked, control_inpaint, resolution = canvas_inputs_for_mode(
+                image_mode,
+                gallery,
+                annotation_target,
+                preserve_unmasked,
+                control_inpaint,
+                resolution,
+            )
+            if image_mode == "txt2img":
+                background = foreground = mask_background = mask_foreground = mask_upload = None
+                mask_target = ""
+                rewrite_edit_prompt = False
         with TemporaryDirectory(prefix="qwen-canvas-") as temporary:
             directory = Path(temporary)
             editor = None
@@ -1164,7 +1188,7 @@ def on_ui_tabs():
                     )
                     with gr.Row():
                         edit_result = gr.Button(
-                            "この画像を続けて編集",
+                            "img2imgへ送る",
                             interactive=False,
                             elem_id="qwen21-edit-result",
                             variant="primary",
@@ -1379,7 +1403,7 @@ def on_ui_tabs():
                                 elem_id="qwen21-control-image",
                             )
                             gr.Markdown("種類に応じた制御画像を用意してください。自動抽出は行いません。")
-                    with gr.Accordion("生成設定", open=False, elem_id="qwen21-advanced"):
+                    with gr.Accordion("生成設定", open=False, elem_id="qwen21-advanced") as advanced:
                         memory_mode = gr.Radio(
                             [("CPUへ退避 · VRAM節約", "offload"), ("GPUに配置", "gpu")],
                             value="offload",
@@ -1490,6 +1514,47 @@ def on_ui_tabs():
                         elem_id="qwen21-status",
                     )
                 assistant = gr.HTML(visible="hidden", elem_id="qwen21-assistant-state")
+        from modules_forge.image_workspace import ImageWorkspace
+
+        result_view.visible = True
+        annotation_panel.visible = "hidden"
+        workspace_view.visible = "hidden"
+        workspace = ImageWorkspace(
+            tab,
+            "qwen21-common",
+            editable=True,
+            models=[source_refresh.parent],
+            prompts=[prompt],
+            actions=[generate, stop, status, lora_gate],
+            settings=[steps, resolution, swap_size.parent, seed],
+            references=[edit_view],
+            outputs=[result_view],
+            panels={
+                "LoRA": [lora_section],
+                "ControlNet": [control_section],
+                "透過": [transparent],
+                "書き換え": [rewrite_prompt.parent],
+                "生成詳細": [precision, memory_mode, fun_acc, advanced],
+            },
+            badges={"LoRA": style_loras, "ControlNet": control_kind, "透過": transparent},
+        )
+        workspace.mode.change(
+            lambda mode, value: (
+                gr.update(
+                    choices=RESOLUTIONS
+                    if mode == "img2img"
+                    else [choice for choice in RESOLUTIONS if choice[1] != "reference"],
+                    value="custom" if mode == "txt2img" and value == "reference" else value,
+                ),
+                gr.update(visible=True if mode == "img2img" else "hidden"),
+            ),
+            inputs=[workspace.mode, resolution],
+            outputs=[resolution, control_inpaint],
+            queue=False,
+            **PRIVATE,
+        )
+        control_inpaint.visible = "hidden"
+        resolution.choices = [choice for choice in resolution.choices if choice[1] != "reference"]
         control_kind.change(
             lambda kind: (
                 gr.update(visible=True if kind != "off" else "hidden"),
@@ -1645,7 +1710,6 @@ def on_ui_tabs():
                 outputs=[lora_section, lora_gate, generate],
                 **PRIVATE,
             )
-        workspace_view.change(switch_workspace, inputs=workspace_view, outputs=[edit_view, result_view], **PRIVATE)
         generate.click(
             start_canvas,
             inputs=[
@@ -1688,6 +1752,7 @@ def on_ui_tabs():
                 allow_lora_base_mismatch,
                 local_model,
                 local_components,
+                workspace.mode,
             ],
             outputs=[job, status, generate, stop, timer, output, files, use, edit_result, effective_prompt],
             concurrency_limit=1,
@@ -1796,6 +1861,10 @@ def on_ui_tabs():
             inputs=[job, gallery, result_variant],
             outputs=[gallery, selected, reference_controls],
             **PRIVATE,
+        ).then(
+            lambda: workspace.select_mode("img2img"),
+            outputs=[workspace.mode, workspace.tabs, workspace.references],
+            **PRIVATE,
         )
         edit_result.click(
             continue_canvas,
@@ -1811,6 +1880,10 @@ def on_ui_tabs():
                 annotation_title,
                 workspace_view,
             ],
+            **PRIVATE,
+        ).then(
+            lambda: workspace.select_mode("img2img"),
+            outputs=[workspace.mode, workspace.tabs, workspace.references],
             **PRIVATE,
         )
         check.click(check_runtime, outputs=environment, **PRIVATE)

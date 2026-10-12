@@ -37,6 +37,7 @@ Private Vulnerability Reportingを有効にできないreleaseは、第三者向
 - [ ] Windows smoke testが通る
 - [ ] installer functional testが通る
 - [ ] Ruff checkとformat checkが通る
+- [ ] 共通画像画面と各Studioの操作・モード切替がCIの検査対象に含まれる
 - [ ] PowerShell parserがすべての`.ps1`を受理する
 - [ ] actionlintがworkflowを受理する
 - [ ] pip-auditのfindingを確認した

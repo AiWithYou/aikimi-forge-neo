@@ -69,7 +69,11 @@ class ConsistencyUiTests(unittest.TestCase):
         )
         self.assertEqual(len(event["outputs"]), 3)
         selection = event["outputs"][0]
-        changed = next(item for item in config["dependencies"] if (selection, "change") in item["targets"])
+        changed = next(
+            item
+            for item in config["dependencies"]
+            if (selection, "change") in item["targets"] and demo.fns[item["id"]].fn is self.ui.lora_selection
+        )
         mismatch = next(key for key, props in components.items() if props.get("label") == "異なる量子化で試す（実験）")
         self.assertEqual(changed["inputs"], [selection, event["outputs"][1], mismatch])
 

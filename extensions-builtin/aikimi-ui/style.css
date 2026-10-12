@@ -1,4 +1,53 @@
-/* Aikimi-owned UI only. Forge-derived tabs intentionally keep Forge styling. */
+/* Aikimi-owned UI uses Forge's theme variables and spacing. */
+
+.aikimi-image-ui { border: 0 !important; padding: 0 !important; background: transparent !important; gap: 12px; }
+.aikimi-image-model { align-items: end; }
+.aikimi-image-model > .row { flex: 1; min-width: 0 !important; }
+.aikimi-image-modes > .tabitem { display: none !important; }
+.aikimi-image-modes { border: 0 !important; }
+.aikimi-image-tools { gap: 6px; flex-wrap: wrap; }
+.aikimi-image-tools button { min-height: 32px; }
+.aikimi-image-tools button[aria-expanded="true"] { box-shadow: inset 0 -2px 0 var(--color-accent, var(--primary-500)); }
+.aikimi-image-toprow { align-items: stretch; gap: 12px; }
+.aikimi-image-prompts textarea { min-height: 100px; max-height: 220px; }
+.aikimi-image-actions { gap: 8px; }
+.aikimi-image-actions > button { width: 100%; min-height: 44px; }
+.aikimi-image-actions :is(#qwen21-stop, #ming-cancel) { width: 100%; flex: 0 0 auto !important; }
+.aikimi-image-workspace { align-items: start; gap: 16px; }
+.aikimi-image-settings, .aikimi-image-output { min-width: 0 !important; gap: 12px; }
+.aikimi-image-output > .column { min-width: 0 !important; width: 100%; max-width: none !important; }
+.aikimi-image-references { border: 0 !important; padding: 0 !important; background: transparent !important; }
+.aikimi-image-parameters { border: 0 !important; padding: 0 !important; background: transparent !important; }
+.aikimi-image-ui #qwen21-edit-tab:not(:has(#qwen21-references img)) #qwen21-annotation-panel { display: none !important; }
+.aikimi-image-panel { padding: 12px !important; }
+.aikimi-image-panel-content { border: 0 !important; padding: 0 !important; }
+.aikimi-image-panel-content > .label-wrap { display: none !important; }
+.aikimi-image-panel #qwen21-workspace { display: flex; flex-direction: column; }
+.aikimi-image-panel #qwen21-controls, .aikimi-image-panel #qwen21-visual { flex: 1 1 auto !important; width: 100%; padding: 0; }
+.aikimi-image-panel #qwen21-run-dock { position: static; width: auto; }
+.aikimi-image-panel .sn-main-grid { grid-template-columns: 1fr !important; }
+.aikimi-image-panel .sn-hero, .aikimi-image-panel .sn-section-title, .aikimi-image-panel .sn-mode-note { display: none; }
+
+/* Show one mode selector for the active image model. */
+body:has(#aikimi-feature-nav:is(
+    [data-active-feature="qwen_image21"], [data-active-feature="ming_image"], [data-active-feature="sensenova"],
+    [data-active-feature="minimax_h3_image"], [data-active-feature="nanosaur2"], [data-active-feature="iris"]
+)) #tabs > :is(.tab-nav, .tab-wrapper) [role="tablist"] > button:is(
+    [aria-controls="tab_txt2img"], [aria-controls="tab_img2img"]
+) { display: none !important; }
+body:has(#aikimi-feature-nav:is(
+    [data-active-feature="qwen_image21"], [data-active-feature="ming_image"], [data-active-feature="sensenova"],
+    [data-active-feature="minimax_h3_image"], [data-active-feature="nanosaur2"], [data-active-feature="iris"]
+)) #tabs > .tab-nav > button:is([aria-controls="tab_txt2img"], [aria-controls="tab_img2img"]) { display: none !important; }
+#aikimi-feature-nav + #tabs > :is(.tab-nav, .tab-wrapper) [role="tablist"] > button[aria-controls="tab_iris_studio"],
+#aikimi-feature-nav + #tabs > .tab-nav > button[aria-controls="tab_iris_studio"] { display: none !important; }
+
+@media (max-width: 760px) {
+    .aikimi-image-toprow, .aikimi-image-workspace { flex-direction: column; }
+    .aikimi-image-prompts, .aikimi-image-actions, .aikimi-image-settings, .aikimi-image-output { width: 100%; }
+    .aikimi-image-actions { flex-direction: row; flex-wrap: wrap; }
+    .aikimi-image-actions > button { flex: 1; width: auto; }
+}
 
 #aikimi-feature-nav.aikimi-feature-nav {
     display: flex;

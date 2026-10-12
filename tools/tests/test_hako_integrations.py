@@ -616,7 +616,7 @@ class NegPiPUITests(unittest.TestCase):
         with mock.patch.object(module, "_initial_runtime", return_value=""):
             tabs = module.on_ui_tabs()
         blocks = tabs[0][0]
-        functions = {entry.fn.__name__: entry for entry in blocks.fns.values() if entry.fn is not None}
+        functions = {entry.fn.__name__: entry for entry in blocks.fns.values() if entry.fn is not None and hasattr(entry.fn, "__name__")}
         generate_inputs = functions["_generate"].inputs
         runtime_inputs = functions["_runtime_action"].inputs
         restart_inputs = functions["_restart"].inputs

@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.1.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.1.0)** · [変更履歴](CHANGELOG.md)
+**[v4.5.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.5.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -56,7 +56,7 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | 画像生成・編集・透過PNG・拡張。専用画面を使用 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | 作曲・ABC楽譜編集。**YuE2 Music** タブを使用 | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1：公式Python** |
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
-| [Iris-3B](extensions-builtin/iris-studio/README.md) | 画像生成・相対深度推定・復元と4倍拡大。通常版／INT8／W4A8、互換LoRAと4ステップTurbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
+| [Iris-3B](extensions-builtin/iris-studio/README.md) | 画像生成・img2img・相対深度推定・復元と4倍拡大。通常版／INT8／W4A8、互換Full FT・LoRAと4ステップTurbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
 
 初回はモデルと必要な実行環境のダウンロード・変換に時間がかかります。Qwenの既定モデルは通常版Q4_K_Mです。Irisは選択した用途の重みを取得し、INT8・W4A8はHugging Faceの変換済み配布を使います。W4A8は画像生成用のテキストエンコーダーも圧縮します。[Irisの導入・検証](docs/iris-studio.md)
 
@@ -136,6 +136,7 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 |---|---|
 | 周囲の描き足し | [Qwen Outpaint](extensions-builtin/qwen-image21-studio/README.md#outpaint補助)。辺や角をドラッグして範囲を指定。境界幅0では元画像の全画素を保持します |
 | マスク・制御画像編集 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md)（囲み注釈、マスク、Fun ControlNet） |
+| 入力画像から描き直す | [Iris img2img](docs/iris-studio.md#入力画像から描き直すimg2img)。互換Full FTを選び、変更強度0〜1を調整。通常サンプリングで使用します |
 | 4K／8K再作画 | [Krea2高解像度処理](docs/krea2_local_supersample_detail_ja.md)・[HyperWeave](extensions-builtin/hyperweave/README.md)。細部はモデルが推定するため変化します。一部は実験機能です |
 | 粒状感抑制 | Extras → [Grain Cleaner](docs/grain-cleaner.md)（追加モデル不要・CPU処理） |
 | 背景透過PNG化 | Extras → [背景除去](docs/background-removal.md)（単画像・バッチ対応） |
@@ -143,7 +144,7 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 
 ### 普段の操作
 
-- Forgeの`txt2img`・`img2img`・Extrasを使えます。上部のショートカットからモデル別の画面へ移動できます。
+- Forgeの`txt2img`・`img2img`・Extrasを使えます。上部のモデルボタンから画像生成の系列を選び、共通の配置で生成・編集できます。LoRAやControlNetなどは上部ボタンで開閉します。[画像生成の共通画面](docs/image-workspace.md)
 - **GPU・モデル保持** で「連続生成を優先」を選ぶと、次の生成までモデルを保持します。手動解放もできます。[モデル保持の使い方](docs/model-retention.md)
 - **ちびあいきみ** をクリックすると進行状況や順番待ちを確認できます。ドラッグで移動し、上部のメニューで表示を切り替えられます。
 

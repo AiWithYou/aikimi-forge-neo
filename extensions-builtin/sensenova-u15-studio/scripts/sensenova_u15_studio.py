@@ -240,14 +240,8 @@ def _mode_updates(mode: str, current_resolution: str, fast_available: bool):
     if mode == MODE_EDIT:
         selected = "custom" if current_resolution == "custom" else "auto"
     else:
-        selected = (
-            current_resolution
-            if current_resolution in values and current_resolution != "auto"
-            else "2048x2048"
-        )
-    text_profile = (
-        PROFILE_OFFICIAL_8STEP if fast_available else PROFILE_QUALITY
-    )
+        selected = current_resolution if current_resolution in values and current_resolution != "auto" else "2048x2048"
+    text_profile = PROFILE_OFFICIAL_8STEP if fast_available else PROFILE_QUALITY
     return (
         gr.update(visible=mode == MODE_EDIT),
         gr.update(choices=choices, value=selected),
@@ -269,9 +263,7 @@ def _mode_updates(mode: str, current_resolution: str, fast_available: bool):
         ),
         gr.update(
             visible=mode == MODE_TEXT,
-            value=(
-                text_profile if mode == MODE_TEXT else PROFILE_QUALITY
-            ),
+            value=(text_profile if mode == MODE_TEXT else PROFILE_QUALITY),
         ),
         gr.update(
             value=8 if mode == MODE_TEXT and fast_available else 50,
@@ -363,7 +355,8 @@ def _request_from_ui(
 ) -> SenseNovaRequest:
     width, height = (
         custom_dimensions(custom_width, custom_height, minimum=512)
-        if resolution == "custom" else parse_resolution(resolution, mode)
+        if resolution == "custom"
+        else parse_resolution(resolution, mode)
     )
     images = normalize_gallery_images(gallery) if mode == MODE_EDIT else ()
     request = SenseNovaRequest(
@@ -445,8 +438,10 @@ def _summary_from_ui(
         except (SenseNovaBridgeError, ValueError, TypeError, OverflowError) as exc:
             # An untouched prompt is an empty draft, not a failed operation.
             # Submission still uses the full validator and reports this error.
-            message = "" if not request.prompt.strip() and str(exc) == "プロンプトを入力してください。" else (
-                f'<p class="sn-inline-error" role="alert">{html.escape(str(exc))}</p>'
+            message = (
+                ""
+                if not request.prompt.strip() and str(exc) == "プロンプトを入力してください。"
+                else (f'<p class="sn-inline-error" role="alert">{html.escape(str(exc))}</p>')
             )
         return request_summary_html(request), message
     except (SenseNovaBridgeError, ValueError, TypeError, OverflowError) as exc:
@@ -583,9 +578,7 @@ def _load_checkpoints():
 def _build_ui():
     selected_checkpoint = load_checkpoint_selection()
     initial_status = inspect_runtime(DEFAULT_SOURCE_PATH, checkpoint=selected_checkpoint)
-    initial_profile = (
-        PROFILE_OFFICIAL_8STEP if initial_status.lora_ready else PROFILE_QUALITY
-    )
+    initial_profile = PROFILE_OFFICIAL_8STEP if initial_status.lora_ready else PROFILE_QUALITY
     initial_steps = 8 if initial_status.lora_ready else 50
     initial_cfg = 1.0 if initial_status.lora_ready else 4.0
     initial_request = SenseNovaRequest(
@@ -610,23 +603,23 @@ def _build_ui():
                 """
             )
             with gr.Row():
-                checkpoint_path = configure_component(gr.Dropdown(
-                    choices=checkpoint_choices(selected_checkpoint),
-                    value=selected_checkpoint, label="チェックポイント", scale=5,
-                ))
+                checkpoint_path = configure_component(
+                    gr.Dropdown(
+                        choices=checkpoint_choices(selected_checkpoint),
+                        value=selected_checkpoint,
+                        label="チェックポイント",
+                        scale=5,
+                    )
+                )
                 refresh_checkpoints = gr.Button("一覧を更新", scale=1)
-            runtime_status = gr.HTML(
-                value=runtime_status_html(initial_status), elem_id="sn-runtime-status"
-            )
+            runtime_status = gr.HTML(value=runtime_status_html(initial_status), elem_id="sn-runtime-status")
             quantization = gr.State(QUANT_INT8_CONVROT)
             job_id = gr.State("")
             lora_ready = gr.State(initial_status.lora_ready)
 
             with gr.Row(elem_classes=["sn-main-grid"]):
                 with gr.Column(scale=6, min_width=430, elem_classes=["sn-compose"]):
-                    gr.HTML(
-                        '<div class="sn-section-title"><h3>つくる</h3></div>'
-                    )
+                    gr.HTML('<div class="sn-section-title"><h3>つくる</h3></div>')
                     mode = gr.Radio(
                         choices=[
                             ("テキストから生成", MODE_TEXT),
@@ -647,9 +640,7 @@ def _build_ui():
                         elem_id="sn-mode-note",
                     )
                     with gr.Group(elem_classes=["sn-prompt-card"]):
-                        gr.Markdown(
-                            "### プロンプト\n被写体、構図、質感、照明、文字、残したい要素を具体的に書きます。"
-                        )
+                        gr.Markdown("### プロンプト\n被写体、構図、質感、照明、文字、残したい要素を具体的に書きます。")
                         prompt = gr.Textbox(
                             label="SenseNovaプロンプト",
                             show_label=False,
@@ -686,9 +677,7 @@ def _build_ui():
                             elem_id="sn-reference-gallery",
                         )
                         selected_reference = gr.State(-1)
-                        reference_order = gr.HTML(
-                            value=reference_order_html([]), elem_id="sn-reference-order"
-                        )
+                        reference_order = gr.HTML(value=reference_order_html([]), elem_id="sn-reference-order")
                         gr.Markdown(
                             "参照優先では8枚、24GB Safeでは2枚まで。番号は現在の表示順です。並べ替えた後はプロンプトの役割も確認してください。"
                         )
@@ -726,9 +715,7 @@ def _build_ui():
                                 elem_id="sn-reference-upload",
                             )
                             with gr.Column(min_width=190):
-                                append_button = gr.Button(
-                                    "末尾へ追加", variant="secondary"
-                                )
+                                append_button = gr.Button("末尾へ追加", variant="secondary")
                                 replace_button = gr.Button("選択画像を差し替え", variant="secondary", interactive=False)
                                 with gr.Row():
                                     move_left_button = gr.Button("← 前へ", size="sm", interactive=False)
@@ -736,9 +723,7 @@ def _build_ui():
                                 remove_button = gr.Button("選択画像を削除", variant="stop", interactive=False)
                                 clear_button = gr.Button("すべて消去", variant="stop", interactive=False)
 
-                    gr.HTML(
-                        '<div class="sn-section-title"><h3>生成設定</h3></div>'
-                    )
+                    gr.HTML('<div class="sn-section-title"><h3>生成設定</h3></div>')
                     with gr.Group(elem_classes=["sn-settings-card"]):
                         generation_profile = gr.Radio(
                             choices=[
@@ -759,9 +744,27 @@ def _build_ui():
                             elem_id="sn-resolution",
                         )
                         with gr.Row(elem_id="sn-dimensions"):
-                            width = gr.Number(value=2048, precision=0, minimum=512, maximum=4096, step=32, label="幅 px", min_width=100, elem_id="sn-width")
+                            width = gr.Number(
+                                value=2048,
+                                precision=0,
+                                minimum=512,
+                                maximum=4096,
+                                step=32,
+                                label="幅 px",
+                                min_width=100,
+                                elem_id="sn-width",
+                            )
                             swap_size = gr.Button("縦横入替", size="sm", scale=0, min_width=70, elem_id="sn-swap-size")
-                            height = gr.Number(value=2048, precision=0, minimum=512, maximum=4096, step=32, label="高さ px", min_width=100, elem_id="sn-height")
+                            height = gr.Number(
+                                value=2048,
+                                precision=0,
+                                minimum=512,
+                                maximum=4096,
+                                step=32,
+                                label="高さ px",
+                                min_width=100,
+                                elem_id="sn-height",
+                            )
                         input_max_pixels = gr.Dropdown(
                             choices=[
                                 ("省メモリ · 各約0.26MP · 比率保護", str(512 * 512)),
@@ -773,7 +776,7 @@ def _build_ui():
                             label="参照画像の情報量",
                             visible=False,
                         )
-                        with gr.Accordion("詳細設定", open=False, elem_id="sn-advanced"):
+                        with gr.Accordion("詳細設定", open=False, elem_id="sn-advanced") as advanced:
                             with gr.Row():
                                 steps = gr.Slider(
                                     1,
@@ -852,12 +855,8 @@ def _build_ui():
                             elem_id="sn-generate",
                         )
 
-                with gr.Column(
-                    scale=5, min_width=390, elem_classes=["sn-result-column"]
-                ):
-                    gr.HTML(
-                        '<div class="sn-section-title"><h3>生成結果</h3></div>'
-                    )
+                with gr.Column(scale=5, min_width=390, elem_classes=["sn-result-column"]) as output_column:
+                    gr.HTML('<div class="sn-section-title"><h3>生成結果</h3></div>')
                     result_image = gr.Image(
                         type="filepath",
                         label="生成結果",
@@ -865,7 +864,7 @@ def _build_ui():
                         height=420,
                         elem_id="sn-result-image",
                     )
-                    reuse_button = gr.Button("結果をImage-1にして続ける", elem_id="sn-reuse-result", interactive=False)
+                    reuse_button = gr.Button("img2imgへ送る", elem_id="sn-reuse-result", interactive=False)
                     with gr.Row(elem_classes=["sn-downloads"]):
                         result_file = gr.File(
                             label="PNG",
@@ -895,7 +894,7 @@ def _build_ui():
                         "実行環境とモデル",
                         open=False,
                         elem_id="sn-runtime-setup",
-                    ):
+                    ) as runtime_setup:
                         with gr.Group(elem_classes=["sn-model-card"]):
                             gr.HTML(
                                 '<p class="sn-quant-note"><strong>正式版 · INT8 ConvRot</strong><br>参照優先では参照キャッシュを精度を保ったままCPUへ退避し、必要な層だけGPUへ転送します。出力は最大2K、参照は最大8枚です。被写体の比率は保ち、32pxグリッドの余白は端の画素で補います。</p>'
@@ -918,6 +917,22 @@ def _build_ui():
                                 elem_id="sn-refresh-runtime",
                             )
 
+        from modules_forge.image_workspace import ImageWorkspace
+
+        ImageWorkspace(
+            interface,
+            "sn-common",
+            editable=True,
+            models=[refresh_checkpoints.parent],
+            prompts=[prompt],
+            actions=[generate_button, cancel_button, validation, progress],
+            settings=[generation_profile, steps, cfg_scale, resolution, swap_size.parent, seed],
+            references=[reference_group, img_cfg_scale, input_max_pixels],
+            outputs=[output_column],
+            panels={"生成詳細": [advanced], "実行環境": [runtime_setup]},
+            native_mode=mode,
+            mode_values=(MODE_TEXT, MODE_EDIT),
+        )
         selection_event = reference_gallery.select(
             _select_reference,
             outputs=[selected_reference],
@@ -1013,10 +1028,22 @@ def _build_ui():
             queue=False,
         )
 
-        resolution.change(_resolution_updates, inputs=[resolution, mode], outputs=[width, height, swap_size], queue=False, show_progress="hidden")
+        resolution.change(
+            _resolution_updates,
+            inputs=[resolution, mode],
+            outputs=[width, height, swap_size],
+            queue=False,
+            show_progress="hidden",
+        )
         for dimension in (width, height):
             dimension.input(lambda: "custom", outputs=resolution, queue=False, show_progress="hidden")
-        swap_size.click(lambda w, h: (h, w, "custom"), inputs=[width, height], outputs=[width, height, resolution], queue=False, show_progress="hidden")
+        swap_size.click(
+            lambda w, h: (h, w, "custom"),
+            inputs=[width, height],
+            outputs=[width, height, resolution],
+            queue=False,
+            show_progress="hidden",
+        )
         mode.change(
             _mode_updates,
             inputs=[mode, resolution, lora_ready],
@@ -1194,15 +1221,26 @@ def _build_ui():
             api_visibility="private",
         )
         refresh_checkpoints.click(
-            _refresh_checkpoints, inputs=[checkpoint_path], outputs=[checkpoint_path],
-            queue=False, show_progress="hidden", api_visibility="private",
+            _refresh_checkpoints,
+            inputs=[checkpoint_path],
+            outputs=[checkpoint_path],
+            queue=False,
+            show_progress="hidden",
+            api_visibility="private",
         )
         checkpoint_path.input(
-            save_checkpoint_selection, inputs=[checkpoint_path],
-            queue=False, show_progress="hidden", api_visibility="private",
+            save_checkpoint_selection,
+            inputs=[checkpoint_path],
+            queue=False,
+            show_progress="hidden",
+            api_visibility="private",
         )
         checkpoint_load = interface.load(
-            _load_checkpoints, outputs=[checkpoint_path], queue=False, show_progress="hidden", api_visibility="private",
+            _load_checkpoints,
+            outputs=[checkpoint_path],
+            queue=False,
+            show_progress="hidden",
+            api_visibility="private",
         )
         checkpoint_load.then(
             _refresh_runtime,
