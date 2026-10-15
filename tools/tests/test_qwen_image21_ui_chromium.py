@@ -18,8 +18,7 @@ from PIL import Image
 from modules import ui_tempdir
 from modules.gradio_frontend_compat import build_patched_tabs_asset, create_gradio_compatibility_app
 from modules_forge import local_assets
-from tools.tests.chromium_helpers import chromium_memory_usage, find_chromium, reserve_local_port
-from tools.tests.test_gradio_frontend_compat_chromium import _wait_expression, cdp_page
+from tools.tests.chromium_helpers import cdp_page, chromium_memory_usage, find_chromium, reserve_local_port
 from tools.tests.test_qwen_image21_service import load_ui
 
 
@@ -195,37 +194,27 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
     def _assert_fun_controlnet_inputs_render(self, *, restored):
         first_event = len(self.setting_events)
         with cdp_page(self.chromium, self.url) as page:
-            self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 25000), timeout=30))
-            self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
+            self.assertTrue(page.wait_for('[role="tab"]', "true", 25000))
+            self.assertTrue(page.wait_for("#main-workspace-prompt textarea", "true"))
             page.evaluate(
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
-            self.assertTrue(page.evaluate(_wait_expression("#qwen21-generate", "true")))
+            self.assertTrue(page.wait_for("#qwen21-generate", "true"))
             if restored:
                 self._assert_setting_result(
                     page,
-                    page.evaluate(
-                        _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
-                        timeout=20,
-                    ),
+                    page.wait_for("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
                     first_event,
                 )
-                self.assertTrue(
-                    page.evaluate(_wait_expression("#qwen21-lora-strengths", "true", 3000)), page.exceptions
-                )
+                self.assertTrue(page.wait_for("#qwen21-lora-strengths", "true", 3000), page.exceptions)
             self.assertFalse(page.exceptions, "Qwen initialization failed before ControlNet interaction")
             # Scroll into view before opening, matching the user's interaction.
             page.evaluate("document.querySelector('#qwen21-common-panel-1-toggle').scrollIntoView({block: 'center'})")
             page.evaluate("document.querySelector('#qwen21-common-panel-1-toggle').click()")
-            self.assertTrue(
-                page.evaluate(_wait_expression("#qwen21-control-kind", "true", 8000), timeout=10), page.exceptions
-            )
+            self.assertTrue(page.wait_for("#qwen21-control-kind", "true", 8000), page.exceptions)
             page.evaluate("document.querySelector('#qwen21-control-kind input[value=canny]').click()")
             self.assertTrue(
-                page.evaluate(
-                    _wait_expression("#qwen21-control-image", "element.getBoundingClientRect().height > 0", 8000),
-                    timeout=10,
-                ),
+                page.wait_for("#qwen21-control-image", "element.getBoundingClientRect().height > 0", 8000),
                 page.exceptions,
             )
             visible = page.evaluate("""(() => {
@@ -239,20 +228,14 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             self.assertIn("前処理済みの制御画像", page.evaluate("document.body.innerText"))
             self._assert_setting_result(
                 page,
-                page.evaluate(
-                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
-                    timeout=20,
-                ),
+                page.wait_for("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
                 first_event,
             )
             self.assertTrue(
-                page.evaluate(
-                    _wait_expression(
-                        "#qwen21-lora-strengths",
-                        "JSON.stringify(Array.from(element.querySelectorAll('.header-cell[data-heading]'))"
-                        ".map(header => header.getAttribute('title'))) === '[\"LoRA\",\"強度\"]'",
-                    ),
-                    timeout=20,
+                page.wait_for(
+                    "#qwen21-lora-strengths",
+                    "JSON.stringify(Array.from(element.querySelectorAll('.header-cell[data-heading]'))"
+                    ".map(header => header.getAttribute('title'))) === '[\"LoRA\",\"強度\"]'",
                 ),
                 page.exceptions,
             )
@@ -265,23 +248,20 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
     def test_fun_acc_switch_keeps_selected_model_and_uses_four_steps(self):
         first_event = len(self.setting_events)
         with cdp_page(self.chromium, self.url) as page:
-            self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 45000), timeout=50))
-            self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
+            self.assertTrue(page.wait_for('[role="tab"]', "true", 45000))
+            self.assertTrue(page.wait_for("#main-workspace-prompt textarea", "true"))
             page.evaluate(
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
-            self.assertTrue(page.evaluate(_wait_expression("#qwen21-fun-acc input", "true", 15000)))
+            self.assertTrue(page.wait_for("#qwen21-fun-acc input", "true", 15000))
             self._assert_setting_result(
                 page,
-                page.evaluate(
-                    _wait_expression("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
-                    timeout=20,
-                ),
+                page.wait_for("#qwen21-precision input[role=listbox]", "element.value.includes('Q4_K_M')"),
                 first_event,
             )
             # Confirm the empty LoRA table is mounted after restoring the
             # saved model before changing Fun Acc settings.
-            self.assertTrue(page.evaluate(_wait_expression("#qwen21-lora-strengths", "true", 3000)), page.exceptions)
+            self.assertTrue(page.wait_for("#qwen21-lora-strengths", "true", 3000), page.exceptions)
             selected_model = page.evaluate("document.querySelector('#qwen21-precision input[role=listbox]')?.value")
             self.assertTrue(selected_model)
             page.evaluate("document.querySelector('#qwen21-fun-acc input').click()")
@@ -292,23 +272,19 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             )
             self._assert_setting_result(
                 page,
-                page.evaluate(
-                    _wait_expression(
-                        "#qwen21-steps",
-                        "Array.from(element.querySelectorAll('input')).some(input => input.value === '4' && input.disabled)",
-                        10000,
-                    )
+                page.wait_for(
+                    "#qwen21-steps",
+                    "Array.from(element.querySelectorAll('input')).some(input => input.value === '4' && input.disabled)",
+                    10000,
                 ),
                 first_event,
             )
             self.assertTrue(
-                page.evaluate(
-                    _wait_expression(
-                        "#qwen21-precision",
-                        f"element.querySelector('input[role=listbox]')?.value === {json.dumps(selected_model)} && "
-                        "!element.querySelector('input[role=listbox]')?.disabled",
-                        10000,
-                    )
+                page.wait_for(
+                    "#qwen21-precision",
+                    f"element.querySelector('input[role=listbox]')?.value === {json.dumps(selected_model)} && "
+                    "!element.querySelector('input[role=listbox]')?.disabled",
+                    10000,
                 ),
                 page.exceptions,
             )
@@ -354,15 +330,13 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
             peak_private = 0
             # Leave transport headroom after the DOM deadline, including cold
             # browser startup while the full offline suite is running.
-            self.assertTrue(page.evaluate(_wait_expression('[role="tab"]', "true", 25000), timeout=30))
-            self.assertTrue(page.evaluate(_wait_expression("#main-workspace-prompt textarea", "true")))
+            self.assertTrue(page.wait_for('[role="tab"]', "true", 25000))
+            self.assertTrue(page.wait_for("#main-workspace-prompt textarea", "true"))
             page.evaluate(
                 "Array.from(document.querySelectorAll('[role=tab]')).find(e=>e.innerText==='Qwen editing').click()"
             )
-            self.assertTrue(page.evaluate(_wait_expression("#qwen21-generate", "true")))
-            self.assertTrue(
-                page.evaluate(_wait_expression("body", "typeof ForgeCanvas === 'function'")), page.exceptions
-            )
+            self.assertTrue(page.wait_for("#qwen21-generate", "true"))
+            self.assertTrue(page.wait_for("body", "typeof ForgeCanvas === 'function'"), page.exceptions)
             self.assertFalse(page.evaluate("document.body.innerText.includes('PNG・生成条件を保存')"))
             page.evaluate("""(() => {
                 const input = document.querySelector('#qwen21-prompt textarea');
@@ -376,41 +350,31 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                     previous_src = page.evaluate("document.querySelector('#qwen21-output img')?.src || null")
                     page.evaluate("document.querySelector('#qwen21-generate').click()")
                     self.assertTrue(
-                        page.evaluate(
-                            _wait_expression(
-                                "body",
-                                "!document.querySelector('#qwen21-downloads') || "
-                                "document.querySelector('#qwen21-downloads').getClientRects().length === 0",
-                            )
+                        page.wait_for(
+                            "body",
+                            "!document.querySelector('#qwen21-downloads') || "
+                            "document.querySelector('#qwen21-downloads').getClientRects().length === 0",
                         )
                     )
                     if generation:
-                        self.assertTrue(
-                            page.evaluate(
-                                _wait_expression("#qwen21-output", "element.innerText.includes('前の結果')", 3000)
-                            )
-                        )
+                        self.assertTrue(page.wait_for("#qwen21-output", "element.innerText.includes('前の結果')", 3000))
                         self.assertTrue(previous_src)
                         self.assertEqual(
                             page.evaluate("document.querySelector('#qwen21-output img')?.src"), previous_src
                         )
                     self.assertTrue(
-                        page.evaluate(
-                            _wait_expression(
-                                "#qwen21-status textarea",
-                                f"element.value.includes('完了 · fixture-job-{generation + 1}')",
-                            )
+                        page.wait_for(
+                            "#qwen21-status textarea",
+                            f"element.value.includes('完了 · fixture-job-{generation + 1}')",
                         )
                     )
                     self.assertEqual(self.rewrite_settings[-1], generation == 1)
                     self.assertTrue(
-                        page.evaluate(
-                            _wait_expression(
-                                "#qwen21-downloads",
-                                "element.innerText.includes('PNG・生成条件を保存') && "
-                                "element.getBoundingClientRect().height > 0",
-                                5000,
-                            )
+                        page.wait_for(
+                            "#qwen21-downloads",
+                            "element.innerText.includes('PNG・生成条件を保存') && "
+                            "element.getBoundingClientRect().height > 0",
+                            5000,
                         ),
                         page.evaluate("document.body.innerText"),
                     )
@@ -421,12 +385,10 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                         if (!button.classList.contains('open')) button.click();
                     })()""")
                     self.assertTrue(
-                        page.evaluate(
-                            _wait_expression(
-                                "#qwen21-effective-prompt textarea",
-                                "element.value === 'A detailed glass bird on a wooden table.'",
-                                5000,
-                            )
+                        page.wait_for(
+                            "#qwen21-effective-prompt textarea",
+                            "element.value === 'A detailed glass bird on a wooden table.'",
+                            5000,
                         ),
                         str(page.exceptions) + str(page.evaluate("document.body.innerText")),
                     )
@@ -453,13 +415,11 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                     self.assertEqual(metadata["json"], {"seed": 123})
                     page.evaluate("document.querySelector('#qwen21-edit-result').click()")
                     self.assertTrue(
-                        page.evaluate(
-                            _wait_expression(
-                                "#qwen21-annotation-panel",
-                                "element.getBoundingClientRect().height > 0 && "
-                                "element.innerText.includes('Image 1') && "
-                                "document.querySelector('#qwen21-references img') !== null",
-                            )
+                        page.wait_for(
+                            "#qwen21-annotation-panel",
+                            "element.getBoundingClientRect().height > 0 && "
+                            "element.innerText.includes('Image 1') && "
+                            "document.querySelector('#qwen21-references img') !== null",
                         ),
                         page.evaluate("document.body.innerText"),
                     )
@@ -470,11 +430,9 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                             document.querySelector('#qwen21-annotation-panel').getBoundingClientRect().height > 0
                         ), 1200))""")
                     )
-                    canvas_ready = page.evaluate(
-                        _wait_expression(
-                            "#qwen21-annotation-editor .forge-image",
-                            "element.complete && element.naturalWidth === 1024 && element.getBoundingClientRect().width > 0",
-                        )
+                    canvas_ready = page.wait_for(
+                        "#qwen21-annotation-editor .forge-image",
+                        "element.complete && element.naturalWidth === 1024 && element.getBoundingClientRect().width > 0",
                     )
                     self.assertTrue(
                         canvas_ready,
@@ -504,9 +462,7 @@ class QwenImage21DownloadChromiumTests(unittest.TestCase):
                             "Array.from(document.querySelectorAll('#qwen21-reference-controls button')).find(b=>b.innerText==='後へ').click()"
                         )
                         self.assertTrue(
-                            page.evaluate(
-                                _wait_expression("#qwen21-references", "!!element.querySelector('input[type=file]')")
-                            ),
+                            page.wait_for("#qwen21-references", "!!element.querySelector('input[type=file]')"),
                             "Reordering a selected reference did not restore upload controls",
                         )
                     rss, private = chromium_memory_usage(page.process.pid)

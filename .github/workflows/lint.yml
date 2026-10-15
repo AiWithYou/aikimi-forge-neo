@@ -107,6 +107,7 @@ on:
       - "tools/tests/test_anima_reference_conditioning.py"
       - "modules_forge/minimax_h3_setup_ui.py"
       - "tools/tests/chromium_helpers.py"
+      - "tools/tests/chromium_process.py"
       - "tools/tests/test_additional_module_identity.py"
       - "tools/tests/test_aikimi_setup.py"
       - "tools/tests/test_aikimi_diagnostics.py"
@@ -114,6 +115,7 @@ on:
       - "tools/tests/test_aikimi_tabs_chromium.py"
       - "tools/tests/test_api_public_state.py"
       - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_chromium_process.py"
       - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_dependency_remediation.py"
       - "tools/tests/test_extension_git.py"
@@ -246,6 +248,7 @@ on:
       - "tools/tests/test_anima_reference_conditioning.py"
       - "modules_forge/minimax_h3_setup_ui.py"
       - "tools/tests/chromium_helpers.py"
+      - "tools/tests/chromium_process.py"
       - "tools/tests/test_additional_module_identity.py"
       - "tools/tests/test_aikimi_setup.py"
       - "tools/tests/test_aikimi_diagnostics.py"
@@ -253,6 +256,7 @@ on:
       - "tools/tests/test_aikimi_tabs_chromium.py"
       - "tools/tests/test_api_public_state.py"
       - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_chromium_process.py"
       - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_dependency_remediation.py"
       - "tools/tests/test_extension_git.py"
@@ -422,6 +426,7 @@ jobs:
             tools/tests/test_h3_union2_installers.py
             tools/tests/test_h3_union2_vae.py
             tools/tests/chromium_helpers.py
+            tools/tests/chromium_process.py
             tools/tests/test_additional_module_identity.py
             tools/tests/test_aikimi_setup.py
             tools/tests/test_aikimi_diagnostics.py
@@ -429,6 +434,7 @@ jobs:
             tools/tests/test_aikimi_tabs_chromium.py
             tools/tests/test_api_public_state.py
             tools/tests/test_chromium_helpers.py
+            tools/tests/test_chromium_process.py
             tools/tests/test_ci_audit_followup.py
             tools/tests/test_dependency_remediation.py
             tools/tests/test_extension_git.py

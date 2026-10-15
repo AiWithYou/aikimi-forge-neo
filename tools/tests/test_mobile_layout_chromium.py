@@ -3,12 +3,11 @@
 import html
 import json
 import re
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from tools.tests.chromium_helpers import find_chromium
+from tools.tests.chromium_helpers import find_chromium, render_chromium_dom
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "extensions-builtin/mobile/javascript/mobile.js"
@@ -49,32 +48,16 @@ class MobileLayoutChromiumTests(unittest.TestCase):
         source = SCRIPT.read_text(encoding="utf-8")
         document = FIXTURE + "<script>" + source + "</script><script>"
         document += "const checks={}; try {" + scenario + "} catch(e) {errors.push(e.message);}"
-        document += "get('result').textContent=JSON.stringify({checks,errors});</script>"
+        document += (
+            "get('result').textContent=JSON.stringify({checks,errors});get('result').dataset.ready='true';</script>"
+        )
         with tempfile.TemporaryDirectory(prefix="aikimi-mobile-test-") as directory:
             page = Path(directory) / "fixture.html"
             page.write_text(document, encoding="utf-8")
-            result = subprocess.run(  # noqa: S603
-                [
-                    self.chromium,
-                    "--headless=new",
-                    "--disable-gpu",
-                    "--disable-extensions",
-                    "--no-first-run",
-                    "--no-default-browser-check",
-                    f"--user-data-dir={Path(directory) / 'profile'}",
-                    "--dump-dom",
-                    page.as_uri(),
-                ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=30,
-                check=False,
-            )
-        self.assertEqual(result.returncode, 0, result.stderr[-1000:])
-        match = re.search(r'<pre id="result">(.*?)</pre>', result.stdout, re.DOTALL)
-        self.assertIsNotNone(match, result.stdout[-2000:])
+            rendered = render_chromium_dom(self.chromium, page.as_uri())
+        match = re.search(r'<pre id="result"[^>]*>(.*?)</pre>', rendered, re.DOTALL)
+        self.assertIsNotNone(match, rendered[-2000:])
+        self.assertIn('data-ready="true"', match.group(0))
         payload = json.loads(html.unescape(match.group(1)))
         self.assertEqual(payload["errors"], [])
         return payload["checks"]

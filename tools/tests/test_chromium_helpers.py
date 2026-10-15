@@ -57,18 +57,48 @@ class ChromiumPageLifecycleTests(unittest.TestCase):
         page = page or Mock()
         page.send.return_value = {}
         self.enterContext(patch.object(chromium_helpers, "reserve_local_port", return_value=9222))
-        self.spawn = self.enterContext(patch.object(chromium_helpers.subprocess, "Popen", return_value=process))
+        self.spawn = self.enterContext(patch.object(chromium_helpers, "spawn_chromium", return_value=process))
         self.endpoint = self.enterContext(
             patch.object(
                 chromium_helpers,
                 "urlopen",
-                return_value=BytesIO(b'{"webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}'),
+                return_value=BytesIO(
+                    b'[{"type":"page","webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}]'
+                ),
             )
         )
         self.connect = self.enterContext(patch.object(chromium_helpers, "_connect_websocket", return_value=websocket))
         self.enterContext(patch.object(chromium_helpers, "CdpPage", return_value=page))
         self.cleanup = self.enterContext(patch.object(chromium_helpers, "close_chromium"))
         return process, websocket, page
+
+    def test_uses_initial_foreground_page_without_creating_background_target(self):
+        _, _, page = self.start_page()
+        self.endpoint.return_value = BytesIO(
+            b'[{"type":"page","url":"about:blank","webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}]'
+        )
+        with chromium_helpers.cdp_page("chrome", "http://127.0.0.1/fixture"):
+            pass
+        request = self.endpoint.call_args.args[0]
+        self.assertEqual(request.full_url, "http://127.0.0.1:9222/json/list")
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(
+            page.send.call_args_list[:4],
+            [
+                call("Page.enable"),
+                call("Runtime.enable"),
+                call("Page.bringToFront"),
+                call("Page.navigate", {"url": "http://127.0.0.1/fixture"}, timeout=30),
+            ],
+        )
+        arguments = self.spawn.call_args.args[0]
+        for flag in (
+            "--disable-background-networking",
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+        ):
+            self.assertIn(flag, arguments)
 
     def test_expired_devtools_readiness_cleans_up_exact_owned_process(self):
         process, _, _ = self.start_page()
@@ -100,7 +130,7 @@ class ChromiumPageLifecycleTests(unittest.TestCase):
             if clock[0] == 0:
                 clock[0] = 11
                 raise OSError("browser still starting")
-            return BytesIO(b'{"webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}')
+            return BytesIO(b'[{"type":"page","webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}]')
 
         self.endpoint.side_effect = endpoint
         with (
@@ -118,7 +148,7 @@ class ChromiumPageLifecycleTests(unittest.TestCase):
 
         def late_endpoint(*_args, **_kwargs):
             clock[0] = 31
-            return BytesIO(b'{"webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}')
+            return BytesIO(b'[{"type":"page","webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}]')
 
         self.endpoint.side_effect = late_endpoint
         with (
@@ -152,7 +182,7 @@ class ChromiumPageLifecycleTests(unittest.TestCase):
 
     def test_navigation_error_closes_socket_and_owned_tree(self):
         process, websocket, page = self.start_page()
-        page.send.side_effect = [{}, {}, {"errorText": "net::ERR_CONNECTION_REFUSED"}]
+        page.send.side_effect = [{}, {}, {}, {"errorText": "net::ERR_CONNECTION_REFUSED"}]
         with (
             self.assertRaisesRegex(RuntimeError, "ERR_CONNECTION_REFUSED"),
             chromium_helpers.cdp_page("chrome", "http://127.0.0.1/fixture"),
@@ -162,6 +192,36 @@ class ChromiumPageLifecycleTests(unittest.TestCase):
         self.assertIs(self.cleanup.call_args.kwargs["websocket"], websocket)
         self.assertEqual(self.cleanup.call_args.kwargs["owned_port"], 9222)
         self.assertTrue(callable(self.cleanup.call_args.kwargs["close_browser"]))
+
+    def test_owned_job_is_closed_even_after_the_browser_root_exits(self):
+        process = FakeProcess()
+        process.returncode = 0
+        process.close_tree = Mock()
+        with (
+            patch.object(chromium_helpers, "_wait_for_port_release", return_value=True) as port,
+            patch.object(chromium_helpers.subprocess, "run") as taskkill,
+        ):
+            chromium_helpers._stop_process_tree(process, owned_port=9222)
+        process.close_tree.assert_called_once_with(timeout=5)
+        port.assert_called_once_with(9222)
+        taskkill.assert_not_called()
+
+    def test_owned_job_snapshots_live_children_without_sending_browser_close(self):
+        process = FakeProcess()
+        process.close_tree = Mock()
+        websocket = FakeWebSocket()
+        close_browser = Mock()
+        with patch.object(chromium_helpers, "_wait_for_port_release", return_value=True):
+            chromium_helpers.close_chromium(
+                process,
+                websocket=websocket,
+                close_browser=close_browser,
+                owned_port=9222,
+                profile_flush_delay=0,
+            )
+        close_browser.assert_not_called()
+        process.close_tree.assert_called_once_with(timeout=5)
+        self.assertTrue(websocket.closed)
 
     def test_fixture_exception_keeps_failure_and_cleans_up_before_profile_removal(self):
         process, websocket, _ = self.start_page()
@@ -180,6 +240,59 @@ class ChromiumPageLifecycleTests(unittest.TestCase):
 
 
 class ChromiumDomCompletionTests(unittest.TestCase):
+    def test_dom_wait_polls_without_page_timer_or_transport_deadline_collision(self):
+        clock = [0.0]
+        page = chromium_helpers.CdpPage(Mock())
+
+        def pending(expression, *, timeout):
+            self.assertNotIn("new Promise", expression)
+            self.assertNotIn("setTimeout", expression)
+            self.assertIn("document.querySelector", expression)
+            self.assertLessEqual(timeout, 0.05 - clock[0])
+            return False
+
+        def advance(duration):
+            clock[0] += duration
+
+        with (
+            patch.object(page, "evaluate", side_effect=pending) as evaluate,
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(chromium_helpers.time, "sleep", side_effect=advance),
+        ):
+            self.assertFalse(page.wait_for("#generate", "true", 50))
+        self.assertEqual(evaluate.call_count, 2)
+        self.assertEqual(clock[0], 0.05)
+
+    def test_dom_wait_ready_after_deadline_is_not_accepted(self):
+        clock = [0.0]
+        page = chromium_helpers.CdpPage(Mock())
+
+        def late(*_args, **_kwargs):
+            clock[0] = 0.051
+            return True
+
+        with (
+            patch.object(page, "evaluate", side_effect=late),
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+        ):
+            self.assertFalse(page.wait_for("#generate", "true", 50))
+
+    def test_dom_wait_allows_response_within_remaining_dom_budget(self):
+        clock = [0.0]
+        page = chromium_helpers.CdpPage(Mock())
+
+        def slow_response(*_args, timeout):
+            if timeout < 6:
+                raise TimeoutError("transport expired before the DOM deadline")
+            clock[0] += 6
+            return True
+
+        with (
+            patch.object(page, "evaluate", side_effect=slow_response),
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+        ):
+            self.assertTrue(page.wait_for("#generate", "true", 15_000))
+
     def fixture_page(self, page):
         @contextmanager
         def opened(*_args, **_kwargs):
@@ -190,6 +303,21 @@ class ChromiumDomCompletionTests(unittest.TestCase):
 
         self.cleaned = False
         return self.enterContext(patch.object(chromium_helpers, "cdp_page", side_effect=opened))
+
+    def test_dom_snapshot_uses_remaining_fixture_budget(self):
+        clock = [100.0]
+        page = Mock(exceptions=[], console_errors=[])
+
+        def slow_snapshot(*_args, timeout):
+            if timeout < 6:
+                raise TimeoutError("transport expired before the fixture deadline")
+            clock[0] += 6
+            return {"ready": True, "dom": "complete"}
+
+        page.evaluate.side_effect = slow_snapshot
+        self.fixture_page(page)
+        with patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]):
+            self.assertEqual(chromium_helpers.render_chromium_dom("chrome", "http://127.0.0.1/fixture"), "complete")
 
     def test_ready_dom_returns_without_waiting_for_browser_exit(self):
         page = Mock(exceptions=[], console_errors=[])

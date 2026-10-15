@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
+from tools.tests.chromium_process import spawn_chromium
+
 
 def find_chromium() -> str | None:
     candidates = [
@@ -102,6 +104,12 @@ def _find_windows_taskkill() -> str | None:
 
 
 def _stop_process_tree(process: subprocess.Popen[Any], *, owned_port: int | None = None) -> None:
+    close_tree = getattr(process, "close_tree", None)
+    if callable(close_tree):
+        close_tree(timeout=5)
+        if owned_port is not None and not _wait_for_port_release(owned_port):
+            raise RuntimeError("Chromium job exited but its CDP port is still in use")
+        return
     if process.poll() is not None or _wait_for_exit(process, 0.5):
         if owned_port is None or _wait_for_port_release(owned_port):
             return
@@ -197,7 +205,9 @@ def close_chromium(
     from websockets.exceptions import ConnectionClosed
 
     try:
-        if close_browser is not None:
+        # Owned Windows Jobs retain live process handles before termination.
+        # Browser.close would discard those processes before that snapshot.
+        if close_browser is not None and not callable(getattr(process, "close_tree", None)):
             try:
                 close_browser()
             except (ConnectionClosed, OSError, RuntimeError, TimeoutError):
@@ -299,6 +309,22 @@ class CdpPage:
             raise RuntimeError(detail.get("exception", {}).get("description", detail.get("text")))
         return result["result"].get("value")
 
+    def wait_for(self, selector: str, condition: str, timeout_ms: int = 15_000) -> bool:
+        deadline = time.monotonic() + timeout_ms / 1000
+        expression = (
+            "(() => {const element = document.querySelector(" + json.dumps(selector) + ");"
+            "return Boolean(element && (" + condition + "));})()"
+        )
+        while time.monotonic() < deadline:
+            ready = self.evaluate(expression, timeout=_remaining_timeout(deadline, timeout_ms / 1000))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            if ready:
+                return True
+            time.sleep(min(0.025, remaining))
+        return False
+
 
 @contextmanager
 def cdp_page(
@@ -319,6 +345,10 @@ def cdp_page(
             "--headless=new",
             "--disable-gpu",
             "--disable-extensions",
+            "--disable-background-networking",
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
             "--no-first-run",
             "--no-default-browser-check",
             f"--window-size={window_size}",
@@ -330,8 +360,9 @@ def cdp_page(
         if reduced_motion:
             command.insert(-1, "--force-prefers-reduced-motion")
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-        process = subprocess.Popen(  # noqa: S603
+        process = spawn_chromium(
             command,
+            deadline=deadline,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=stderr,
@@ -345,11 +376,13 @@ def cdp_page(
             while True:
                 try:
                     request = Request(  # noqa: S310 - fixed loopback debugging endpoint
-                        f"http://127.0.0.1:{debugging_port}/json/new?about:blank",
-                        method="PUT",
+                        f"http://127.0.0.1:{debugging_port}/json/list",
                     )
                     with urlopen(request, timeout=_remaining_timeout(startup_deadline, 1)) as response:  # noqa: S310
-                        target = json.load(response)
+                        targets = json.load(response)
+                    target = next((item for item in targets if item.get("type") == "page"), None)
+                    if target is None:
+                        raise OSError("Chrome initial page is not ready")
                     _remaining_timeout(startup_deadline, 1)
                     break
                 except OSError as error:
@@ -370,6 +403,7 @@ def cdp_page(
             page.process = process
             page.send("Page.enable")
             page.send("Runtime.enable")
+            page.send("Page.bringToFront")
             # Windows CIでは新しいChromeプロセスの初回読込が10秒を超える場合がある。
             navigation = page.send("Page.navigate", {"url": url}, timeout=30)
             if navigation.get("errorText"):
@@ -419,7 +453,7 @@ def render_chromium_dom(
                     "(() => {const ready = Boolean(" + completion + ");"
                     "const dom = document.documentElement?.outerHTML || '';"
                     "return {ready, url: location.href, dom: ready ? dom : dom.slice(-2000)};})()",
-                    timeout=_remaining_timeout(deadline, 5),
+                    timeout=_remaining_timeout(deadline, timeout),
                 )
                 if time.monotonic() >= deadline:
                     raise TimeoutError("Chromium DOM completion predicate timed out")

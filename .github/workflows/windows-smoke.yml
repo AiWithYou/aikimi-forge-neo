@@ -86,6 +86,7 @@ on:
       - "script.js"
       - "webui.py"
       - "tools/tests/chromium_helpers.py"
+      - "tools/tests/chromium_process.py"
       - "tools/tests/test_aikimi_diagnostics.py"
       - "tools/tests/test_aikimi_status.py"
       - "tools/tests/test_aikimi_tabs.py"
@@ -96,6 +97,7 @@ on:
       - "tools/tests/test_api_public_state.py"
       - "tools/tests/test_api_script_args.py"
       - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_chromium_process.py"
       - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_dependency_remediation.py"
       - "modules/metadata_cache.py"
@@ -220,6 +222,7 @@ on:
       - "script.js"
       - "webui.py"
       - "tools/tests/chromium_helpers.py"
+      - "tools/tests/chromium_process.py"
       - "tools/tests/test_aikimi_diagnostics.py"
       - "tools/tests/test_aikimi_status.py"
       - "tools/tests/test_aikimi_tabs.py"
@@ -230,6 +233,7 @@ on:
       - "tools/tests/test_api_public_state.py"
       - "tools/tests/test_api_script_args.py"
       - "tools/tests/test_chromium_helpers.py"
+      - "tools/tests/test_chromium_process.py"
       - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_dependency_remediation.py"
       - "modules/metadata_cache.py"
@@ -360,6 +364,7 @@ jobs:
           --module tools.tests.test_api_public_state
           --module tools.tests.test_api_script_args
           --module tools.tests.test_chromium_helpers
+          --module tools.tests.test_chromium_process
           --module tools.tests.test_ci_audit_followup
           --module tools.tests.test_dependency_remediation
           --module tools.tests.test_ci_workflow_boundaries

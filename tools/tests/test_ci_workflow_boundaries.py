@@ -212,7 +212,9 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         self.assertEqual(workflow.count('"modules/aikimi_status.py"'), 2)
         self.assertEqual(workflow.count('"modules/aikimi_security/**"'), 2)
         self.assertEqual(workflow.count('"tools/tests/chromium_helpers.py"'), 2)
+        self.assertEqual(workflow.count('"tools/tests/chromium_process.py"'), 2)
         self.assertEqual(workflow.count('"tools/tests/test_chromium_helpers.py"'), 2)
+        self.assertEqual(workflow.count('"tools/tests/test_chromium_process.py"'), 2)
 
         assets = (ROOT / "tools/requirements-aikimi-assets.txt").read_text(encoding="utf-8")
         browser = (ROOT / "tools/requirements-test.txt").read_text(encoding="utf-8")
@@ -232,7 +234,9 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
             "script.js",
             "tools/run_ci_tests.py",
             "tools/tests/chromium_helpers.py",
+            "tools/tests/chromium_process.py",
             "tools/tests/test_chromium_helpers.py",
+            "tools/tests/test_chromium_process.py",
             "tools/tests/test_ci_workflow_boundaries.py",
             "tools/tests/test_gpu_ownership.py",
             "tools/tests/test_minimax_h3_submission.py",
@@ -255,6 +259,7 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         for module in (
             "tools.tests.test_additional_module_identity",
             "tools.tests.test_chromium_helpers",
+            "tools.tests.test_chromium_process",
             "tools.tests.test_ci_workflow_boundaries",
             "tools.tests.test_gpu_ownership",
             "tools.tests.test_minimax_h3_submission",
@@ -287,8 +292,10 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
             "modules/gradio_file_url.py",
             "modules/gradio_runtime.py",
             "tools/tests/chromium_helpers.py",
+            "tools/tests/chromium_process.py",
             "tools/tests/test_additional_module_identity.py",
             "tools/tests/test_chromium_helpers.py",
+            "tools/tests/test_chromium_process.py",
             "tools/tests/test_ci_workflow_boundaries.py",
             "tools/tests/test_option_migrations.py",
             "tools/tests/test_patcher_cleanup.py",
