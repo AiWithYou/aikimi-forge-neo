@@ -91,6 +91,65 @@ class ChromiumPageLifecycleTests(unittest.TestCase):
             self.fail("failed connection must not yield a page")
         self.cleanup.assert_called_once_with(process, websocket=None, close_browser=None, owned_port=9222)
 
+    def test_devtools_startup_can_use_remaining_fixture_deadline_after_ten_seconds(self):
+        _, websocket, page = self.start_page()
+        clock = [0.0]
+
+        def endpoint(*_args, **kwargs):
+            self.assertLessEqual(kwargs["timeout"], 1)
+            if clock[0] == 0:
+                clock[0] = 11
+                raise OSError("browser still starting")
+            return BytesIO(b'{"webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}')
+
+        self.endpoint.side_effect = endpoint
+        with (
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(chromium_helpers.time, "sleep"),
+            chromium_helpers.cdp_page("chrome", "http://127.0.0.1/fixture", deadline=30) as opened,
+        ):
+            self.assertIs(opened, page)
+        self.assertEqual(self.endpoint.call_count, 2)
+        self.assertIs(self.cleanup.call_args.kwargs["websocket"], websocket)
+
+    def test_devtools_response_after_fixture_deadline_is_rejected_and_cleaned_up(self):
+        process, _, _ = self.start_page()
+        clock = [0.0]
+
+        def late_endpoint(*_args, **_kwargs):
+            clock[0] = 31
+            return BytesIO(b'{"webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}')
+
+        self.endpoint.side_effect = late_endpoint
+        with (
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+            self.assertRaisesRegex(TimeoutError, "DevTools did not start"),
+            chromium_helpers.cdp_page("chrome", "http://127.0.0.1/fixture", deadline=30),
+        ):
+            self.fail("late readiness must not yield a page")
+        self.connect.assert_not_called()
+        self.cleanup.assert_called_once_with(process, websocket=None, close_browser=None, owned_port=9222)
+
+    def test_devtools_request_uses_only_remaining_startup_budget(self):
+        process, _, _ = self.start_page()
+        clock = [29.75]
+        timeouts = []
+
+        def unavailable(*_args, **kwargs):
+            timeouts.append(kwargs["timeout"])
+            clock[0] = 30
+            raise OSError("not ready")
+
+        self.endpoint.side_effect = unavailable
+        with (
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+            self.assertRaisesRegex(TimeoutError, "DevTools did not start"),
+            chromium_helpers.cdp_page("chrome", "http://127.0.0.1/fixture", deadline=30),
+        ):
+            self.fail("unready Chrome must not yield a page")
+        self.assertEqual(timeouts, [0.25])
+        self.cleanup.assert_called_once_with(process, websocket=None, close_browser=None, owned_port=9222)
+
     def test_navigation_error_closes_socket_and_owned_tree(self):
         process, websocket, page = self.start_page()
         page.send.side_effect = [{}, {}, {"errorText": "net::ERR_CONNECTION_REFUSED"}]

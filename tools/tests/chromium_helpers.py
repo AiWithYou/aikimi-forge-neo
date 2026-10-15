@@ -341,22 +341,23 @@ def cdp_page(
         websocket = None
         page = None
         try:
-            startup_deadline = time.monotonic() + 10
+            startup_deadline = deadline if deadline is not None else time.monotonic() + 10
             while True:
                 try:
                     request = Request(  # noqa: S310 - fixed loopback debugging endpoint
                         f"http://127.0.0.1:{debugging_port}/json/new?about:blank",
                         method="PUT",
                     )
-                    with urlopen(request, timeout=_remaining_timeout(deadline, 1)) as response:  # noqa: S310
+                    with urlopen(request, timeout=_remaining_timeout(startup_deadline, 1)) as response:  # noqa: S310
                         target = json.load(response)
+                    _remaining_timeout(startup_deadline, 1)
                     break
                 except OSError as error:
                     if process.poll() is not None:
                         raise RuntimeError(f"Chrome exited before DevTools started: {process.returncode}") from error
                     if time.monotonic() >= startup_deadline:
                         raise TimeoutError("Chrome DevTools did not start") from error
-                    time.sleep(_remaining_timeout(deadline, 0.05))
+                    time.sleep(_remaining_timeout(startup_deadline, 0.05))
 
             websocket = _connect_websocket(
                 target["webSocketDebuggerUrl"],
