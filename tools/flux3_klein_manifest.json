@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "comfy_repository": "https://github.com/Comfy-Org/ComfyUI.git",
+  "comfy_revision": "20b46065ef7f34fa21e8abebe8d0cca90a904d6d",
+  "python_version": "3.13",
+  "uv": {
+    "artifact_id": "flux3-uv",
+    "relative_path": "bootstrap/uv.whl",
+    "url": "https://files.pythonhosted.org/packages/a6/b7/aebd3504d559315be6137ebfe1f6d2258e8e2f48e528d7cc799aea3441ef/uv-0.12.12-py3-none-win_amd64.whl",
+    "size": 17654279,
+    "sha256": "4a5acd0c6087970bdf210eeb1203835117f6fb8b84828604205de510f68aa6a7",
+    "license_url": "https://github.com/astral-sh/uv/blob/0.12.12/LICENSE-MIT"
+  },
+  "files": {
+    "diffusion_models/flux3_image_klein_bf16.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "diffusion_models/flux3_image_klein_bf16.safetensors",
+      "size": 11076957072,
+      "sha256": "5c921759dc03663dbb67df11d8e3d317d2d5b893b31b969c95dc77ebf861b19c"
+    },
+    "diffusion_models/flux3_image_klein_int8_convrot.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "diffusion_models/flux3_image_klein_int8_convrot.safetensors",
+      "size": 5807427339,
+      "sha256": "8949ecfc1bf3871b08be02cf43ec7276a4914e1a86eade6b5eb8f4204426bc92"
+    },
+    "diffusion_models/flux3_image_klein_nvfp4.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "diffusion_models/flux3_image_klein_nvfp4.safetensors",
+      "size": 5257238192,
+      "sha256": "f99714a57ada7b7f39ebb7d916a1b842324c8ec483943816f5b3ea5c062b08a9"
+    },
+    "diffusion_models/flux3_image_klein_sd_bf16.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "diffusion_models/flux3_image_klein_sd_bf16.safetensors",
+      "size": 11097404512,
+      "sha256": "c3e9813cdd049c831c836b2e9db61150e49a93fc1a4c63b256494642fee0bd7c"
+    },
+    "diffusion_models/flux3_image_klein_sd_int8_convrot.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "diffusion_models/flux3_image_klein_sd_int8_convrot.safetensors",
+      "size": 5827874779,
+      "sha256": "847d8933548afd93df4af2cac2498e70891bf28d9dae06d695f536992e168fe2"
+    },
+    "diffusion_models/flux3_image_klein_sd_nvfp4.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "diffusion_models/flux3_image_klein_sd_nvfp4.safetensors",
+      "size": 5277685632,
+      "sha256": "15d421e2558443fcf83ba46f3cd884d9d181c2c7a0a7bdcd2974af234a2d4f5c"
+    },
+    "text_encoders/qwen3.5_9b_flux3_prompt_upsampler_int8_convrot.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "text_encoders/qwen3.5_9b_flux3_prompt_upsampler_int8_convrot.safetensors",
+      "size": 9748113996,
+      "sha256": "cb8cb9b9dcd2569509de755dca54d96fd93a16a7aabfd2f4051f0a144230620f"
+    },
+    "text_encoders/qwen3vl_4b_bf16.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "text_encoders/qwen3vl_4b_bf16.safetensors",
+      "size": 8875719408,
+      "sha256": "f0b24fc5c8d7c0ea6ca909da14c20af5cac53f22506be942c6c956f838b9630f"
+    },
+    "text_encoders/qwen3vl_4b_int8_convrot.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "text_encoders/qwen3vl_4b_int8_convrot.safetensors",
+      "size": 4858559240,
+      "sha256": "32de113cbf8282b02cbff0794b637b9d6676da09314a1db5a30bcea9bf4ee01c"
+    },
+    "vae/flux2-vae.safetensors": {
+      "repository": "black-forest-labs/flux-3-image-klein-comfy",
+      "revision": "bfec4ea10ad389929f0f483d54508fc21e6c2ede",
+      "filename": "vae/flux2-vae.safetensors",
+      "size": 336211292,
+      "sha256": "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3"
+    },
+    "text_encoders/system_prompts.json": {
+      "repository": "black-forest-labs/flux-3-image-klein-pup",
+      "revision": "a03efc6b895ae4220aebb3a958488b939df9caf0",
+      "filename": "system_prompts.json",
+      "size": 12602,
+      "sha256": "b5da3ed8bc04ab59dbdb747930f7dbff847e868903fed8028f85ee1a4ac82fb4"
+    }
+  }
+}

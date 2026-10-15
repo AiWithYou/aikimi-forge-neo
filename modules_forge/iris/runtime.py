@@ -106,8 +106,12 @@ class Runner:
         self.loras = []
 
     def set_loras(self, loras):
-        from .lora import apply, verify_sources
+        from .lora import apply, verify_base, verify_sources
 
+        if any(item["metadata"].get("base_sha256") for item in loras):
+            if self.source_identity is None:
+                self.source_identity = checkpoint_identity(self.root, self.precision, self.task, self.checkpoint)
+            verify_base(loras, self.source_identity, self.precision)
         apply(self.model, loras)
         verify_sources(loras)
         self.loras = loras
@@ -152,7 +156,7 @@ class Runner:
             # from an absolute Windows model path (which contains a colon).
             negative = (
                 self.encoder.encode([request["negative_prompt"]])
-                if request.get("sampling", {}).get("mode") != "turbo" or request["cfg"] != 1
+                if request.get("sampling", {}).get("mode") not in {"turbo", "official_turbo"} or request["cfg"] != 1
                 else None
             )
 
@@ -187,7 +191,7 @@ class Runner:
         if image_mode == "img2img":
             from .img2img import image_schedule
 
-            if request.get("sampling", {}).get("mode") == "turbo":
+            if request.get("sampling", {}).get("mode") in {"turbo", "official_turbo"}:
                 raise ValueError("img2imgではTurbo LoRAを外して通常サンプリングを使ってください。")
             image_plan = image_schedule(request["steps"], request["strength"], self.cfg.flow.shift)
             total = image_plan.steps
@@ -223,7 +227,21 @@ class Runner:
                     text = self.prepare_text(request)
                     self.model.cuda()
                     with torch.autocast("cuda", dtype=torch.bfloat16):
-                        if request.get("sampling", {}).get("mode") == "turbo":
+                        if request.get("sampling", {}).get("mode") == "official_turbo":
+                            from .official_turbo import generate as generate_official_turbo
+
+                            pixels = generate_official_turbo(
+                                self.model,
+                                text,
+                                [request["prompt"]],
+                                request["height"],
+                                request["width"],
+                                request["sampling"]["sigmas"],
+                                torch.Generator().manual_seed(request["seed"]),
+                                num_train_timesteps=self.cfg.flow.num_train_timesteps,
+                                prediction=self.cfg.flow.prediction,
+                            )
+                        elif request.get("sampling", {}).get("mode") == "turbo":
                             from .turbo import generate_turbo
 
                             if self.cfg.flow.prediction != "v" or self.cfg.flow.num_train_timesteps != 1000:
@@ -368,6 +386,13 @@ class Runner:
                 )
                 metadata["input"]["resize"] = {"mode": "resize", "resample": "bicubic", "size": result["size"]}
                 result.update(image_mode=image_mode, strength=request["strength"], executed_steps=total)
+            elif request.get("sampling", {}).get("mode") == "official_turbo":
+                metadata["schedule"] = {
+                    **request["sampling"],
+                    "forward_calls": calls,
+                    "prediction": self.cfg.flow.prediction,
+                    "num_train_timesteps": self.cfg.flow.num_train_timesteps,
+                }
             atomic_json(directory / "progress.json", {"stage": "終了処理中"})
         finally:
             hook.remove()

@@ -24,13 +24,24 @@ def resident_run(payload):
     if checkpoint != "base":
         checkpoint = str(model_files(payload["root"], request["precision"], request["task"], checkpoint)[0])
     identity = checkpoint_identity(payload["root"], request["precision"], request["task"], checkpoint)
-    from modules_forge.iris.lora import sampling_settings, verify_sources
+    from modules_forge.iris.lora import sampling_settings, verify_base, verify_sources
+    from modules_forge.iris.official_turbo import checkpoint_settings, combine_settings
 
     loras = request.get("loras", [])
     verify_sources(loras)
-    sampling = sampling_settings(loras)
+    verify_base(loras, identity, request["precision"])
+    sampling = combine_settings(checkpoint_settings(payload["root"], checkpoint), sampling_settings(loras))
     if request.get("sampling", {"mode": "standard"}) != sampling:
-        raise ValueError("LoRAと生成方式が一致しません。再実行してください。")
+        raise ValueError("チェックポイント・LoRAと生成方式が一致しません。再実行してください。")
+    if sampling["mode"] == "official_turbo":
+        if request.get("image_mode") == "img2img":
+            raise ValueError("公式Turboはimg2imgに対応していません。")
+        if (
+            request.get("steps") != len(sampling["sigmas"])
+            or request.get("cfg") != 1
+            or request.get("negative_prompt") != ""
+        ):
+            raise ValueError("公式Turboの固定生成条件が一致しません。再実行してください。")
     if sampling["mode"] == "turbo":
         if request.get("image_mode") == "img2img":
             raise ValueError("img2imgではTurbo LoRAを外して通常サンプリングを使ってください。")

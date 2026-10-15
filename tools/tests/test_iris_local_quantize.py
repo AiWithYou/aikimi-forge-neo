@@ -76,6 +76,108 @@ class IrisLocalQuantizeTests(unittest.TestCase):
             self.assertIn("linear.qweight", source.keys())
             self.assertIn("modulation_cores.0.weight", source.keys())
 
+    def test_distilled_export_preserves_schedule_and_its_provenance(self):
+        distill = self.weights.with_name("distill.yaml")
+        distill.write_text("dmd:\n  deterministic: true\n  sigmas: [1, 0.938, 0.833, 0.625]\n", encoding="utf-8")
+        destination = self.project / "turbo-int8"
+        with patch.object(quantize_iris, "load_model", return_value=(Tiny(), None, {})), redirect_stdout(io.StringIO()):
+            quantize_iris.export(self.root, "generate", "int8", str(self.weights), output_dir=destination)
+        self.assertEqual((destination / "distill.yaml").read_bytes(), distill.read_bytes())
+        manifest = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["source_distill_sha256"], quantize_iris.sha256(distill))
+        self.assertIn("distill.yaml", {entry["path"] for entry in manifest["files"]})
+        with safe_open(destination / "model.safetensors", framework="pt") as source:
+            self.assertEqual(source.metadata()["source_distill_sha256"], manifest["source_distill_sha256"])
+
+    def test_distill_change_during_conversion_is_rejected_before_writing(self):
+        distill = self.weights.with_name("distill.yaml")
+        distill.write_text("dmd:\n  deterministic: true\n  sigmas: [1, 0.938, 0.833, 0.625]\n", encoding="utf-8")
+        destination = self.project / "turbo-int8"
+
+        def change_schedule(model):
+            distill.write_text("dmd:\n  deterministic: true\n  sigmas: [1, 0.9, 0.8, 0.6]\n", encoding="utf-8")
+            return {"format": "iris-rowwise-int8-v1", "linear_count": 1, "bytes": 1}
+
+        with (
+            patch.object(quantize_iris, "load_model", return_value=(Tiny(), None, {})),
+            patch.object(quantize_iris, "convert_linears", side_effect=change_schedule),
+        ):
+            with self.assertRaisesRegex(ValueError, "変更|変換元"):
+                quantize_iris.export(self.root, "generate", "int8", str(self.weights), output_dir=destination)
+        self.assertFalse((destination / "model.safetensors").exists())
+
+    def test_source_change_during_weight_save_leaves_no_published_model(self):
+        distill = self.weights.with_name("distill.yaml")
+        original_config = self.config.read_bytes()
+        first_schedule = "dmd:\n  deterministic: true\n  sigmas: [1, 0.938, 0.833, 0.625]\n"
+        next_schedule = "dmd:\n  deterministic: true\n  sigmas: [1, 0.9, 0.8, 0.6]\n"
+        save = quantize_iris.save_file
+        for change in ("config", "change_distill", "add_distill", "remove_distill"):
+            with self.subTest(change=change):
+                self.config.write_bytes(original_config)
+                if change == "add_distill":
+                    distill.unlink(missing_ok=True)
+                else:
+                    distill.write_text(first_schedule, encoding="utf-8")
+                destination = self.project / f"output-{change}"
+
+                def change_source(*args, change=change, **kwargs):
+                    save(*args, **kwargs)
+                    if change == "config":
+                        self.config.write_bytes(original_config + b"\n# changed during save\n")
+                    elif change == "remove_distill":
+                        distill.unlink()
+                    else:
+                        distill.write_text(next_schedule, encoding="utf-8")
+
+                with (
+                    patch.object(quantize_iris, "load_model", return_value=(Tiny(), None, {})),
+                    patch.object(quantize_iris, "save_file", side_effect=change_source),
+                    redirect_stdout(io.StringIO()),
+                    self.assertRaisesRegex(ValueError, "変更|変換元"),
+                ):
+                    quantize_iris.export(self.root, "generate", "int8", str(self.weights), output_dir=destination)
+                self.assertFalse(any(destination.glob("*")))
+
+    def test_failed_weight_save_does_not_publish_partial_files(self):
+        destination = self.project / "failed-output"
+        save = quantize_iris.save_file
+
+        def fail_after_write(*args, **kwargs):
+            save(*args, **kwargs)
+            raise OSError("simulated storage failure")
+
+        with (
+            patch.object(quantize_iris, "load_model", return_value=(Tiny(), None, {})),
+            patch.object(quantize_iris, "save_file", side_effect=fail_after_write),
+            self.assertRaisesRegex(OSError, "storage failure"),
+        ):
+            quantize_iris.export(self.root, "generate", "int8", str(self.weights), output_dir=destination)
+        self.assertFalse(any(destination.glob("*")))
+
+    def test_late_source_change_keeps_previous_managed_export(self):
+        source = checkpoint(self.root / "official")
+        source_config = source.with_name("config.yaml")
+        destination = self.root / "int8"
+        destination.mkdir()
+        for name in ("model.safetensors", "config.yaml", "manifest.json"):
+            (destination / name).write_bytes(b"previous export")
+        before = contents(destination)
+        save = quantize_iris.save_file
+
+        def change_source(*args, **kwargs):
+            save(*args, **kwargs)
+            source_config.write_bytes(source_config.read_bytes() + b"\n# changed during save\n")
+
+        with (
+            patch.object(quantize_iris, "load_model", return_value=(Tiny(), None, {})),
+            patch.object(quantize_iris, "save_file", side_effect=change_source),
+            redirect_stdout(io.StringIO()),
+            self.assertRaisesRegex(ValueError, "変更|変換元"),
+        ):
+            quantize_iris.export(self.root, "generate", "int8")
+        self.assertEqual(contents(destination), before)
+
     def test_custom_w4a8_uses_source_size_without_requiring_sibling_int8(self):
         destination = self.project / "outside/w4a8"
         before = contents(self.weights.parent)

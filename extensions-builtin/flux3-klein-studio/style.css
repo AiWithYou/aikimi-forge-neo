@@ -1,0 +1,22 @@
+#flux3-layout-editor { padding: 4px 0; }
+.flux3-layout { color: var(--body-text-color); }
+.flux3-layout-toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 14px; font-size: 13px; }
+.flux3-layout button { padding: 6px 10px; border: 1px solid var(--border-color-primary, #454857); border-radius: 7px; background-color: var(--button-secondary-background-fill, #272936); color: inherit; cursor: pointer; white-space: nowrap; }
+.flux3-layout button:disabled { opacity: .4; cursor: default; }
+.flux3-layout-body { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(200px, 1fr); gap: 22px; align-items: start; }
+.flux3-layout-stage { position: relative; width: 380px; max-width: 100%; margin: 0 auto; aspect-ratio: 1; border: 1px solid var(--border-color-primary, #454857); border-radius: 9px; overflow: hidden; background-color: var(--input-background-fill, #171923); background-image: linear-gradient(90deg, rgba(128,128,128,.13) 1px, transparent 1px), linear-gradient(rgba(128,128,128,.13) 1px, transparent 1px); background-size: 25% 25%; }
+.flux3-layout svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.flux3-layout svg rect { fill: #8b8cff24; stroke: #aaaaff; stroke-width: 2; }
+.flux3-layout svg text { fill: var(--body-text-color, #eeeeff); font-size: 30px; font-weight: 600; pointer-events: none; }
+.flux3-layout svg .flux3-layout-draft { fill: #aaaaff12; stroke-dasharray: 5 4; pointer-events: none; }
+.flux3-layout-rows { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.flux3-layout-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.flux3-layout-row label { display: grid; gap: 5px; font-size: 12px; color: var(--body-text-color, #ddd); }
+.flux3-layout-row input { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--border-color-primary, #454857); border-radius: 7px; padding: 8px 10px; background-color: var(--input-background-fill, #171923); color: var(--body-text-color, #eee); font: inherit; font-size: 14px; }
+.flux3-layout input:focus, .flux3-layout button:focus-visible, .flux3-layout svg:focus-visible { outline: 2px solid #aaaaff; outline-offset: 2px; }
+.flux3-layout-empty, .flux3-layout-note { color: var(--body-text-color-subdued, #a8a9bd); font-size: 13px; line-height: 1.6; }
+.flux3-layout-note:not(:empty) { margin-top: 10px; }
+.flux3-layout-advanced:not(:has(details[open])) #flux3-layout-json { display: none; }
+#flux3-layout-disclosure { padding: 0; background-color: transparent; }
+#flux3-layout-disclosure summary { padding: 10px 12px; cursor: pointer; font-size: 13px; }
+@media (max-width: 700px) { .flux3-layout-body { grid-template-columns: minmax(0, 1fr); gap: 14px; } .flux3-layout-toolbar { align-items: start; flex-direction: column; gap: 8px; } }

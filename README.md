@@ -2,13 +2,20 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.5.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.5.0)** · [変更履歴](CHANGELOG.md)
+**[v4.6.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.6.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
 **画像の生成・編集、音声付き動画、作曲、画像や文章の評価を、ひとつのWebUIから使えるWindows向けのForge Neo派生版です。** モデルの導入、高解像度処理、画像の仕上げも支援します。
 
-各Studioの先頭からチェックポイントを選べます。追加本体は `models/<系列>/checkpoints/` と下位フォルダーへ置き、一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
+各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
+
+## v4.6.0の主な変更
+
+- **[FLUX 3 Image Klein](docs/flux3-klein.md)**：蒸留版／Base、最大10枚の参照編集、ドラッグでの配置指定、4K生成。履歴から保存画像・生成条件・使い方を開けます。公式INT8を既定にし、PUPは標準OFFの任意追加にしました。
+- **[Iris公式Turboと抽出LoRA](docs/iris-studio.md#公式iris-3b-turbo)**：公式Full FTの固定4ステップ生成、量子化時の蒸留設定保持、rank64／128への差分抽出に対応。中断・失敗後の復帰とLoRA入力エラーも改善しました。
+- **普段の操作**：強調ショートカット、Undo／Redo、追加ネットワークの挿入・並べ替え・検索、同名チェックポイント、モード切替、再読込後の結果復元を修正しました。
+- **保存・拡大・導入とAPI**：複数画像／ZIP保存、バッチ番号、PNG情報の上書き、タイル拡大、停止待ち、拡張の依存解決、モデル修復の容量見積もり、`--skip-install`、API入力処理を修正しました。[全変更](CHANGELOG.md#v460--2026-10-16)
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 
@@ -39,7 +46,7 @@ cd aikimi-forge-neo
 
 ### モデルを選んで導入する
 
-Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニュー番号（1〜6）を選びます。Qwen・YuE2・Clef・Irisは表にある専用BATを実行してください。
+Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニュー番号（1〜6）を選びます。Qwen・YuE2・Clef・Iris・FLUX 3は表にある専用BATを実行してください。
 
 ```powershell
 .\aikimi-setup.bat
@@ -57,6 +64,7 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | 作曲・ABC楽譜編集。**YuE2 Music** タブを使用 | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1：公式Python** |
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
 | [Iris-3B](extensions-builtin/iris-studio/README.md) | 画像生成・img2img・相対深度推定・復元と4倍拡大。通常版／INT8／W4A8、互換Full FT・LoRAと4ステップTurbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
+| [FLUX 3 Image Klein](docs/flux3-klein.md) | 蒸留版／Baseの画像生成、最大10枚の参照編集、配置ボックス。PUPは任意の追加機能。**FLUX 3** タブを使用 | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
 
 初回はモデルと必要な実行環境のダウンロード・変換に時間がかかります。Qwenの既定モデルは通常版Q4_K_Mです。Irisは選択した用途の重みを取得し、INT8・W4A8はHugging Faceの変換済み配布を使います。W4A8は画像生成用のテキストエンコーダーも圧縮します。[Irisの導入・検証](docs/iris-studio.md)
 
@@ -159,7 +167,7 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 | Forge `txt2img` / `img2img` | `models/Lora/` | **LoRAを組み合わせる** で選択、または `<lora:名前:0.8>` |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → 一覧更新 → 複数選択** |
 | Ming Image | `models/Ming-Image/loras/` | **LoRA** で選択 |
-| Iris（画像生成） | `models/Iris-3B/loras/` | **LoRA → 一覧を更新 → 複数選択**。[対応形式・Turbo](docs/iris-studio.md#任意のloraとturbo) |
+| Iris（画像生成） | `models/Iris-3B/loras/` | **LoRA → 一覧を更新 → 複数選択**。[対応形式・Turbo](docs/iris-studio.md#任意のloraとコミュニティ製turbo) |
 
 強度は−2〜2で指定します。0は無効、×は選択解除です。同じLoRAを選択欄とプロンプトの両方へ指定しないでください。モデルの世代や形式が異なると使えません。[対応形式と外部モデルの指定方法](docs/local-models.md) · [Qwen追加LoRAガイド](extensions-builtin/qwen-image21-studio/README.md#追加lora)
 

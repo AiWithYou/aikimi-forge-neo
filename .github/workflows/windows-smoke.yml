@@ -20,6 +20,12 @@ on:
       - "extensions-builtin/sensenova-u15-studio/**"
       - "extensions-builtin/yue2-studio/**"
       - "extensions-builtin/qwen-image21-studio/**"
+      - "modules_forge/flux3_klein/**"
+      - "extensions-builtin/flux3-klein-studio/**"
+      - "tools/*flux3*.py"
+      - "tools/tests/test_flux3_klein*.py"
+      - "tools/flux3_klein_manifest.json"
+      - "tools/requirements-flux3-klein.*"
       - "tools/*qwen_image21*.py"
       - "tools/tests/test_qwen_image21*.py"
       - "tools/tests/test_qwen21_style_lora.py"
@@ -148,6 +154,12 @@ on:
       - "extensions-builtin/sensenova-u15-studio/**"
       - "extensions-builtin/yue2-studio/**"
       - "extensions-builtin/qwen-image21-studio/**"
+      - "modules_forge/flux3_klein/**"
+      - "extensions-builtin/flux3-klein-studio/**"
+      - "tools/*flux3*.py"
+      - "tools/tests/test_flux3_klein*.py"
+      - "tools/flux3_klein_manifest.json"
+      - "tools/requirements-flux3-klein.*"
       - "tools/*qwen_image21*.py"
       - "tools/tests/test_qwen_image21*.py"
       - "tools/tests/test_qwen21_style_lora.py"
@@ -398,6 +410,8 @@ jobs:
           --module tools.tests.test_ui_tempdir_security
           --module tools.tests.test_upstream_neo_regressions
           --module tools.tests.test_workflow_ui
+      - name: Run FLUX 3 CPU contracts without model downloads
+        run: python tools/run_ci_tests.py --pattern "test_flux3_klein*.py" --verbosity 2
       - name: Start the real UI and run the full Chromium smoke
         shell: pwsh
         run: |

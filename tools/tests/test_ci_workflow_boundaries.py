@@ -111,6 +111,81 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         for bypass in ("ignore-vulns:", "no-deps:", "needs:", "continue-on-error:"):
             self.assertNotIn(bypass, job)
 
+    def test_flux3_lint_tracks_runtime_studio_installers_and_asset_inputs(self):
+        lint = self.workflow("lint.yml")
+        for path in (
+            "modules_forge/flux3_klein/**",
+            "extensions-builtin/flux3-klein-studio/**",
+            "tools/*flux3*.py",
+            "tools/tests/test_flux3*.py",
+            "tools/tests/flux3_layout.test.mjs",
+            "tools/flux3_klein_manifest.json",
+            "tools/requirements-flux3-klein.*",
+        ):
+            with self.subTest(trigger=path):
+                self.assertEqual(lint.count(f'"{path}"'), 2)
+        for path in (
+            "modules_forge/flux3_klein",
+            "extensions-builtin/flux3-klein-studio/scripts",
+            "tools/*flux3*.py",
+            "tools/tests/test_flux3*.py",
+        ):
+            with self.subTest(ruff=path):
+                self.assertTrue(f"            {path}\n" in lint, f"Missing FLUX 3 lint target: {path}")
+
+    def test_flux3_layout_is_syntax_checked_and_its_node_contracts_run(self):
+        self.assertTrue(
+            "node --check extensions-builtin/flux3-klein-studio/javascript/flux3_layout.js"
+            in self.workflow("lint.yml"),
+            "FLUX 3 layout JavaScript must pass a syntax check",
+        )
+        self.assertTrue(
+            "node --test tools/tests/flux3_layout.test.mjs" in self.workflow("unit-tests.yml"),
+            "FLUX 3 layout contracts must run in CI",
+        )
+        for path in ("tools/flux3_klein_manifest.json", "tools/requirements-flux3-klein.*"):
+            with self.subTest(unit_trigger=path):
+                self.assertEqual(self.workflow("unit-tests.yml").count(f'"{path}"'), 2)
+
+    def test_flux3_windows_cpu_discovers_current_and_future_feature_contracts(self):
+        windows = self.workflow("windows-smoke.yml")
+        for path in (
+            "modules_forge/flux3_klein/**",
+            "extensions-builtin/flux3-klein-studio/**",
+            "tools/*flux3*.py",
+            "tools/tests/test_flux3_klein*.py",
+            "tools/flux3_klein_manifest.json",
+            "tools/requirements-flux3-klein.*",
+        ):
+            with self.subTest(trigger=path):
+                self.assertEqual(windows.count(f'"{path}"'), 2)
+        self.assertTrue(
+            'python tools/run_ci_tests.py --pattern "test_flux3_klein*.py" --verbosity 2' in windows,
+            "Windows must discover all FLUX 3 contracts, including future feature tests",
+        )
+
+    def test_flux3_lock_rebuild_command_keeps_the_required_cuda_index(self):
+        lock = (ROOT / "tools/requirements-flux3-klein.lock").read_text(encoding="utf-8")
+        command = lock.splitlines()[1]
+        self.assertIn("--index-url https://pypi.org/simple", command)
+        self.assertIn("--extra-index-url https://download.pytorch.org/whl/cu130", command)
+
+    def test_flux3_dependency_audit_checks_every_pin_without_platform_resolution(self):
+        security = self.workflow("security.yml")
+        self.assertTrue("  flux3-pip-audit:" in security, "FLUX 3 needs an independent complete-lock audit")
+        job = security.split("  flux3-pip-audit:", 1)[1].split("  gitleaks-full-history:", 1)[0]
+        self.assertIn("inputs: tools/requirements-flux3-klein.lock", job)
+        self.assertIn("vulnerability-service: OSV", job)
+        self.assertIn("internal-be-careful-extra-flags: --strict --no-deps --disable-pip", job)
+        for bypass in (
+            "ignore-vulns:",
+            "--ignore-vuln",
+            "needs:",
+            "continue-on-error:",
+            "internal-be-careful-allow-failure:",
+        ):
+            self.assertNotIn(bypass, job)
+
     def workflow(self, name: str) -> str:
         return (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
 

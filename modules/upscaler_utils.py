@@ -120,12 +120,17 @@ def torch_bgr_to_pil_image(tensor: torch.Tensor) -> Image.Image:
 
 @torch.inference_mode()
 def upscale_tensor_tiles(model: Callable, tensor: torch.Tensor, tile_size: int, overlap: int, desc: str) -> torch.Tensor:
+    if tile_size <= 0:
+        return _model(model, tensor)
+    if not 0 <= overlap < tile_size:
+        raise ValueError("Tile overlap must be non-negative and smaller than tile size.")
+
     _, _, H_in, W_in = tensor.shape
     stride = tile_size - overlap
     n_tiles_x, n_tiles_y = (W_in + stride - 1) // stride, (H_in + stride - 1) // stride
     total_tiles = n_tiles_x * n_tiles_y
 
-    if tile_size <= 0 or total_tiles <= 4:
+    if total_tiles <= 4:
         return _model(model, tensor)
 
     device = tensor.device
@@ -233,6 +238,9 @@ def upscale_with_model_cpu(
         logger.debug("=> %s", output)
         return output
 
+    if not 0 <= tile_overlap < tile_size:
+        raise ValueError("Tile overlap must be non-negative and smaller than tile size.")
+
     grid = images.split_grid(img, tile_size, tile_size, tile_overlap)
     newtiles = []
 
@@ -245,7 +253,7 @@ def upscale_with_model_cpu(
             newrow = []
             for x, w, tile in row:
                 if shared.state.interrupted:
-                    break
+                    return img
                 logger.debug("Tile (%d, %d) %s...", x, y, tile)
                 output = upscale_pil_patch(model, tile)
                 scale_factor = output.width // tile.width

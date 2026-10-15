@@ -17,6 +17,7 @@ from modules_forge.iris.core import (
     runtime_status,
 )
 from modules_forge.iris.local_source import resolve
+from modules_forge.iris.official_turbo import checkpoint_settings, combine_settings, generation_sizes
 from modules_forge.iris.preparation import PREPARATION
 from modules_forge.iris.service import SERVICE
 
@@ -134,9 +135,20 @@ def switch(state, task, precision, checkpoint="base", *, persist=True, saved=Non
     )
 
 
-def lora_sampling(loras):
+def update_sizes(checkpoint, current="1024×1024", names=None, rows=None):
+    try:
+        sampling = (
+            lora_sampling(list(local_assets.lora_settings(names, rows)), checkpoint) if names is not None else None
+        )
+        sizes = generation_sizes(RUNTIME, checkpoint, sampling=sampling)
+    except ValueError:
+        return gr.skip()
+    return gr.update(choices=list(sizes), value=current if current in sizes else "1024×1024")
+
+
+def lora_sampling(loras, checkpoint="base"):
     active = [{**item, "metadata": iris_lora.inspect(RUNTIME, item["name"])} for item in loras if item["strength"] != 0]
-    sampling = iris_lora.sampling_settings(active)
+    sampling = combine_settings(checkpoint_settings(RUNTIME, checkpoint), iris_lora.sampling_settings(active))
     if sampling["mode"] == "turbo":
         return {**sampling, "turbo_name": next(item["name"] for item in active if item["metadata"].get("turbo_steps"))}
     return sampling
@@ -155,25 +167,30 @@ def lora_controls(state, task, names, rows, standard, steps, cfg, negative, *, p
         if persist and local_assets.selection("iris_lora") != {"loras": settings}:
             local_assets.save_selection("iris_lora", {"loras": settings})
         if task == "generate":
-            sampling = lora_sampling(settings)
+            sampling = lora_sampling(settings, (state or {}).get("selection_checkpoint", "base"))
     except ValueError as exc:
         message = str(exc)
     update_sampling = False
     if sampling is not None:
-        if sampling["mode"] == "turbo":
+        if sampling["mode"] == "official_turbo":
+            update_sampling = True
+            steps, cfg, negative = len(sampling["sigmas"]), 1, ""
+            standard.pop("turbo_name", None)
+            message = f"公式Turbo · {steps}ステップ・CFG 1"
+        elif sampling["mode"] == "turbo":
             update_sampling = standard.get("turbo_name") != sampling["turbo_name"]
             if update_sampling:
                 steps, cfg, negative = sampling["default_steps"], 1, ""
             standard["turbo_name"] = sampling["turbo_name"]
             message = f"Turbo · 推奨 {sampling['default_steps']}ステップ・CFG 1"
         else:
-            if standard.get("mode") == "turbo":
+            if standard.get("mode") in {"turbo", "official_turbo"}:
                 update_sampling = True
                 steps, cfg, negative = standard["steps"], standard["cfg"], standard["negative"]
             standard.pop("turbo_name", None)
         standard["mode"] = sampling["mode"]
     editable = task == "generate" and not (state or {}).get("job")
-    sampling_editable = task == "generate"
+    sampling_editable = task == "generate" and (sampling or {}).get("mode") != "official_turbo"
     choices = list(dict.fromkeys([*iris_lora.inventory(RUNTIME), *names]))
     return (
         standard,
@@ -245,19 +262,21 @@ def start(
         loras = []
         if task == "generate":
             loras = list(local_assets.lora_settings(lora_names, lora_rows))
-            lora_sampling(loras)
         if checkpoint != "base":
             try:
                 source = resolve(RUNTIME, checkpoint)
             except ValueError as exc:
                 raise ValueError(f"チェックポイント: {exc}") from exc
             checkpoint, precision = str(source["weights"]), source["precision"]
+        if task == "generate":
+            sampling = lora_sampling(loras, checkpoint)
         if ready(task, precision, checkpoint):
             width, height = 1024, 1024
             if task == "generate":
-                if size not in GENERATION_SIZES:
+                sizes = generation_sizes(RUNTIME, checkpoint, sampling=sampling)
+                if size not in sizes:
                     raise ValueError("生成サイズを選び直してください。")
-                width, height = GENERATION_SIZES[size]
+                width, height = sizes[size]
             identifier = SERVICE.start(
                 {
                     "task": task,
@@ -514,7 +533,10 @@ def on_ui_tabs():
                     value=initial_view[8], show_label=False, interactive=False, lines=2, elem_id="iris-status"
                 )
                 with gr.Accordion("詳細設定", open=False) as detail:
-                    size = gr.Dropdown(list(GENERATION_SIZES), value="1024×1024", label="生成サイズ")
+                    initial_sizes = update_sizes(selected)
+                    size = gr.Dropdown(
+                        initial_sizes.get("choices", list(GENERATION_SIZES)), value="1024×1024", label="生成サイズ"
+                    )
                     with gr.Row():
                         steps = gr.Slider(
                             1,
@@ -620,21 +642,30 @@ def on_ui_tabs():
         ]
         for component in (loras, lora_strengths):
             model_catalog.configure_component(component)
-        loras.change(edit_loras, lora_inputs, lora_outputs, queue=False, trigger_mode="always_last")
-        lora_strengths.input(edit_loras, lora_inputs, lora_outputs, queue=False)
-        lora_refresh.click(sync_loras, lora_inputs, lora_outputs, queue=False)
+        size_inputs = [checkpoint, size, loras, lora_strengths]
+        loras.change(edit_loras, lora_inputs, lora_outputs, queue=False, trigger_mode="always_last").then(
+            update_sizes, size_inputs, [size], queue=False
+        )
+        lora_strengths.input(edit_loras, lora_inputs, lora_outputs, queue=False).then(
+            update_sizes, size_inputs, [size], queue=False
+        )
+        lora_refresh.click(sync_loras, lora_inputs, lora_outputs, queue=False).then(
+            update_sizes, size_inputs, [size], queue=False
+        )
         ui.load(load_selection, [], [*change_outputs, task], queue=False, show_progress="hidden").then(
             load_loras, [state, task], lora_outputs, queue=False, show_progress="hidden"
-        )
+        ).then(update_sizes, size_inputs, [size], queue=False)
         task.change(switch, [state, task, precision, checkpoint], change_outputs, queue=False).then(
             sync_loras, lora_inputs, lora_outputs, queue=False
-        )
+        ).then(update_sizes, size_inputs, [size], queue=False)
         precision.input(switch, [state, task, precision, checkpoint], change_outputs, queue=False)
-        checkpoint.input(switch, [state, task, precision, checkpoint], change_outputs, queue=False)
+        checkpoint.input(switch, [state, task, precision, checkpoint], change_outputs, queue=False).then(
+            sync_loras, lora_inputs, lora_outputs, queue=False
+        ).then(update_sizes, size_inputs, [size], queue=False)
 
         refresh.click(refresh_checkpoints, [checkpoint], [checkpoint], queue=False).then(
             switch, [state, task, precision, checkpoint], change_outputs, queue=False
-        )
+        ).then(sync_loras, lora_inputs, lora_outputs, queue=False).then(update_sizes, size_inputs, [size], queue=False)
 
         def send(state, destination):
             if (state or {}).get("job"):

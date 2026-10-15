@@ -179,6 +179,9 @@ def restore_progress(id_task):
 
     res = next(iter([x[1] for x in recorded_results if id_task == x[0]]), None)
     if res is not None:
+        # The Hires button returns gallery and metadata without a video slot.
+        if len(res) == 4:
+            return res[0], gr.update(value=None, visible=False), *res[1:]
         return res
 
-    return gr.skip(), gr.skip(), gr.skip(), f"Couldn't restore progress for {id_task}: results either have been discarded or never were obtained"
+    return gr.skip(), gr.skip(), gr.skip(), gr.skip(), f"Couldn't restore progress for {id_task}: results either have been discarded or never were obtained"

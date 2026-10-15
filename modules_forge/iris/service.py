@@ -11,7 +11,17 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from .core import ROOT, RUNTIME, IrisError, atomic_json, model_files, model_ready, python_path, validate_request
+from .core import (
+    ROOT,
+    RUNTIME,
+    IrisError,
+    atomic_json,
+    checkpoint_identity,
+    model_files,
+    model_ready,
+    python_path,
+    validate_request,
+)
 
 
 class Service:
@@ -25,12 +35,30 @@ class Service:
     def start(self, value):
         from modules_forge.gpu_ownership import GPUOwnership
 
-        request = validate_request(value)
-        if request["task"] == "generate":
-            from .lora import sampling_settings, snapshot
+        from .official_turbo import checkpoint_settings, combine_settings, generation_sizes
 
-            request["loras"] = snapshot(self.root, request.get("loras", []))
-            request["sampling"] = sampling_settings(request["loras"])
+        loras, sampling, sizes = [], None, None
+        if value.get("task", "generate") == "generate":
+            from .lora import sampling_settings, snapshot, verify_base
+
+            loras = snapshot(self.root, value.get("loras", []))
+            sampling = combine_settings(
+                checkpoint_settings(self.root, value.get("checkpoint", "base")), sampling_settings(loras)
+            )
+            sizes = generation_sizes(self.root, value.get("checkpoint", "base"), sampling=sampling)
+        request = validate_request(value, sizes=sizes)
+        if request["task"] == "generate":
+            request["loras"], request["sampling"] = loras, sampling
+            if any(item["metadata"].get("base_sha256") for item in loras):
+                verify_base(
+                    loras,
+                    checkpoint_identity(self.root, request["precision"], request["task"], request["checkpoint"]),
+                    request["precision"],
+                )
+            if request["sampling"]["mode"] == "official_turbo":
+                if request["image_mode"] == "img2img":
+                    raise IrisError("公式Turboはimg2imgに対応していません。通常モデルを選んでください。")
+                request.update(steps=len(request["sampling"]["sigmas"]), cfg=1.0, negative_prompt="")
             if request["sampling"]["mode"] == "turbo":
                 if request["image_mode"] == "img2img":
                     raise IrisError("img2imgではTurbo LoRAを外して通常サンプリングを使ってください。")
@@ -119,9 +147,14 @@ class Service:
                     except Exception as exc:
                         job.update(status="stopping", error=f"終了を確認中: {exc}")
                         time.sleep(0.5)
-                atomic_json(directory / "result.json", {"status": status, "error": job["error"]})
-            lease.release()
-            job["status"] = status
+            try:
+                if status != "complete":
+                    atomic_json(directory / "result.json", {"status": status, "error": job["error"]})
+            finally:
+                try:
+                    lease.release()
+                finally:
+                    job["status"] = status
 
     def poll(self, identifier):
         job = self.jobs.get(identifier)

@@ -280,7 +280,7 @@ class ExtraNetworksPage:
             )
             onclick = html.escape(onclick)
 
-        btn_copy_path = self.btn_copy_path_tpl.format(**{"filename": item["filename"]})
+        btn_copy_path = self.btn_copy_path_tpl.format(**{"filename": html.escape(item["filename"])})
         btn_metadata = ""
         metadata = item.get("metadata")
         if metadata:
@@ -326,7 +326,7 @@ class ExtraNetworksPage:
             search_terms_html += search_term_template.format(
                 **{
                     "class": f"search_terms{' search_only' if search_only else ''}",
-                    "search_term": search_term,
+                    "search_term": html.escape(search_term),
                 }
             )
 
@@ -645,8 +645,8 @@ class ExtraNetworksPage:
         pth = Path(path)
         mtime, ctime = self.lister.mctime(path)
         return {
-            "date_created": int(mtime),
-            "date_modified": int(ctime),
+            "date_created": int(ctime),
+            "date_modified": int(mtime),
             "name": pth.name.lower(),
             "path": str(pth).lower(),
         }
@@ -671,7 +671,8 @@ class ExtraNetworksPage:
 
         file = f"{path}.safetensors"
         if self.lister.exists(file) and "ssmd_cover_images" in metadata and len(list(filter(None, json.loads(metadata["ssmd_cover_images"])))) > 0:
-            return f"./sd_extra_networks/cover-images?page={self.extra_networks_tabname}&item={name}"
+            query = urllib.parse.urlencode({"page": self.name, "item": name})
+            return f"./sd_extra_networks/cover-images?{query}"
 
         return None
 

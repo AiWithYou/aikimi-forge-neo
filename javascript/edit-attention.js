@@ -103,6 +103,7 @@ function keyupEditAttention(event) {
             numParen++;
         }
 
+        let weight;
         if (start == "[") {
             weight = (1 / 1.1) ** numParen;
         } else {

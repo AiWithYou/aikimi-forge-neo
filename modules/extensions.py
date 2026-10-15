@@ -55,7 +55,7 @@ class ExtensionMetadata:
             errors.report(f"Error reading {self.filename} for extension {canonical_name}.", exc_info=True)
 
         self.canonical_name = self.config.get("Extension", "Name", fallback=canonical_name)
-        self.canonical_name = canonical_name.lower().strip()
+        self.canonical_name = self.canonical_name.lower().strip()
 
         self.requires = None
 
@@ -124,7 +124,7 @@ class Extension:
         self.remote = None
         self.have_info_from_repo = False
         self.metadata = metadata if metadata else ExtensionMetadata(self.path, name.lower())
-        self.canonical_name = metadata.canonical_name
+        self.canonical_name = self.metadata.canonical_name
 
     def to_dict(self):
         return {x: getattr(self, x) for x in self.cached_fields}
@@ -255,8 +255,8 @@ def list_extensions():
             if not os.path.isdir(path):
                 continue
 
-            canonical_name = extension_dirname
-            metadata = ExtensionMetadata(path, canonical_name)
+            metadata = ExtensionMetadata(path, extension_dirname)
+            canonical_name = metadata.canonical_name
 
             # check for duplicated canonical names
             already_loaded_extension = loaded_extensions.get(metadata.canonical_name)

@@ -1,7 +1,7 @@
 (function () {
     "use strict";
 
-    const API_VERSION = 5;
+    const API_VERSION = 6;
     const FEATURE_EVENT = "aikimi:feature-tab-change";
     const FEATURE_NAV_ID = "aikimi-feature-nav";
     const SETUP_RETRY_LIMIT = 80;
@@ -84,6 +84,12 @@
             label: "Iris",
             kind: "native",
         }),
+        flux3: Object.freeze({
+            buttonId: "aikimi-tab-flux3",
+            containerId: "tab_flux3_klein_studio",
+            label: "FLUX 3",
+            kind: "native",
+        }),
     });
     const FEATURE_ORDER = Object.freeze([
         "krea2",
@@ -97,6 +103,7 @@
         "yue2",
         "clef",
         "iris",
+        "flux3",
     ]);
 
     if (window.AikimiTabs?.apiVersion === API_VERSION) {

@@ -366,7 +366,7 @@ class Api:
 
     def get_script(self, script_name, script_runner):
         if script_name is None or script_name == "":
-            return None, None
+            return None
 
         script_idx = script_name_to_index(script_name, script_runner.scripts)
         return script_runner.scripts[script_idx]
@@ -431,7 +431,7 @@ class Api:
             return {}
 
         possible_fields = infotext_utils.paste_fields[tabname]["fields"]
-        set_fields = request.model_dump(exclude_unset=True) if hasattr(request, "request") else request.dict(exclude_unset=True)  # pydantic v1/v2 have different names for this
+        set_fields = request.model_dump(exclude_unset=True)
         params = infotext_utils.parse_generation_parameters(request.infotext)
 
         def get_base_type(annotation):
@@ -441,9 +441,9 @@ class Api:
                 args = get_args(annotation)  # filter out NoneType
                 non_none_args = [arg for arg in args if arg is not type(None)]
                 if len(non_none_args) == 1:  # annotation was Optional[X]
-                    return non_none_args[0]
+                    return get_base_type(non_none_args[0])
 
-            return annotation
+            return origin or annotation
 
         def get_field_value(field, params):
             value = field.function(params) if field.function else params.get(field.label)
@@ -458,10 +458,12 @@ class Api:
             if target_type == type(None):
                 return None
 
-            if isinstance(value, dict) and value.get("__type__") == "generic_update":  # this is a gradio.update rather than a value
+            if isinstance(value, dict) and value.get("__type__") == "update":
                 value = value.get("value")
 
-            if value is not None and not isinstance(value, target_type):
+            if target_type is bool and value == "False":
+                value = False
+            elif value is not None and not isinstance(value, target_type):
                 value = target_type(value)
 
             return value

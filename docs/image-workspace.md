@@ -5,7 +5,7 @@
 ## 生成と編集
 
 - **txt2img**：文章から新しい画像を生成します。前に使った参照画像を保持していても、このモードの生成には渡しません。
-- **img2img**：入力画像と文章から編集します。Qwen Image 2.1、SenseNova、H3 Imageでは、参照画像を用いるモデル固有の編集方式を使います。Irisでは変更強度を指定して通常サンプリングで描き直します。
+- **img2img**：入力画像と文章から編集します。Qwen Image 2.1、FLUX 3、SenseNova、H3 Imageでは、参照画像を用いるモデル固有の編集方式を使います。Irisでは変更強度を指定して通常サンプリングで描き直します。
 - Krea2・AnimaはForgeのtxt2img／img2imgを使います。Ming・Nanosaur2は現在txt2imgに対応しています。
 
 参照編集モデルにはForgeのdenoising strengthやサンプラーを追加しません。そのモデルで実際に調整できる項目を表示します。Irisでは学習に対応するサイズから選択します。

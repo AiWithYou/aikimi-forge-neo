@@ -342,7 +342,8 @@ function tryToRemoveExtraNetworkFromPrompt(textarea, text, isNeg) {
             }
         }
     } else {
-        newTextareaText = textarea.value.replaceAll(new RegExp(`((?:${extraTextBeforeNet})?${text})`, "g"), "");
+        const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        newTextareaText = textarea.value.replaceAll(new RegExp(`((?:${escapeRegExp(extraTextBeforeNet)})?${escapeRegExp(text)})`, "g"), "");
         replaced = newTextareaText != textarea.value;
     }
 

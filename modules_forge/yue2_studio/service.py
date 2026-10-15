@@ -228,6 +228,7 @@ class Studio:
                     if time.monotonic() - cancelled_at >= 3:
                         resident.close()
                         raise InterruptedError("停止しました。完了済みの候補は履歴に残っています。")
+                    time.sleep(0.1)
             saved = read_json(job.directory / "status.json")
             if job.cancel.is_set():
                 raise InterruptedError("停止しました。完了済みの候補は履歴に残っています。")

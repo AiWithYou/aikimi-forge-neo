@@ -107,6 +107,19 @@ class IrisLoRATests(unittest.TestCase):
             torch.testing.assert_close(model.projection.weight, original - delta)
             self.assertIs(shared[0], model.projection)
 
+    def test_normal_merge_preserves_parameter_without_writing_borrowed_base_storage(self):
+        with tempfile.TemporaryDirectory() as root:
+            adapter(root)
+            model = nn.Module()
+            model.projection = nn.Linear(2, 2, bias=False)
+            parameter = model.projection.weight
+            borrowed = parameter.detach()
+            original = borrowed.clone()
+            lora.apply(model, lora.snapshot(root, [{"name": "test.safetensors", "strength": 1}]))
+            self.assertIs(model.projection.weight, parameter)
+            torch.testing.assert_close(borrowed, original, rtol=0, atol=0)
+            torch.testing.assert_close(parameter, original + torch.tensor([[1.0, 2.0], [-0.5, -1.0]]))
+
     def test_int8_keeps_base_buffers_and_tracks_device_moves(self):
         with tempfile.TemporaryDirectory() as root:
             adapter(root)

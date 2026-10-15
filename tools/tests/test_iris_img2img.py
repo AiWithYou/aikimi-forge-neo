@@ -292,6 +292,7 @@ class RuntimeTests(unittest.TestCase):
                 patch.object(runtime, "Runner", return_value=fake) as build,
                 patch.object(worker, "model_files", return_value=(Path("custom.safetensors"), Path("config.yaml"))),
                 patch.object(worker, "checkpoint_identity", return_value={"sha256": "custom-full-ft"}),
+                patch("modules_forge.iris.official_turbo.checkpoint_settings", return_value=None),
             ):
                 for mode, strength in (("txt2img", None), ("img2img", 0.25), ("img2img", 0.65), ("txt2img", None)):
                     core.atomic_json(

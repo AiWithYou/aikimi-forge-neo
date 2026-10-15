@@ -117,17 +117,16 @@ def save_files(js_data, images, do_make_zip, index):
         for image_index, filedata in enumerate(images, start_index):
             image = filedata[0]
             is_grid = image_index < p.index_of_first_image
-            p.batch_index = image_index - 1
+            p.batch_index = 0 if is_grid else (image_index - p.index_of_first_image) % p.batch_size
 
             try:
-                parameters = parameters_copypaste.parse_generation_parameters(data["infotexts"][image_index], [])
+                infotext = data["infotexts"][image_index]
             except IndexError:
-                fullfn, _ = modules.images.save_image(image, path, "", seed=None, prompt=None, extension=extension, info=None, grid=is_grid, p=p, save_to_dirs=save_to_dirs)
-                filename = os.path.relpath(fullfn, path)
-                return gr.update(value=[fullfn], visible=True), plaintext_to_html(f"Saved: {filename}")
+                infotext = None
 
+            parameters = parameters_copypaste.parse_generation_parameters(infotext, []) if infotext else {}
             parsed_infotexts.append(parameters)
-            fullfn, txt_fullfn = modules.images.save_image(image, path, "", seed=parameters["Seed"], prompt=parameters["Prompt"], extension=extension, info=p.infotexts[image_index], grid=is_grid, p=p, save_to_dirs=save_to_dirs)
+            fullfn, txt_fullfn = modules.images.save_image(image, path, "", seed=parameters.get("Seed"), prompt=parameters.get("Prompt", ""), extension=extension, info=infotext, grid=is_grid, p=p, save_to_dirs=save_to_dirs)
 
             filename = os.path.relpath(fullfn, path)
             filenames.append(filename)
@@ -137,12 +136,15 @@ def save_files(js_data, images, do_make_zip, index):
                 fullfns.append(txt_fullfn)
 
         if file:
-            writer.writerow([parsed_infotexts[0]["Prompt"], parsed_infotexts[0]["Seed"], data["width"], data["height"], data["sampler_name"], data["cfg_scale"], data["steps"], filenames[0], parsed_infotexts[0]["Negative prompt"], data["sd_model_name"], data["sd_model_hash"]])
+            parameters = parsed_infotexts[0]
+            log_data = data if parameters else {}
+            writer.writerow([parameters.get("Prompt", ""), parameters.get("Seed", ""), log_data.get("width", images[0][0].width), log_data.get("height", images[0][0].height), log_data.get("sampler_name", ""), log_data.get("cfg_scale", ""), log_data.get("steps", ""), filenames[0], parameters.get("Negative prompt", ""), log_data.get("sd_model_name", ""), log_data.get("sd_model_hash", "")])
 
     # Make Zip
     if do_make_zip:
-        p.all_seeds = [parameters["Seed"] for parameters in parsed_infotexts]
-        namegen = modules.images.FilenameGenerator(p, parsed_infotexts[0]["Seed"], parsed_infotexts[0]["Prompt"], image, True)
+        p.all_seeds = [parameters["Seed"] for parameters in parsed_infotexts if "Seed" in parameters] or [""]
+        parameters = next((parameters for parameters in parsed_infotexts if parameters), {})
+        namegen = modules.images.FilenameGenerator(p, parameters.get("Seed", ""), parameters.get("Prompt", ""), image, True)
         zip_filename = namegen.apply(shared.opts.grid_zip_filename_pattern or "[datetime]_[[model_name]]_[seed]-[seed_last]")
         zip_filepath = os.path.join(path, f"{zip_filename}.zip")
 

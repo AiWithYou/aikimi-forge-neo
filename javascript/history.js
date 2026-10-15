@@ -40,7 +40,7 @@
         }
 
         #undo() {
-            this.#snapshot(false);
+            this.#snapshot();
 
             if (this.undoStack.length < 2) return;
 
@@ -53,13 +53,12 @@
         }
 
         #redo() {
+            this.#snapshot();
             if (this.redoStack.length < 1) return;
-
-            const current = this.textarea.value;
-            this.undoStack.push(current);
 
             const prev = this.redoStack.pop();
             this.textarea.value = prev;
+            this.#snapshot(false);
             updateInput(this.textarea);
         }
 

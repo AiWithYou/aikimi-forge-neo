@@ -141,7 +141,7 @@ def process_batch(p, input, output_dir, inpaint_mask_dir, args, to_scale=False, 
             if model_info is not None:
                 p.override_settings["sd_model_checkpoint"] = model_info.name
             elif sd_model_checkpoint_override:
-                p.override_settings["sd_model_checkpoint"] = sd_model_checkpoint_override
+                p.override_settings["sd_model_checkpoint"] = sd_model_checkpoint_override.name
             else:
                 p.override_settings.pop("sd_model_checkpoint", None)
 

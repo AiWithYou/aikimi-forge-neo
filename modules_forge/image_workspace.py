@@ -185,6 +185,7 @@ class ImageWorkspace:
         targets = [self.mode, self.tabs, self.references]
         if native_mode is not None:
             native_mode.visible = "hidden"
+            native_mode.do_not_save_to_config = True
             targets.append(native_mode)
             native_mode.change(self.sync_native_mode, inputs=[native_mode, self.mode], outputs=targets[:3], **PRIVATE)
         inputs = [self.mode] + ([native_mode] if native_mode is not None else [])

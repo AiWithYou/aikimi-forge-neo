@@ -121,11 +121,15 @@ class CheckpointInfo:
         if self.shorthash not in self.ids:
             self.ids += [self.shorthash, self.sha256, f"{self.name} [{self.shorthash}]", f"{self.name_for_extra} [{self.shorthash}]"]
 
-        old_title = self.title
+        old_key = next((key for key, info in checkpoints_list.items() if info is self), None)
         self.title = f"{self.name} [{self.shorthash}]"
         self.short_title = f"{self.name_for_extra} [{self.shorthash}]"
 
-        replace_key(checkpoints_list, old_title, self.title, self)
+        new_key = self.title
+        if new_key in checkpoints_list and checkpoints_list[new_key].filename != self.filename:
+            new_key = os.path.abspath(self.filename)
+        if old_key is not None:
+            replace_key(checkpoints_list, old_key, new_key, self)
         self.register()
 
         return self.shorthash

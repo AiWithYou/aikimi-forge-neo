@@ -65,7 +65,7 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def validate_request(value):
+def validate_request(value, *, sizes=None):
     request = dict(value)
     task = request.get("task", "generate")
     precision = request.get("precision", "int8")
@@ -106,8 +106,8 @@ def validate_request(value):
     request["prompt"] = prompt
     request["negative_prompt"] = str(request.get("negative_prompt", ""))
     for name, default, low, high in (
-        ("width", 1024, 768, 1344),
-        ("height", 1024, 768, 1344),
+        ("width", 1024, 752, 1344),
+        ("height", 1024, 752, 1344),
         ("steps", 100, 1, 200),
         ("seed", -1, -1, 2**32 - 1),
     ):
@@ -119,7 +119,7 @@ def validate_request(value):
         except (TypeError, ValueError, OverflowError) as exc:
             raise IrisError(f"{name}は{low}〜{high}の整数を指定してください。") from exc
         request[name] = int(numeric)
-    if (request["width"], request["height"]) not in GENERATION_SIZES.values():
+    if (request["width"], request["height"]) not in (GENERATION_SIZES if sizes is None else sizes).values():
         raise IrisError("画像生成のサイズを選び直してください。")
     try:
         cfg = float(request.get("cfg", 3.0))
@@ -158,7 +158,11 @@ def checkpoint_identity(root, precision, task, checkpoint="base"):
     from modules_forge.local_assets import file_identity
 
     weights, config = model_files(root, precision, task, checkpoint)
-    return {"weights": file_identity(weights), "config": file_identity(config)}
+    result = {"weights": file_identity(weights), "config": file_identity(config)}
+    distill = weights.with_name("distill.yaml")
+    if checkpoint != "base" and distill.exists():
+        result["distill"] = file_identity(distill)
+    return result
 
 
 def python_path(root=RUNTIME):

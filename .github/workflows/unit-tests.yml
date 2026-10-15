@@ -10,6 +10,8 @@ on:
       - "pyproject.toml"
       - "requirements.txt"
       - "tools/requirements*.txt"
+      - "tools/flux3_klein_manifest.json"
+      - "tools/requirements-flux3-klein.*"
       - ".github/workflows/unit-tests.yml"
   push:
     branches: [neo]
@@ -21,6 +23,8 @@ on:
       - "pyproject.toml"
       - "requirements.txt"
       - "tools/requirements*.txt"
+      - "tools/flux3_klein_manifest.json"
+      - "tools/requirements-flux3-klein.*"
       - ".github/workflows/unit-tests.yml"
   workflow_dispatch:
 
@@ -77,6 +81,8 @@ jobs:
         run: node --test tools/tests/h3_handoff_core.test.mjs tools/tests/qwen_outpaint_canvas.test.mjs
       - name: Run Clef clipboard contracts
         run: node --test tools/tests/clef_clipboard.test.mjs
+      - name: Run FLUX 3 layout contracts
+        run: node --test tools/tests/flux3_layout.test.mjs
       - name: Run Clef contracts without model downloads
         run: python tools/run_ci_tests.py --pytest tools/tests/test_clef*.py -q
       - name: Run SenseNova checkpoint contracts without model downloads

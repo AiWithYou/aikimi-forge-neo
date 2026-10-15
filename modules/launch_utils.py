@@ -233,7 +233,7 @@ def list_extensions_builtin(settings_file):
     disabled_extensions = set(settings.get("disabled_extensions", []))
     disable_all_extensions = settings.get("disable_all_extensions", "none")
 
-    if disable_all_extensions != "none" or args.disable_extra_extensions or args.disable_all_extensions or not os.path.isdir(extensions_builtin_dir):
+    if disable_all_extensions == "all" or args.disable_all_extensions or not os.path.isdir(extensions_builtin_dir):
         return []
 
     return [x for x in os.listdir(extensions_builtin_dir) if x not in disabled_extensions]
@@ -343,7 +343,12 @@ def prepare_environment():
     print(f"Python {sys.version}")
     print(f"Version: {tag}")
 
-    if args.reinstall_torch or not is_installed("torch") or not is_installed("torchvision") or _managed_torch_needs_upgrade():
+    if not args.skip_install and (
+        args.reinstall_torch
+        or not is_installed("torch")
+        or not is_installed("torchvision")
+        or _managed_torch_needs_upgrade()
+    ):
         run(f'"{python}" -m {torch_command}', "Installing torch and torchvision", "Couldn't install torch", live=True)
         startup_timer.record("install torch")
 

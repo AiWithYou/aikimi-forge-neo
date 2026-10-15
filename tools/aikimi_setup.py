@@ -767,22 +767,28 @@ class Installer:
         except KeyError as error:
             raise SetupError(f"Unknown setup profile: {name}") from error
 
-    def _profile_download_requirement(self, profile: ProfileSpec, *, generated_ready: bool) -> int:
+    def _profile_download_requirement(
+        self, profile: ProfileSpec, *, generated_ready: bool, missing_paths: frozenset[Path] = frozenset()
+    ) -> int:
         required = 0
         for artifact in profile.artifacts:
             if artifact.temporary and generated_ready:
                 continue
             target = self._target(artifact.relative_path)
             partial = Path(f"{target}.part")
-            if target.is_file() and target.stat().st_size == artifact.size:
+            if target not in missing_paths and target.is_file() and target.stat().st_size == artifact.size:
                 continue
-            partial_bytes = min(partial.stat().st_size, artifact.size) if partial.is_file() else 0
+            partial_bytes = (
+                min(partial.stat().st_size, artifact.size) if partial not in missing_paths and partial.is_file() else 0
+            )
             required += artifact.size - partial_bytes
         if profile.generated is not None and not generated_ready:
             generated_path = self._target(profile.generated.relative_path)
             generated_partial = Path(f"{generated_path}.part")
             partial_bytes = (
-                min(generated_partial.stat().st_size, profile.generated.size) if generated_partial.is_file() else 0
+                min(generated_partial.stat().st_size, profile.generated.size)
+                if generated_partial not in missing_paths and generated_partial.is_file()
+                else 0
             )
             required += profile.generated.size - partial_bytes
         return required
@@ -793,14 +799,18 @@ class Installer:
         target = self._target(artifact.relative_path)
         return not (target.is_file() and not target.is_symlink() and target.stat().st_size == artifact.size)
 
-    def _generated_present_for_plan(self, profile: ProfileSpec) -> bool:
+    def _generated_present_for_plan(
+        self, profile: ProfileSpec, *, missing_paths: frozenset[Path] = frozenset()
+    ) -> bool:
         generated = profile.generated
         if generated is None:
             return False
         target = self._target(generated.relative_path)
         sidecar = self._target(generated.sidecar_relative_path)
         return (
-            target.is_file()
+            target not in missing_paths
+            and sidecar not in missing_paths
+            and target.is_file()
             and not target.is_symlink()
             and target.stat().st_size == generated.size
             and sidecar.is_file()
@@ -992,6 +1002,7 @@ class Installer:
         dry_run: bool,
         keep_source: bool,
         _lock: bool = True,
+        _missing_paths: frozenset[Path] = frozenset(),
     ) -> dict[str, object]:
         if not dry_run and _lock:
             with self._mutation_lock():
@@ -1003,14 +1014,18 @@ class Installer:
                 )
         profile = self._profile(profile_name)
         if dry_run:
-            generated_ready = self._generated_present_for_plan(profile)
+            generated_ready = self._generated_present_for_plan(profile, missing_paths=_missing_paths)
             required_bytes = (
-                self._profile_download_requirement(profile, generated_ready=generated_ready) + DOWNLOAD_HEADROOM_BYTES
+                self._profile_download_requirement(
+                    profile, generated_ready=generated_ready, missing_paths=_missing_paths
+                )
+                + DOWNLOAD_HEADROOM_BYTES
             )
             planned = [
                 item.relative_path
                 for item in profile.artifacts
-                if not (item.temporary and generated_ready) and self._needs_install_for_plan(item)
+                if not (item.temporary and generated_ready)
+                and (self._target(item.relative_path) in _missing_paths or self._needs_install_for_plan(item))
             ]
             if profile.generated is not None and not generated_ready:
                 planned.append(profile.generated.relative_path)
@@ -1109,6 +1124,12 @@ class Installer:
                 )
         profile = self._profile(profile_name)
         quarantined: list[str] = []
+        missing_paths: set[Path] = set()
+
+        def quarantine(path: Path) -> None:
+            quarantined.append(self._quarantine(profile, path, dry_run=dry_run))
+            missing_paths.add(path)
+
         for artifact in profile.artifacts:
             target = self._target(artifact.relative_path)
             partial = Path(f"{target}.part")
@@ -1116,11 +1137,11 @@ class Installer:
             if status.state == "invalid":
                 if target.is_symlink():
                     raise SetupError(f"Refusing to repair a symbolic-link target: {artifact.relative_path}")
-                quarantined.append(self._quarantine(profile, target, dry_run=dry_run))
+                quarantine(target)
             if partial.is_file() and not partial.is_symlink():
                 # Repair is an explicit request for a clean retry. Incomplete
                 # files cannot be authenticated until every byte is present.
-                quarantined.append(self._quarantine(profile, partial, dry_run=dry_run))
+                quarantine(partial)
 
         generated_status = self._verify_generated(profile)
         if profile.generated is not None and generated_status is not None:
@@ -1138,19 +1159,19 @@ class Installer:
                 if target.is_symlink():
                     raise SetupError("Refusing to repair a symbolic-link conversion output")
                 if target.exists():
-                    quarantined.append(self._quarantine(profile, target, dry_run=dry_run))
+                    quarantine(target)
             for sidecar in checksum_remnants:
-                quarantined.append(self._quarantine(profile, sidecar, dry_run=dry_run))
+                quarantine(sidecar)
             partial = Path(f"{self._target(generated.relative_path)}.part")
             if partial.exists():
                 if partial.is_symlink() or not partial.is_file():
                     raise SetupError("Refusing to repair an unsafe conversion partial")
-                quarantined.append(self._quarantine(profile, partial, dry_run=dry_run))
+                quarantine(partial)
 
         revision_status = self._runtime_revision_status(profile)
         if revision_status is not None and revision_status.state == "invalid":
             revision_path = self._target(profile.runtime_revision_path or "")
-            quarantined.append(self._quarantine(profile, revision_path, dry_run=dry_run))
+            quarantine(revision_path)
 
         if dry_run:
             install_plan = self.install(
@@ -1158,6 +1179,7 @@ class Installer:
                 dry_run=True,
                 keep_source=keep_source,
                 _lock=False,
+                _missing_paths=frozenset(missing_paths),
             )
             return {
                 "schema_version": SCHEMA_VERSION,

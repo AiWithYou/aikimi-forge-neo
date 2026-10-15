@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from modules_forge import local_assets
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -19,7 +21,8 @@ class IrisUITests(unittest.TestCase):
         callbacks.on_ui_tabs = lambda callback: None
         with patch.dict(sys.modules, {"modules.script_callbacks": callbacks}):
             spec.loader.exec_module(module)
-        blocks, label, identifier = module.on_ui_tabs()[0]
+        with patch.object(local_assets, "selection", return_value={}):
+            blocks, label, identifier = module.on_ui_tabs()[0]
         self.assertEqual((label, identifier), ("Iris", "iris_studio"))
         components = blocks.get_config_file()["components"]
         task = next(x for x in components if x.get("props", {}).get("elem_id") == "iris-task")

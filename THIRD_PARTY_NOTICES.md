@@ -56,6 +56,15 @@ SenseNova runtimeは、固定commit`e6dfd45762eb46f805067fe079c14bcb643ccccd`か
 
 配布元の[Apache-2.0 LICENSE](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo/blob/5243039779e896b9dc884433e76b33cbe9f4f5e7/LICENSE)全文を[modules_forge/iris/LICENSE.turbo](modules_forge/iris/LICENSE.turbo)へ同梱します。TurboのLoRA重みは固定revision・SHA-256で別途取得し、Gitには含めません。[使い方・導入](docs/iris-studio.md#任意のloraとturbo)
 
+## FLUX 3 Image Klein
+
+- 画像モデルの原作・公式Comfy形式: [Black Forest Labs](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/tree/bfec4ea10ad389929f0f483d54508fc21e6c2ede)。蒸留版・Baseの重みには[FLUX Kommunity License v.1.0](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/blob/bfec4ea10ad389929f0f483d54508fc21e6c2ede/LICENSE.md)が適用されます。モデルの使用・出力の利用・再配布は、その全文の条件に従います。
+- Qwen3-VL-4B-Instructテキストエンコーダーは[Apache-2.0](https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/b6a0ce4a76671720ce10a978532bfb300af476c2/text_encoder/LICENSE)。任意の追加機能である[公式PUP](https://huggingface.co/black-forest-labs/flux-3-image-klein-pup/blob/a03efc6b895ae4220aebb3a958488b939df9caf0/README.md#license)もApache-2.0です。PUPは既定OFFで、標準導入には含めません。
+- `conditioning.py`の配置ボックス処理・画像前処理・PUP入力処理は、BFLの[公式推論コード](https://github.com/black-forest-labs/flux-3-image-klein/tree/45e57c9fb06f9751cdced29a65c5d2171003be05)を基にしています。Apache-2.0本文は[LICENSE.bfl-reference](modules_forge/flux3_klein/LICENSE.bfl-reference)、由来と変更箇所は[専用notice](modules_forge/flux3_klein/THIRD_PARTY_NOTICES.md)に保持しています。
+- 別途取得する推論ランタイムは[ComfyUIの固定版](https://github.com/Comfy-Org/ComfyUI/tree/20b46065ef7f34fa21e8abebe8d0cca90a904d6d)で、[GPL-3.0](https://github.com/Comfy-Org/ComfyUI/blob/20b46065ef7f34fa21e8abebe8d0cca90a904d6d/LICENSE)です。専用環境のComfy Kitchen 0.2.37には[Apache-2.0 LICENSE](https://github.com/Comfy-Org/comfy-kitchen/blob/v0.2.37/LICENSE)と[NVIDIA由来ライブラリ等を含むNOTICE](https://github.com/Comfy-Org/comfy-kitchen/blob/v0.2.37/NOTICE)、comfy-aimdo 0.5.6には[GPL-3.0 LICENSE](https://github.com/Comfy-Org/comfy-aimdo/blob/v0.5.6/LICENSE)が付属します。
+
+モデル重み・専用ランタイム・依存wheelはGitへ同梱せず、利用者の環境へ別途取得します。[導入と対応形式](docs/flux3-klein.md)を参照してください。
+
 ## fontとUI asset
 
 `modules/Roboto-Regular.ttf`は、font metadataでApache-2.0を示しています。`modules/web/fonts/sourcesanspro`にはSource Sans Proのwoff2が含まれます。release担当者は、fontの配布元と必要なlicense本文をrelease前に再確認してください。

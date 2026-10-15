@@ -2,13 +2,20 @@
 
 English · [日本語](README.md)
 
-**[v4.5.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.5.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.6.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.6.0)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
 **A Windows-focused Forge Neo fork for image generation and editing, video with audio, music composition, and image or text evaluation in one WebUI.** It also provides model setup, high-resolution workflows, and image finishing tools.
 
-Each Studio has checkpoint selection at the top. Place additional models in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
+Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
+
+## What's new in v4.6.0
+
+- **[FLUX 3 Image Klein](docs/flux3-klein.md)**: distilled and Base models, editing with up to ten references, drawn layout boxes, and 4K output. Persistent history opens saved images, generation settings, and the user guide. Official INT8 is the default; PUP is off by default and installed separately.
+- **[Official Iris Turbo and extracted LoRAs](docs/iris-studio.md#公式iris-3b-turbo)**: fixed four-step Full FT inference, preserved distillation settings during quantization, and rank64/rank128 extraction. Cancellation recovery and invalid LoRA input handling are also improved.
+- **Everyday controls**: fixes for emphasis shortcuts, undo/redo, extra-network insertion/sorting/search, same-name checkpoints, mode switching, and restoring results after a reload.
+- **Saving, upscaling, setup, and APIs**: fixes for multi-image/ZIP saves, batch numbering, PNG-info overrides, tiled upscaling, stop waits, extension dependencies, repair capacity estimates, `--skip-install`, and API inputs. See the [complete changelog](CHANGELOG.md#v460--2026-10-16).
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 
@@ -35,7 +42,7 @@ Choose a model and run its setup BAT file. **You only need to install the models
 
 ### Choose and install models
 
-For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choose a menu entry (1–6). Use the dedicated BAT files in the table for Qwen, YuE2, Clef, and Iris.
+For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choose a menu entry (1–6). Use the dedicated BAT files in the table for Qwen, YuE2, Clef, Iris, and FLUX 3.
 
 ```powershell
 .\aikimi-setup.bat
@@ -53,6 +60,7 @@ For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choos
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | Music composition and ABC score editing in **YuE2 Music** | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1: Official Python** |
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | Image, text, and JSON evaluation; image curation and per-criterion probabilities | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
 | [Iris-3B](extensions-builtin/iris-studio/README.md) | Image generation, img2img, relative depth, restoration, and 4× upscaling; standard, INT8, and W4A8 modes, compatible full fine-tunes and LoRAs, and 4-step Turbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
+| [FLUX 3 Image Klein](docs/flux3-klein.md) | Distilled/Base generation, editing with up to 10 references, bounding boxes, and separately installed optional prompt upsampling in **FLUX 3** | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
 
 The initial download and runtime setup or conversion can take time. Qwen defaults to the standard Q4_K_M model. Iris downloads weights for the selected task; INT8 and W4A8 use preconverted Hugging Face distributions. W4A8 also compresses the text encoder for image generation. See the [Iris guide](docs/iris-studio.md).
 
@@ -153,7 +161,7 @@ Place compatible LoRAs in the directories below, or enter a full path in the sel
 | Forge `txt2img` / `img2img` | `models/Lora/` | Select in the LoRA combination control, or use `<lora:name:0.8>` |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → Refresh → select multiple** |
 | Ming Image | `models/Ming-Image/loras/` | Select under **Model / LoRA** |
-| Iris (image generation) | `models/Iris-3B/loras/` | **LoRA → Refresh → select multiple**. See [supported formats and Turbo (Japanese)](docs/iris-studio.md#任意のloraとturbo) |
+| Iris (image generation) | `models/Iris-3B/loras/` | **LoRA → Refresh → select multiple**. See [supported formats and Turbo (Japanese)](docs/iris-studio.md#任意のloraとコミュニティ製turbo) |
 
 Strength ranges from −2 to 2. A value of 0 disables the LoRA; × removes the selection. Do not specify the same LoRA in both the selector and prompt. Different model generations or formats may be incompatible. See [Supported formats and external paths](docs/local-models.md) and the [Qwen LoRA guide](extensions-builtin/qwen-image21-studio/README.md#追加lora).
 

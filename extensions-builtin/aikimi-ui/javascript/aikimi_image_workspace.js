@@ -5,7 +5,7 @@
     let scheduled = false;
     const observed = new WeakSet();
     const observer = new MutationObserver(schedule);
-    const imageFeatures = new Set(["qwen_image21", "ming_image", "sensenova", "minimax_h3_image", "nanosaur2", "iris"]);
+    const imageFeatures = new Set(["qwen_image21", "ming_image", "sensenova", "minimax_h3_image", "nanosaur2", "iris", "flux3"]);
     const forgeFeatures = new Set(["krea2", "anima38"]);
 
     function root() { return typeof gradioApp === "function" ? gradioApp() : document; }

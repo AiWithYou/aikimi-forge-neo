@@ -80,6 +80,7 @@ class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
             ("qwen_image21_studio", "Qwen Image 2.1"),
             ("clef_studio", "Clef"),
             ("iris_studio", "Iris"),
+            ("flux3_klein_studio", "FLUX 3"),
             ("settings", "Settings"),
             ("extensions", "Extensions"),
         ]
@@ -474,7 +475,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 11
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 12
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -715,6 +716,14 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         presetUnchanged: (presetInput?.value || null) === presetBeforeQwen,
         presetEventsUnchanged: window.fixturePresetEvents.selectedValues.length === presetEventsBeforeQwen
     }};
+    document.querySelector("#aikimi-tab-flux3").click();
+    await waitFor(() => window.AikimiTabs.getActiveFeature() === "flux3");
+    const flux3Result = {{
+        active: window.AikimiTabs.getActiveFeature(),
+        container: window.AikimiTabs.getActiveContainer()?.id || null,
+        nativeHidden: getComputedStyle(fixtureNativeButton("tab_flux3_klein_studio")).display === "none",
+        forgeModesHidden: ["tab_txt2img", "tab_img2img"].every((id) => !fixtureNativeButton(id) || getComputedStyle(fixtureNativeButton(id)).display === "none")
+    }};
     const narrowNav = document.querySelector("#aikimi-feature-nav");
     narrowNav.style.width = "320px";
     const narrowNavFits = narrowNav.scrollWidth === narrowNav.clientWidth;
@@ -770,6 +779,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         qwenVisibleAfterRemount,
         qwenActiveAfterRemount,
         clefResult,
+        flux3Result,
         narrowNavFits,
         tabListClass: tabList.className,
         mutationRepairCount: repairedRow ? document.querySelectorAll("#aikimi-feature-nav").length : 0,
@@ -868,9 +878,19 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "YuE2 Music",
                 "Clef",
                 "Iris",
+                "FLUX 3",
             ],
         )
         self.assertTrue(result["externalRowBeforeTabs"])
+        self.assertEqual(
+            result["flux3Result"],
+            {
+                "active": "flux3",
+                "container": "tab_flux3_klein_studio",
+                "nativeHidden": True,
+                "forgeModesHidden": True,
+            },
+        )
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])
         self.assertTrue(result["nativeOrderUnchanged"])
         self.assertTrue(result["nativeNodeIdentityUnchanged"])
@@ -1067,6 +1087,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "YuE2 Music",
                 "Clef",
                 "Iris",
+                "FLUX 3",
             ],
         )
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])

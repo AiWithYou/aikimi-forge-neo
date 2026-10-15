@@ -23,7 +23,17 @@ FORGE_FAMILIES = (
     "Ernie-Image",
     "PiD",
 )
-STUDIO_FAMILIES = ("Qwen-Image-2.1", "Ming-Image", "Iris-3B", "Clef", "SenseNova-U1", "MiniMax-H3", "Nanosaur2", "YuE2")
+STUDIO_FAMILIES = (
+    "Qwen-Image-2.1",
+    "Ming-Image",
+    "Iris-3B",
+    "Flux-3-Klein",
+    "Clef",
+    "SenseNova-U1",
+    "MiniMax-H3",
+    "Nanosaur2",
+    "YuE2",
+)
 
 
 def prepare_directories():

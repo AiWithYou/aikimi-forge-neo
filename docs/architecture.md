@@ -55,7 +55,7 @@ API routeは共通の認証処理を使います。healthは最小情報、statu
 
 ## Aikimi UIとStatus
 
-`extensions-builtin/aikimi-ui`は、Aikimi固有の小型ナビゲーション、ちびあいきみ、status用CSSを所有します。AikimiナビゲーションはGradioのタブ列へbuttonを挿入せず、`#tabs`直前の独立した1行として配置します。Forge由来の上部タブ、Quick Settings、`txt2img`、`img2img`、`Extras`、`Settings`は維持します。専用の画像Studioを開いている間はForge側のtxt2img／img2imgボタンを隠し、そのStudio内で切り替えます。Irisでは用途のないCheckpoint・VAEのQuick Settingsも隠します。
+`extensions-builtin/aikimi-ui`は、Aikimi固有の小型ナビゲーション、ちびあいきみ、status用CSSを所有します。AikimiナビゲーションはGradioのタブ列へbuttonを挿入せず、`#tabs`直前の独立した1行として配置します。Forge由来の上部タブ、Quick Settings、`txt2img`、`img2img`、`Extras`、`Settings`は維持します。専用の画像Studioを開いている間はForge側のtxt2img／img2imgボタンを隠し、そのStudio内で切り替えます。IrisとFLUX 3では用途のないCheckpoint・VAEのQuick Settingsも隠します。
 
 画像生成はモデルごとの能力に合わせた[共通画面](image-workspace.md)を使用します。設定パネルの開閉は機能の有効・無効と独立し、元のコンポーネント・実行サービスを使います。参照画像を使う編集と、Irisの変更強度を使うimg2imgは、それぞれのサンプリングを維持します。
 
@@ -97,6 +97,12 @@ extensions-builtin/minimax-h3-studio
 ```
 
 bridgeは、runtime path、process identity、ComfyUI revision、必要node、model一覧を検査します。Forgeが起動したprocessだけを再起動し、外部launcherが所有するprocessを自動停止しません。
+
+## FLUX 3 Image Klein
+
+`extensions-builtin/flux3-klein-studio`から`modules_forge/flux3_klein/service.py`へ生成を渡し、共通GPU使用権の下でresident workerを実行します。専用のPythonと固定ComfyUI checkoutを使い、ComfyUI HTTPサーバーは起動しません。
+
+参照画像は受付時に画素を保存し、順序とハッシュを保持します。PUP・テキストエンコーダー・VAE・生成本体を必要な段階で読み込み、使わないモデルをGPUから退避します。PUPは標準OFFの別途導入です。FP32 VAEは空きメモリに応じて分割処理し、保存前に数値と生成条件を検証します。中断・失敗時はworkerの終了を確認してからGPU使用権を返します。[使い方と制限](flux3-klein.md)
 
 ## model setup
 

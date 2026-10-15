@@ -16,6 +16,8 @@ SUFFIXES = (
     (".lora_A.weight", "down"),
     (".lora_B.weight", "up"),
 )
+HYBRID_FORMAT = "iris-turbo-svd-v1"
+DENSE_PREFIX = "dense."
 
 
 def inventory(root):
@@ -51,8 +53,14 @@ def target(key):
 
 def pairs(header):
     result = {}
+    metadata = header.get("__metadata__", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("LoRAのメタデータが不正です。")
+    hybrid = metadata.get("format") == HYBRID_FORMAT
     for key in header:
         if key == "__metadata__":
+            continue
+        if hybrid and key.startswith(DENSE_PREFIX):
             continue
         name, side = target(key)
         entry = result.setdefault(name, {})
@@ -82,7 +90,7 @@ def inspect(root, name):
             raise ValueError(f"LoRAのrankが一致しません: {name}")
         ranks.add(down["shape"][0])
     metadata = header.get("__metadata__", {})
-    if not isinstance(metadata, dict) or len(ranks) != 1:
+    if len(ranks) != 1:
         raise ValueError("LoRAのrank・メタデータが不正です。")
     rank = ranks.pop()
     try:
@@ -97,6 +105,38 @@ def inspect(root, name):
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("LoRAのrank・alpha・メタデータが不正です。") from exc
     result = {"rank": rank, "alpha": alpha}
+    if metadata.get("format") == HYBRID_FORMAT:
+        from .official_turbo import validate_settings
+
+        try:
+            for field in ("base_sha256", "base_config_sha256", "target_sha256"):
+                value = metadata[field]
+                if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+                    raise ValueError
+            if alpha != rank or "turbo_steps" in extra:
+                raise ValueError
+            sampling = validate_settings(json.loads(metadata["sampling"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("抽出Turbo LoRAの元モデル・生成設定が不正です。") from exc
+        dense = {key: value for key, value in header.items() if key.startswith(DENSE_PREFIX)}
+        if not dense:
+            raise ValueError("抽出Turbo LoRAの非Linearデータがありません。")
+        for key, value in dense.items():
+            name = key.removeprefix(DENSE_PREFIX)
+            if (
+                not name
+                or not all(part and (part.isidentifier() or part.isdecimal()) for part in name.split("."))
+                or value.get("dtype") != "BF16"
+                or any(type(size) is not int or size <= 0 for size in value.get("shape", []))
+            ):
+                raise ValueError(f"非Linearデータの形状・名前が不正です: {key}")
+        result.update(
+            format=HYBRID_FORMAT,
+            base_sha256=metadata["base_sha256"],
+            base_config_sha256=metadata["base_config_sha256"],
+            target_sha256=metadata["target_sha256"],
+            sampling=sampling,
+        )
     if "turbo_steps" in extra:
         steps, shift = extra.get("turbo_steps"), extra.get("shift")
         try:
@@ -153,13 +193,33 @@ def verify_sources(loras):
 
 
 def sampling_settings(loras):
-    active = [item for item in loras if item["strength"] != 0 and "turbo_steps" in item["metadata"]]
+    active = [
+        item
+        for item in loras
+        if item["strength"] != 0 and ("turbo_steps" in item["metadata"] or "sampling" in item["metadata"])
+    ]
     if not active:
         return {"mode": "standard"}
     if len(active) != 1 or active[0]["strength"] != 1:
         raise ValueError("Turbo LoRAは一つだけ選び、強度1で使用してください。")
     metadata = active[0]["metadata"]
+    if "sampling" in metadata:
+        return metadata["sampling"]
     return {"mode": "turbo", "default_steps": metadata["turbo_steps"], "shift": metadata["shift"]}
+
+
+def verify_base(loras, identity, precision):
+    for item in loras:
+        metadata = item["metadata"]
+        if metadata.get("format") != HYBRID_FORMAT:
+            continue
+        if precision != "normal":
+            raise ValueError("抽出Turbo LoRAは通常版の元モデルで使用してください。")
+        if (
+            identity.get("weights", {}).get("sha256") != metadata["base_sha256"]
+            or identity.get("config", {}).get("sha256") != metadata["base_config_sha256"]
+        ):
+            raise ValueError("抽出Turbo LoRAの元モデル・設定が一致しません。オリジナルの通常版を選んでください。")
 
 
 def apply(model, loras):
@@ -173,11 +233,13 @@ def apply(model, loras):
     from .w4a8 import W4A8Linear
 
     verify_sources(loras)
-    prepared = []
+    sampling_settings(loras)
+    prepared, replacements = [], []
     for item in loras:
         seen_modules = set()
         with safe_open(item["path"], framework="pt", device="cpu") as file:
-            for name, pair in pairs(dict.fromkeys(file.keys())).items():
+            header = {**dict.fromkeys(file.keys()), "__metadata__": file.metadata() or {}}
+            for name, pair in pairs(header).items():
                 try:
                     module = model.get_submodule(name)
                 except AttributeError as exc:
@@ -195,14 +257,36 @@ def apply(model, loras):
                 if not math.isfinite(scale) or not torch.isfinite(down).all() or not torch.isfinite(up).all():
                     raise ValueError(f"LoRAに非有限値が含まれています: {name}")
                 prepared.append((module, down, up, scale))
+            if item["metadata"].get("format") == HYBRID_FORMAT:
+                for key in file.keys():
+                    if not key.startswith(DENSE_PREFIX):
+                        continue
+                    name = key.removeprefix(DENSE_PREFIX)
+                    try:
+                        parameter = model.get_parameter(name)
+                        parent = model.get_submodule(name.rsplit(".", 1)[0]) if "." in name else model
+                    except AttributeError as exc:
+                        raise ValueError(f"非Linearデータの対象がありません: {name}") from exc
+                    if name.endswith(".weight") and isinstance(parent, (nn.Linear, Int8Linear, W4A8Linear)):
+                        raise ValueError(f"Linearの重みは非Linearデータで差し替えできません: {name}")
+                    value = file.get_tensor(key).float()
+                    if value.shape != parameter.shape:
+                        raise ValueError(f"非Linearデータの形状が一致しません: {name}")
+                    if not torch.isfinite(value).all():
+                        raise ValueError(f"非Linearデータに非有限値があります: {name}")
+                    replacements.append((parameter, value))
     verify_sources(loras)
     with torch.no_grad():
+        for parameter, value in replacements:
+            parameter.copy_(value.to(parameter.dtype))
         for index, (module, down, up, scale) in enumerate(prepared):
             if isinstance(module, nn.Linear):
                 merged = module.weight.float() + (up @ down) * scale
                 if not torch.isfinite(merged).all():
                     raise ValueError("LoRAの合成結果に非有限値が含まれています。")
-                module.weight.copy_(merged.to(module.weight.dtype))
+                # Keep Parameter identity for shared modules without dirtying
+                # every page of a large safetensors memory-mapped base.
+                module.weight.set_(merged.to(module.weight.dtype))
             else:
                 down_name, up_name = f"_iris_lora_down_{index}", f"_iris_lora_up_{index}"
                 module.register_buffer(down_name, down, persistent=False)

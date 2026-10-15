@@ -165,7 +165,16 @@ def resolve(root, value) -> dict:
         precision = _precision(local_assets.read_header(weights))
     except (OSError, UnicodeError, TypeError, KeyError) as exc:
         raise ValueError(f"Irisのsafetensorsヘッダーを読み込めません: {weights}") from exc
-    return {"weights": weights, "config": config, "precision": precision, "raw": raw}
+    result = {"weights": weights, "config": config, "precision": precision, "raw": raw}
+    distill = weights.with_name("distill.yaml")
+    if distill.exists():
+        from .official_turbo import read_settings
+
+        result["sampling"] = read_settings(distill)
+        flow = raw.get("flow", {})
+        if not isinstance(flow, dict) or flow.get("prediction", "v") not in {"v", "x"}:
+            raise ValueError("公式Turboにはvまたはxのflow predictionが必要です。")
+    return result
 
 
 def discover(root, directory) -> list[tuple[str, str]]:

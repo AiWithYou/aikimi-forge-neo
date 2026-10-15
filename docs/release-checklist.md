@@ -38,9 +38,12 @@ Private Vulnerability Reportingを有効にできないreleaseは、第三者向
 - [ ] installer functional testが通る
 - [ ] Ruff checkとformat checkが通る
 - [ ] 共通画像画面と各Studioの操作・モード切替がCIの検査対象に含まれる
+- [ ] FLUX 3の本体module・Studio・setup・worker・テストがlint対象で、Python契約テストはLinux/WindowsのCPU CIが自動探索し、配置JavaScriptの構文確認とNode契約テストも実行される
+- [ ] FLUX 3の専用依存lockはCUDA 13.0用indexを含む再生成コマンドを保持し、依存変更後は専用環境を再検証する
 - [ ] PowerShell parserがすべての`.ps1`を受理する
 - [ ] actionlintがworkflowを受理する
 - [ ] pip-auditのfindingを確認した
+- [ ] FLUX 3の全固定依存が独立したOSV監査を通り、Windows用lockの再解決や依存スキップ、無断例外を行っていない
 - [ ] `docs/security-model.md`の期限付きadvisory例外を再審査し、期限切れを残していない
 - [ ] CodeQLのfindingを確認した
 - [ ] dependency reviewを確認した
@@ -94,8 +97,8 @@ findingがある場合は、単語だけを置換せず、対象文全体を書�
 
 - [ ] Local SafeでWebUIとAPIを起動した
 - [ ] browserから`127.0.0.1`だけで開ける
-- [ ] Forge由来の上部タブが表示され、Quick SettingsはIris以外で表示される。Iris内では使用しないCheckpoint・VAE設定を隠し、GPU解放と機能切替を残す
-- [ ] Aikimiの11入口が`#tabs`直前にあり、Gradio所有tablistのchild、順序、label、ARIAを変更しない
+- [ ] Forge由来の上部タブが表示され、Quick SettingsはIris・FLUX 3以外で表示される。両Studio内では使用しないCheckpoint・VAE設定を隠し、GPU解放と機能切替を残す
+- [ ] FLUX 3を含むAikimiの12入口が`#tabs`直前にあり、Gradio所有tablistのchild、順序、label、ARIAを変更しない
 - [ ] `Krea2`がUI Presetの`krea`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持する
 - [ ] `Krea2`を別のタブから開くと`txt2img`へ移動し、`Krea2 2-Stage Upscale`を自動選択しない
 - [ ] `Anima`がUI Presetの`anima`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持する

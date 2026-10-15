@@ -16,6 +16,13 @@ on:
       - "extensions-builtin/clef-studio/**"
       - "tools/*clef*.py"
       - "tools/tests/test_clef*.py"
+      - "modules_forge/flux3_klein/**"
+      - "extensions-builtin/flux3-klein-studio/**"
+      - "tools/*flux3*.py"
+      - "tools/tests/test_flux3*.py"
+      - "tools/tests/flux3_layout.test.mjs"
+      - "tools/flux3_klein_manifest.json"
+      - "tools/requirements-flux3-klein.*"
       - "modules_forge/iris/**"
       - "extensions-builtin/iris-studio/**"
       - "tools/*iris*.py"
@@ -148,6 +155,13 @@ on:
       - "extensions-builtin/clef-studio/**"
       - "tools/*clef*.py"
       - "tools/tests/test_clef*.py"
+      - "modules_forge/flux3_klein/**"
+      - "extensions-builtin/flux3-klein-studio/**"
+      - "tools/*flux3*.py"
+      - "tools/tests/test_flux3*.py"
+      - "tools/tests/flux3_layout.test.mjs"
+      - "tools/flux3_klein_manifest.json"
+      - "tools/requirements-flux3-klein.*"
       - "modules_forge/iris/**"
       - "extensions-builtin/iris-studio/**"
       - "tools/*iris*.py"
@@ -300,6 +314,10 @@ jobs:
             extensions-builtin/clef-studio/scripts
             tools/*clef*.py
             tools/tests/test_clef*.py
+            modules_forge/flux3_klein
+            extensions-builtin/flux3-klein-studio/scripts
+            tools/*flux3*.py
+            tools/tests/test_flux3*.py
             modules_forge/iris
             extensions-builtin/iris-studio/scripts
             tools/*iris*.py
@@ -449,6 +467,7 @@ jobs:
           node --check modules_forge/forge_canvas/canvas.js
           node --check extensions-builtin/clef-studio/assets/clipboard.js
           node --check extensions-builtin/clef-studio/assets/filters.js
+          node --check extensions-builtin/flux3-klein-studio/javascript/flux3_layout.js
       - name: Validate YAML syntax
         shell: bash
         run: |
