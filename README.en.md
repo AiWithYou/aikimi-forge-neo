@@ -15,7 +15,7 @@ Choose the model at the top of each Studio. FLUX 3 selects the official distille
 - **[FLUX 3 Image Klein](docs/flux3-klein.md)**: distilled and Base models, editing with up to ten references, drawn layout boxes, and 4K output. Persistent history opens saved images, generation settings, and the user guide. Official INT8 is the default; PUP is off by default and installed separately.
 - **[Official Iris Turbo and extracted LoRAs](docs/iris-studio.md#公式iris-3b-turbo)**: fixed four-step Full FT inference, preserved distillation settings during quantization, and rank64/rank128 extraction. Cancellation recovery and invalid LoRA input handling are also improved.
 - **Everyday controls**: fixes for emphasis shortcuts, undo/redo, extra-network insertion/sorting/search, same-name checkpoints, mode switching, and restoring results after a reload.
-- **Saving, upscaling, setup, and APIs**: fixes for multi-image/ZIP saves, batch numbering, PNG-info overrides, tiled upscaling, stop waits, extension dependencies, repair capacity estimates, H3 orbit LoRA change detection, `--skip-install`, and API inputs. See the [complete changelog](CHANGELOG.md#v460--2026-10-16).
+- **Saving, upscaling, setup, and APIs**: fixes for multi-image/ZIP saves, batch numbering, PNG-info overrides, tiled upscaling, stop waits, extension dependencies, repair capacity estimates, H3 orbit LoRA change detection, Windows short paths, `--skip-install`, and API inputs. See the [complete changelog](CHANGELOG.md#v460--2026-10-16).
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 

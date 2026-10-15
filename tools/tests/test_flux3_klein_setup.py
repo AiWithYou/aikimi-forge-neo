@@ -100,7 +100,7 @@ class Flux3SetupTests(unittest.TestCase):
                 "sha256": hashlib.sha256(b"good").hexdigest(),
             }
             with patch.object(setup, "_hub_download") as download:
-                self.assertEqual(setup.download_asset(root, spec), root / "asset.bin")
+                self.assertEqual(setup.download_asset(root, spec), root.resolve() / "asset.bin")
             download.assert_not_called()
 
     def test_hub_download_uses_pinned_revision_existing_auth_and_validates_before_publish(self):

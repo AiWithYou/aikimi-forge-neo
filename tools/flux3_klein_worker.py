@@ -17,8 +17,9 @@ def resident_run(payload):
     global _runner, _root
 
     from modules_forge.flux3_klein.inference import Runner
+    from modules_forge.flux3_klein.paths import canonical_path
 
-    root = Path(payload["root"]).resolve()
+    root = canonical_path(payload["root"])
     directory = Path(payload["job_dir"]).resolve()
     request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
     if _runner is not None and root != _root:

@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
 
 from modules.aikimi_security.redaction import redact_text, sanitized_subprocess_environment  # noqa: E402
 from modules_forge.flux3_klein import core  # noqa: E402
+from modules_forge.flux3_klein.paths import canonical_path  # noqa: E402
 
 LOCK = ROOT / "tools/requirements-flux3-klein.lock"
 
@@ -39,9 +40,10 @@ def download_plan(*, model="distilled", precision="int8", with_pup=False) -> lis
 
 
 def _target(root: Path, relative: str) -> Path:
-    root = Path(root).absolute()
-    if root.is_symlink() or root.resolve() != root:
-        raise Flux3SetupError("管理フォルダーにリンクは使用できません。")
+    try:
+        root = canonical_path(root)
+    except ValueError:
+        raise Flux3SetupError("管理フォルダーにリンクは使用できません。") from None
     relative_path = PurePosixPath(relative.replace("\\", "/"))
     if (
         relative_path.is_absolute()
@@ -49,8 +51,11 @@ def _target(root: Path, relative: str) -> Path:
         or any(part in {"..", "."} or ":" in part for part in relative_path.parts)
     ):
         raise Flux3SetupError("管理フォルダー外への保存を拒否しました。")
-    target = root.joinpath(*relative_path.parts)
-    if target.is_symlink() or not target.resolve().is_relative_to(root.resolve()):
+    try:
+        target = canonical_path(root.joinpath(*relative_path.parts))
+    except ValueError:
+        raise Flux3SetupError("管理フォルダー外へのリンクを拒否しました。") from None
+    if not target.is_relative_to(root):
         raise Flux3SetupError("管理フォルダー外へのリンクを拒否しました。")
     return target
 

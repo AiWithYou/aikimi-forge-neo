@@ -11,6 +11,7 @@ from pathlib import Path
 from PIL import Image, PngImagePlugin
 
 from . import conditioning
+from .paths import canonical_path
 
 
 class Cancelled(RuntimeError):
@@ -88,8 +89,12 @@ def verify_module_origin(module, repository):
     """Comfy's top-level package is a namespace package without __file__."""
     filename = getattr(module, "__file__", None)
     locations = [filename] if filename else list(getattr(module, "__path__", []))
-    if not locations or any(not Path(path).resolve().is_relative_to(repository) for path in locations):
-        raise RuntimeError("a Comfy module was imported from a different runtime")
+    try:
+        repository = canonical_path(repository)
+        if not locations or any(not canonical_path(path).is_relative_to(repository) for path in locations):
+            raise ValueError("module outside the pinned checkout")
+    except (OSError, ValueError):
+        raise RuntimeError("a Comfy module was imported from a different runtime") from None
 
 
 class Runner:
@@ -272,8 +277,8 @@ class ComfyRuntime:
     def __init__(self, root):
         from .core import comfy_path
 
-        self.root = Path(root)
-        repository = comfy_path(self.root).resolve()
+        self.root = canonical_path(root)
+        repository = canonical_path(comfy_path(self.root))
         if not (repository / "comfy" / "ldm" / "flux3" / "model.py").is_file():
             raise RuntimeError("the pinned FLUX 3 Comfy runtime has not been installed")
         sys.path.insert(0, str(repository))

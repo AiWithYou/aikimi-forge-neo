@@ -11,6 +11,7 @@ from pathlib import Path
 from PIL import Image
 
 from .core import ROOT, Flux3Error, validate_request
+from .paths import canonical_path
 from .service import Service
 
 MAX_RESULTS = 50
@@ -34,20 +35,22 @@ class History:
         self.root = Path(root).absolute()
 
     def _root(self):
-        if not self.root.is_dir() or self.root.resolve() != self.root or _linked(self.root):
+        root = canonical_path(self.root)
+        if not root.is_dir():
             raise Flux3Error("履歴の保存先がありません。")
-        return self.root
+        return root
 
     def load(self, identifier):
         try:
             if not isinstance(identifier, str) or re.fullmatch(r"[0-9a-f]{32}", identifier) is None:
                 raise Flux3Error("履歴を選択してください。")
-            directory = self._root() / identifier
-            if _linked(directory) or not directory.is_dir() or directory.resolve().parent != self.root:
+            root = self._root()
+            directory = root / identifier
+            if not canonical_path(directory).is_dir() or directory.resolve().parent != root:
                 raise Flux3Error("履歴の保存場所が一致しません。")
             for filename in ("output.png", "request.json", "result.json", "progress.json"):
                 path = directory / filename
-                if _linked(path) or not path.is_file():
+                if not canonical_path(path).is_file():
                     raise Flux3Error("履歴のファイルがありません。")
             if (directory / "cancel").exists() or _linked(directory / "cancel"):
                 raise Flux3Error("中断された履歴です。")
@@ -57,21 +60,16 @@ class History:
             if record.get("status", "complete") != "complete":
                 raise Flux3Error("生成が完了していません。")
             if (
-                Path(record["image_path"]) != directory / "output.png"
-                or Path(record["result_path"]) != directory / "result.json"
+                canonical_path(record["image_path"]) != directory / "output.png"
+                or canonical_path(record["result_path"]) != directory / "result.json"
             ):
                 raise Flux3Error("履歴の出力パスが一致しません。")
             request = _json(directory / "request.json")
             validate_request({key: value for key, value in request.items() if key != "reference_sha256"})
             reference_hashes = []
             for value in request.get("images", []):
-                path = Path(value)
-                if (
-                    _linked(path)
-                    or not path.is_file()
-                    or path.parent != directory
-                    or path.resolve().parent != directory
-                ):
+                path = canonical_path(value)
+                if not path.is_file() or path.parent != directory:
                     raise Flux3Error("履歴の参照画像の保存場所が一致しません。")
                 with path.open("rb") as source:
                     reference_hashes.append(hashlib.file_digest(source, "sha256").hexdigest())

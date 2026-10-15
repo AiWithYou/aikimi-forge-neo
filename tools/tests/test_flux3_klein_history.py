@@ -10,13 +10,14 @@ from pathlib import Path
 from PIL import Image, PngImagePlugin
 
 from modules_forge.flux3_klein.history import History
+from tools.tests.test_flux3_klein_paths import canonical_alias
 
 
 class HistoryTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name) / "outputs"
+        self.root = Path(self.temporary.name).resolve() / "outputs"
         self.root.mkdir()
         self.history = History(self.root)
 
@@ -67,6 +68,28 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(result["id"], identifier)
         self.assertEqual(result["files"], [str(directory / "output.png"), str(directory / "result.json")])
         self.assertEqual(result["prompt"], "a white vase")
+
+    def test_record_and_reference_short_names_share_the_canonical_output_root(self):
+        identifier, directory = self.completed()
+        reference = directory / "input.png"
+        Image.new("RGB", (64, 64), "red").save(reference)
+        alias = self.root.parent / "OUTPUT~1"
+        request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
+        digest = hashlib.sha256(reference.read_bytes()).hexdigest()
+        request.update(images=[str(alias / identifier / reference.name)], reference_sha256=[digest])
+        record = json.loads((directory / "result.json").read_text(encoding="utf-8"))
+        record.update(
+            image_path=str(alias / identifier / "output.png"),
+            result_path=str(alias / identifier / "result.json"),
+            reference_hashes=[digest],
+        )
+        metadata = PngImagePlugin.PngInfo()
+        metadata.add_text("flux3_klein", json.dumps(record))
+        Image.new("RGB", (64, 64), "white").save(directory / "output.png", pnginfo=metadata)
+        (directory / "request.json").write_text(json.dumps(request), encoding="utf-8")
+        (directory / "result.json").write_text(json.dumps(record), encoding="utf-8")
+        with canonical_alias(alias, self.root):
+            self.assertEqual(self.history.load(identifier)["id"], identifier)
 
     def test_newest_fifty_candidates_are_bounded_and_ordered(self):
         for number in range(1, 54):
