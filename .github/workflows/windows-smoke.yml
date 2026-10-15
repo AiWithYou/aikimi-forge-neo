@@ -342,6 +342,7 @@ jobs:
           import modules_forge.minimax_h3_bridge;
           import modules_forge.sensenova_u15_bridge"
       - name: Run launch, security, and UI smoke tests
+        id: smoke
         run: >-
           python tools/run_ci_tests.py --verbosity 2
           --preload modules.shared
@@ -411,6 +412,7 @@ jobs:
           --module tools.tests.test_upstream_neo_regressions
           --module tools.tests.test_workflow_ui
       - name: Run FLUX 3 CPU contracts without model downloads
+        if: ${{ !cancelled() && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}
         run: python tools/run_ci_tests.py --pattern "test_flux3_klein*.py" --verbosity 2
       - name: Start the real UI and run the full Chromium smoke
         shell: pwsh

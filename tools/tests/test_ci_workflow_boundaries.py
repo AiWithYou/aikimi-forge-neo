@@ -164,6 +164,23 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
             "Windows must discover all FLUX 3 contracts, including future feature tests",
         )
 
+    def test_flux3_windows_cpu_runs_after_a_started_main_smoke_even_when_it_fails(self):
+        windows = self.workflow("windows-smoke.yml")
+        smoke = windows.split("      - name: Run launch, security, and UI smoke tests\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        flux3 = windows.split("      - name: Run FLUX 3 CPU contracts without model downloads\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn("        id: smoke\n", smoke)
+        self.assertIn(
+            "        if: ${{ !cancelled() && "
+            "(steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}\n",
+            flux3,
+            "FLUX 3 must run after main success or failure, but skip before main starts or on cancellation",
+        )
+        self.assertNotIn("continue-on-error:", windows, "A failed main smoke must still fail the Windows job")
+
     def test_flux3_lock_rebuild_command_keeps_the_required_cuda_index(self):
         lock = (ROOT / "tools/requirements-flux3-klein.lock").read_text(encoding="utf-8")
         command = lock.splitlines()[1]
@@ -194,6 +211,15 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
 
         self.assertEqual(workflow.count('"modules/aikimi_status.py"'), 2)
         self.assertEqual(workflow.count('"modules/aikimi_security/**"'), 2)
+        self.assertEqual(workflow.count('"tools/tests/chromium_helpers.py"'), 2)
+        self.assertEqual(workflow.count('"tools/tests/test_chromium_helpers.py"'), 2)
+
+        assets = (ROOT / "tools/requirements-aikimi-assets.txt").read_text(encoding="utf-8")
+        browser = (ROOT / "tools/requirements-test.txt").read_text(encoding="utf-8")
+        self.assertIn("websockets==15.0.1", assets.splitlines())
+        self.assertIn("websockets==15.0.1", browser.splitlines())
+        security = self.workflow("security.yml")
+        self.assertIn("inputs: tools/requirements-aikimi-assets.txt", security)
 
     def test_windows_job_tracks_and_runs_its_runner_and_chromium_smokes(self):
         workflow = self.workflow("windows-smoke.yml")

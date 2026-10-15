@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import unittest
+from contextlib import contextmanager
+from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
@@ -44,6 +48,213 @@ class FakeWebSocket:
         self.closed = True
         if self.error is not None:
             raise self.error
+
+
+class ChromiumPageLifecycleTests(unittest.TestCase):
+    def start_page(self, *, page=None):
+        process = FakeProcess()
+        websocket = FakeWebSocket()
+        page = page or Mock()
+        page.send.return_value = {}
+        self.enterContext(patch.object(chromium_helpers, "reserve_local_port", return_value=9222))
+        self.spawn = self.enterContext(patch.object(chromium_helpers.subprocess, "Popen", return_value=process))
+        self.endpoint = self.enterContext(
+            patch.object(
+                chromium_helpers,
+                "urlopen",
+                return_value=BytesIO(b'{"webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/fixture"}'),
+            )
+        )
+        self.connect = self.enterContext(patch.object(chromium_helpers, "_connect_websocket", return_value=websocket))
+        self.enterContext(patch.object(chromium_helpers, "CdpPage", return_value=page))
+        self.cleanup = self.enterContext(patch.object(chromium_helpers, "close_chromium"))
+        return process, websocket, page
+
+    def test_expired_devtools_readiness_cleans_up_exact_owned_process(self):
+        process, _, _ = self.start_page()
+        self.endpoint.side_effect = OSError("not listening")
+        with (
+            patch.object(chromium_helpers.time, "monotonic", side_effect=[0, 0, 11]),
+            self.assertRaisesRegex(TimeoutError, "DevTools did not start"),
+            chromium_helpers.cdp_page("chrome", "http://127.0.0.1/fixture"),
+        ):
+            self.fail("unready Chrome must not yield a page")
+        self.cleanup.assert_called_once_with(process, websocket=None, close_browser=None, owned_port=9222)
+
+    def test_websocket_failure_still_cleans_up_owned_process(self):
+        process, _, _ = self.start_page()
+        self.connect.side_effect = OSError("connect failed")
+        with (
+            self.assertRaisesRegex(OSError, "connect failed"),
+            chromium_helpers.cdp_page("chrome", "http://127.0.0.1/fixture"),
+        ):
+            self.fail("failed connection must not yield a page")
+        self.cleanup.assert_called_once_with(process, websocket=None, close_browser=None, owned_port=9222)
+
+    def test_navigation_error_closes_socket_and_owned_tree(self):
+        process, websocket, page = self.start_page()
+        page.send.side_effect = [{}, {}, {"errorText": "net::ERR_CONNECTION_REFUSED"}]
+        with (
+            self.assertRaisesRegex(RuntimeError, "ERR_CONNECTION_REFUSED"),
+            chromium_helpers.cdp_page("chrome", "http://127.0.0.1/fixture"),
+        ):
+            self.fail("failed navigation must not yield a page")
+        self.assertEqual(self.cleanup.call_args.args, (process,))
+        self.assertIs(self.cleanup.call_args.kwargs["websocket"], websocket)
+        self.assertEqual(self.cleanup.call_args.kwargs["owned_port"], 9222)
+        self.assertTrue(callable(self.cleanup.call_args.kwargs["close_browser"]))
+
+    def test_fixture_exception_keeps_failure_and_cleans_up_before_profile_removal(self):
+        process, websocket, _ = self.start_page()
+        with (
+            self.assertRaisesRegex(ValueError, "fixture failed"),
+            chromium_helpers.cdp_page("chrome", "http://127.0.0.1/fixture", reduced_motion=True),
+        ):
+            raise ValueError("fixture failed")
+        arguments = self.spawn.call_args.args[0]
+        self.assertIn("--force-prefers-reduced-motion", arguments)
+        self.assertNotIn("--dump-dom", arguments)
+        self.assertNotIn("--virtual-time-budget=7000", arguments)
+        self.assertEqual(sum(arg.startswith("--user-data-dir=") for arg in arguments), 1)
+        self.assertEqual(self.cleanup.call_args.args, (process,))
+        self.assertIs(self.cleanup.call_args.kwargs["websocket"], websocket)
+
+
+class ChromiumDomCompletionTests(unittest.TestCase):
+    def fixture_page(self, page):
+        @contextmanager
+        def opened(*_args, **_kwargs):
+            try:
+                yield page
+            finally:
+                self.cleaned = True
+
+        self.cleaned = False
+        return self.enterContext(patch.object(chromium_helpers, "cdp_page", side_effect=opened))
+
+    def test_ready_dom_returns_without_waiting_for_browser_exit(self):
+        page = Mock(exceptions=[], console_errors=[])
+        page.evaluate.side_effect = [
+            {"ready": False, "dom": '<pre id="result">pending</pre>'},
+            {"ready": True, "dom": '<pre id="result" data-ready="true">{"ok":true}</pre>'},
+        ]
+        opened = self.fixture_page(page)
+        with patch.object(chromium_helpers.time, "sleep"):
+            document = chromium_helpers.render_chromium_dom("chrome", "http://127.0.0.1/fixture")
+        self.assertIn('data-ready="true"', document)
+        self.assertEqual(page.evaluate.call_count, 2)
+        page.process.wait.assert_not_called()
+        self.assertEqual(opened.call_args.kwargs["window_size"], "1280,900")
+        self.assertTrue(self.cleaned)
+
+    def test_json_without_completion_marker_times_out_with_last_dom_and_cleans_up(self):
+        clock = [100.0]
+        page = Mock(exceptions=["fixture error"], console_errors=["bad asset"])
+
+        def pending(*_args, **_kwargs):
+            clock[0] += 30
+            return {"ready": False, "dom": '<pre id="result">{"ok":true}</pre>'}
+
+        page.evaluate.side_effect = pending
+        self.fixture_page(page)
+        with (
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+            self.assertRaisesRegex(TimeoutError, "DOM completion") as failure,
+        ):
+            chromium_helpers.render_chromium_dom("chrome", "http://127.0.0.1/fixture")
+        notes = "\n".join(failure.exception.__notes__)
+        self.assertIn('id=\\"result\\"', notes)
+        self.assertIn("fixture error", notes)
+        self.assertTrue(self.cleaned)
+
+    def test_evaluation_failure_is_not_accepted_as_dom_completion(self):
+        page = Mock(exceptions=[], console_errors=[])
+        page.evaluate.side_effect = RuntimeError("JavaScript failed")
+        self.fixture_page(page)
+        with self.assertRaisesRegex(RuntimeError, "JavaScript failed"):
+            chromium_helpers.render_chromium_dom("chrome", "http://127.0.0.1/fixture")
+        self.assertTrue(self.cleaned)
+
+    def test_startup_and_dom_completion_share_one_absolute_deadline(self):
+        clock = [100.0]
+        page = Mock(exceptions=[], console_errors=[])
+
+        @contextmanager
+        def slow_start(*_args, **kwargs):
+            self.assertEqual(kwargs["deadline"], 130)
+            clock[0] += 29
+            yield page
+
+        def pending(*_args, **kwargs):
+            self.assertLessEqual(kwargs["timeout"], 1)
+            clock[0] += 2
+            return {"ready": False, "dom": "pending"}
+
+        page.evaluate.side_effect = pending
+        with (
+            patch.object(chromium_helpers, "cdp_page", side_effect=slow_start),
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+            self.assertRaisesRegex(TimeoutError, "DOM completion"),
+        ):
+            chromium_helpers.render_chromium_dom("chrome", "http://127.0.0.1/fixture")
+        self.assertEqual(page.evaluate.call_count, 1)
+
+    def test_ready_response_after_deadline_is_rejected(self):
+        clock = [100.0]
+        page = Mock(exceptions=[], console_errors=[])
+
+        def late_completion(*_args, **_kwargs):
+            clock[0] += 31
+            return {"ready": True, "dom": '<pre id="result" data-ready="true">{"ok":true}</pre>'}
+
+        page.evaluate.side_effect = late_completion
+        self.fixture_page(page)
+        with (
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+            self.assertRaisesRegex(TimeoutError, "DOM completion"),
+        ):
+            chromium_helpers.render_chromium_dom("chrome", "http://127.0.0.1/fixture")
+        self.assertTrue(self.cleaned)
+
+    def test_failure_notes_redact_secret_and_personal_path_and_bound_output(self):
+        clock = [100.0]
+        page = Mock(exceptions=[], console_errors=[])
+
+        def pending(*_args, **_kwargs):
+            clock[0] += 30
+            return {
+                "ready": False,
+                "dom": 'token=HARNESS_CANARY C:\\Users\\private\\input.png {"token":"QUOTED_CANARY"} ' + "x" * 6000,
+            }
+
+        page.evaluate.side_effect = pending
+        self.fixture_page(page)
+        with (
+            patch.object(chromium_helpers.time, "monotonic", side_effect=lambda: clock[0]),
+            self.assertRaises(TimeoutError) as failure,
+        ):
+            chromium_helpers.render_chromium_dom("chrome", "http://127.0.0.1/fixture?token=URL_CANARY")
+        notes = "\n".join(failure.exception.__notes__)
+        self.assertNotIn("HARNESS_CANARY", notes)
+        self.assertNotIn("QUOTED_CANARY", notes)
+        self.assertNotIn("URL_CANARY", notes)
+        self.assertNotIn("private", notes)
+        self.assertIn("redacted", notes)
+        self.assertLessEqual(len(notes), 4000)
+
+
+class ChromiumHelperImportTests(unittest.TestCase):
+    def test_helper_import_needs_no_browser_or_application_packages(self):
+        root = str(Path(__file__).resolve().parents[2])
+        script = (
+            f"import sys; sys.path.insert(0, {root!r}); "
+            "import tools.tests.chromium_helpers; "
+            "assert not {'websockets', 'gradio', 'torch'}.intersection(sys.modules)"
+        )
+        completed = subprocess.run(  # noqa: S603 - current Python and fixed local import probe
+            [sys.executable, "-I", "-S", "-c", script], capture_output=True, text=True, check=False, timeout=10
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
 
 class ChromiumMemoryTests(unittest.TestCase):

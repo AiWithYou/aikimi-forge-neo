@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import signal
 import socket
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
-
-from websockets.exceptions import ConnectionClosed
+from urllib.request import Request, urlopen
 
 
 def find_chromium() -> str | None:
@@ -192,6 +194,8 @@ def close_chromium(
 ) -> None:
     """Close CDP, its socket, and the exact Chromium process tree independently."""
 
+    from websockets.exceptions import ConnectionClosed
+
     try:
         if close_browser is not None:
             try:
@@ -209,3 +213,228 @@ def close_chromium(
             _stop_process_tree(process, owned_port=owned_port)
             if profile_flush_delay > 0:
                 time.sleep(profile_flush_delay)
+
+
+def _wait_expression(selector: str, condition: str, timeout_ms: int = 15_000) -> str:
+    return f"""
+        new Promise((resolve) => {{
+            const started = performance.now();
+            const check = () => {{
+                const element = document.querySelector({json.dumps(selector)});
+                if (element && ({condition})) {{ resolve(true); return; }}
+                if (performance.now() - started > {timeout_ms}) {{ resolve(false); return; }}
+                setTimeout(check, 25);
+            }};
+            check();
+        }})
+    """
+
+
+def _remaining_timeout(deadline: float | None, maximum: float) -> float:
+    if deadline is None:
+        return maximum
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("Chromium deadline elapsed")
+    return min(maximum, remaining)
+
+
+def _connect_websocket(*args, **kwargs):
+    from websockets.sync.client import connect
+
+    return connect(*args, **kwargs)
+
+
+def _diagnostic_note(value: object, limit: int = 4000) -> str:
+    from modules.aikimi_security.redaction import redact_mapping, redact_text
+
+    text = redact_text(value) if isinstance(value, str) else json.dumps(redact_mapping(value), ensure_ascii=False)
+    return text[:limit]
+
+
+class CdpPage:
+    def __init__(self, websocket, *, deadline: float | None = None):
+        self.websocket = websocket
+        self.deadline = deadline
+        self.command_id = 0
+        self.exceptions = []
+        self.console_errors = []
+
+    def send(self, method: str, params: dict | None = None, *, timeout: float = 10):
+        timeout = _remaining_timeout(self.deadline, timeout)
+        self.command_id += 1
+        command_id = self.command_id
+        self.websocket.send(json.dumps({"id": command_id, "method": method, "params": params or {}}))
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"CDP command timed out: {method}")
+            message = json.loads(self.websocket.recv(timeout=remaining))
+            if message.get("method") == "Runtime.exceptionThrown":
+                detail = message.get("params", {}).get("exceptionDetails", {})
+                self.exceptions.append(detail.get("exception", {}).get("description", detail.get("text")))
+                self.exceptions = self.exceptions[-20:]
+            if message.get("method") == "Runtime.consoleAPICalled" and message.get("params", {}).get("type") == "error":
+                self.console_errors.append(message["params"].get("args", []))
+                self.console_errors = self.console_errors[-20:]
+            if message.get("id") != command_id:
+                continue
+            if "error" in message:
+                raise RuntimeError(message["error"])
+            return message.get("result", {})
+
+    def evaluate(self, expression: str, *, timeout: float = 15):
+        result = self.send(
+            "Runtime.evaluate",
+            {
+                "expression": expression,
+                "awaitPromise": True,
+                "returnByValue": True,
+            },
+            timeout=timeout,
+        )
+        if "exceptionDetails" in result:
+            detail = result["exceptionDetails"]
+            raise RuntimeError(detail.get("exception", {}).get("description", detail.get("text")))
+        return result["result"].get("value")
+
+
+@contextmanager
+def cdp_page(
+    chromium: str,
+    url: str,
+    *,
+    window_size: str = "900,800",
+    reduced_motion: bool = False,
+    deadline: float | None = None,
+):
+    debugging_port = reserve_local_port()
+    with (
+        tempfile.TemporaryDirectory(prefix="forge-test-chrome-") as profile,
+        tempfile.TemporaryFile() as stderr,
+    ):
+        command = [
+            chromium,
+            "--headless=new",
+            "--disable-gpu",
+            "--disable-extensions",
+            "--no-first-run",
+            "--no-default-browser-check",
+            f"--window-size={window_size}",
+            f"--user-data-dir={profile}",
+            f"--remote-debugging-port={debugging_port}",
+            "--remote-allow-origins=*",
+            "about:blank",
+        ]
+        if reduced_motion:
+            command.insert(-1, "--force-prefers-reduced-motion")
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        process = subprocess.Popen(  # noqa: S603
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=stderr,
+            creationflags=creationflags,
+            start_new_session=os.name != "nt",
+        )
+        websocket = None
+        page = None
+        try:
+            startup_deadline = time.monotonic() + 10
+            while True:
+                try:
+                    request = Request(  # noqa: S310 - fixed loopback debugging endpoint
+                        f"http://127.0.0.1:{debugging_port}/json/new?about:blank",
+                        method="PUT",
+                    )
+                    with urlopen(request, timeout=_remaining_timeout(deadline, 1)) as response:  # noqa: S310
+                        target = json.load(response)
+                    break
+                except OSError as error:
+                    if process.poll() is not None:
+                        raise RuntimeError(f"Chrome exited before DevTools started: {process.returncode}") from error
+                    if time.monotonic() >= startup_deadline:
+                        raise TimeoutError("Chrome DevTools did not start") from error
+                    time.sleep(_remaining_timeout(deadline, 0.05))
+
+            websocket = _connect_websocket(
+                target["webSocketDebuggerUrl"],
+                origin=f"http://127.0.0.1:{debugging_port}",
+                open_timeout=_remaining_timeout(deadline, 5),
+                close_timeout=2,
+                max_size=None,
+            )
+            page = CdpPage(websocket, deadline=deadline)
+            page.process = process
+            page.send("Page.enable")
+            page.send("Runtime.enable")
+            # Windows CIでは新しいChromeプロセスの初回読込が10秒を超える場合がある。
+            navigation = page.send("Page.navigate", {"url": url}, timeout=30)
+            if navigation.get("errorText"):
+                raise RuntimeError(f"Chrome navigation failed: {navigation['errorText']}")
+            yield page
+        except BaseException as error:
+            stderr.seek(0, os.SEEK_END)
+            stderr.seek(max(0, stderr.tell() - 2000))
+            error.add_note(
+                _diagnostic_note("Chrome stderr (tail): " + stderr.read().decode("utf-8", errors="replace"), 2000)
+            )
+            raise
+        finally:
+            # Browser.close must remain available after the fixture deadline.
+            if page is not None:
+                page.deadline = None
+            close_chromium(
+                process,
+                websocket=websocket,
+                close_browser=(lambda: page.send("Browser.close", timeout=2)) if page is not None else None,
+                owned_port=debugging_port,
+            )
+
+
+def render_chromium_dom(
+    chromium: str,
+    url: str,
+    *,
+    completion: str = "document.querySelector('#result')?.dataset.ready === 'true'",
+    window_size: str = "1280,900",
+    reduced_motion: bool = False,
+    timeout: float = 30,
+) -> str:
+    """Return a completed fixture DOM while its owned browser is still running."""
+    deadline = time.monotonic() + timeout
+    snapshot = None
+    with cdp_page(
+        chromium,
+        url,
+        window_size=window_size,
+        reduced_motion=reduced_motion,
+        deadline=deadline,
+    ) as page:
+        try:
+            while True:
+                snapshot = page.evaluate(
+                    "(() => {const ready = Boolean(" + completion + ");"
+                    "const dom = document.documentElement?.outerHTML || '';"
+                    "return {ready, url: location.href, dom: ready ? dom : dom.slice(-2000)};})()",
+                    timeout=_remaining_timeout(deadline, 5),
+                )
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Chromium DOM completion predicate timed out")
+                if snapshot["ready"]:
+                    return snapshot["dom"]
+                time.sleep(_remaining_timeout(deadline, 0.05))
+        except BaseException as error:
+            error.add_note(
+                _diagnostic_note(
+                    {
+                        "stage": "Chromium DOM completion",
+                        "url": url,
+                        "last_dom": snapshot,
+                        "exceptions": page.exceptions,
+                        "console": page.console_errors,
+                    }
+                )
+            )
+            raise

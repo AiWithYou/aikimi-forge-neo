@@ -1,36 +1,16 @@
 import html
 import json
-import os
 import re
-import shutil
-import subprocess
-import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from tools.tests.chromium_helpers import find_chromium, render_chromium_dom
+
 ROOT = Path(__file__).resolve().parents[2]
 TABS_JS = ROOT / "extensions-builtin" / "aikimi-ui" / "javascript" / "aikimi_tabs.js"
-
-
-def find_chromium():
-    configured = os.environ.get("CHROME_BIN")
-    candidates = [
-        configured,
-        shutil.which("google-chrome"),
-        shutil.which("google-chrome-stable"),
-        shutil.which("chromium"),
-        shutil.which("chromium-browser"),
-        shutil.which("chrome"),
-        Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-        Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
-    ]
-    for candidate in candidates:
-        if candidate and Path(candidate).is_file():
-            return str(Path(candidate))
-    return None
 
 
 class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
@@ -828,31 +808,9 @@ class AikimiTabsChromiumTests(unittest.TestCase):
 
     def render_fixture(self, query=""):
         url = self.base_url + (f"?{query}" if query else "")
-        with tempfile.TemporaryDirectory(prefix="aikimi-tabs-chrome-") as profile:
-            completed = subprocess.run(  # noqa: S603 - executable is resolved from trusted local paths.
-                [
-                    self.chromium,
-                    "--headless=new",
-                    "--disable-gpu",
-                    "--disable-extensions",
-                    "--no-first-run",
-                    "--no-default-browser-check",
-                    "--window-size=1280,900",
-                    f"--user-data-dir={profile}",
-                    "--virtual-time-budget=7000",
-                    "--dump-dom",
-                    url,
-                ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=30,
-                check=False,
-            )
-        self.assertEqual(completed.returncode, 0, completed.stderr[-2000:])
-        match = re.search(r'<pre id="result"[^>]*>(.*?)</pre>', completed.stdout, re.DOTALL)
-        self.assertIsNotNone(match, completed.stdout[-2000:])
+        document = render_chromium_dom(self.chromium, url)
+        match = re.search(r'<pre id="result"[^>]*>(.*?)</pre>', document, re.DOTALL)
+        self.assertIsNotNone(match, document[-2000:])
         self.assertIn('data-ready="true"', match.group(0))
         return json.loads(html.unescape(match.group(1)))
 

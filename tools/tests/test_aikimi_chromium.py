@@ -1,35 +1,15 @@
 import html
 import json
-import os
 import re
-import shutil
-import subprocess
-import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
+from tools.tests.chromium_helpers import find_chromium, render_chromium_dom
+
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def find_chromium():
-    configured = os.environ.get("CHROME_BIN")
-    candidates = [
-        configured,
-        shutil.which("google-chrome"),
-        shutil.which("google-chrome-stable"),
-        shutil.which("chromium"),
-        shutil.which("chromium-browser"),
-        shutil.which("chrome"),
-        Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-        Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
-    ]
-    for candidate in candidates:
-        if candidate and Path(candidate).is_file():
-            return str(Path(candidate))
-    return None
 
 
 class AikimiFixtureHandler(BaseHTTPRequestHandler):
@@ -217,8 +197,6 @@ if (window.fixtureWarning) {{
             document.body.append(result);
             window.AikimiStatus.publish('minimax-h3', {{state:'completed', resultElementId:result.id}});
             window.fixtureChecks.resultEnabled = !panel.querySelector('.aikimi-status__actions button').disabled;
-            // --dump-domの仮想時計に合わせ、遷移後のスクロール処理を実行する。
-            window.requestAnimationFrame = callback => setTimeout(callback, 0);
             panel.querySelector('.aikimi-status__actions button').click();
             window.fixtureChecks.done = true;
             setTimeout(() => report(attempt + 1), 100);
@@ -283,34 +261,9 @@ class AikimiChromiumTests(unittest.TestCase):
 
     def render_fixture(self, query="", reduced_motion=False, window_size="1280,900"):
         url = self.base_url + (f"?{query}" if query else "")
-        with tempfile.TemporaryDirectory(prefix="aikimi-chrome-") as profile:
-            command = [
-                self.chromium,
-                "--headless=new",
-                "--disable-gpu",
-                "--disable-extensions",
-                "--no-first-run",
-                "--no-default-browser-check",
-                f"--window-size={window_size}",
-                f"--user-data-dir={profile}",
-                "--virtual-time-budget=7000",
-                "--dump-dom",
-            ]
-            if reduced_motion:
-                command.append("--force-prefers-reduced-motion")
-            command.append(url)
-            completed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=30,
-                check=False,
-            )
-        self.assertEqual(completed.returncode, 0, completed.stderr[-2000:])
-        match = re.search(r'<pre id="result"[^>]*>(.*?)</pre>', completed.stdout, re.DOTALL)
-        self.assertIsNotNone(match, completed.stdout[-2000:])
+        document = render_chromium_dom(self.chromium, url, reduced_motion=reduced_motion, window_size=window_size)
+        match = re.search(r'<pre id="result"[^>]*>(.*?)</pre>', document, re.DOTALL)
+        self.assertIsNotNone(match, document[-2000:])
         self.assertIn('data-ready="true"', match.group(0))
         return json.loads(html.unescape(match.group(1)))
 

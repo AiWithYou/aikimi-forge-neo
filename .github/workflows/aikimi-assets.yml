@@ -12,6 +12,8 @@ on:
       - "style.css"
       - "tools/build_aikimi_motion_asset.py"
       - "tools/requirements-aikimi-assets.txt"
+      - "tools/tests/chromium_helpers.py"
+      - "tools/tests/test_chromium_helpers.py"
       - "tools/tests/test_aikimi_*.py"
   push:
     branches: [neo]
@@ -25,6 +27,8 @@ on:
       - "style.css"
       - "tools/build_aikimi_motion_asset.py"
       - "tools/requirements-aikimi-assets.txt"
+      - "tools/tests/chromium_helpers.py"
+      - "tools/tests/test_chromium_helpers.py"
       - "tools/tests/test_aikimi_*.py"
   workflow_dispatch:
 
