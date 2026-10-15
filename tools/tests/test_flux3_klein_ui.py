@@ -52,8 +52,8 @@ class UITests(unittest.TestCase):
         )
         self.assertEqual(input_gallery.type, "pil")
         self.assertTrue(gallery["interactive"])
-        self.assertTrue(any(item.get("label") == "プロンプト補完" for item in props))
-        self.assertFalse(next(item for item in props if item.get("label") == "プロンプト補完")["value"])
+        self.assertTrue(any(item.get("label") == "プロンプト補完（PUP）" for item in props))
+        self.assertFalse(next(item for item in props if item.get("label") == "プロンプト補完（PUP）")["value"])
         self.assertTrue(any(item.get("label") == "配置ボックス（JSON）" for item in props))
 
     def test_start_uses_only_current_mode_references(self):

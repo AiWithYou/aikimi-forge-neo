@@ -1,4 +1,4 @@
-"""Read the pinned Orbit file once and validate the exact bytes to deserialize."""
+"""Validate the pinned Orbit bytes before deserialization and after application."""
 
 import hashlib
 import json
@@ -34,16 +34,15 @@ def verify_version(path, expected):
     with Path(path).open("rb") as stream:
         if _handle_version(stream) != expected:
             raise ValueError("Orbit LoRAが受付後に変更されました。")
-        if expected[2] is None:
-            digest = hashlib.sha256()
-            received = 0
-            while block := stream.read(min(1024 * 1024, MODEL_BYTES + 1 - received)):
-                received += len(block)
-                digest.update(block)
-                if received > MODEL_BYTES:
-                    break
-            if received != MODEL_BYTES or digest.hexdigest() != MODEL_SHA256 or _handle_version(stream) != expected:
-                raise ValueError("Orbit LoRAが受付後に変更されました。")
+        digest = hashlib.sha256()
+        received = 0
+        while block := stream.read(min(1024 * 1024, MODEL_BYTES + 1 - received)):
+            received += len(block)
+            digest.update(block)
+            if received > MODEL_BYTES:
+                break
+        if received != MODEL_BYTES or digest.hexdigest() != MODEL_SHA256 or _handle_version(stream) != expected:
+            raise ValueError("Orbit LoRAが受付後に変更されました。")
 
 
 def read_verified(canonical_path, roots, size, sha256, version):

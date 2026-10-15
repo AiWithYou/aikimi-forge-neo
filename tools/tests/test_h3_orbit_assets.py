@@ -100,13 +100,12 @@ class OrbitInstallerTests(unittest.TestCase):
         self.assertTrue(all(0 < size <= len(self.payload) + 1 for size in response.read_sizes))
         self.assert_no_parts()
 
-    def test_install_is_idempotent_and_uses_cached_local_identity(self):
+    def test_install_is_idempotent_and_preserves_verified_existing_file(self):
         path = self.seed()
         before = path.stat().st_mtime_ns
-        with mock.patch.object(orbit, "file_identity", wraps=local_assets.file_identity) as identify:
-            self.assertTrue(orbit.installed(self.root))
-            self.assertEqual(orbit.install(self.root), path)
-        self.assertEqual(identify.call_count, 2)
+        self.assertTrue(orbit.installed(self.root))
+        self.assertEqual(orbit.install(self.root), path)
+        self.assertEqual(path.read_bytes(), self.payload)
         self.assertEqual(path.stat().st_mtime_ns, before)
         self.download.assert_not_called()
         self.assert_no_parts()
@@ -155,6 +154,18 @@ class OrbitInstallerTests(unittest.TestCase):
         path.write_bytes(b"!" * len(self.payload))
         with self.assertRaises(ValueError):
             orbit.validate_model(managed)
+        self.download.assert_not_called()
+
+    def test_same_version_cannot_reuse_cached_hash_after_content_changes(self):
+        path = self.seed()
+        version = local_assets.file_version(path)
+        with mock.patch.object(local_assets, "file_version", return_value=version):
+            self.assertTrue(orbit.installed(self.root))
+            path.write_bytes(b"!" * len(self.payload))
+            self.assertFalse(orbit.installed(self.root))
+            with self.assertRaises(ValueError):
+                orbit.install(self.root)
+        self.assertEqual(path.read_bytes(), b"!" * len(self.payload))
         self.download.assert_not_called()
 
     def test_short_hash_mismatched_and_oversized_downloads_leave_no_final_or_partial_file(self):

@@ -10,7 +10,6 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from modules_forge.local_assets import file_identity
 from modules_forge.minimax_h3_runtime import (
     REPOSITORY_ROOT as REPO_ROOT,
 )
@@ -142,14 +141,20 @@ def install_node(runtime_root: Path) -> Path:
 def _validate(path: Path) -> Path:
     if path.is_symlink() or not path.is_file():
         raise ValueError("360° Orbit LoRAが未導入です。「Orbit LoRAを準備」を実行してください。")
-    identity = file_identity(path)
-    if identity["size"] != MODEL_BYTES or identity["sha256"] != MODEL_SHA256:
+    digest, received = hashlib.sha256(), 0
+    with path.open("rb") as stream:
+        while block := stream.read(min(1024 * 1024, MODEL_BYTES + 1 - received)):
+            received += len(block)
+            digest.update(block)
+            if received > MODEL_BYTES:
+                break
+    if received != MODEL_BYTES or digest.hexdigest() != MODEL_SHA256:
         raise ValueError(f"360° Orbit LoRAのサイズまたはSHA-256が一致しません。既存ファイルを確認してください: {path}")
     return path
 
 
 def installed(repository_root: Path = REPO_ROOT, *, runtime_root: Path | None = None) -> bool:
-    """Check complete local bytes, reusing file_identity's change-aware hash cache."""
+    """Check pinned local bytes without treating file timestamps as a version counter."""
     try:
         if runtime_root is not None:
             validate_model(runtime_root)

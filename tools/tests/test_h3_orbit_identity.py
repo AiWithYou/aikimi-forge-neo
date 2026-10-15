@@ -553,7 +553,7 @@ class OrbitWorkerByteTests(OrbitFixture):
     def test_change_after_read_or_during_patch_cannot_return_a_receipt(self):
         original_hash = hashlib.sha256
 
-        def changed_hash(data):
+        def changed_hash(data=b""):
             digest = original_hash(data)
             self.path.write_bytes(b"!" * len(self.data))
             return digest
@@ -575,6 +575,45 @@ class OrbitWorkerByteTests(OrbitFixture):
         self.apply.side_effect = changed_patch
         with self.assertRaisesRegex(ValueError, "変更"):
             self.execute()
+
+    def test_same_version_changes_after_read_deserialize_or_patch_cannot_return_a_receipt(self):
+        from safetensors.torch import load
+
+        original_hash = hashlib.sha256
+        original_apply = self.apply.side_effect
+
+        def changed_hash(data=b""):
+            digest = original_hash(data)
+            self.path.write_bytes(b"!" * len(self.data))
+            return digest
+
+        def changed_deserialize(data):
+            tensors = load(data)
+            self.path.write_bytes(b"!" * len(self.data))
+            return tensors
+
+        def changed_patch(*args):
+            model = original_apply(*args)
+            self.path.write_bytes(b"!" * len(self.data))
+            return model
+
+        for stage, mutation in (
+            ("hash", patch.object(self.node.orbit_bytes.hashlib, "sha256", side_effect=changed_hash)),
+            ("deserialize", patch("safetensors.torch.load", side_effect=changed_deserialize)),
+            ("patch", patch.object(self.apply, "side_effect", changed_patch)),
+        ):
+            with self.subTest(stage=stage):
+                self.path.write_bytes(self.data)
+                self.apply.reset_mock()
+                version = list(local_assets.file_version(self.path))
+                with (
+                    patch.object(self.node.orbit_bytes, "_handle_version", return_value=version),
+                    mutation,
+                    self.assertRaisesRegex(ValueError, "変更"),
+                ):
+                    self.execute(version=json.dumps(version))
+                if stage != "patch":
+                    self.apply.assert_not_called()
 
     def test_unreliable_version_falls_back_to_content_before_patching(self):
         from safetensors.torch import load

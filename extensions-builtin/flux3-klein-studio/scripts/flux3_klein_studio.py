@@ -129,7 +129,7 @@ def on_ui_tabs():
             steps = gr.Slider(1, 200, value=16, step=1, label="Steps")
             cfg = gr.Slider(1, 15, value=1, step=0.1, label="CFG", interactive=False)
             seed = gr.Number(value=-1, precision=0, label="Seed")
-            pup = gr.Checkbox(value=False, label="プロンプト補完", info="任意。追加モデルの導入が必要です。")
+            pup = gr.Checkbox(value=False, label="プロンプト補完（PUP）", info="任意。追加モデルの導入が必要です。")
         references = gr.Gallery(
             label="参照画像（入力順・最大10枚）",
             type="pil",
