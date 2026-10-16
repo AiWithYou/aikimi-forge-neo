@@ -28,7 +28,9 @@ def adapter(path, value=1.0, metadata=None, pair_suffixes=("lora_down", "lora_up
         PREFIX + f".{pair_suffixes[1]}.weight": ([3, 1], [value, value, value]),
         PREFIX + ".alpha": ([], [1.0]),
     }
-    header, data = {"__metadata__": metadata or {"base_model": "black-forest-labs/flux-3-image-klein-base"}}, b""
+    if metadata is None:
+        metadata = {"base_model": "black-forest-labs/flux-3-image-klein-base"}
+    header, data = {"__metadata__": metadata}, b""
     for name, (shape, values) in tensors.items():
         payload = struct.pack("<" + "f" * len(values), *values)
         header[name] = {"dtype": "F32", "shape": shape, "data_offsets": [len(data), len(data) + len(payload)]}
@@ -87,12 +89,30 @@ class LoraTests(unittest.TestCase):
                 self.lora().inspect(root, "linked.safetensors")
             self.assertEqual(self.lora().inventory(root), [])
 
-    def test_base_lora_cannot_silently_apply_to_distilled_or_changed_file(self):
+    def test_training_source_does_not_change_the_selected_model(self):
+        sources = (
+            ({"base_model": "black-forest-labs/flux-3-image-klein-base"}, "base"),
+            ({"base_model": "black-forest-labs/flux-3-image-klein"}, "distilled"),
+            ({"base_model": "another/training-checkpoint"}, None),
+            ({"training_note": "compatible adapter"}, None),
+            ({}, None),
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for metadata, training_source in sources:
+                path = adapter(root / "loras/AikimiLoRA.safetensors", metadata=metadata)
+                for selected_model in ("base", "distilled"):
+                    with self.subTest(metadata=metadata, model=selected_model):
+                        request = {"model": selected_model, "lora": path.name, "lora_strength": 0.75}
+                        identity = self.lora().bind(root, request)
+                        self.assertEqual(request["model"], selected_model)
+                        self.assertEqual(identity["base_model"], training_source)
+                        self.assertEqual(request["lora_identity"], identity)
+
+    def test_changed_adapter_is_rejected_after_selection(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             path = adapter(root / "loras/AikimiLoRA.safetensors")
-            with self.assertRaisesRegex(ValueError, "Base"):
-                self.lora().bind(root, {"model": "distilled", "lora": path.name})
             request = {"model": "base", "lora": path.name, "lora_strength": 1.0}
             self.lora().bind(root, request)
             adapter(path, value=2.0)
@@ -129,7 +149,7 @@ class LoraTests(unittest.TestCase):
                         1,
                     )
 
-    def test_runner_applies_before_sampling_and_records_png_identity(self):
+    def test_distilled_runner_applies_base_trained_lora_and_records_both_identities(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             path = adapter(root / "loras/AikimiLoRA.safetensors")
@@ -144,7 +164,7 @@ class LoraTests(unittest.TestCase):
 
             runtime.sample = sampled
             request = core.validate_request(
-                dict(prompt="cat", model="base", width=64, height=64, seed=7, lora=path.name, lora_strength=0.75)
+                dict(prompt="cat", model="distilled", width=64, height=64, seed=7, lora=path.name, lora_strength=0.75)
             )
             self.lora().bind(root, request)
             with patch(
@@ -154,9 +174,19 @@ class LoraTests(unittest.TestCase):
                 result = Runner(root, runtime).run(root / "job", request)
             runtime.apply_lora.assert_called_once()
             self.assertEqual(runtime.apply_lora.call_args.args[1:], (path.resolve(), 0.75))
+            self.assertIn(("verify", "distilled"), runtime.events)
+            self.assertIn(("dit", "distilled"), runtime.events)
+            sample = next(event for event in runtime.events if event[0] == "sample")
+            self.assertIsNone(sample[1])
+            self.assertEqual((len(sample[2]), sample[3]), (17, 1.0))
+            self.assertEqual(result["model"], "distilled")
+            self.assertEqual(result["lora"]["base_model"], "base")
             self.assertEqual(result["lora"], {**request["lora_identity"], "strength": 0.75, "applied_targets": 1})
+            self.assertEqual(json.loads((root / "job/result.json").read_text(encoding="utf-8")), result)
             with Image.open(result["image_path"]) as image:
-                self.assertEqual(json.loads(image.info["flux3_klein"])["lora"], result["lora"])
+                saved = json.loads(image.info["flux3_klein"])
+            self.assertEqual(saved["model"], "distilled")
+            self.assertEqual(saved["lora"], result["lora"])
 
     def test_zero_strength_does_not_load_adapter_or_leave_it_for_next_job(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -317,7 +347,7 @@ class LoraTests(unittest.TestCase):
             root = Path(temp)
             path = adapter(root / "loras/AikimiLoRA.safetensors")
             request = core.validate_request(
-                dict(prompt="cat", model="base", width=64, height=64, seed=7, lora=path.name, lora_strength=0.75)
+                dict(prompt="cat", model="distilled", width=64, height=64, seed=7, lora=path.name, lora_strength=0.75)
             )
             directory = root / "outputs" / ("a" * 32)
             directory.mkdir(parents=True)
@@ -332,7 +362,10 @@ class LoraTests(unittest.TestCase):
                 result = Runner(root, runtime).run(directory, request)
             history = History(root / "outputs")
             self.assertIn("AikimiLoRA ×0.75", history.list()[0][0])
-            self.assertEqual(history.load("a" * 32)["lora"], result["lora"])
+            restored = history.load("a" * 32)
+            self.assertEqual(restored["model"], "distilled")
+            self.assertEqual(restored["lora"], result["lora"])
+            self.assertEqual(restored["lora"]["base_model"], "base")
             with Image.open(directory / "output.png") as image:
                 record = json.loads(image.info["flux3_klein"])
                 pixels = image.copy()

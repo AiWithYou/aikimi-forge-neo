@@ -88,21 +88,22 @@ class UITests(unittest.TestCase):
         self.assertEqual(generation.inputs[-2:], [lora, strength])
         selected = next(item for item in blocks.fns.values() if item.fn is module.select_lora)
         self.assertEqual(selected.inputs, [lora])
-        self.assertEqual(selected.outputs[1], strength)
+        self.assertEqual(selected.outputs, [strength], "Selecting a LoRA must not write model, Steps, or CFG")
+        model = next(item for item in blocks.blocks.values() if item.elem_id == "flux3-model-choice")
         defaults = next(item for item in blocks.fns.values() if item.fn is module.model_defaults)
-        self.assertEqual(defaults.inputs, [selected.outputs[0]])
+        self.assertEqual(defaults.inputs, [model])
         with patch.object(module.SERVICE, "start", return_value="job") as start:
             generation.fn(
                 {},
                 "txt2img",
-                "base",
+                "distilled",
                 "int8",
                 "cat",
                 [],
                 "[]",
                 "1024×1024",
-                50,
-                3.5,
+                23,
+                1.0,
                 7,
                 False,
                 "AikimiLoRA.safetensors",
@@ -110,10 +111,17 @@ class UITests(unittest.TestCase):
             )
         self.assertEqual(start.call_args.args[0]["lora"], "AikimiLoRA.safetensors")
         self.assertEqual(start.call_args.args[0]["lora_strength"], 0.75)
-        with patch.object(module.local_lora, "required_model", return_value="base"):
-            model, strength = module.select_lora("AikimiLoRA.safetensors")
-        self.assertEqual(model["value"], "base")
-        self.assertTrue(strength["interactive"])
+        self.assertEqual(start.call_args.args[0]["model"], "distilled")
+        self.assertEqual(start.call_args.args[0]["steps"], 23)
+        self.assertEqual(start.call_args.args[0]["cfg"], 1.0)
+        with (
+            patch.object(module.local_lora, "resolve", return_value=Path("AikimiLoRA.safetensors")),
+            patch.object(module.local_lora, "header_info", return_value={"base_model": "base"}),
+        ):
+            update = module.select_lora("AikimiLoRA.safetensors")
+        self.assertTrue(update["interactive"])
+        self.assertNotIn("value", update)
+        self.assertFalse(module.select_lora("")["interactive"])
         with patch.object(
             module, "lora_choices", return_value=[("なし", ""), ("AikimiLoRA", "AikimiLoRA.safetensors")]
         ):
@@ -134,7 +142,7 @@ class UITests(unittest.TestCase):
             component_mapping={},
         )
         load_add_component()(loader, "flux3/LoRA", choice)
-        self.assertEqual(choice.value, "", "Startup must not restore a LoRA without running its model callback")
+        self.assertEqual(choice.value, "", "Startup must not restore a LoRA without updating its strength control")
         self.assertTrue(choice.visible)
         self.assertNotIn("flux3/LoRA/value", loader.component_mapping)
 

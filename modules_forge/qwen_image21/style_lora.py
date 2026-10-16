@@ -126,8 +126,6 @@ def inspect(runtime: Path, name: str) -> dict:
         if len(down) != 2 or len(up) != 2 or not 0 < down[0] == up[1] or min(*down, *up) <= 0:
             raise ValueError(f"LoRAの形状が不正です: {name_}")
     base_forward = metadata.get("qwen_base_forward", "")
-    if base_forward and base_forward != "convrot_int8_bf16_backward_v1":
-        raise ValueError(f"未対応の学習時モデルです: {base_forward}")
     from . import consistency_lora
 
     consistency_version = consistency_lora.identify(path, metadata)
@@ -138,8 +136,8 @@ def inspect(runtime: Path, name: str) -> dict:
         "metadata": metadata,
         "linear_layers": len(groups),
         "training_only_keys": sorted(ignored),
-        "base_mismatch": bool(base_forward),
-        "source": SUSHI_SOURCE if ignored or base_forward else None,
+        "training_base_forward": base_forward,
+        "source": SUSHI_SOURCE if ignored or base_forward == "convrot_int8_bf16_backward_v1" else None,
     }
     if consistency_version:
         info.update(consistency_version=consistency_version, source=consistency_lora.SOURCE)
@@ -165,8 +163,6 @@ def validate_options(values: dict) -> None:
             or not -2 <= strength <= 2
         ):
             raise ValueError(f"{name}: 強度は−2〜2の数値で指定してください。")
-    if not isinstance(values.get("allow_lora_base_mismatch", False), bool):
-        raise ValueError("異なる量子化の指定が不正です。")
     if any(item["strength"] != 0 for item in adapters):
         if values.get("operation", "generate") != "generate":
             raise ValueError("追加LoRAは画像生成で使用してください。")
@@ -185,8 +181,6 @@ def validate_installed(runtime: Path, values: dict) -> list[dict]:
             if path in seen:
                 raise ValueError("同じ実ファイルのLoRAを二重に指定できません。")
             seen.add(path)
-            if info["base_mismatch"] and not values.get("allow_lora_base_mismatch"):
-                raise ValueError("ConvRot INT8用です。「異なる量子化で試す」をONにした実験のみ可能です。")
             infos.append({**info, "strength": item["strength"]})
         except (ValueError, OSError) as exc:
             raise ValueError(f"{item['name']}: {exc}") from exc
@@ -202,7 +196,7 @@ def cache_key(runtime: Path, values: dict) -> tuple:
         from modules_forge.local_assets import file_identity
 
         entries.append((str(path), file_identity(path)["sha256"]))
-    return tuple(entries), values.get("allow_lora_base_mismatch", False)
+    return tuple(entries)
 
 
 def fingerprint(path: Path) -> str:

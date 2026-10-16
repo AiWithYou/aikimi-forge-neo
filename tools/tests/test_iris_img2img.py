@@ -382,7 +382,7 @@ class UITests(unittest.TestCase):
         self.assertEqual(upload["props"]["type"], "pil")
         self.assertEqual((strength["props"]["minimum"], strength["props"]["maximum"]), (0, 1))
         run = next(fn for fn in blocks.fns.values() if fn.fn is module.start_with_loras)
-        self.assertEqual([c._id for c in run.inputs[-2:]], [upload["id"], strength["id"]])
+        self.assertEqual([c._id for c in run.inputs[-4:-2]], [upload["id"], strength["id"]])
         with (
             patch.object(module, "ready", return_value=True),
             patch.object(module.SERVICE, "start", return_value="job") as start,

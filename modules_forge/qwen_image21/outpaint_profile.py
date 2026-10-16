@@ -11,7 +11,6 @@ FIELDS = (
     "memory_mode",
     "style_loras",
     "lora_strengths",
-    "allow_lora_base_mismatch",
     "fun_acc",
     "sparse_mode",
     "sparse_keep_percent",

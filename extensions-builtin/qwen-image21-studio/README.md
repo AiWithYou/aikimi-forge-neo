@@ -29,7 +29,7 @@ Outpaintの「生成設定」でLoRA v2／v1／なし、Steps（通常版の初�
 
 | 組み合わせ | 対応範囲 |
 | --- | --- |
-| 通常版4精度＋Outpaint v1／v2／なし＋画風LoRA | 対応。LoRA形式・形状・学習時の量子化差の確認は共通です。 |
+| 通常版4精度＋Outpaint v1／v2／なし＋画風LoRA | 対応。LoRA形式・対象層・形状の検証は共通です。 |
 | 通常版＋Fun Acc＋Outpaint／画風LoRA／ControlNet | 対応。4 steps・PDDスケジューラ・KVキャッシュOFF。追加LoRA・制御との画質は実験扱いです。 |
 | 公式Turbo＋Outpaint／画風LoRA／ControlNet | 対応。推奨8 stepsでは公式sigma列、それ以外は指定回数のFlowMatch列を使用。追加LoRA・制御との画質は実験扱いです。 |
 | Viggle Turbo＋Outpaint／画風LoRA／ControlNet | 対応。推奨4 steps。指定回数とViggleスケジューラを使用します。追加LoRA・制御との画質は実験扱いです。 |
@@ -71,7 +71,7 @@ Qwen Image 2.1用の `.safetensors` を `models/Qwen-Image-2.1/loras/` に置き
 
 **チェックポイント**では互換モデルのファイル／Diffusersフォルダーも指定できます。**モデル詳細**の**環境・共通部品を準備（標準本体なし）**を使えば、標準の本体をダウンロードする必要はありません。単一safetensorsはBF16またはINT8 ConvRot、TransformerフォルダーはBF16／実行時INT8／W4A8、対応GGUFは通常版Q4で使用します。[導入手順と対応範囲](../../docs/local-models.md)
 
-通常版Q4_K_M・W4A8・INT8・BF16とTurboで使用できます。SushiUIの `lora_unet_...__...`、Diffusers/Comfy系の `transformer.` / `diffusion_model.` 配下の線形LoRA（A/Bまたはdown/up、alpha/rank）を読み込みます。Qwen Imageの別バージョン、DoRA、独自ヘッドなど、すべての形式への対応ではありません。未対応キー・不足ペア・寸法不一致があれば部分適用せずエラーにします。Fun Acc・Outpaint・Sparseとの併用も受け付けますが、高速化モデルへの画風の適用は実験扱いです。
+通常版Q4_K_M・W4A8・INT8・BF16とTurboで使用できます。SushiUIの `lora_unet_...__...`、Diffusers/Comfy系の `transformer.` / `diffusion_model.` 配下の線形LoRA（A/Bまたはdown/up、alpha/rank）を読み込みます。Qwen Imageの別バージョン、DoRA、独自ヘッドなど、すべての形式への対応ではありません。未対応キー・不足ペア・寸法不一致があれば部分適用せずエラーにします。Fun Acc・Outpaint・Sparseとの併用も受け付けます。LoRAの選択で現在の本体・精度・Stepsは変更しません。
 
 Hugging Faceからファイル名を指定して取得する補助コマンドも使えます。取得revisionとSHA-256を保存し、LFSのハッシュと照合します。
 
@@ -79,9 +79,9 @@ Hugging Faceからファイル名を指定して取得する補助コマンド�
 .\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\prepare_qwen21_style_lora.py owner/repo --file model.safetensors
 ```
 
-検証に使用した [celstk/qwen2.1_lora](https://huggingface.co/celstk/qwen2.1_lora) の重みは同梱しません。必要な場合は配布元から取得してください。[SushiUIの実装](https://github.com/celll1/SushiUI/blob/69de838b18dbed8e8fc1e1294fb649a4f7dc5452/backend/core/pipeline_backends/qwen_image_21.py#L55-L78)に従い、通常の全面生成では学習専用global adapterを除外します。ただしこのLoRAはConvRot INT8で学習され、標準のINT8はbitsandbytes、Q4はGGUFです。ローカルConvRot本体も学習元重みとの一致を確認していないため、**「異なる量子化で試す（実験）」を明示的にONにした場合のみ適用**します。選択を変えるとOFFへ戻ります。
+検証に使用した [celstk/qwen2.1_lora](https://huggingface.co/celstk/qwen2.1_lora) の重みは同梱しません。必要な場合は配布元から取得してください。[SushiUIの実装](https://github.com/celll1/SushiUI/blob/69de838b18dbed8e8fc1e1294fb649a4f7dc5452/backend/core/pipeline_backends/qwen_image_21.py#L55-L78)に従い、通常の全面生成では学習専用global adapterを除外します。学習元の本体・量子化方式や作者の推奨条件は参考情報です。学習元と異なる精度・Turbo本体でも、実際の対象層と形状が対応すれば適用します。学習元の記録が未知でも、その記録だけを理由に拒否しません。画質や編集特性は同じ入力・Seedで比較してください。
 
-各LoRAのファイル名・SHA-256・強度・適用層数・量子化の差を生成情報へ保存します。LoRAや強度を変えた場合はモデルを再読み込みします。元のモデルの重みには書き込みません。
+各LoRAのファイル名・SHA-256・強度・適用層数・学習元の記録を生成情報へ保存します。LoRAファイルを変えた場合はモデルを再読み込みし、読み込み済みLoRAの強度だけの変更は残差へ反映します。元のモデルの重みには書き込みません。
 
 2026年9月28日にINT8とQ4_K_Mで実生成を確認しました。複数読み込みは同じ重みを2つの名前で参照し、0.75と0.25で同時適用する動作試験です。異なるLoRA同士の画風の相性は評価していません。この時点ではW4A8・BF16の追加LoRA実生成は未検証でした。
 

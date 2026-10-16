@@ -148,7 +148,6 @@ class Request:
     outpaint_feather: int = 32
 
     style_loras: tuple[dict, ...] = ()
-    allow_lora_base_mismatch: bool = False
     local_model: str = ""
     local_components: str = ""
 

@@ -50,9 +50,7 @@ CONVROT_STRUCTURE_SHA256 = "fdb08c901ba1106956ff3c784fbd385b2752cc217f251ba7a0fb
 OFFICIAL_LORA_REVISION = "e909f4636d119d65fe4cba8770c19daff2ac102e"
 OFFICIAL_LORA_FILE_NAME = "SenseNova-U1.5-8B-MoT-LoRA-8step.safetensors"
 OFFICIAL_LORA_EXPECTED_BYTES = 814_867_236
-OFFICIAL_LORA_SHA256 = (
-    "3ef32180cdf1e30a870a83f4f136e897ea50b7ee467f863d75633464ebb25708"
-)
+OFFICIAL_LORA_SHA256 = "3ef32180cdf1e30a870a83f4f136e897ea50b7ee467f863d75633464ebb25708"
 EXPECTED_LORA_TARGETS = 294
 
 MAX_REFERENCE_IMAGES = 64
@@ -140,6 +138,7 @@ class SenseNovaRequest:
     input_max_pixels: int | str = 512 * 512
     steps: int = 50
     cfg_scale: float = 4.0
+    cfg_norm: str = "none"
     img_cfg_scale: float = 1.0
     timestep_shift: float = 3.0
     seed: int = 42
@@ -250,36 +249,16 @@ def validate_request(request: SenseNovaRequest) -> None:
     if not prompt:
         raise SenseNovaBridgeError("プロンプトを入力してください。")
     if len(prompt) > MAX_PROMPT_LENGTH:
-        raise SenseNovaBridgeError(
-            f"プロンプトは{MAX_PROMPT_LENGTH:,}文字以内にしてください。"
-        )
+        raise SenseNovaBridgeError(f"プロンプトは{MAX_PROMPT_LENGTH:,}文字以内にしてください。")
     if not request.model_path.strip():
-        raise SenseNovaBridgeError(
-            "モデルIDまたはローカルモデルパスを入力してください。"
-        )
+        raise SenseNovaBridgeError("モデルIDまたはローカルモデルパスを入力してください。")
     if request.quantization != QUANT_INT8_CONVROT:
         raise SenseNovaBridgeError(f"未対応の量子化方式です: {request.quantization!r}")
     if request.model_path.strip() != DEFAULT_MODEL_ID:
-        raise SenseNovaBridgeError(
-            f"INT8 ConvRotのconfigは正式版 {DEFAULT_MODEL_ID} に固定されています。"
-        )
+        raise SenseNovaBridgeError(f"INT8 ConvRotのconfigは正式版 {DEFAULT_MODEL_ID} に固定されています。")
     if request.generation_profile not in GENERATION_PROFILES:
-        raise SenseNovaBridgeError(
-            "生成プロファイルは quality または official_8step を指定してください。"
-        )
+        raise SenseNovaBridgeError("生成プロファイルは quality または official_8step を指定してください。")
     if request.generation_profile == PROFILE_OFFICIAL_8STEP:
-        if request.mode != MODE_TEXT:
-            raise SenseNovaBridgeError(
-                "公式8-Step LoRAはテキスト生成専用です。画像編集ではQuality 50-Stepを使ってください。"
-            )
-        if int(request.steps) != 8 or float(request.cfg_scale) != 1.0:
-            raise SenseNovaBridgeError(
-                "公式8-StepはSteps 8・CFG 1.0の固定プリセットです。"
-            )
-        if float(request.timestep_shift) != 3.0:
-            raise SenseNovaBridgeError(
-                "公式8-StepはTimestep Shift 3.0の固定プリセットです。"
-            )
         if not _official_lora_is_ready(DEFAULT_LORA_PATH):
             raise SenseNovaBridgeError(
                 "公式8-Step LoRAが未準備です。download_sensenova_u15_int8.batを再実行してください。"
@@ -287,59 +266,40 @@ def validate_request(request: SenseNovaRequest) -> None:
     if not request.checkpoint.strip():
         raise SenseNovaBridgeError("INT8 ConvRot checkpointを指定してください。")
     if Path(request.checkpoint).suffix.lower() != ".safetensors":
-        raise SenseNovaBridgeError(
-            "INT8 ConvRotには拡張子 .safetensors のcheckpointが必要です。"
-        )
+        raise SenseNovaBridgeError("INT8 ConvRotには拡張子 .safetensors のcheckpointが必要です。")
 
     if request.mode == MODE_EDIT:
         if not request.input_images:
-            raise SenseNovaBridgeError(
-                "画像編集には参照画像を1枚以上追加してください。"
-            )
+            raise SenseNovaBridgeError("画像編集には参照画像を1枚以上追加してください。")
         if len(request.input_images) > MAX_REFERENCE_IMAGES:
             raise SenseNovaBridgeError(f"参照画像は最大{MAX_REFERENCE_IMAGES}枚です。")
     elif request.input_images:
-        raise SenseNovaBridgeError(
-            "テキスト生成では参照画像を使用しません。画像編集へ切り替えてください。"
-        )
+        raise SenseNovaBridgeError("テキスト生成では参照画像を使用しません。画像編集へ切り替えてください。")
 
     if (request.width is None) != (request.height is None):
-        raise SenseNovaBridgeError(
-            "幅と高さは両方指定するか、両方を自動にしてください。"
-        )
+        raise SenseNovaBridgeError("幅と高さは両方指定するか、両方を自動にしてください。")
     if request.width is None and request.mode != MODE_EDIT:
         raise SenseNovaBridgeError("テキスト生成では出力解像度を指定してください。")
     if request.width is not None:
         for name, value in (("幅", request.width), ("高さ", request.height)):
-            if (
-                value is None
-                or value < MIN_OUTPUT_SIDE
-                or value > MAX_OUTPUT_SIDE
-                or value % GRID_FACTOR
-            ):
-                raise SenseNovaBridgeError(
-                    f"{name}は{MIN_OUTPUT_SIDE}〜{MAX_OUTPUT_SIDE}の32の倍数にしてください。"
-                )
+            if value is None or value < MIN_OUTPUT_SIDE or value > MAX_OUTPUT_SIDE or value % GRID_FACTOR:
+                raise SenseNovaBridgeError(f"{name}は{MIN_OUTPUT_SIDE}〜{MAX_OUTPUT_SIDE}の32の倍数にしてください。")
     if not MIN_PIXEL_BUDGET <= int(request.target_pixels) <= MAX_PIXEL_BUDGET:
-        raise SenseNovaBridgeError(
-            "自動出力の画素数は512²〜2048²の範囲にしてください。"
-        )
+        raise SenseNovaBridgeError("自動出力の画素数は512²〜2048²の範囲にしてください。")
     input_budget: int | None = None
     if request.input_max_pixels != "auto":
         try:
             input_budget = int(request.input_max_pixels)
         except (TypeError, ValueError) as exc:
-            raise SenseNovaBridgeError(
-                "入力画像予算は auto または整数で指定してください。"
-            ) from exc
+            raise SenseNovaBridgeError("入力画像予算は auto または整数で指定してください。") from exc
         if not MIN_PIXEL_BUDGET <= input_budget <= MAX_PIXEL_BUDGET:
-            raise SenseNovaBridgeError(
-                "入力画像予算は512²〜2048²の範囲にしてください。"
-            )
+            raise SenseNovaBridgeError("入力画像予算は512²〜2048²の範囲にしてください。")
     if not 1 <= int(request.steps) <= 100:
         raise SenseNovaBridgeError("Stepsは1〜100にしてください。")
     if not 0.0 <= float(request.cfg_scale) <= 20.0:
         raise SenseNovaBridgeError("CFGは0〜20にしてください。")
+    if request.cfg_norm not in ("none", "global", "channel"):
+        raise SenseNovaBridgeError("CFG正規化はnone・global・channelから選択してください。")
     if not 0.0 <= float(request.img_cfg_scale) <= 20.0:
         raise SenseNovaBridgeError("Image CFGは0〜20にしてください。")
     if not 0.1 <= float(request.timestep_shift) <= 20.0:
@@ -347,29 +307,19 @@ def validate_request(request: SenseNovaRequest) -> None:
     if not 0 <= int(request.seed) <= 2**32 - 1:
         raise SenseNovaBridgeError("Seedは0〜4,294,967,295にしてください。")
     if request.vram_mode not in VRAM_MODES:
-        raise SenseNovaBridgeError(
-            f"VRAMモードは {', '.join(VRAM_MODES)} から選択してください。"
-        )
+        raise SenseNovaBridgeError(f"VRAMモードは {', '.join(VRAM_MODES)} から選択してください。")
     if request.vram_mode == "low":
         output_pixels = (
-            int(request.target_pixels)
-            if request.width is None
-            else int(request.width) * int(request.height or 0)
+            int(request.target_pixels) if request.width is None else int(request.width) * int(request.height or 0)
         )
         low_vram_errors: list[str] = []
         if output_pixels > LOW_VRAM_MAX_OUTPUT_PIXELS:
-            low_vram_errors.append(
-                f"出力{request.width or '自動'}×{request.height or '自動'}"
-            )
+            low_vram_errors.append(f"出力{request.width or '自動'}×{request.height or '自動'}")
         if request.mode == MODE_EDIT:
             if len(request.input_images) > LOW_VRAM_MAX_REFERENCE_IMAGES:
                 low_vram_errors.append(f"参照{len(request.input_images)}枚")
             if input_budget is None or input_budget > LOW_VRAM_MAX_INPUT_PIXELS:
-                budget_label = (
-                    "自動"
-                    if input_budget is None
-                    else f"{round(input_budget**0.5):,}²/画像"
-                )
+                budget_label = "自動" if input_budget is None else f"{round(input_budget**0.5):,}²/画像"
                 low_vram_errors.append(f"入力予算{budget_label}")
         if low_vram_errors:
             details = "、".join(low_vram_errors)
@@ -383,7 +333,9 @@ def validate_request(request: SenseNovaRequest) -> None:
         if pixels > LOW_VRAM_MAX_OUTPUT_PIXELS:
             raise SenseNovaBridgeError("参照優先では出力を2048²以下にしてください。")
         if request.mode == MODE_EDIT and (
-            len(request.input_images) > REFERENCE_MAX_IMAGES or input_budget is None or input_budget > REFERENCE_MAX_INPUT_PIXELS
+            len(request.input_images) > REFERENCE_MAX_IMAGES
+            or input_budget is None
+            or input_budget > REFERENCE_MAX_INPUT_PIXELS
         ):
             raise SenseNovaBridgeError("参照優先では参照8枚まで、各画像の予算を約1.05MP以下にしてください。")
     if request.attn_backend not in ATTENTION_BACKENDS:
@@ -400,9 +352,8 @@ def compatible_checkpoint(path: Path) -> bool:
     try:
         header = local_assets.read_header(path)
         tensors = {name: item for name, item in header.items() if name != "__metadata__"}
-        if (
-            sum(name.endswith(".comfy_quant") for name in tensors) != EXPECTED_CONVROT_LAYERS
-            or any("lm_head" in name for name in tensors)
+        if sum(name.endswith(".comfy_quant") for name in tensors) != EXPECTED_CONVROT_LAYERS or any(
+            "lm_head" in name for name in tensors
         ):
             return False
         sizes = {"U8": 1, "I8": 1, "BF16": 2, "F16": 2, "F32": 4, "F64": 8, "I32": 4, "I64": 8}
@@ -489,11 +440,7 @@ def _official_lora_header_is_valid(path: Path) -> bool:
 def _official_lora_is_ready(path: Path = DEFAULT_LORA_PATH) -> bool:
     sidecar = Path(str(path) + ".sha256")
     try:
-        sidecar_sha256 = (
-            sidecar.read_text(encoding="utf-8").strip().split()[0].lower()
-            if sidecar.is_file()
-            else ""
-        )
+        sidecar_sha256 = sidecar.read_text(encoding="utf-8").strip().split()[0].lower() if sidecar.is_file() else ""
         return (
             path.is_file()
             and path.stat().st_size == OFFICIAL_LORA_EXPECTED_BYTES
@@ -510,37 +457,22 @@ def inspect_runtime(
     checkpoint: str | os.PathLike[str] = DEFAULT_CHECKPOINT_PATH,
 ) -> RuntimeStatus:
     source = Path(source_path).expanduser().resolve()
-    checkpoint_path = (
-        Path(checkpoint).expanduser().resolve()
-        if str(checkpoint).strip()
-        else None
-    )
+    checkpoint_path = Path(checkpoint).expanduser().resolve() if str(checkpoint).strip() else None
     messages: list[str] = []
     package_init = source / "SenseNova" / "src" / "sensenova_u1" / "__init__.py"
     inference_file = source / "SenseNova" / "examples" / "editing" / "inference.py"
     config_file = source / "SenseNova-U1.5-8B-MoT" / "config.json"
     revision_file = source / ".sensenova_runtime_revision"
-    revision = (
-        revision_file.read_text(encoding="utf-8").strip()
-        if revision_file.is_file()
-        else ""
-    )
+    revision = revision_file.read_text(encoding="utf-8").strip() if revision_file.is_file() else ""
     source_ready = (
-        package_init.is_file()
-        and inference_file.is_file()
-        and config_file.is_file()
-        and revision == SOURCE_REVISION
+        package_init.is_file() and inference_file.is_file() and config_file.is_file() and revision == SOURCE_REVISION
     )
     if source_ready:
         messages.append("正式版ConvRotランタイムは固定リビジョンで準備済みです。")
     elif package_init.is_file():
-        messages.append(
-            "推論コードのリビジョンが一致しません。セットアップを再実行してください。"
-        )
+        messages.append("推論コードのリビジョンが一致しません。セットアップを再実行してください。")
     else:
-        messages.append(
-            "正式版ランタイムが未準備です。download_sensenova_u15_int8.bat を実行してください。"
-        )
+        messages.append("正式版ランタイムが未準備です。download_sensenova_u15_int8.bat を実行してください。")
 
     dependencies_ready, dependency_message = environment_status()
     messages.append(dependency_message)
@@ -549,9 +481,7 @@ def inspect_runtime(
     partial = Path(str(checkpoint_path) + ".part") if checkpoint_path else None
     if partial and partial.is_file():
         partial_bytes = partial.stat().st_size
-    chunk_directory = (
-        Path(str(checkpoint_path) + ".part.chunks") if checkpoint_path else None
-    )
+    chunk_directory = Path(str(checkpoint_path) + ".part.chunks") if checkpoint_path else None
     if chunk_directory and chunk_directory.is_dir():
         chunk_bytes = sum(
             path.stat().st_size
@@ -569,19 +499,15 @@ def inspect_runtime(
             f"{partial_bytes / (1024**3):.2f} / {CONVROT_EXPECTED_BYTES / (1024**3):.2f} GiB"
         )
     elif checkpoint_path and checkpoint_path.is_file():
-        messages.append(
-            "INT8 ConvRotの完全性記録が一致しません。セットアップでSHA-256を再検証してください。"
-        )
+        messages.append("INT8 ConvRotの完全性記録が一致しません。セットアップでSHA-256を再検証してください。")
     else:
         messages.append("正式版INT8 ConvRotが未準備です。セットアップを実行してください。")
 
     lora_ready = _official_lora_is_ready(DEFAULT_LORA_PATH)
     if lora_ready:
-        messages.append("公式8-Step T2I LoRAを確認しました。")
+        messages.append("公式8-Step LoRAを確認しました。")
     else:
-        messages.append(
-            "公式8-Step T2I LoRAは未準備です。Quality 50-Stepは利用できます。"
-        )
+        messages.append("公式8-Step LoRAは未準備です。Quality 50-Stepは利用できます。")
 
     return RuntimeStatus(
         ready=source_ready and dependencies_ready and checkpoint_ready,
@@ -619,15 +545,13 @@ def runtime_status_html(status: RuntimeStatus) -> str:
         f'<section class="sn-runtime sn-runtime-{state}" role="status">'
         '<div class="sn-runtime-summary">'
         f'<span class="sn-status-dot" aria-hidden="true"></span><strong>{title}</strong>'
-        f'<p>{html.escape(summary)}</p></div>'
+        f"<p>{html.escape(summary)}</p></div>"
         '<details class="sn-runtime-details"><summary>詳細を開く</summary>'
         f"<ul>{items}</ul></details></section>"
     )
 
 
-def progress_html(
-    stage: str, message: str, progress: float, elapsed: float | None = None
-) -> str:
+def progress_html(stage: str, message: str, progress: float, elapsed: float | None = None) -> str:
     pct = max(0, min(100, round(float(progress) * 100)))
     elapsed_text = f" · {elapsed:.0f}秒" if elapsed is not None else ""
     safe_stage = html.escape(stage)
@@ -665,19 +589,14 @@ def _cleanup_job_directory(job_directory: Path, cache_root: Path) -> None:
     expected_parent = (cache_root / "jobs").resolve()
     resolved = job_directory.resolve()
     if resolved.parent != expected_parent or not _is_within(resolved, cache_root):
-        raise SenseNovaBridgeError(
-            "一時jobの削除先が許可範囲外です。削除を中止しました。"
-        )
+        raise SenseNovaBridgeError("一時jobの削除先が許可範囲外です。削除を中止しました。")
     for attempt in range(3):
         try:
             shutil.rmtree(resolved)
             return
         except OSError as exc:
             if attempt == 2:
-                print(
-                    "SenseNova temporary cleanup did not complete "
-                    f"({type(exc).__name__})."
-                )
+                print(f"SenseNova temporary cleanup did not complete ({type(exc).__name__}).")
                 return
             time.sleep(0.1 * (attempt + 1))
 
@@ -721,9 +640,7 @@ def _release_forge_vram() -> None:
     try:
         release_forge_vram()
     except Exception as exc:
-        raise SenseNovaBridgeError(
-            f"ForgeモデルのVRAM解放に失敗しました: {exc}"
-        ) from exc
+        raise SenseNovaBridgeError(f"ForgeモデルのVRAM解放に失敗しました: {exc}") from exc
 
 
 def _stage_images(images: Sequence[Image.Image], job_directory: Path) -> list[str]:
@@ -765,24 +682,14 @@ def _request_payload(
         "input_max_pixels": request.input_max_pixels,
         "generation_profile": request.generation_profile,
         "lora_path": (
-            os.fspath(DEFAULT_LORA_PATH.resolve())
-            if request.generation_profile == PROFILE_OFFICIAL_8STEP
-            else ""
+            os.fspath(DEFAULT_LORA_PATH.resolve()) if request.generation_profile == PROFILE_OFFICIAL_8STEP else ""
         ),
-        "lora_revision": (
-            OFFICIAL_LORA_REVISION
-            if request.generation_profile == PROFILE_OFFICIAL_8STEP
-            else ""
-        ),
-        "lora_sha256": (
-            OFFICIAL_LORA_SHA256
-            if request.generation_profile == PROFILE_OFFICIAL_8STEP
-            else ""
-        ),
+        "lora_revision": (OFFICIAL_LORA_REVISION if request.generation_profile == PROFILE_OFFICIAL_8STEP else ""),
+        "lora_sha256": (OFFICIAL_LORA_SHA256 if request.generation_profile == PROFILE_OFFICIAL_8STEP else ""),
         "steps": int(request.steps),
         "cfg_scale": float(request.cfg_scale),
         "img_cfg_scale": float(request.img_cfg_scale),
-        "cfg_norm": "none",
+        "cfg_norm": request.cfg_norm,
         "timestep_shift": float(request.timestep_shift),
         "seed": int(request.seed),
         "vram_mode": request.vram_mode,
@@ -811,9 +718,7 @@ def _parse_event(line: str) -> dict[str, Any] | None:
     return payload
 
 
-def _read_process_output(
-    process: subprocess.Popen[str], events: queue.Queue[str | None]
-) -> None:
+def _read_process_output(process: subprocess.Popen[str], events: queue.Queue[str | None]) -> None:
     assert process.stdout is not None
     try:
         for line in process.stdout:
@@ -910,9 +815,7 @@ def run_generation(
     with _PROCESS_LOCK:
         if _ACTIVE_JOB_ID is not None:
             _cleanup_job_directory(job_directory, cache_root)
-            raise SenseNovaBridgeError(
-                "別のSenseNova生成が実行中です。完了またはキャンセルを待ってください。"
-            )
+            raise SenseNovaBridgeError("別のSenseNova生成が実行中です。完了またはキャンセルを待ってください。")
         _ACTIVE_JOB_ID = job_id
         _ACTIVE_JOB_COMMITTED = False
         _CANCELLED_JOB_IDS.discard(job_id)
@@ -937,9 +840,7 @@ def run_generation(
             metadata_path=metadata_path,
         )
         request_path = job_directory / "request.json"
-        request_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
+        request_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         if job_id in _CANCELLED_JOB_IDS:
             raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
         while not ownership.acquire():
@@ -1012,8 +913,12 @@ def run_generation(
                     if event is not None:
                         last_event = redact_mapping(event)
                         if event["stage"] != "complete":
-                            yield {**last_event, "elapsed": time.monotonic() - started, "job_id": job_id,
-                                   "worker_reused": reused}
+                            yield {
+                                **last_event,
+                                "elapsed": time.monotonic() - started,
+                                "job_id": job_id,
+                                "worker_reused": reused,
+                            }
                             last_yield = time.monotonic()
                 if response is not None:
                     return_code = 0 if response["ok"] else 1
@@ -1028,19 +933,13 @@ def run_generation(
             raise SenseNovaGenerationCancelled("SenseNova生成をキャンセルしました。")
         if return_code != 0:
             error_message = str(last_event.get("message") or "SenseNova worker failed.")
-            details = [line for line in log_tail if not line.startswith("Traceback")][
-                -4:
-            ]
+            details = [line for line in log_tail if not line.startswith("Traceback")][-4:]
             if details:
                 error_message += " / " + " | ".join(details)
             raise SenseNovaBridgeError(error_message)
         if not output_path.is_file() or not metadata_path.is_file():
-            raise SenseNovaBridgeError(
-                "workerは正常終了しましたが、出力画像またはメタデータがありません。"
-            )
-        if not _is_within(output_path, output_root) or not _is_within(
-            metadata_path, output_root
-        ):
+            raise SenseNovaBridgeError("workerは正常終了しましたが、出力画像またはメタデータがありません。")
+        if not _is_within(output_path, output_root) or not _is_within(metadata_path, output_root):
             raise SenseNovaBridgeError("worker出力が許可された保存先の外にあります。")
         metadata = _validate_worker_result(output_path, metadata_path, request)
         with _PROCESS_LOCK:
@@ -1116,7 +1015,7 @@ def request_summary_html(request: SenseNovaRequest) -> str:
     mode = "複数画像編集" if request.mode == MODE_EDIT else "テキスト生成"
     quantization = "正式版 · INT8 ConvRot"
     profile = {
-        PROFILE_OFFICIAL_8STEP: "公式8-Step T2I",
+        PROFILE_OFFICIAL_8STEP: "公式8-Step LoRA",
         PROFILE_QUALITY: "Quality",
     }.get(
         request.generation_profile,

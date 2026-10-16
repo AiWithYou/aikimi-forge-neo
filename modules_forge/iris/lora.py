@@ -99,11 +99,14 @@ def inspect(root, name):
         alpha = float(metadata.get("alpha", rank))
         if not math.isfinite(alpha) or alpha <= 0:
             raise ValueError
-        extra = json.loads(metadata.get("extra", "{}"))
-        if not isinstance(extra, dict):
-            raise ValueError
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("LoRAのrank・alpha・メタデータが不正です。") from exc
+    try:
+        extra = json.loads(metadata.get("extra", "{}"))
+    except (TypeError, ValueError):
+        extra = {}
+    if not isinstance(extra, dict):
+        extra = {}
     result = {"rank": rank, "alpha": alpha}
     if metadata.get("format") == HYBRID_FORMAT:
         from .official_turbo import validate_settings
@@ -113,7 +116,7 @@ def inspect(root, name):
                 value = metadata[field]
                 if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
                     raise ValueError
-            if alpha != rank or "turbo_steps" in extra:
+            if alpha != rank:
                 raise ValueError
             sampling = validate_settings(json.loads(metadata["sampling"]))
         except (KeyError, TypeError, ValueError) as exc:
@@ -145,9 +148,10 @@ def inspect(root, name):
             shift = float(shift)
             if not math.isfinite(shift) or shift <= 0:
                 raise ValueError
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError("Turbo LoRAのSteps・shiftが不正です。") from exc
-        result.update(turbo_steps=steps, shift=shift)
+        except (TypeError, ValueError, OverflowError):
+            pass
+        else:
+            result.update(turbo_steps=steps, shift=shift)
     return result
 
 
@@ -192,20 +196,25 @@ def verify_sources(loras):
             raise ValueError("受付後にLoRAが更新されました。選び直して再実行してください。") from exc
 
 
-def sampling_settings(loras):
-    active = [
-        item
-        for item in loras
-        if item["strength"] != 0 and ("turbo_steps" in item["metadata"] or "sampling" in item["metadata"])
-    ]
+def sampling_settings(loras, mode="standard", shift=4.0):
+    if mode not in ("standard", "turbo"):
+        raise ValueError("通常またはコミュニティTurboのサンプリングを選んでください。")
+    try:
+        if isinstance(shift, bool):
+            raise ValueError
+        shift = float(shift)
+        if not math.isfinite(shift) or shift <= 0:
+            raise ValueError
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Turbo shiftは正の有限値で指定してください。") from exc
+    active = [item for item in loras if item["strength"] != 0 and item["metadata"].get("format") == HYBRID_FORMAT]
     if not active:
-        return {"mode": "standard"}
+        return {"mode": "turbo", "shift": shift} if mode == "turbo" else {"mode": "standard"}
     if len(active) != 1 or active[0]["strength"] != 1:
-        raise ValueError("Turbo LoRAは一つだけ選び、強度1で使用してください。")
-    metadata = active[0]["metadata"]
-    if "sampling" in metadata:
-        return metadata["sampling"]
-    return {"mode": "turbo", "default_steps": metadata["turbo_steps"], "shift": metadata["shift"]}
+        raise ValueError("抽出Turboアダプターは一つだけ選び、強度1で使用してください。")
+    if mode != "standard":
+        raise ValueError("抽出TurboアダプターとコミュニティTurbo方式は併用できません。")
+    return active[0]["metadata"]["sampling"]
 
 
 def verify_base(loras, identity, precision):

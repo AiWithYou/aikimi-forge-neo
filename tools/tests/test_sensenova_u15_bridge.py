@@ -10,16 +10,20 @@ import torch
 from PIL import Image
 from safetensors.torch import save_file
 
-from modules_forge import sensenova_u15_bridge as bridge
 from modules_forge import gpu_residency
+from modules_forge import sensenova_u15_bridge as bridge
 from tools.tests.resident_fixtures import worker_script
 
 
 class SenseNovaRequestTests(unittest.TestCase):
     def setUp(self):
         patcher = mock.patch.object(
-            bridge.local_assets, "file_identity", side_effect=lambda path: {
-                "path": str(Path(path).resolve()), "size": 4, "sha256": bridge.CONVROT_SHA256,
+            bridge.local_assets,
+            "file_identity",
+            side_effect=lambda path: {
+                "path": str(Path(path).resolve()),
+                "size": 4,
+                "sha256": bridge.CONVROT_SHA256,
             },
         )
         patcher.start()
@@ -27,14 +31,20 @@ class SenseNovaRequestTests(unittest.TestCase):
 
     def test_reference_profile_limits_are_explicit(self):
         request = bridge.SenseNovaRequest(
-            mode=bridge.MODE_EDIT, prompt="Combine references", generation_profile=bridge.PROFILE_QUALITY,
+            mode=bridge.MODE_EDIT,
+            prompt="Combine references",
+            generation_profile=bridge.PROFILE_QUALITY,
             input_images=(Image.new("RGB", (32, 32)),) * 8,
-            width=2048, height=2048, input_max_pixels=1024 * 1024, vram_mode="reference",
+            width=2048,
+            height=2048,
+            input_max_pixels=1024 * 1024,
+            vram_mode="reference",
         )
         bridge.validate_request(request)
         for changes in (
             {"input_images": request.input_images + request.input_images[:1]},
-            {"input_max_pixels": "auto"}, {"input_max_pixels": 2048 * 2048},
+            {"input_max_pixels": "auto"},
+            {"input_max_pixels": 2048 * 2048},
             {"width": 4096},
         ):
             with self.subTest(changes=changes.keys()), self.assertRaises(bridge.SenseNovaBridgeError):
@@ -57,12 +67,8 @@ class SenseNovaRequestTests(unittest.TestCase):
                 flatten.assert_not_called()
 
     def test_official_resolution_and_edit_auto_resolution(self):
-        self.assertEqual(
-            bridge.parse_resolution("2720x1536", bridge.MODE_TEXT), (2720, 1536)
-        )
-        self.assertEqual(
-            bridge.parse_resolution("auto", bridge.MODE_EDIT), (None, None)
-        )
+        self.assertEqual(bridge.parse_resolution("2720x1536", bridge.MODE_TEXT), (2720, 1536))
+        self.assertEqual(bridge.parse_resolution("auto", bridge.MODE_EDIT), (None, None))
         with self.assertRaisesRegex(bridge.SenseNovaBridgeError, "画像編集"):
             bridge.parse_resolution("auto", bridge.MODE_TEXT)
 
@@ -76,10 +82,7 @@ class SenseNovaRequestTests(unittest.TestCase):
         self.assertEqual(images[1].getpixel((0, 0)), (0, 0, 255))
 
     def test_edit_accepts_sixty_four_ordered_images(self):
-        images = tuple(
-            Image.new("RGB", (32, 32), (index, 0, 0))
-            for index in range(bridge.MAX_REFERENCE_IMAGES)
-        )
+        images = tuple(Image.new("RGB", (32, 32), (index, 0, 0)) for index in range(bridge.MAX_REFERENCE_IMAGES))
         request = bridge.SenseNovaRequest(
             mode=bridge.MODE_EDIT,
             prompt="Use every image in order.",
@@ -119,9 +122,7 @@ class SenseNovaRequestTests(unittest.TestCase):
         with self.assertRaisesRegex(bridge.SenseNovaBridgeError, "24GB安全"):
             bridge.validate_request(unsafe)
 
-        unrestricted = bridge.SenseNovaRequest(
-            **{**unsafe.__dict__, "vram_mode": "unrestricted"}
-        )
+        unrestricted = bridge.SenseNovaRequest(**{**unsafe.__dict__, "vram_mode": "unrestricted"})
         bridge.validate_request(unrestricted)
 
     def test_low_vram_defaults_match_the_measured_3090_profile(self):
@@ -144,8 +145,7 @@ class SenseNovaRequestTests(unittest.TestCase):
         three_references = bridge.SenseNovaRequest(
             **{
                 **request.__dict__,
-                "input_images": request.input_images
-                + (Image.new("RGB", (32, 32)),),
+                "input_images": request.input_images + (Image.new("RGB", (32, 32)),),
             }
         )
         with self.assertRaisesRegex(bridge.SenseNovaBridgeError, "参照3枚"):
@@ -187,22 +187,20 @@ class SenseNovaRequestTests(unittest.TestCase):
                 metadata_path=root / "output.json",
             )
         self.assertEqual(payload["model_path"], bridge.DEFAULT_MODEL_ID)
-        self.assertEqual(
-            payload["checkpoint_revision"], bridge.CHECKPOINT_REVISION
-        )
+        self.assertEqual(payload["checkpoint_revision"], bridge.CHECKPOINT_REVISION)
         self.assertEqual(payload["checkpoint_sha256"], bridge.CONVROT_SHA256)
         self.assertEqual(payload["quantization"], bridge.QUANT_INT8_CONVROT)
         self.assertEqual(payload["generation_profile"], bridge.PROFILE_QUALITY)
         self.assertEqual(payload["lora_path"], "")
 
-    def test_official_8step_profile_is_fixed_to_the_verified_t2i_preset(self):
+    def test_official_8step_profile_keeps_the_asset_and_user_sampling_values(self):
         request = bridge.SenseNovaRequest(
             mode=bridge.MODE_TEXT,
             prompt="A lighthouse",
             generation_profile=bridge.PROFILE_OFFICIAL_8STEP,
-            steps=8,
-            cfg_scale=1.0,
-            timestep_shift=3.0,
+            steps=12,
+            cfg_scale=2.5,
+            timestep_shift=2.0,
         )
         with mock.patch.object(bridge, "_official_lora_is_ready", return_value=True):
             bridge.validate_request(request)
@@ -213,28 +211,34 @@ class SenseNovaRequestTests(unittest.TestCase):
             output_path=Path("output.png"),
             metadata_path=Path("output.json"),
         )
-        self.assertEqual(
-            payload["lora_path"], str(bridge.DEFAULT_LORA_PATH.resolve())
-        )
+        self.assertEqual(payload["lora_path"], str(bridge.DEFAULT_LORA_PATH.resolve()))
         self.assertEqual(payload["lora_revision"], bridge.OFFICIAL_LORA_REVISION)
         self.assertEqual(payload["lora_sha256"], bridge.OFFICIAL_LORA_SHA256)
+        self.assertEqual((payload["steps"], payload["cfg_scale"], payload["timestep_shift"]), (12, 2.5, 2.0))
+        self.assertEqual(payload["checkpoint"], str(Path(request.checkpoint).resolve()))
+        self.assertEqual(payload["model_path"], request.model_path)
 
         for updates, message in (
-            ({"mode": bridge.MODE_EDIT}, "テキスト生成専用"),
-            ({"steps": 7}, "Steps 8"),
-            ({"cfg_scale": 4.0}, "CFG 1.0"),
-            ({"timestep_shift": 2.0}, "Shift 3.0"),
+            ({"steps": 0}, "Stepsは1"),
+            ({"cfg_scale": 21.0}, "CFGは0"),
+            ({"timestep_shift": 0.0}, "Shiftは0.1"),
         ):
-            invalid = bridge.SenseNovaRequest(
-                **{**request.__dict__, **updates}
-            )
+            invalid = bridge.SenseNovaRequest(**{**request.__dict__, **updates})
             with (
-                mock.patch.object(
-                    bridge, "_official_lora_is_ready", return_value=True
-                ),
+                mock.patch.object(bridge, "_official_lora_is_ready", return_value=True),
                 self.assertRaisesRegex(bridge.SenseNovaBridgeError, message),
             ):
                 bridge.validate_request(invalid)
+
+        edit = bridge.SenseNovaRequest(
+            **{
+                **request.__dict__,
+                "mode": bridge.MODE_EDIT,
+                "input_images": (Image.new("RGB", (32, 32)),),
+            }
+        )
+        with mock.patch.object(bridge, "_official_lora_is_ready", return_value=True):
+            bridge.validate_request(edit)
 
     def test_convrot_requires_safetensors_extension(self):
         request = bridge.SenseNovaRequest(
@@ -245,6 +249,25 @@ class SenseNovaRequestTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(bridge.SenseNovaBridgeError, r"\.safetensors"):
             bridge.validate_request(request)
+
+    def test_cfg_norm_defaults_to_none_and_preserves_supported_api_values(self):
+        request = bridge.SenseNovaRequest(
+            mode=bridge.MODE_TEXT,
+            prompt="A lighthouse",
+            generation_profile=bridge.PROFILE_QUALITY,
+        )
+        self.assertEqual(request.cfg_norm, "none")
+        for value in ("none", "global", "channel"):
+            with self.subTest(cfg_norm=value):
+                selected = bridge.SenseNovaRequest(**{**request.__dict__, "cfg_norm": value})
+                bridge.validate_request(selected)
+                payload = bridge._request_payload(
+                    selected, input_paths=[], output_path=Path("output.png"), metadata_path=Path("output.json")
+                )
+                self.assertEqual(payload["cfg_norm"], value)
+        for value in ("cfg_zero_star", "unknown", None):
+            with self.subTest(cfg_norm=value), self.assertRaisesRegex(bridge.SenseNovaBridgeError, "CFG正規化"):
+                bridge.validate_request(bridge.SenseNovaRequest(**{**request.__dict__, "cfg_norm": value}))
 
     def test_convrot_rejects_preview_model_config(self):
         request = bridge.SenseNovaRequest(
@@ -270,9 +293,7 @@ class SenseNovaRuntimeTests(unittest.TestCase):
         (package / "__init__.py").write_text("", encoding="utf-8")
         (inference / "inference.py").write_text("", encoding="utf-8")
         (config / "config.json").write_text("{}", encoding="utf-8")
-        (source / ".sensenova_runtime_revision").write_text(
-            bridge.SOURCE_REVISION + "\n", encoding="utf-8"
-        )
+        (source / ".sensenova_runtime_revision").write_text(bridge.SOURCE_REVISION + "\n", encoding="utf-8")
         return source
 
     def test_runtime_status_checks_revision_size_and_convrot_header(self):
@@ -317,9 +338,7 @@ class SenseNovaRuntimeTests(unittest.TestCase):
             status = bridge.inspect_runtime(source, checkpoint=checkpoint)
             self.assertFalse(status.ready)
             self.assertEqual(status.partial_bytes, 7)
-            self.assertTrue(
-                any("ダウンロード中" in message for message in status.messages)
-            )
+            self.assertTrue(any("ダウンロード中" in message for message in status.messages))
 
     def test_parallel_convrot_chunks_are_counted_in_download_progress(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -339,8 +358,12 @@ class SenseNovaRuntimeTests(unittest.TestCase):
 class SenseNovaWorkerBridgeTests(unittest.TestCase):
     def setUp(self):
         patcher = mock.patch.object(
-            bridge.local_assets, "file_identity", side_effect=lambda path: {
-                "path": str(Path(path).resolve()), "size": 4, "sha256": bridge.CONVROT_SHA256,
+            bridge.local_assets,
+            "file_identity",
+            side_effect=lambda path: {
+                "path": str(Path(path).resolve()),
+                "size": 4,
+                "sha256": bridge.CONVROT_SHA256,
             },
         )
         patcher.start()
@@ -353,9 +376,7 @@ class SenseNovaWorkerBridgeTests(unittest.TestCase):
         self.addCleanup(worker_python.stop)
 
     def test_worker_events_are_parsed_strictly(self):
-        event = bridge._parse_event(
-            'SENSENOVA_EVENT {"stage":"sampling","progress":0.5}'
-        )
+        event = bridge._parse_event('SENSENOVA_EVENT {"stage":"sampling","progress":0.5}')
         self.assertEqual(event["stage"], "sampling")
         self.assertIsNone(bridge._parse_event("ordinary log line"))
         self.assertIsNone(bridge._parse_event("SENSENOVA_EVENT not-json"))
@@ -575,8 +596,11 @@ time.sleep(60)
             # 次回受付まで回復し、前workerの入力ハンドルが削除を妨げない。
             with mock.patch.object(bridge, "inspect_runtime", return_value=ready):
                 following = bridge.run_generation(
-                    request, output_directory=root / "outputs", cache_directory=cache,
-                    log_directory=root / "logs", worker_path=worker,
+                    request,
+                    output_directory=root / "outputs",
+                    cache_directory=cache,
+                    log_directory=root / "logs",
+                    worker_path=worker,
                 )
                 self.assertEqual(next(following)["stage"], "prepare")
                 following.close()

@@ -11,21 +11,9 @@ from PIL import Image
 from modules_forge.sensenova_u15_bridge import RuntimeStatus
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = (
-    ROOT
-    / "extensions-builtin"
-    / "sensenova-u15-studio"
-    / "scripts"
-    / "sensenova_u15_studio.py"
-)
+SCRIPT = ROOT / "extensions-builtin" / "sensenova-u15-studio" / "scripts" / "sensenova_u15_studio.py"
 STYLE = ROOT / "extensions-builtin" / "sensenova-u15-studio" / "style.css"
-JAVASCRIPT = (
-    ROOT
-    / "extensions-builtin"
-    / "sensenova-u15-studio"
-    / "javascript"
-    / "sensenova_u15_studio.js"
-)
+JAVASCRIPT = ROOT / "extensions-builtin" / "sensenova-u15-studio" / "javascript" / "sensenova_u15_studio.js"
 BRIDGE = ROOT / "modules_forge" / "sensenova_u15_bridge.py"
 
 
@@ -59,15 +47,22 @@ def load_studio_module():
 
 
 class SenseNovaStudioSourceTests(unittest.TestCase):
-    def test_ready_fast_profile_reasserts_locked_settings_after_old_ui_restore(self):
+    def test_ready_fast_profile_refresh_preserves_user_sampling_values(self):
         status = RuntimeStatus(
-            ready=True, source_ready=True, dependencies_ready=True, checkpoint_ready=True,
-            source_path=ROOT, checkpoint_path=ROOT / "fixture.safetensors", messages=(), lora_ready=True,
+            ready=True,
+            source_ready=True,
+            dependencies_ready=True,
+            checkpoint_ready=True,
+            source_path=ROOT,
+            checkpoint_path=ROOT / "fixture.safetensors",
+            messages=(),
+            lora_ready=True,
         )
         with mock.patch.object(self.studio, "inspect_runtime", return_value=status):
-            updates = self.studio._refresh_runtime("runtime", "checkpoint", self.studio.MODE_TEXT, self.studio.PROFILE_OFFICIAL_8STEP)
-        self.assertEqual([update["value"] for update in updates[3:]], [8, 1.0, 3.0])
-        self.assertTrue(all(update["interactive"] is False for update in updates[3:]))
+            updates = self.studio._refresh_runtime(
+                "runtime", "checkpoint", self.studio.MODE_TEXT, self.studio.PROFILE_OFFICIAL_8STEP
+            )
+        self.assertTrue(all("value" not in update for update in updates[3:]))
 
     @classmethod
     def setUpClass(cls):
@@ -93,9 +88,7 @@ class SenseNovaStudioSourceTests(unittest.TestCase):
         self.assertIn(".sn-bulk-row", self.style)
         self.assertIn("選択画像を差し替え", self.script)
         self.assertIn("_move_reference", self.script)
-        self.assertIn(
-            'label=f"参照画像（最大{MAX_REFERENCE_IMAGES}枚）"', self.script
-        )
+        self.assertIn('label=f"参照画像（最大{MAX_REFERENCE_IMAGES}枚）"', self.script)
 
     def test_final_int8_convrot_is_the_fixed_model(self):
         self.assertIn("gr.State(QUANT_INT8_CONVROT)", self.script)
@@ -120,14 +113,28 @@ class SenseNovaStudioSourceTests(unittest.TestCase):
     def test_stop_is_enabled_only_after_this_generation_has_a_job_id(self):
         with (
             mock.patch.object(self.studio, "_request_from_ui"),
-            mock.patch.object(self.studio, "run_generation", return_value=iter([
-                {"stage": "prepare", "message": "準備中", "job_id": "own-job"},
-                {"stage": "complete", "message": "完了", "job_id": "own-job"},
-            ])),
+            mock.patch.object(
+                self.studio,
+                "run_generation",
+                return_value=iter(
+                    [
+                        {"stage": "prepare", "message": "準備中", "job_id": "own-job"},
+                        {"stage": "complete", "message": "完了", "job_id": "own-job"},
+                    ]
+                ),
+            ),
         ):
             updates = list(self.studio._generate(*([None] * 18)))
         self.assertEqual([value[6]["interactive"] for value in updates], [False, True, False])
         self.assertEqual([value[5] for value in updates], ["", "own-job", ""])
+
+    def test_generate_passes_the_selected_cfg_norm_to_the_request(self):
+        with (
+            mock.patch.object(self.studio, "_request_from_ui") as make_request,
+            mock.patch.object(self.studio, "run_generation", return_value=iter(())),
+        ):
+            list(self.studio._generate(*([None] * 20), cfg_norm="channel"))
+        self.assertEqual(make_request.call_args.args[-1], "channel")
 
     def test_measured_24gb_safe_defaults_are_visible(self):
         self.assertIn('value="2048x2048"', self.script)
@@ -135,22 +142,15 @@ class SenseNovaStudioSourceTests(unittest.TestCase):
         self.assertIn("各約0.26MP · 比率保護", self.script)
         self.assertIn("元の入力1枚目を基準", self.bridge)
         self.assertIn("Uncapped streaming", self.script)
-        updates = self.studio._mode_updates(
-            self.studio.MODE_EDIT, "2048x2048", True
-        )
+        updates = self.studio._mode_updates(self.studio.MODE_EDIT, "2048x2048", True)
         self.assertEqual(updates[1]["value"], "auto")
         self.assertEqual(updates[3]["value"], str(512 * 512))
-        self.assertEqual(updates[5]["value"], self.studio.PROFILE_QUALITY)
-        self.assertEqual(updates[6]["value"], 50)
-        self.assertEqual(updates[7]["value"], 4.0)
+        self.assertTrue(updates[5]["visible"])
+        self.assertTrue(all("value" not in update for update in updates[5:9]))
 
     def test_missing_official_lora_defaults_explicitly_to_quality(self):
-        updates = self.studio._mode_updates(
-            self.studio.MODE_TEXT, "2048x2048", False
-        )
-        self.assertEqual(updates[5]["value"], self.studio.PROFILE_QUALITY)
-        self.assertEqual(updates[6]["value"], 50)
-        self.assertEqual(updates[7]["value"], 4.0)
+        updates = self.studio._mode_updates(self.studio.MODE_TEXT, "2048x2048", False)
+        self.assertTrue(all("value" not in update for update in updates[5:9]))
         self.assertTrue(updates[6]["interactive"])
         self.assertIn("LoRAが未準備", updates[4]["value"])
 
@@ -174,15 +174,16 @@ class SenseNovaStudioSourceTests(unittest.TestCase):
         self.assertIn("Quality生成できます", refreshed[0])
 
     def test_official_8step_and_quality_profiles_update_as_one_preset(self):
-        self.assertIn("公式8-Step · 高速T2I", self.script)
+        self.assertIn("公式8-Step LoRA", self.script)
         fast = self.studio._profile_updates(self.studio.PROFILE_OFFICIAL_8STEP)
         self.assertEqual([update["value"] for update in fast], [8, 1.0, 3.0])
-        self.assertTrue(all(update["interactive"] is False for update in fast))
+        self.assertTrue(all(update["interactive"] is True for update in fast))
+        mode = self.studio._mode_updates(self.studio.MODE_TEXT, "2048x2048", True)
+        self.assertTrue(all(update["interactive"] for update in mode[6:9]))
+        self.assertTrue(all("value" not in update for update in mode[5:9]))
 
         quality = self.studio._profile_updates(self.studio.PROFILE_QUALITY)
-        self.assertEqual(
-            [update["value"] for update in quality], [50, 4.0, 3.0]
-        )
+        self.assertEqual([update["value"] for update in quality], [50, 4.0, 3.0])
         self.assertTrue(all(update["interactive"] is True for update in quality))
 
     def test_responsive_and_accessible_ui_contracts(self):
@@ -210,6 +211,7 @@ class SenseNovaStudioSourceTests(unittest.TestCase):
             source_path=ROOT / "runtime-final",
             checkpoint_path=ROOT / "model.safetensors",
             messages=("test",),
+            lora_ready=True,
         )
         with mock.patch.object(self.studio, "inspect_runtime", return_value=status):
             interface = self.studio._build_ui()[0][0]
@@ -234,17 +236,32 @@ class SenseNovaStudioSourceTests(unittest.TestCase):
             for component in config["components"]
             if component.get("props", {}).get("label") == "生成プロファイル"
         )
-        self.assertEqual(profile["value"], self.studio.PROFILE_QUALITY)
+        self.assertEqual(profile["value"], self.studio.PROFILE_OFFICIAL_8STEP)
+        sampling = [
+            component["props"]
+            for component in config["components"]
+            if component.get("props", {}).get("label") in {"Steps", "CFG", "Timestep Shift"}
+        ]
+        self.assertTrue(all(control["interactive"] for control in sampling))
+        normalization = next(
+            component for component in config["components"] if component.get("props", {}).get("label") == "CFG正規化"
+        )
+        self.assertEqual(normalization["props"]["value"], "none")
+        self.assertEqual([value for _, value in normalization["props"]["choices"]], ["none", "global", "channel"])
+        self.assertTrue(normalization["props"]["interactive"])
+        for endpoint in ("_generate", "_summary_from_ui"):
+            dependencies = [
+                entry for entry in config["dependencies"] if str(entry.get("api_name", "")).startswith(endpoint)
+            ]
+            self.assertTrue(dependencies)
+            self.assertTrue(all(normalization["id"] in entry["inputs"] for entry in dependencies))
         refresh_dependencies = [
             dependency
             for dependency in config["dependencies"]
-            if isinstance(dependency.get("api_name"), str)
-            and dependency["api_name"].startswith("_refresh_runtime")
+            if isinstance(dependency.get("api_name"), str) and dependency["api_name"].startswith("_refresh_runtime")
         ]
         self.assertEqual(len(refresh_dependencies), 2)
-        self.assertTrue(
-            all(len(dependency["outputs"]) == 6 for dependency in refresh_dependencies)
-        )
+        self.assertTrue(all(len(dependency["outputs"]) == 6 for dependency in refresh_dependencies))
 
         prompt_id = next(
             component["id"]
@@ -280,9 +297,7 @@ class SenseNovaStudioSourceTests(unittest.TestCase):
             second = Path(temp) / "second.png"
             Image.new("RGB", (8, 8), (255, 0, 0)).save(first)
             Image.new("RGB", (8, 8), (0, 0, 255)).save(second)
-            gallery, uploads, order, selected = self.studio._append_reference_files(
-                [], [str(first), str(second)]
-            )
+            gallery, uploads, order, selected = self.studio._append_reference_files([], [str(first), str(second)])
         values = gallery["value"]
         self.assertEqual(len(values), 2)
         self.assertEqual(values[0][0].getpixel((0, 0)), (255, 0, 0))
@@ -314,11 +329,11 @@ class SenseNovaStudioSourceTests(unittest.TestCase):
             mock.patch.object(self.studio, "inspect_runtime", return_value=status),
             mock.patch.object(self.studio, "runtime_status_html", return_value="ready"),
         ):
-            updates = self.studio._refresh_runtime(
-                "runtime", "checkpoint", self.studio.MODE_EDIT, self.studio.PROFILE_QUALITY
-            )
-        self.assertTrue(updates[1])
-        self.assertTrue(all("value" not in update for update in updates[2:]))
+            for profile in (self.studio.PROFILE_QUALITY, self.studio.PROFILE_OFFICIAL_8STEP):
+                with self.subTest(profile=profile):
+                    updates = self.studio._refresh_runtime("runtime", "checkpoint", self.studio.MODE_EDIT, profile)
+                    self.assertTrue(updates[1])
+                    self.assertTrue(all("value" not in update for update in updates[2:]))
 
     def test_reordering_relabels_references_and_tracks_the_moved_image(self):
         red = Image.new("RGB", (24, 16), "red")

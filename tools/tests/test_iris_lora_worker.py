@@ -148,7 +148,9 @@ class LoRAWorkerTests(unittest.TestCase):
                 "task": "generate",
                 "precision": "int8",
                 "loras": sources,
-                "sampling": {"mode": "turbo", "default_steps": 4, "shift": 4.0},
+                "lora_sampling": "turbo",
+                "turbo_shift": 2.5,
+                "sampling": {"mode": "turbo", "shift": 2.5},
                 "steps": 8,
                 "cfg": 2.0,
                 "negative_prompt": "blurry",
@@ -178,9 +180,7 @@ class LoRAWorkerTests(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError, "Turbo.*Steps|Turbo.*CFG|Turbo.*Negative"):
                             worker.resident_run(payload)
                         constructor.assert_not_called()
-                core.atomic_json(
-                    job / "request.json", {**request, "sampling": {**request["sampling"], "default_steps": 8}}
-                )
+                core.atomic_json(job / "request.json", {**request, "sampling": {**request["sampling"], "shift": 8}})
                 with self.assertRaisesRegex(ValueError, "LoRAと生成方式"):
                     worker.resident_run(payload)
                 constructor.assert_not_called()

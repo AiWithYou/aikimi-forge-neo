@@ -81,7 +81,6 @@ def load_adapters(transformer, runtime: Path, request: dict) -> list[dict]:
                 "sha256": adapter_key[1],
                 "applied_layers": len(targets_seen),
                 "base_precision": request["precision"],
-                "experimental_base_mismatch": info["base_mismatch"],
             }
         )
     verify_sources(sources)
@@ -94,13 +93,11 @@ def load_adapters(transformer, runtime: Path, request: dict) -> list[dict]:
 def update_strengths(transformer, loaded: list[dict], runtime: Path, request: dict) -> list[dict]:
     """Update resident residuals atomically; leave disabled adapters ready to reuse."""
     validate_options(request)
-    keys, _ = cache_key(runtime, request)
+    keys = cache_key(runtime, request)
     active = [item for item in request.get("style_loras", ()) if item["strength"] != 0]
     available = {(str(Path(info["path"]).resolve()), info["sha256"]): info for info in loaded}
     if any(key not in available for key in keys):
         raise ValueError("追加LoRAの読み込み状態が変わりました。モデルを読み込み直してください。")
-    if not request.get("allow_lora_base_mismatch", False) and any(available[key]["base_mismatch"] for key in keys):
-        raise ValueError("ConvRot INT8用です。「異なる量子化で試す」をONにした実験のみ可能です。")
     strengths = {key: item["strength"] for key, item in zip(keys, active, strict=True)}
     for module in transformer.modules():
         if isinstance(module, StyleLinear) and hasattr(module, "adapter_key"):

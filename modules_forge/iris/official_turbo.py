@@ -63,7 +63,7 @@ def combine_settings(checkpoint, adapter):
     if checkpoint is None:
         return adapter
     if adapter["mode"] != "standard":
-        raise ValueError("公式TurboとTurbo LoRAは併用できません。Turbo LoRAを外してください。")
+        raise ValueError("公式Turboと別のTurbo生成方式は併用できません。サンプリングを通常にしてください。")
     return checkpoint
 
 

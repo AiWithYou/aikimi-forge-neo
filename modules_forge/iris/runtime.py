@@ -192,7 +192,7 @@ class Runner:
             from .img2img import image_schedule
 
             if request.get("sampling", {}).get("mode") in {"turbo", "official_turbo"}:
-                raise ValueError("img2imgではTurbo LoRAを外して通常サンプリングを使ってください。")
+                raise ValueError("img2imgでは通常サンプリングを使ってください。Turbo方式は未対応です。")
             image_plan = image_schedule(request["steps"], request["strength"], self.cfg.flow.shift)
             total = image_plan.steps
         if request.get("sampling", {}).get("mode") == "turbo" and request["cfg"] != 1:

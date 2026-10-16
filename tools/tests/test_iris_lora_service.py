@@ -41,7 +41,7 @@ class LoRAServiceTests(unittest.TestCase):
                 style = adapter(root, "style.safetensors")
                 selection = [{"name": turbo.name, "strength": 1}, {"name": style.name, "strength": -0.5}]
                 request = self.generation(
-                    precision=precision, loras=selection, sampling={"mode": "standard"}, steps=8, cfg=2.0
+                    precision=precision, loras=selection, lora_sampling="turbo", turbo_shift=2.5, steps=8, cfg=2.0
                 )
                 service = Service(root)
                 lease = Mock()
@@ -64,7 +64,7 @@ class LoRAServiceTests(unittest.TestCase):
                 saved = json.loads((root / "outputs/iris" / identifier / "request.json").read_text(encoding="utf-8"))
                 self.assertEqual(dispatched, [saved])
                 self.assertEqual((saved["steps"], saved["cfg"], saved["negative_prompt"]), (8, 2.0, "blurry"))
-                self.assertEqual(saved["sampling"], {"mode": "turbo", "default_steps": 4, "shift": 4.0})
+                self.assertEqual(saved["sampling"], {"mode": "turbo", "shift": 2.5})
                 self.assertEqual(saved["precision"], precision)
                 self.assertEqual(saved["seed"], 123)
                 self.assertEqual(
@@ -91,7 +91,7 @@ class LoRAServiceTests(unittest.TestCase):
                 self.assertEqual(thread.call_args.kwargs["args"], (service.jobs[identifier], lease))
                 thread.return_value.start.assert_called_once_with()
 
-    def test_turbo_fills_only_omitted_steps_and_cfg_from_recommended_defaults(self):
+    def test_lora_recommendations_do_not_replace_omitted_generation_defaults(self):
         for omitted in (("steps", "cfg"), ("steps",), ("cfg",)):
             with self.subTest(omitted=omitted), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -116,9 +116,9 @@ class LoRAServiceTests(unittest.TestCase):
                 saved = json.loads((root / "outputs/iris" / identifier / "request.json").read_text(encoding="utf-8"))
                 self.assertEqual(
                     (saved["steps"], saved["cfg"], saved["negative_prompt"]),
-                    (4 if "steps" in omitted else 8, 1.0 if "cfg" in omitted else 2.0, "blurry"),
+                    (100 if "steps" in omitted else 8, 3.0 if "cfg" in omitted else 2.0, "blurry"),
                 )
-                self.assertEqual(saved["sampling"], {"mode": "turbo", "default_steps": 4, "shift": 4.0})
+                self.assertEqual(saved["sampling"], {"mode": "standard"})
                 for name in omitted:
                     self.assertNotIn(name, request)
 
@@ -140,7 +140,6 @@ class LoRAServiceTests(unittest.TestCase):
                 [{"name": "normal.safetensors", "strength": True}],
                 [{"name": "normal.safetensors", "strength": float("nan")}],
                 [{"name": "normal.safetensors", "strength": "invalid"}],
-                [{"name": "turbo.safetensors", "strength": 0.5}],
             )
             service = Service(root)
             for selection in selections:

@@ -114,6 +114,18 @@ class TurboSVDTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "併用"):
                 official_turbo.combine_settings(PROFILE, PROFILE)
 
+    def test_extra_recommendations_do_not_reject_valid_hybrid_contract(self):
+        with tempfile.TemporaryDirectory() as root:
+            for extra in ({}, {"turbo_steps": 4, "shift": 4}, {"turbo_steps": 0, "shift": "unknown"}):
+                with self.subTest(extra=extra):
+                    hybrid(root, changes={"extra": json.dumps(extra)})
+                    sources = lora.snapshot(root, [{"name": "turbo.safetensors", "strength": 1}])
+                    self.assertEqual(lora.sampling_settings(sources), PROFILE)
+                    lora.verify_base(sources, BASE_ID, "normal")
+            hybrid(root, changes={"alpha": "2", "extra": json.dumps({"turbo_steps": 4, "shift": 4})})
+            with self.assertRaisesRegex(ValueError, "抽出Turbo"):
+                lora.snapshot(root, [{"name": "turbo.safetensors", "strength": 1}])
+
     def test_dense_replacement_is_exact_and_failure_does_not_merge(self):
         with tempfile.TemporaryDirectory() as root:
             hybrid(root)

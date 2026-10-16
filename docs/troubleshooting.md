@@ -113,7 +113,7 @@ python .\tools\aikimi_setup.py repair anima38 --dry-run
 nvidia-smi
 ```
 
-24GB Safeは、参照2枚以下、各参照約512²、出力2048² pixels以下を基準にします。画像編集では公式8-Step LoRAを使わず、Quality 50-Stepを選びます。
+24GB Safeは、参照2枚以下、各参照約512²、出力2048² pixels以下を基準にします。画像編集にも公式8-Step LoRAを選べます。Qualityの50 Stepsや公式LoRAの8 Stepsは調整の出発点で、Steps・CFG・Shiftは変更できます。
 
 ## MiniMax H3 backendへ接続できない
 

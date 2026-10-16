@@ -73,7 +73,7 @@ Windows・Python 3.13・NVIDIA GPUで使用します。Irisは専用の`models/I
 
 Stepsはtxt2imgと同じ全体の時間刻みの基準です。0より大きい強度では、`Steps × 変更強度`の小数部分を切り捨てた回数（最小1回）だけ、時間刻みの後半を実行します。例えば100 Steps・強度0.25なら25回です。強度はノイズ量そのものではなく、公式のshift済み時間刻みから開始位置を選ぶための値です。
 
-通常サンプリングに対応します。Turbo LoRAを選んだ状態ではimg2imgを実行できません。Turboを外して通常サンプリングで実行してください。生成結果は**img2imgへ送る**で次の入力に使えます。入力PNG、変更強度、実際のサンプリング回数、モデルと生成条件を保存します。
+通常サンプリングに対応します。コミュニティ製Turbo LoRAも通常のLoRAとして併用できます。**サンプリング**を**通常**にして実行してください。コミュニティTurbo方式そのもの、公式Turboと専用の抽出アダプターにはimg2imgを実装していません。生成結果は**img2imgへ送る**で次の入力に使えます。入力PNG、変更強度、実際のサンプリング回数、モデルと生成条件を保存します。
 
 生成・モデル準備の実行中は、前回の結果をimg2img・深度推定・復元へ送れません。完了・中断・失敗の処理が終わると、保持した生成結果を再び送れます。
 
@@ -108,7 +108,7 @@ hf download speridlabs/iris-3b turbo/model.safetensors turbo/config.yaml turbo/d
 
 **一覧を更新**して `speridlabs-turbo/turbo/model.safetensors` を選びます。隣接する `distill.yaml` から固定スケジュールを読み、4ステップ・CFG 1で生成します。ステップ数・CFG・Negative Promptはこのモデルでは変更できません。通常モデルへ戻すと、それまでの通常サンプリング設定を復元します。プロンプト、Seed、生成サイズは指定できます。サイズは公式Turboの7種類（1024×1024、1344×752、1344×896、1200×896とその縦横反転）を使います。
 
-公式Turboは決定的なflow-Euler方式（σ = 1、0.938、0.833、0.625）で、初期ノイズをCPUで生成します。ステップ間で新しいノイズを加えません。img2imgとコミュニティ製Turbo LoRAとの併用には対応しません。通常の互換LoRAは選択できますが、蒸留モデル上での効果は組み合わせごとに確認してください。
+公式Turboは決定的なflow-Euler方式（σ = 1、0.938、0.833、0.625）で、初期ノイズをCPUで生成します。ステップ間で新しいノイズを加えません。img2imgとコミュニティTurbo方式との併用には対応しません。コミュニティ製Turboを含む通常の互換LoRAは選択できますが、蒸留モデル上での効果は組み合わせごとに確認してください。
 
 実行条件には使用したスケジュールを記録し、モデルの識別情報には `distill.yaml` のSHA-256も含めます。不正な蒸留設定や実行中に変更されたファイルはエラーにします。画像内の長い文字やSeedごとの多様性には通常モデルより弱い傾向があると[公式モデルカード](https://huggingface.co/speridlabs/iris-3b#iris-3b-turbo)で報告されています。
 
@@ -124,7 +124,7 @@ hf download speridlabs/iris-3b turbo/model.safetensors turbo/config.yaml turbo/d
 
 Iris Studioでチェックポイントを**オリジナル**、保存形式を**通常版**にし、LoRA一覧を更新して `official-turbo-svd/iris-turbo-r128.safetensors` または `iris-turbo-r64.safetensors` を一つ、強度1で選びます。公式Turboと同じ固定スケジュール・7種類のサイズを使用します。LoRAを外すと通常の生成設定に戻ります。
 
-この形式は低rank因子と非Linearの差し替えを含む専用アダプターです。元モデルと設定のSHA-256を照合し、異なるFull FT、量子化モデル、強度1以外、別のTurboとの併用はエラーにします。img2imgには対応しません。通常モデルへマージするため、読み込み後のモデル計算量とVRAMは公式Turboと同じ条件です。ファイルの縮小率と生成速度は別に比較してください。
+この形式は低rank因子と非Linearの差し替えを含む専用アダプターです。元モデルと設定のSHA-256を照合し、異なるFull FT、量子化モデル、強度1以外、別の抽出アダプターやTurbo生成方式との併用はエラーにします。通常のLinear LoRAはコミュニティ製Turboを含めて追加できます。img2imgには対応しません。通常モデルへマージするため、読み込み後のモデル計算量とVRAMは公式Turboと同じ条件です。ファイルの縮小率と生成速度は別に比較してください。
 
 RTX 3090の通常版で、rank64・rank128の1024×1024・4 Steps・CFG 1の画像生成を確認しています。初回は元モデルの読み込み・LoRAの適用・テキストエンコーダーの準備に数分かかる場合があります。
 
@@ -134,7 +134,9 @@ RTX 3090の通常版で、rank64・rank128の1024×1024・4 Steps・CFG 1の画�
 
 対応する重みはIrisのモジュール名を使う `.lora_down` / `.lora_up`、または `.lora_A.weight` / `.lora_B.weight` の対です。rank・alphaはsafetensorsのメタデータから読み、未指定のalphaはrankを使います。`adapter_config.json`は読みません。対象名・形状・値を全て確認し、別系列や未対応のキーを含むファイルはエラーにします。量子化本体は圧縮された重みを保持したままLoRAの差分を加えます。
 
-[Iris-3B Turbo Space](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo)の蒸留LoRAは、メタデータの `shift` に従って専用のTurbo方式で生成します。Turboへの切替時に推奨初期値を設定してNegative Promptを空にし、既定の `r2-1000` は4 Steps・CFG 1・shift 4です。その後はSteps・CFG・Negative Promptを手動変更でき、生成は変更後の値を使います。一覧更新や追加の通常LoRAの変更では手動設定を戻しません。LoRAの入力エラーが出た場合も、最後に有効だった生成方式と手動設定を保持します。CFG 1ではNegative Promptを使用せず、CFGを上げた場合に使います。Turbo LoRAは一度に一つで強度1を使い、追加の通常LoRAとの併用は可能です。通常のLoRAだけの場合は従来のSteps・CFG・Negative Promptを使用します。
+[Iris-3B Turbo Space](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo)の蒸留LoRAも通常のLinear LoRAとして扱います。学習元や推奨のメタデータだけで使用モデル・サンプリング・Steps・CFG・Negative Promptを変更したり、強度や複数併用を拒否したりしません。通常サンプリングのimg2imgにも使えます。壊れた推奨メタデータは無視し、因子・rank・alpha・形状・有限値・ファイルの識別情報は検証します。
+
+専用の生成方式を使う場合は、詳細設定の**サンプリング**で**コミュニティTurbo**を選び、**Turbo shift**を指定します。既定は通常サンプリングで、方式を選んでもSteps・CFG・Negative Promptは変わりません。`r2-1000` の推奨は4 Steps・CFG 1・shift 4で、選択したLoRAに有効な推奨値があれば画面に表示します。複数LoRAを併用する場合も、shiftは利用者が指定した一つの値を使います。CFG 1ではNegative Promptを使用せず、CFGを上げた場合に使います。APIでは `lora_sampling="standard"` または `"turbo"`、`turbo_shift=4` を指定します。省略時は通常サンプリングです。
 
 Turboはガイダンスを含めて蒸留されています。手動CFGは蒸留後の追加補正であり、学習時のガイダンス強度を変更するものではありません。StepsやCFGを増やしても画質が改善するとは限らないため、まず推奨初期値を使い、調整後の画質は個別に確認してください。
 

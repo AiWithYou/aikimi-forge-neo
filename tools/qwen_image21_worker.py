@@ -670,7 +670,7 @@ def _runtime_matches(key: tuple, style_key: tuple) -> bool:
     return (
         _RESIDENT_RUNTIME is not None
         and key == _RESIDENT_KEY
-        and set(style_key[0]) <= set(_RESIDENT_RUNTIME.get("loaded_style_key", ((), False))[0])
+        and set(style_key) <= set(_RESIDENT_RUNTIME.get("loaded_style_key", ()))
     )
 
 

@@ -1,6 +1,8 @@
 """LoRA compatibility boundaries, residual math, and multiple adapter contracts."""
 
 import asyncio
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -59,7 +61,7 @@ class StyleLoraTests(unittest.TestCase):
                 info = style_lora.inspect(self.root, name)
                 self.assertEqual(info["consistency_version"], "1500")
                 self.assertIn("ausboss", info["source"])
-                self.assertFalse(info["base_mismatch"])
+                self.assertEqual(info["training_base_forward"], "")
         self.write({"ss_output_name": "qwen21_consistency_v1"})
         self.assertNotIn("consistency_version", style_lora.inspect(self.root, self.path.name))
 
@@ -72,10 +74,9 @@ class StyleLoraTests(unittest.TestCase):
             {"qwen_partition_global_adapter": "latent_summary_v1", "qwen_base_forward": "convrot_int8_bf16_backward_v1"}
         )
         values = Request(prompt="test", style_loras=({"name": self.path.name, "strength": 1.0},)).to_dict()
-        with self.assertRaisesRegex(ValueError, "ConvRot"):
-            style_lora.validate_installed(self.root, values)
-        values["allow_lora_base_mismatch"] = True
-        self.assertTrue(style_lora.validate_installed(self.root, values)[0]["base_mismatch"])
+        info = style_lora.validate_installed(self.root, values)[0]
+        self.assertEqual(info["training_base_forward"], "convrot_int8_bf16_backward_v1")
+        self.assertEqual(info["training_only_keys"], ["qwen_partition_global_adapter.alpha"])
 
     def options(self, strength=1.0, **extra):
         return {"style_loras": [{"name": self.path.name, "strength": strength}], "precision": "int8", **extra}
@@ -256,23 +257,56 @@ class StyleLoraTests(unittest.TestCase):
         style_lora_runtime.update_strengths(model, loaded, self.root, self.options(-0.5))
         torch.testing.assert_close(model.transformer_blocks[0].attn.to_q(x), before - 1.5, rtol=0.016, atol=0.016)
 
-    def test_reuse_checks_current_base_mismatch_permission_before_updating_scales(self):
-        self.write({"qwen_base_forward": "convrot_int8_bf16_backward_v1"})
-        model, _ = self.model()
-        loaded = load_adapters(model, self.root, self.options(allow_lora_base_mismatch=True))
-        wrapper = model.transformer_blocks[0].attn.to_q
-        with self.assertRaisesRegex(ValueError, "ConvRot"):
-            style_lora_runtime.update_strengths(model, loaded, self.root, self.options(0.25))
-        self.assertEqual(wrapper.scale, 0.5)
-        self.assertEqual(style_lora_runtime.update_strengths(model, loaded, self.root, self.options(0)), [])
-        self.assertEqual(wrapper.scale, 0)
-        current = style_lora_runtime.update_strengths(
-            model, loaded, self.root, self.options(0.25, allow_lora_base_mismatch=True)
-        )
-        self.assertTrue(current[0]["experimental_base_mismatch"])
-        self.assertEqual(wrapper.scale, 0.125)
+    def test_training_base_metadata_does_not_restrict_application_or_reuse(self):
+        for training_base in ("convrot_int8_bf16_backward_v1", "bf16", "future_distilled_base_v3"):
+            for precision in ("int8", "base_q4_k_m", "turbo_bf16"):
+                with self.subTest(training_base=training_base, precision=precision):
+                    self.write({"qwen_base_forward": training_base})
+                    model, base = self.model()
+                    options = self.options(precision=precision, steps=17, local_model="selected.safetensors")
+                    original = dict(options)
+                    x = torch.ones(1, 3, dtype=torch.bfloat16)
+                    before = base(x)
+                    loaded = load_adapters(model, self.root, options)
+                    wrapper = model.transformer_blocks[0].attn.to_q
+                    torch.testing.assert_close(wrapper(x), before + 3, rtol=0.016, atol=0.016)
+                    current = style_lora_runtime.update_strengths(
+                        model, loaded, self.root, self.options(0.25, precision=precision)
+                    )
+                    self.assertEqual(current[0]["training_base_forward"], training_base)
+                    self.assertNotIn("experimental_base_mismatch", current[0])
+                    self.assertEqual(wrapper.scale, 0.125)
+                    torch.testing.assert_close(wrapper(x), before + 0.75, rtol=0.016, atol=0.016)
+                    self.assertEqual(options, original)
+                    self.assertEqual(style_lora_runtime.update_strengths(model, loaded, self.root, self.options(0)), [])
+                    self.assertEqual(wrapper.scale, 0)
 
-    def test_ui_blocks_mismatched_base_and_labels_experiment(self):
+    def test_prepare_command_records_training_base_as_information(self):
+        from types import SimpleNamespace
+
+        from tools import prepare_qwen21_style_lora as prepare
+
+        self.write({"qwen_base_forward": "future_distilled_base_v3"})
+        downloaded = self.root / "models/Qwen-Image-2.1/loras/owner--repo/weights.safetensors"
+        downloaded.parent.mkdir(parents=True)
+        downloaded.write_bytes(self.path.read_bytes())
+        item = SimpleNamespace(
+            rfilename=downloaded.name, lfs=SimpleNamespace(sha256=style_lora.fingerprint(downloaded))
+        )
+        repository = SimpleNamespace(sha="fixed-revision", siblings=[item])
+        with (
+            patch.object(prepare, "ROOT", self.root),
+            patch("sys.argv", ["prepare_qwen21_style_lora.py", "owner/repo"]),
+            patch("huggingface_hub.HfApi.model_info", return_value=repository),
+            patch("huggingface_hub.hf_hub_download", return_value=str(downloaded)),
+            patch("sys.stdout", io.StringIO()),
+        ):
+            prepare.main()
+        receipt = json.loads(downloaded.with_suffix(".source.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["training_base_forward"], "future_distilled_base_v3")
+        self.assertNotIn("base_mismatch", receipt)
+
+    def test_ui_accepts_training_base_information_without_confirmation(self):
         from types import SimpleNamespace
 
         from tools.tests.test_qwen_image21_service import load_ui
@@ -280,22 +314,19 @@ class StyleLoraTests(unittest.TestCase):
         ui = load_ui()
         self.write({"qwen_base_forward": "convrot_int8_bf16_backward_v1"})
         with patch.object(ui, "RUNTIME", self.root):
-            blocked = ui.lora_readiness([self.path.name], [[self.path.name, 1]], False, "", SimpleNamespace())
-            enabled = ui.lora_readiness([self.path.name], [[self.path.name, 1]], True, "", SimpleNamespace())
-        self.assertFalse(blocked[2]["interactive"])
-        self.assertIn("要確認", blocked[0]["label"])
+            enabled = ui.lora_readiness([self.path.name], [[self.path.name, 1]], "", SimpleNamespace())
         self.assertTrue(enabled[2]["interactive"])
-        self.assertIn("実験", enabled[0]["label"])
+        self.assertEqual(enabled[0]["label"], "LoRA · 1件")
+        self.assertEqual(enabled[1], "")
 
     def test_ui_add_remove_preserves_strength_by_name_not_row(self):
         from tools.tests.test_qwen_image21_service import load_ui
 
         ui = load_ui()
         with patch.object(ui, "RUNTIME", self.root):
-            table, _, optin = ui.lora_selection(["other.safetensors", self.path.name], [[self.path.name, 0.65]])
+            table, _ = ui.lora_selection(["other.safetensors", self.path.name], [[self.path.name, 0.65]])
             self.assertEqual(table["value"], [["other.safetensors", 1.0], [self.path.name, 0.65]])
-            self.assertFalse(optin["value"])
-            table, _, _ = ui.lora_selection([self.path.name], table["value"])
+            table, _ = ui.lora_selection([self.path.name], table["value"])
             self.assertEqual(table["value"], [[self.path.name, 0.65]])
             settings = ui.lora_settings([self.path.name], [["irrelevant", 0.2], [self.path.name, 0.65]])
             self.assertEqual(settings, ({"name": self.path.name, "strength": 0.65},))
@@ -305,7 +336,7 @@ class StyleLoraTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "更新"):
                 ui.lora_settings([self.path.name], [])
 
-    def test_reopening_settings_preserves_base_mismatch_opt_in(self):
+    def test_reopening_settings_preserves_strength_without_training_base_gate(self):
         from tools.tests.test_qwen_image21_service import load_ui
 
         ui = load_ui()
@@ -323,12 +354,14 @@ class StyleLoraTests(unittest.TestCase):
                 for item in config["dependencies"]
                 if any(target[0] == section and target[1] == "expand" for target in item["targets"])
             )
-            self.assertEqual(len(expand["inputs"]), 3)
-            reopened = asyncio.run(demo.call_function(expand["id"], [names, rows, True]))["prediction"]
-            self.assertTrue(reopened[2]["value"])
+            self.assertEqual(len(expand["inputs"]), 2)
+            reopened = asyncio.run(demo.call_function(expand["id"], [names, rows]))["prediction"]
+            self.assertEqual(len(reopened), 2)
             self.assertEqual(reopened[0]["value"], rows)
-            selection_changed = ui.lora_selection(names, rows)
-            self.assertFalse(selection_changed[2]["value"])
+            self.assertFalse(
+                any(item["props"].get("label") == "異なる量子化で試す（実験）" for item in config["components"])
+            )
+            self.assertNotIn("allow_lora_base_mismatch", Request.__dataclass_fields__)
 
 
 if __name__ == "__main__":

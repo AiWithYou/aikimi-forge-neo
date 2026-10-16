@@ -80,6 +80,12 @@ def validate_request(value, *, sizes=None):
     if not isinstance(checkpoint, str) or not checkpoint.strip() or "://" in checkpoint:
         raise IrisError("チェックポイントを選び直してください。")
     request["checkpoint"] = checkpoint.strip().strip('"')
+    from .lora import sampling_settings
+
+    request["lora_sampling"] = request.get("lora_sampling", "standard")
+    request["turbo_shift"] = request.get("turbo_shift", 4.0)
+    sampling_settings([], request["lora_sampling"], request["turbo_shift"])
+    request["turbo_shift"] = float(request["turbo_shift"])
     image_mode = request.get("image_mode", "txt2img")
     if image_mode not in {"txt2img", "img2img"}:
         raise IrisError("txt2imgまたはimg2imgを選び直してください。")

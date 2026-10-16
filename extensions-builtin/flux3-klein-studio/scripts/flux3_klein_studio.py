@@ -121,10 +121,11 @@ def refresh_loras(selected):
 
 def select_lora(selected):
     try:
-        required = local_lora.required_model(RUNTIME, selected)
+        if selected:
+            local_lora.header_info(local_lora.resolve(RUNTIME, selected))
     except ValueError as error:
         raise gr.Error(str(error)) from error
-    return gr.update(value=required) if required else gr.skip(), gr.update(interactive=bool(selected))
+    return gr.update(interactive=bool(selected))
 
 
 def on_ui_tabs():
@@ -235,7 +236,7 @@ def on_ui_tabs():
         timer = gr.Timer(0.5, active=False)
         model.change(model_defaults, inputs=model, outputs=[steps, cfg], queue=False, api_visibility="private")
         lora_refresh.click(refresh_loras, inputs=lora, outputs=lora, queue=False, api_visibility="private")
-        lora.change(select_lora, inputs=lora, outputs=[model, lora_strength], queue=False, api_visibility="private")
+        lora.change(select_lora, inputs=lora, outputs=lora_strength, queue=False, api_visibility="private")
         run.click(
             start,
             inputs=[

@@ -49,10 +49,9 @@ class IrisLoRATests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             adapter(root, meta={"rank": "1", "alpha": "1", "extra": json.dumps({"turbo_steps": 4, "shift": 4})})
             sources = lora.snapshot(root, [{"name": "test.safetensors", "strength": 1}])
-            self.assertEqual(lora.sampling_settings(sources), {"mode": "turbo", "default_steps": 4, "shift": 4.0})
-            for invalid in (sources * 2, [{**sources[0], "strength": 0.5}]):
-                with self.assertRaises(ValueError):
-                    lora.sampling_settings(invalid)
+            self.assertEqual(lora.sampling_settings(sources), {"mode": "standard"})
+            for selected in (sources * 2, [{**sources[0], "strength": 0.5}]):
+                self.assertEqual(lora.sampling_settings(selected, "turbo", 2), {"mode": "turbo", "shift": 2.0})
 
     def test_metadata_extra_cannot_override_scale(self):
         with tempfile.TemporaryDirectory() as root:
@@ -225,8 +224,7 @@ class IrisLoRATests(unittest.TestCase):
                 {"turbo_steps": 4, "shift": float("nan")},
             ):
                 adapter(root, meta={"rank": "1", "alpha": "1", "extra": json.dumps(extra)})
-                with self.assertRaises(ValueError):
-                    lora.inspect(root, "test.safetensors")
+                self.assertEqual(lora.inspect(root, "test.safetensors"), {"rank": 1, "alpha": 1.0})
 
 
 if __name__ == "__main__":

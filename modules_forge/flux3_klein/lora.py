@@ -122,16 +122,16 @@ def header_info(path):
             if alpha.get("dtype") not in {"F32", "F16", "BF16"} or alpha.get("shape") not in ([], [1]):
                 raise Flux3Error("LoRAのalphaが不正です。")
     source = metadata.get("base_model", "")
-    model = (
+    training_source = (
         "base"
         if source.endswith("flux-3-image-klein-base")
         else ("distilled" if source.endswith("flux-3-image-klein") else None)
     )
-    return {"rank": next(iter(ranks)) if len(ranks) == 1 else None, "targets": len(groups), "base_model": model}
-
-
-def required_model(root, name):
-    return header_info(resolve(root, name))["base_model"] if name else None
+    return {
+        "rank": next(iter(ranks)) if len(ranks) == 1 else None,
+        "targets": len(groups),
+        "base_model": training_source,
+    }
 
 
 def inspect(root, name):
@@ -148,10 +148,6 @@ def bind(root, request):
     if not name:
         return None
     current = inspect(root, name)
-    if current["base_model"] and current["base_model"] != request.get("model", "distilled"):
-        raise Flux3Error(
-            "このLoRAはKlein Base用です。" if current["base_model"] == "base" else "このLoRAは蒸留版用です。"
-        )
     previous = request.get("lora_identity")
     if previous is not None and previous != current:
         raise Flux3Error("選択したLoRAが変更されました。選び直して再実行してください。")

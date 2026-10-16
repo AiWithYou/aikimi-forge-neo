@@ -74,16 +74,14 @@ class ConsistencyUiTests(unittest.TestCase):
             for item in config["dependencies"]
             if (selection, "change") in item["targets"] and demo.fns[item["id"]].fn is self.ui.lora_selection
         )
-        mismatch = next(key for key, props in components.items() if props.get("label") == "異なる量子化で試す（実験）")
-        self.assertEqual(changed["inputs"], [selection, event["outputs"][1], mismatch])
+        self.assertEqual(changed["inputs"], [selection, event["outputs"][1]])
 
     def test_known_adapter_selection_explains_geometry_and_pose_limit(self):
-        info = {"base_mismatch": False, "consistency_version": "1500"}
+        info = {"training_base_forward": "", "consistency_version": "1500"}
         with patch.object(self.ui.lora_library, "inspect", return_value=info):
-            _, message, mismatch = self.ui.lora_selection(["renamed.safetensors"], [["renamed.safetensors", 1]])
+            _, message = self.ui.lora_selection(["renamed.safetensors"], [["renamed.safetensors", 1]])
         for phrase in ("Consistency", "ポーズ", "同じサイズ", "ConvRot", "25", "Q4_K_M", "作者"):
             self.assertIn(phrase, message)
-        self.assertFalse(mismatch["value"])
 
 
 if __name__ == "__main__":

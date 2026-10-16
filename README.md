@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.7.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.7.0)** · [変更履歴](CHANGELOG.md)
+**[v4.7.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.7.1)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,11 +10,13 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v4.7.0の主な変更
+## v4.7.1の主な変更
 
-- **[FLUX 3のLoRA](docs/flux3-klein.md#lora)**：Studioから選択・強度調整・一覧更新ができ、Base用LoRAではモデルも切り替わります。PNG・条件JSON・履歴に名前とSHA-256、強度を記録します。
+- **[LoRAと本体の選択](docs/local-models.md#loraとモデルの変更)**：学習元や推奨と使用条件を区別します。FLUX 3のモデル自動切替・学習元名による使用拒否を撤去し、選んだモデル・Steps・CFGを維持します。Base学習LoRAも、実際の対象と形状が対応すれば蒸留版で使えます。
+- **Qwen・Iris・SenseNovaのLoRA**：Qwenの学習時精度による許可ゲートを撤去。Irisの通常LoRAは強度変更・複数併用・img2imgに使え、Turbo方式は明示選択できます。SenseNovaの推奨値も手動変更でき、画像編集にLoRAを適用できます。
+- **[FLUX 3のLoRA](docs/flux3-klein.md#lora)**：Studioから選択・強度調整・一覧更新ができ、PNG・条件JSON・履歴に名前とSHA-256、強度を記録します。
 - **読み込みと画面設定**：LoRAの形式・形状・有限値と全対象の登録を検証し、生成受付後の差し替えを拒否します。起動時の保存済みLoRA選択による設定の不整合も防ぎます。
-- **履歴とAPI**：未完了の生成が多くても最新50件までの完成結果を表示。保存先のリンク・参照画像のSHA-256・大きすぎる入力数値の検証を修正しました。[全変更](CHANGELOG.md#v470--2026-10-16)
+- **履歴とAPI**：未完了の生成が多くても最新50件までの完成結果を表示。保存先のリンク・参照画像のSHA-256・大きすぎる入力数値の検証を修正しました。[全変更](CHANGELOG.md#v471--2026-10-16)
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 

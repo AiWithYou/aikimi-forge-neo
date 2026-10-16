@@ -56,7 +56,7 @@ def main():
         "sha256": digest,
         "size": path.stat().st_size,
         "linear_layers": checked["linear_layers"],
-        "base_mismatch": checked["base_mismatch"],
+        "training_base_forward": checked["training_base_forward"],
     }
     atomic_json(path.with_suffix(".source.json"), receipt)
     sys.stdout.write(json.dumps({"installed": name, **receipt}, ensure_ascii=True) + "\n")

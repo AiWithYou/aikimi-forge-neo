@@ -30,7 +30,10 @@ def resident_run(payload):
     loras = request.get("loras", [])
     verify_sources(loras)
     verify_base(loras, identity, request["precision"])
-    sampling = combine_settings(checkpoint_settings(payload["root"], checkpoint), sampling_settings(loras))
+    sampling = combine_settings(
+        checkpoint_settings(payload["root"], checkpoint),
+        sampling_settings(loras, request.get("lora_sampling", "standard"), request.get("turbo_shift", 4.0)),
+    )
     if request.get("sampling", {"mode": "standard"}) != sampling:
         raise ValueError("チェックポイント・LoRAと生成方式が一致しません。再実行してください。")
     if sampling["mode"] == "official_turbo":
@@ -44,7 +47,7 @@ def resident_run(payload):
             raise ValueError("公式Turboの固定生成条件が一致しません。再実行してください。")
     if sampling["mode"] == "turbo":
         if request.get("image_mode") == "img2img":
-            raise ValueError("img2imgではTurbo LoRAを外して通常サンプリングを使ってください。")
+            raise ValueError("img2imgではサンプリングを通常にしてください。コミュニティTurbo方式は未対応です。")
         steps, cfg = request.get("steps"), request.get("cfg")
         if type(steps) is not int or not 1 <= steps <= 200:
             raise ValueError("TurboのStepsは1〜200の整数で指定してください。")

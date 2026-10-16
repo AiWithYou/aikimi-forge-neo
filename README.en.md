@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v4.7.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.7.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.7.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.7.1)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,11 +10,13 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v4.7.0
+## What's new in v4.7.1
 
-- **[FLUX 3 LoRAs](docs/flux3-klein.md#lora)**: select a local LoRA, adjust its strength, and refresh the list in Studio. Base-specific LoRAs select the Base model. PNG metadata, settings JSON, and history retain the name, SHA-256, and strength.
+- **[LoRAs and model selection](docs/local-models.md#loraとモデルの変更)**: training provenance and recommendations do not fix the inference model. FLUX 3 keeps the selected model, Steps, and CFG and no longer rejects a LoRA solely because its training model differs. Base-trained LoRAs can run with the distilled model when their actual targets and shapes match.
+- **Qwen, Iris, and SenseNova LoRAs**: remove Qwen's training-precision opt-in gate. Iris permits ordinary LoRA strengths, combinations, and img2img, with explicit Turbo sampling selection. SenseNova recommendations remain editable, and its LoRA can also be used for image editing.
+- **[FLUX 3 LoRAs](docs/flux3-klein.md#lora)**: select a local LoRA, adjust its strength, and refresh the list in Studio. PNG metadata, settings JSON, and history retain the name, SHA-256, and strength.
 - **Loading and UI settings**: validate adapter formats, shapes, finite values, and registration of every target; reject file replacements after submission. Start without a LoRA to keep restored UI settings consistent.
-- **History and APIs**: show up to 50 completed results even when many newer jobs are unfinished. Revalidate output links and reference-image hashes, and reject oversized numeric inputs. See the [complete changelog](CHANGELOG.md#v470--2026-10-16).
+- **History and APIs**: show up to 50 completed results even when many newer jobs are unfinished. Revalidate output links and reference-image hashes, and reject oversized numeric inputs. See the [complete changelog](CHANGELOG.md#v471--2026-10-16).
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 

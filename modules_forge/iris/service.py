@@ -43,7 +43,8 @@ class Service:
 
             loras = snapshot(self.root, value.get("loras", []))
             sampling = combine_settings(
-                checkpoint_settings(self.root, value.get("checkpoint", "base")), sampling_settings(loras)
+                checkpoint_settings(self.root, value.get("checkpoint", "base")),
+                sampling_settings(loras, value.get("lora_sampling", "standard"), value.get("turbo_shift", 4.0)),
             )
             sizes = generation_sizes(self.root, value.get("checkpoint", "base"), sampling=sampling)
         request = validate_request(value, sizes=sizes)
@@ -61,11 +62,7 @@ class Service:
                 request.update(steps=len(request["sampling"]["sigmas"]), cfg=1.0, negative_prompt="")
             if request["sampling"]["mode"] == "turbo":
                 if request["image_mode"] == "img2img":
-                    raise IrisError("img2imgではTurbo LoRAを外して通常サンプリングを使ってください。")
-                if "steps" not in value:
-                    request["steps"] = request["sampling"]["default_steps"]
-                if "cfg" not in value:
-                    request["cfg"] = 1.0
+                    raise IrisError("img2imgではサンプリングを通常にしてください。コミュニティTurbo方式は未対応です。")
         if request.get("checkpoint", "base") != "base":
             request["checkpoint"] = str(
                 model_files(self.root, request["precision"], request["task"], request["checkpoint"])[0]

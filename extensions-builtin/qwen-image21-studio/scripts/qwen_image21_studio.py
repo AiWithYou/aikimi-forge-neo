@@ -203,7 +203,6 @@ def start(
     custom_height=1024,
     style_loras=None,
     lora_strengths=None,
-    allow_lora_base_mismatch=False,
     local_model="",
     local_components="",
 ):
@@ -260,7 +259,6 @@ def start(
             style_loras=lora_settings(style_loras, lora_strengths),
             local_model=local_model or "",
             local_components=local_components or "",
-            allow_lora_base_mismatch=allow_lora_base_mismatch,
         )
         identifier = STUDIO.start(generation, owner(request))
         for message in sampling_recommendations(generation.to_dict()):
@@ -598,7 +596,6 @@ def start_canvas(
     custom_height=1024,
     style_loras=None,
     lora_strengths=None,
-    allow_lora_base_mismatch=False,
     local_model="",
     local_components="",
     image_mode=None,
@@ -691,7 +688,6 @@ def start_canvas(
                 custom_height,
                 style_loras,
                 lora_strengths,
-                allow_lora_base_mismatch,
                 local_model,
                 local_components,
             )
@@ -856,28 +852,24 @@ def prepare_consistency(names, rows):
     )
 
 
-def lora_selection(names, rows, allow_mismatch=False):
+def lora_selection(names, rows):
     from modules_forge.local_assets import lora_rows
 
     names = names or []
     table = gr.update(value=lora_rows(names, rows), visible=True if names else "hidden")
-    mismatched, errors, consistency = [], [], []
+    training_bases, errors, consistency = [], [], []
     for name in names:
         try:
             info = lora_library.inspect(RUNTIME, name)
-            if info["base_mismatch"]:
-                mismatched.append(name)
+            if info["training_base_forward"]:
+                training_bases.append(f"{lora_display_name(name).split(' / ')[0]}: {info['training_base_forward']}")
             if info.get("consistency_version"):
                 consistency.append(info["consistency_version"])
         except (OSError, ValueError, KeyError, TypeError) as exc:
             errors.append(f"{name}: {exc}")
     message = "\n\n".join(errors)
-    if mismatched:
-        message += (
-            ("\n\n" if message else "")
-            + "学習時はConvRot INT8: "
-            + ", ".join(lora_display_name(name).split(" / ")[0] for name in mismatched)
-        )
+    if training_bases:
+        message += ("\n\n" if message else "") + "学習元の記録: " + " / ".join(training_bases)
     if consistency:
         message += (
             ("\n\n" if message else "")
@@ -887,14 +879,10 @@ def lora_selection(names, rows, allow_mismatch=False):
             "新しいポーズや顔の向きへの変更を抑える場合があります。"
             "作者の学習元はComfy-Org ConvRot INT8です。ローカル本体も含め学習元重みとの一致や、Turboなどとの併用画質は未検証です。"
         )
-    return (
-        table,
-        message,
-        gr.update(visible=True if mismatched else "hidden", value=bool(mismatched and allow_mismatch)),
-    )
+    return table, message
 
 
-def lora_readiness(names, rows, allow_mismatch, identifier, request: gr.Request):
+def lora_readiness(names, rows, identifier, request: gr.Request):
     running = False
     if identifier:
         try:
@@ -906,24 +894,13 @@ def lora_readiness(names, rows, allow_mismatch, identifier, request: gr.Request)
         heading = f"LoRA · {len(names)}件"
         try:
             settings = lora_settings(names, rows)
-            infos = lora_library.validate_installed(
-                RUNTIME,
-                {
-                    "style_loras": settings,
-                    "allow_lora_base_mismatch": allow_mismatch,
-                },
-            )
+            lora_library.validate_installed(RUNTIME, {"style_loras": settings})
             active = sum(item["strength"] != 0 for item in settings)
             if active != len(settings):
                 heading += f" · 有効{active}件"
-            if any(info["base_mismatch"] for info in infos):
-                heading += " · 実験"
-                message = "学習時と異なる量子化での実験"
         except (OSError, ValueError, KeyError, TypeError) as exc:
             heading += " · 要確認"
             message, valid = str(exc), False
-            if "ConvRot INT8" in message:
-                message = "LoRA設定の「異なる量子化で試す」を確認してください。"
     return gr.update(label=heading), message, gr.update(interactive=valid and not running)
 
 
@@ -1281,9 +1258,6 @@ def on_ui_tabs():
                             elem_id="qwen21-lora-strengths",
                         )
                         lora_info = gr.Markdown("")
-                        allow_lora_base_mismatch = gr.Checkbox(
-                            value=False, label="異なる量子化で試す（実験）", visible="hidden"
-                        )
                         with gr.Accordion("LoRAの追加方法", open=False):
                             gr.Markdown(
                                 "`models/Qwen-Image-2.1/loras/` に Qwen Image 2.1 用の `.safetensors` を置き、一覧更新。サブフォルダーも使えます。"
@@ -1677,39 +1651,38 @@ def on_ui_tabs():
             **PRIVATE,
         ).then(
             lora_selection,
-            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch],
-            outputs=[lora_strengths, lora_info, allow_lora_base_mismatch],
+            inputs=[style_loras, lora_strengths],
+            outputs=[lora_strengths, lora_info],
             **PRIVATE,
         ).then(
             lora_readiness,
-            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch, job],
+            inputs=[style_loras, lora_strengths, job],
             outputs=[lora_section, lora_gate, generate],
             **PRIVATE,
         )
         lora_section.expand(
             lora_selection,
-            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch],
-            outputs=[lora_strengths, lora_info, allow_lora_base_mismatch],
+            inputs=[style_loras, lora_strengths],
+            outputs=[lora_strengths, lora_info],
             **PRIVATE,
         )
         style_loras.change(
             lora_selection,
-            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch],
-            outputs=[lora_strengths, lora_info, allow_lora_base_mismatch],
+            inputs=[style_loras, lora_strengths],
+            outputs=[lora_strengths, lora_info],
             **PRIVATE,
         ).then(
             lora_readiness,
-            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch, job],
+            inputs=[style_loras, lora_strengths, job],
             outputs=[lora_section, lora_gate, generate],
             **PRIVATE,
         )
-        for component in (lora_strengths, allow_lora_base_mismatch):
-            component.input(
-                lora_readiness,
-                inputs=[style_loras, lora_strengths, allow_lora_base_mismatch, job],
-                outputs=[lora_section, lora_gate, generate],
-                **PRIVATE,
-            )
+        lora_strengths.input(
+            lora_readiness,
+            inputs=[style_loras, lora_strengths, job],
+            outputs=[lora_section, lora_gate, generate],
+            **PRIVATE,
+        )
         generate.click(
             start_canvas,
             inputs=[
@@ -1749,7 +1722,6 @@ def on_ui_tabs():
                 height,
                 style_loras,
                 lora_strengths,
-                allow_lora_base_mismatch,
                 local_model,
                 local_components,
                 workspace.mode,
@@ -1768,7 +1740,7 @@ def on_ui_tabs():
             **PRIVATE,
         ).then(assistant_status, inputs=job, outputs=assistant, **PRIVATE).then(
             lora_readiness,
-            inputs=[style_loras, lora_strengths, allow_lora_base_mismatch, job],
+            inputs=[style_loras, lora_strengths, job],
             outputs=[lora_section, lora_gate, generate],
             **PRIVATE,
         ).then(
@@ -1894,7 +1866,6 @@ def on_ui_tabs():
         "memory_mode": memory_mode,
         "style_loras": style_loras,
         "lora_strengths": lora_strengths,
-        "allow_lora_base_mismatch": allow_lora_base_mismatch,
         "fun_acc": fun_acc,
         "sparse_mode": sparse_mode,
         "sparse_keep_percent": sparse_keep,

@@ -12,8 +12,8 @@ W4A8の例: `.\aikimi-iris-setup.bat --precision w4a8 --task generate`。[W4A8�
 
 画像生成の既定は1024×1024・100 Steps・CFG 3。公式デモに合わせた7種類の生成サイズから選び、Seedを固定して同じ条件を再使用できます。深度はカラーPNGと元の浮動小数点NPY、復元はPNGを保存し、入力画像と比較できます。画像・条件・実測値は`outputs/iris/`へ保存します。
 
-文章から生成する場合は**txt2img**、入力画像を描き直す場合は**img2img**を選びます。img2imgでは左の入力画像と**変更強度**（0〜1）を指定します。生成用Full FTも使えます。強度0は生成サイズへリサイズした入力、1は同じ条件のtxt2imgになります。通常サンプリングに対応し、Turbo LoRAは外す必要があります。生成した画像は**img2imgへ送る**で続けて使えます。
+文章から生成する場合は**txt2img**、入力画像を描き直す場合は**img2img**を選びます。img2imgでは左の入力画像と**変更強度**（0〜1）を指定します。生成用Full FTも使えます。強度0は生成サイズへリサイズした入力、1は同じ条件のtxt2imgになります。通常サンプリングでコミュニティ製Turbo LoRAも併用できます。生成した画像は**img2imgへ送る**で続けて使えます。
 
-画像生成のLoRAは `models/Iris-3B/loras/` と下位フォルダーから複数選び、各強度を指定します。Iris-3B Turboの蒸留LoRAでは、切替時に4 Steps・CFG 1の推奨初期値を設定し、その後も手動変更できます。CFG 1ではNegative Promptを使用せず、CFGを上げると反映します。[対応形式・Turboの導入](../../docs/iris-studio.md#任意のloraとturbo)
+画像生成のLoRAは `models/Iris-3B/loras/` と下位フォルダーから複数選び、各強度を指定します。コミュニティ製Turbo LoRAを選んでもモデル・Steps・CFG・Negative Prompt・サンプリングは変わりません。専用の方式を使う場合は詳細設定の**サンプリング**で**コミュニティTurbo**を選び、**Turbo shift**を指定します。CFG 1ではNegative Promptを使用せず、CFGを上げると反映します。[対応形式・Turboの導入](../../docs/iris-studio.md#任意のloraとコミュニティ製turbo)
 
 [検証・仕様](../../docs/iris-studio.md) · [公式モデル](https://huggingface.co/speridlabs/iris-3b)

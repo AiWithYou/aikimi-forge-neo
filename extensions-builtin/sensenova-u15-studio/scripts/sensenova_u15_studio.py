@@ -241,7 +241,6 @@ def _mode_updates(mode: str, current_resolution: str, fast_available: bool):
         selected = "custom" if current_resolution == "custom" else "auto"
     else:
         selected = current_resolution if current_resolution in values and current_resolution != "auto" else "2048x2048"
-    text_profile = PROFILE_OFFICIAL_8STEP if fast_available else PROFILE_QUALITY
     return (
         gr.update(visible=mode == MODE_EDIT),
         gr.update(choices=choices, value=selected),
@@ -261,22 +260,10 @@ def _mode_updates(mode: str, current_resolution: str, fast_available: bool):
                 )
             )
         ),
-        gr.update(
-            visible=mode == MODE_TEXT,
-            value=(text_profile if mode == MODE_TEXT else PROFILE_QUALITY),
-        ),
-        gr.update(
-            value=8 if mode == MODE_TEXT and fast_available else 50,
-            interactive=mode != MODE_TEXT or not fast_available,
-        ),
-        gr.update(
-            value=1.0 if mode == MODE_TEXT and fast_available else 4.0,
-            interactive=mode != MODE_TEXT or not fast_available,
-        ),
-        gr.update(
-            value=3.0,
-            interactive=mode != MODE_TEXT or not fast_available,
-        ),
+        gr.update(visible=True),
+        gr.update(interactive=True),
+        gr.update(interactive=True),
+        gr.update(interactive=True),
         gr.update(placeholder=_prompt_placeholder(mode)),
     )
 
@@ -284,9 +271,9 @@ def _mode_updates(mode: str, current_resolution: str, fast_available: bool):
 def _profile_updates(profile: str):
     if profile == PROFILE_OFFICIAL_8STEP:
         return (
-            gr.update(value=8, interactive=False),
-            gr.update(value=1.0, interactive=False),
-            gr.update(value=3.0, interactive=False),
+            gr.update(value=8, interactive=True),
+            gr.update(value=1.0, interactive=True),
+            gr.update(value=3.0, interactive=True),
         )
     if profile == PROFILE_QUALITY:
         return (
@@ -300,12 +287,12 @@ def _profile_updates(profile: str):
 def _refresh_runtime(source_path: str, checkpoint_path: str, mode: str, current_profile: str):
     try:
         status = inspect_runtime(source_path, checkpoint=checkpoint_path)
-        profile = PROFILE_QUALITY if mode == MODE_EDIT or not status.lora_ready else current_profile
+        profile = current_profile if status.lora_ready else PROFILE_QUALITY
         profile_update = gr.update()
         steps, cfg, shift = gr.update(), gr.update(), gr.update()
         if profile != current_profile:
             profile_update = gr.update(value=profile)
-        if profile != current_profile or profile == PROFILE_OFFICIAL_8STEP:
+        if profile != current_profile:
             steps, cfg, shift = _profile_updates(profile)
         return (
             runtime_status_html(status),
@@ -350,6 +337,7 @@ def _request_from_ui(
     dtype: str,
     custom_width=2048,
     custom_height=2048,
+    cfg_norm="none",
     *,
     should_validate: bool = True,
 ) -> SenseNovaRequest:
@@ -374,6 +362,7 @@ def _request_from_ui(
         generation_profile=generation_profile,
         steps=int(steps),
         cfg_scale=float(cfg_scale),
+        cfg_norm=cfg_norm,
         img_cfg_scale=float(img_cfg_scale),
         timestep_shift=float(timestep_shift),
         seed=int(seed),
@@ -407,6 +396,7 @@ def _summary_from_ui(
     dtype,
     custom_width=2048,
     custom_height=2048,
+    cfg_norm="none",
 ):
     try:
         request = _request_from_ui(
@@ -430,6 +420,7 @@ def _summary_from_ui(
             dtype,
             custom_width,
             custom_height,
+            cfg_norm,
             should_validate=False,
         )
         try:
@@ -472,6 +463,7 @@ def _generate(
     dtype,
     custom_width=2048,
     custom_height=2048,
+    cfg_norm="none",
 ):
     yield (
         progress_html("prepare", "生成条件を確認しています", 0.01),
@@ -506,6 +498,7 @@ def _generate(
             dtype,
             custom_width,
             custom_height,
+            cfg_norm,
         )
         for update in run_generation(
             request,
@@ -728,7 +721,7 @@ def _build_ui():
                         generation_profile = gr.Radio(
                             choices=[
                                 (
-                                    "公式8-Step · 高速T2I · 推奨",
+                                    "公式8-Step LoRA · 推奨",
                                     PROFILE_OFFICIAL_8STEP,
                                 ),
                                 ("Quality 50-Step · 基本モデル", PROFILE_QUALITY),
@@ -784,7 +777,7 @@ def _build_ui():
                                     value=initial_steps,
                                     step=1,
                                     label="Steps",
-                                    interactive=not initial_status.lora_ready,
+                                    interactive=True,
                                 )
                                 seed = gr.Number(
                                     value=42,
@@ -800,7 +793,7 @@ def _build_ui():
                                     value=initial_cfg,
                                     step=0.1,
                                     label="CFG",
-                                    interactive=not initial_status.lora_ready,
+                                    interactive=True,
                                 )
                                 img_cfg_scale = gr.Slider(
                                     0,
@@ -817,9 +810,15 @@ def _build_ui():
                                     value=3.0,
                                     step=0.1,
                                     label="Timestep Shift",
-                                    interactive=not initial_status.lora_ready,
+                                    interactive=True,
                                 )
                             with gr.Row():
+                                cfg_norm = gr.Dropdown(
+                                    choices=["none", "global", "channel"],
+                                    value="none",
+                                    label="CFG正規化",
+                                    interactive=True,
+                                )
                                 vram_mode = gr.Dropdown(
                                     choices=[
                                         ("参照優先 · 最大8枚 · KVをCPUへ退避", "reference"),
@@ -1102,6 +1101,7 @@ def _build_ui():
             dtype,
             width,
             height,
+            cfg_norm,
         ]
         for component in [
             width,
@@ -1115,6 +1115,7 @@ def _build_ui():
             generation_profile,
             steps,
             cfg_scale,
+            cfg_norm,
             img_cfg_scale,
             timestep_shift,
             seed,

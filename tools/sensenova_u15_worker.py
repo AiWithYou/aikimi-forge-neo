@@ -17,7 +17,7 @@ import sys
 import time
 import traceback
 from collections.abc import Sequence
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager, nullcontext, suppress
 from pathlib import Path
 from typing import Any
 
@@ -57,9 +57,7 @@ PROFILE_QUALITY = "quality"
 PROFILE_OFFICIAL_8STEP = "official_8step"
 OFFICIAL_LORA_REVISION = "e909f4636d119d65fe4cba8770c19daff2ac102e"
 OFFICIAL_LORA_EXPECTED_BYTES = 814_867_236
-OFFICIAL_LORA_SHA256 = (
-    "3ef32180cdf1e30a870a83f4f136e897ea50b7ee467f863d75633464ebb25708"
-)
+OFFICIAL_LORA_SHA256 = "3ef32180cdf1e30a870a83f4f136e897ea50b7ee467f863d75633464ebb25708"
 EXPECTED_LORA_TARGETS = 294
 
 
@@ -77,9 +75,7 @@ def emit(stage: str, message: str, progress: float, **extra: Any) -> None:
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     partial = path.with_name(path.name + ".part")
-    partial.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    partial.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(partial, path)
 
 
@@ -104,20 +100,9 @@ def _to_pil(batch: torch.Tensor) -> list[Image.Image]:
     if batch.shape[-1] in {3, 4}:
         values = batch[..., :3].clamp(0, 1).float().cpu().numpy()
     elif batch.shape[1] == 3:
-        mean = torch.tensor(NORM_MEAN, device=batch.device, dtype=batch.dtype).view(
-            1, 3, 1, 1
-        )
-        std = torch.tensor(NORM_STD, device=batch.device, dtype=batch.dtype).view(
-            1, 3, 1, 1
-        )
-        values = (
-            (batch * std + mean)
-            .clamp(0, 1)
-            .float()
-            .permute(0, 2, 3, 1)
-            .cpu()
-            .numpy()
-        )
+        mean = torch.tensor(NORM_MEAN, device=batch.device, dtype=batch.dtype).view(1, 3, 1, 1)
+        std = torch.tensor(NORM_STD, device=batch.device, dtype=batch.dtype).view(1, 3, 1, 1)
+        values = (batch * std + mean).clamp(0, 1).float().permute(0, 2, 3, 1).cpu().numpy()
     else:
         raise RuntimeError(f"Unsupported image tensor shape: {tuple(batch.shape)}")
     values = (values * 255.0).round().astype(np.uint8)
@@ -162,9 +147,7 @@ def _aspect_fit_size(
     return content_width, content_height
 
 
-def _resize_with_edge_padding(
-    image: Image.Image, canvas_width: int, canvas_height: int
-) -> Image.Image:
+def _resize_with_edge_padding(image: Image.Image, canvas_width: int, canvas_height: int) -> Image.Image:
     content_width, content_height = _aspect_fit_size(
         image.width,
         image.height,
@@ -172,9 +155,7 @@ def _resize_with_edge_padding(
         canvas_height,
     )
     if image.size != (content_width, content_height):
-        image = image.resize(
-            (content_width, content_height), Image.Resampling.LANCZOS
-        )
+        image = image.resize((content_width, content_height), Image.Resampling.LANCZOS)
 
     pad_left = (canvas_width - content_width) // 2
     pad_right = canvas_width - content_width - pad_left
@@ -212,9 +193,7 @@ def _load_images(
             min_pixels=budget,
             max_pixels=budget,
         )
-        images.append(
-            _resize_with_edge_padding(image, resized_width, resized_height)
-        )
+        images.append(_resize_with_edge_padding(image, resized_width, resized_height))
     return images, original_sizes
 
 
@@ -251,9 +230,7 @@ def _validate_payload(payload: dict[str, Any]) -> None:
     if mode == "text" and image_paths:
         raise RuntimeError("Text-to-image does not accept reference images.")
     if len(image_paths) > MAX_REFERENCE_IMAGES:
-        raise RuntimeError(
-            f"At most {MAX_REFERENCE_IMAGES} ordered reference images are supported."
-        )
+        raise RuntimeError(f"At most {MAX_REFERENCE_IMAGES} ordered reference images are supported.")
     for image_path in image_paths:
         if not Path(image_path).is_file():
             raise RuntimeError(f"Input image does not exist: {image_path}")
@@ -268,9 +245,7 @@ def _validate_payload(payload: dict[str, Any]) -> None:
         for name, value in (("width", width), ("height", height)):
             value = int(value)
             if value < 512 or value > 4096 or value % IMAGE_GRID_FACTOR:
-                raise RuntimeError(
-                    f"{name} must be a multiple of 32 from 512 through 4096."
-                )
+                raise RuntimeError(f"{name} must be a multiple of 32 from 512 through 4096.")
     if payload.get("quantization") != "int8_convrot":
         raise RuntimeError("This worker only accepts the final INT8 ConvRot checkpoint.")
     if payload.get("model_path") != FINAL_MODEL_ID:
@@ -299,16 +274,6 @@ def _validate_payload(payload: dict[str, Any]) -> None:
     if profile not in {PROFILE_QUALITY, PROFILE_OFFICIAL_8STEP}:
         raise RuntimeError(f"Unsupported generation profile: {profile}")
     if profile == PROFILE_OFFICIAL_8STEP:
-        if mode != "text":
-            raise RuntimeError("The official 8-step LoRA only supports text-to-image.")
-        if int(payload.get("steps", 0)) != 8:
-            raise RuntimeError("The official 8-step profile requires exactly 8 steps.")
-        if float(payload.get("cfg_scale", -1)) != 1.0:
-            raise RuntimeError("The official 8-step profile requires CFG 1.0.")
-        if float(payload.get("timestep_shift", -1)) != 3.0:
-            raise RuntimeError("The official 8-step profile requires timestep shift 3.0.")
-        if payload.get("cfg_norm") != "none":
-            raise RuntimeError("The official 8-step profile requires cfg_norm none.")
         if payload.get("lora_revision") != OFFICIAL_LORA_REVISION:
             raise RuntimeError("The pinned official 8-step LoRA revision does not match.")
         if payload.get("lora_sha256") != OFFICIAL_LORA_SHA256:
@@ -322,36 +287,21 @@ def _validate_payload(payload: dict[str, Any]) -> None:
             raise RuntimeError(f"The official 8-step LoRA is missing or incomplete: {lora_path}")
         if _sha256(lora_path) != OFFICIAL_LORA_SHA256:
             raise RuntimeError("The official 8-step LoRA failed SHA-256 verification.")
-    elif any(
-        str(payload.get(field, "")).strip()
-        for field in ("lora_path", "lora_revision", "lora_sha256")
-    ):
-        raise RuntimeError(
-            "The quality profile must not receive hidden LoRA provenance fields."
-        )
+    elif any(str(payload.get(field, "")).strip() for field in ("lora_path", "lora_revision", "lora_sha256")):
+        raise RuntimeError("The quality profile must not receive hidden LoRA provenance fields.")
     vram_mode = str(payload.get("vram_mode", "low"))
     if vram_mode not in {"low", "reference", "unrestricted", "full"}:
         raise RuntimeError(f"Unsupported VRAM mode: {vram_mode}")
     if vram_mode == "low":
         output_pixels = (
-            int(payload.get("target_pixels", DEFAULT_TARGET_PIXELS))
-            if width is None
-            else int(width) * int(height)
+            int(payload.get("target_pixels", DEFAULT_TARGET_PIXELS)) if width is None else int(width) * int(height)
         )
         requested_input = payload.get("input_max_pixels", "auto")
-        safe_input = (
-            None if requested_input == "auto" else int(requested_input)
-        )
+        safe_input = None if requested_input == "auto" else int(requested_input)
         if (
             output_pixels > LOW_VRAM_MAX_OUTPUT_PIXELS
             or len(image_paths) > LOW_VRAM_MAX_REFERENCE_IMAGES
-            or (
-                mode == "edit"
-                and (
-                    safe_input is None
-                    or safe_input > LOW_VRAM_MAX_INPUT_PIXELS
-                )
-            )
+            or (mode == "edit" and (safe_input is None or safe_input > LOW_VRAM_MAX_INPUT_PIXELS))
         ):
             raise RuntimeError(
                 "The 24 GB safe profile requires output <= 2048^2, at most 2 references, "
@@ -359,12 +309,21 @@ def _validate_payload(payload: dict[str, Any]) -> None:
                 "for a larger workload."
             )
     if payload.get("vram_mode") == "reference":
-        output_pixels = int(payload.get("target_pixels", DEFAULT_TARGET_PIXELS)) if width is None else int(width) * int(height)
+        output_pixels = (
+            int(payload.get("target_pixels", DEFAULT_TARGET_PIXELS)) if width is None else int(width) * int(height)
+        )
         requested = payload.get("input_max_pixels", "auto")
-        if output_pixels > LOW_VRAM_MAX_OUTPUT_PIXELS or (mode == "edit" and (
-            len(image_paths) > REFERENCE_MAX_IMAGES or requested == "auto" or int(requested) > REFERENCE_MAX_INPUT_PIXELS
-        )):
-            raise RuntimeError("Reference profile requires output <= 2048^2, at most 8 references, and input_max_pixels <= 1024^2.")
+        if output_pixels > LOW_VRAM_MAX_OUTPUT_PIXELS or (
+            mode == "edit"
+            and (
+                len(image_paths) > REFERENCE_MAX_IMAGES
+                or requested == "auto"
+                or int(requested) > REFERENCE_MAX_INPUT_PIXELS
+            )
+        ):
+            raise RuntimeError(
+                "Reference profile requires output <= 2048^2, at most 8 references, and input_max_pixels <= 1024^2."
+            )
 
 
 def _load_runtime(payload: dict[str, Any]):
@@ -378,11 +337,7 @@ def _load_runtime(payload: dict[str, Any]):
     if not package_path.is_file() or not inference_path.is_file() or not config_repo.is_dir():
         raise RuntimeError(f"SenseNova runtime source is incomplete: {source_path}")
     revision_file = source_path / ".sensenova_runtime_revision"
-    revision = (
-        revision_file.read_text(encoding="utf-8").strip()
-        if revision_file.is_file()
-        else ""
-    )
+    revision = revision_file.read_text(encoding="utf-8").strip() if revision_file.is_file() else ""
     if revision != RUNTIME_REVISION:
         raise RuntimeError("SenseNova runtime revision does not match the pinned loader.")
     sys.path.insert(0, os.fspath(source_path))
@@ -476,13 +431,9 @@ def _load_runtime(payload: dict[str, Any]):
     unexpected = list(load_info.get("unexpected_keys", []))
     leftover = list(load_info.get("meta_materialized", []))
     if engine.quantization_format != "int8_convrot":
-        raise RuntimeError(
-            f"Expected int8_convrot, loaded {engine.quantization_format or 'unknown'}."
-        )
+        raise RuntimeError(f"Expected int8_convrot, loaded {engine.quantization_format or 'unknown'}.")
     if loaded_layers != EXPECTED_CONVROT_LAYERS:
-        raise RuntimeError(
-            f"Expected {EXPECTED_CONVROT_LAYERS} INT8 ConvRot layers, loaded {loaded_layers}."
-        )
+        raise RuntimeError(f"Expected {EXPECTED_CONVROT_LAYERS} INT8 ConvRot layers, loaded {loaded_layers}.")
     if missing or unexpected or leftover:
         raise RuntimeError(
             "Checkpoint/config mismatch: "
@@ -490,29 +441,24 @@ def _load_runtime(payload: dict[str, Any]):
             f"{len(leftover)} uninitialized tensors."
         )
     if engine.release_variant != "final" or not engine.pruned_lm_head:
-        raise RuntimeError(
-            "The checkpoint is not the pruned final SenseNova U1.5 T2I/edit release."
-        )
+        raise RuntimeError("The checkpoint is not the pruned final SenseNova U1.5 T2I/edit release.")
     lora_info: dict[str, Any] | None = None
     if profile == PROFILE_OFFICIAL_8STEP:
         engine = engine.with_lora(str(Path(payload["lora_path"]).resolve()), 1.0)
         lora = engine.lora
-        if (
-            lora is None
-            or lora.task != "t2i"
-            or lora.steps != 8
-            or lora.cfg != 1.0
-            or lora.cfg_norm != "none"
-            or lora.timestep_shift != 3.0
-            or len(lora.targets) != EXPECTED_LORA_TARGETS
-        ):
-            raise RuntimeError("The official 8-step LoRA metadata or target coverage is invalid.")
+        if lora is None or len(lora.targets) != EXPECTED_LORA_TARGETS:
+            raise RuntimeError("The official 8-step LoRA target coverage is invalid.")
         lora_info = {
             "path": str(Path(lora.path).resolve()),
             "revision": OFFICIAL_LORA_REVISION,
             "sha256": OFFICIAL_LORA_SHA256,
             "targets": len(lora.targets),
             "strength": lora.strength,
+            "training_task": lora.task,
+            "recommended_steps": lora.steps,
+            "recommended_cfg_scale": lora.cfg,
+            "recommended_cfg_norm": lora.cfg_norm,
+            "recommended_timestep_shift": lora.timestep_shift,
         }
     return (
         sensenova_u1,
@@ -550,8 +496,19 @@ def _runtime_for_request(payload):
     expected = payload.get("checkpoint_identity")
     if expected is not None and json.dumps(expected, sort_keys=True) != snapshots[0][1]:
         raise RuntimeError("The selected checkpoint changed after the request was created.")
-    keys = ("source_path", "checkpoint", "checkpoint_sha256", "model_path", "generation_profile", "lora_path",
-            "vram_mode", "attn_backend", "dtype", "device", "quantization")
+    keys = (
+        "source_path",
+        "checkpoint",
+        "checkpoint_sha256",
+        "model_path",
+        "generation_profile",
+        "lora_path",
+        "vram_mode",
+        "attn_backend",
+        "dtype",
+        "device",
+        "quantization",
+    )
     key = tuple((name, payload.get(name)) for name in keys) + snapshots
     if _RESIDENT_MODE and _RESIDENT_RUNTIME is not None and _RESIDENT_KEY == key:
         _RESIDENT_RUNTIME[-1].clear()
@@ -593,6 +550,21 @@ def _runtime_for_request(payload):
     return runtime
 
 
+def _edit_with_lora(engine, prompt, images, *, streaming_prefetch_count, **sampling):
+    if getattr(engine, "lora", None) is None:
+        return engine.edit(prompt, images, streaming_prefetch_count=streaming_prefetch_count, **sampling)
+    # The pinned engine's edit() rejects task=t2i metadata before these same
+    # execution contexts. Keep its training metadata and apply the native hooks.
+    with engine._execution_lock, engine._lora_ctx():
+        model_context = (
+            nullcontext(engine.model)
+            if streaming_prefetch_count is None
+            else engine._model_ctx(streaming_prefetch_count)
+        )
+        with model_context as model:
+            return model.it2i_generate(engine.tokenizer, prompt, list(images), **sampling)
+
+
 def run_request(payload: dict[str, Any]) -> dict[str, Any]:
     _validate_payload(payload)
     started = time.monotonic()
@@ -600,11 +572,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
     source_revision_file = Path(payload["source_path"]).resolve() / ".sensenova_runtime_revision"
-    source_revision = (
-        source_revision_file.read_text(encoding="utf-8").strip()
-        if source_revision_file.is_file()
-        else ""
-    )
+    source_revision = source_revision_file.read_text(encoding="utf-8").strip() if source_revision_file.is_file() else ""
 
     (
         sensenova_u1,
@@ -625,11 +593,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         input_max_pixels=payload.get("input_max_pixels", "auto"),
     )
     effective_input_max_pixels = (
-        _effective_input_max_pixels(
-            len(image_paths), payload.get("input_max_pixels", "auto")
-        )
-        if image_paths
-        else 0
+        _effective_input_max_pixels(len(image_paths), payload.get("input_max_pixels", "auto")) if image_paths else 0
     )
     width, height = _resolve_output_size(payload, original_sizes, smart_resize)
     steps = int(payload.get("steps", 50))
@@ -671,7 +635,8 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
                     progress_callback=progress_callback,
                 )
             else:
-                tensor = engine.edit(
+                tensor = _edit_with_lora(
+                    engine,
                     prompt,
                     images,
                     image_size=(width, height),
@@ -730,6 +695,7 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         "height": height,
         "steps": steps,
         "cfg_scale": float(payload.get("cfg_scale", 4.0)),
+        "cfg_norm": str(payload.get("cfg_norm", "none")),
         "img_cfg_scale": float(payload.get("img_cfg_scale", 1.0)),
         "timestep_shift": float(payload.get("timestep_shift", 3.0)),
         "seed": int(payload.get("seed", 42)),
@@ -739,16 +705,10 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
         "input_image_count": len(images),
         "input_image_names": [Path(path).name for path in image_paths],
         "input_preprocessing": "aspect_fit_edge_pad_32",
-        "input_original_sizes": [
-            {"width": size[0], "height": size[1]} for size in original_sizes
-        ],
-        "input_prepared_sizes": [
-            {"width": image.width, "height": image.height} for image in images
-        ],
+        "input_original_sizes": [{"width": size[0], "height": size[1]} for size in original_sizes],
+        "input_prepared_sizes": [{"width": image.width, "height": image.height} for image in images],
         "output_aspect_source": (
-            "original_input_1"
-            if payload.get("width") is None and payload.get("height") is None
-            else "explicit"
+            "original_input_1" if payload.get("width") is None and payload.get("height") is None else "explicit"
         ),
         "requested_input_max_pixels": payload.get("input_max_pixels", "auto"),
         "effective_input_max_pixels": effective_input_max_pixels,
@@ -759,16 +719,8 @@ def run_request(payload: dict[str, Any]) -> dict[str, Any]:
             "decode_save_seconds": round(output_seconds, 3),
         },
         "cuda_peak": {
-            "allocated_bytes": (
-                int(torch.cuda.max_memory_allocated(device))
-                if device.type == "cuda"
-                else 0
-            ),
-            "reserved_bytes": (
-                int(torch.cuda.max_memory_reserved(device))
-                if device.type == "cuda"
-                else 0
-            ),
+            "allocated_bytes": (int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else 0),
+            "reserved_bytes": (int(torch.cuda.max_memory_reserved(device)) if device.type == "cuda" else 0),
             "active_bytes": int(cuda_stats.get("active_bytes.all.peak", 0)),
             "allocation_retries": int(cuda_stats.get("num_alloc_retries", 0)),
             "ooms": int(cuda_stats.get("num_ooms", 0)),
