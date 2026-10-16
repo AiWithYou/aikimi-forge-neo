@@ -130,10 +130,22 @@ class WindowsJobLifecycleTests(unittest.TestCase):
         kernel.pids = [42, 43]
         kernel.OpenProcess = Mock(side_effect=[20, 0])
         with (
+            patch.object(c, "get_last_error", return_value=5, create=True),
             patch.object(chromium_process, "_native_error", return_value=OSError("open failed")),
             self.assertRaisesRegex(OSError, "open failed"),
         ):
             self.make_job(kernel).close()
+        self.assertTrue(kernel.terminated)
+        self.assertEqual([event[1] for event in kernel.events if event[0] == "wait"], [20])
+        self.assertEqual(kernel.events[-2:], [("close", 20), ("close", 10)])
+
+    def test_exited_snapshot_members_do_not_prevent_owned_job_cleanup(self):
+        kernel = _FakeKernel()
+        kernel.pids = [41, 42, 43]
+        kernel.OpenProcess = Mock(side_effect=[0, 20, 0])
+        with patch.object(c, "get_last_error", return_value=87, create=True):
+            self.make_job(kernel).close()
+        self.assertEqual(kernel.OpenProcess.call_count, 3)
         self.assertTrue(kernel.terminated)
         self.assertEqual([event[1] for event in kernel.events if event[0] == "wait"], [20])
         self.assertEqual(kernel.events[-2:], [("close", 20), ("close", 10)])

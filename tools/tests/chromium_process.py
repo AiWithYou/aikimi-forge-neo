@@ -127,6 +127,8 @@ class _WindowsJob:
             # Hold the SAME noninherited handle through membership check and wait.
             process = self.kernel.OpenProcess(0x101000, False, pid)  # SYNCHRONIZE | QUERY_LIMITED_INFORMATION
             if not process:
+                if c.get_last_error() == 87:  # ERROR_INVALID_PARAMETER: exited since the snapshot.
+                    continue
                 raise _native_error("process open")
             try:
                 member = c.c_int()
