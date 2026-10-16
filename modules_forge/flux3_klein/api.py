@@ -61,6 +61,7 @@ def public_result(value):
         "comfy_revision",
         "sampling_width",
         "sampling_height",
+        "lora",
     }
     result = {key: item for key, item in value.items() if key in allowed}
     if value.get("status") == "complete":

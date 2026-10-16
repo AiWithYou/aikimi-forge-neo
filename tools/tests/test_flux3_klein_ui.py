@@ -75,6 +75,69 @@ class UITests(unittest.TestCase):
             )
         self.assertEqual(start.call_args.args[0]["images"], [])
 
+    def test_lora_selection_strength_and_refresh_are_connected_to_generation(self):
+        module = self.load_screen()
+        blocks = module.on_ui_tabs()[0][0]
+        self.addCleanup(blocks.close)
+        props = [item.get("props", {}) for item in blocks.get_config_file()["components"]]
+        self.assertTrue(any(item.get("elem_id") == "flux3-lora-choice" for item in props))
+        self.assertTrue(any(item.get("label") == "LoRA強度" for item in props))
+        lora = next(item for item in blocks.blocks.values() if item.elem_id == "flux3-lora-choice")
+        strength = next(item for item in blocks.blocks.values() if getattr(item, "label", None) == "LoRA強度")
+        generation = next(item for item in blocks.fns.values() if item.fn is module.start)
+        self.assertEqual(generation.inputs[-2:], [lora, strength])
+        selected = next(item for item in blocks.fns.values() if item.fn is module.select_lora)
+        self.assertEqual(selected.inputs, [lora])
+        self.assertEqual(selected.outputs[1], strength)
+        defaults = next(item for item in blocks.fns.values() if item.fn is module.model_defaults)
+        self.assertEqual(defaults.inputs, [selected.outputs[0]])
+        with patch.object(module.SERVICE, "start", return_value="job") as start:
+            generation.fn(
+                {},
+                "txt2img",
+                "base",
+                "int8",
+                "cat",
+                [],
+                "[]",
+                "1024×1024",
+                50,
+                3.5,
+                7,
+                False,
+                "AikimiLoRA.safetensors",
+                0.75,
+            )
+        self.assertEqual(start.call_args.args[0]["lora"], "AikimiLoRA.safetensors")
+        self.assertEqual(start.call_args.args[0]["lora_strength"], 0.75)
+        with patch.object(module.local_lora, "required_model", return_value="base"):
+            model, strength = module.select_lora("AikimiLoRA.safetensors")
+        self.assertEqual(model["value"], "base")
+        self.assertTrue(strength["interactive"])
+        with patch.object(
+            module, "lora_choices", return_value=[("なし", ""), ("AikimiLoRA", "AikimiLoRA.safetensors")]
+        ):
+            self.assertEqual(module.refresh_loras("AikimiLoRA.safetensors")["value"], "AikimiLoRA.safetensors")
+            self.assertEqual(module.refresh_loras("removed.safetensors")["value"], "")
+
+    def test_lora_starts_unselected_even_with_saved_ui_defaults(self):
+        from tools.tests.test_ui_loadsave_selection import load_add_component
+
+        module = self.load_screen()
+        with patch.object(module, "lora_choices", return_value=[("なし", ""), ("Base", "base.safetensors")]):
+            blocks = module.on_ui_tabs()[0][0]
+        self.addCleanup(blocks.close)
+        choice = next(item for item in blocks.blocks.values() if item.elem_id == "flux3-lora-choice")
+        loader = types.SimpleNamespace(
+            finalized_ui=False,
+            ui_settings={"flux3/LoRA/value": "base.safetensors", "flux3/LoRA/visible": False},
+            component_mapping={},
+        )
+        load_add_component()(loader, "flux3/LoRA", choice)
+        self.assertEqual(choice.value, "", "Startup must not restore a LoRA without running its model callback")
+        self.assertTrue(choice.visible)
+        self.assertNotIn("flux3/LoRA/value", loader.component_mapping)
+
     def test_history_panel_has_persistent_selection_files_and_guide(self):
         module = self.load_screen()
         blocks = module.on_ui_tabs()[0][0]

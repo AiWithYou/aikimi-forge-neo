@@ -1,17 +1,43 @@
 """Uploaded pixels, completed artifacts and confirmed worker exit own the GPU lease."""
 
+import hashlib
 import json
+import stat
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from PIL import Image, PngImagePlugin
 
+from modules_forge.flux3_klein.core import validate_request
 from modules_forge.flux3_klein.service import Service
 
 
 class ServiceTests(unittest.TestCase):
+    def test_redirected_output_ancestor_is_rejected_before_acquiring_gpu(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            service = Service(root, outputs=root / "outputs")
+            original = Path.lstat
+
+            def redirected(path):
+                return (
+                    SimpleNamespace(st_mode=stat.S_IFDIR, st_reparse_tag=0xA0000003) if path == root else original(path)
+                )
+
+            with (
+                patch.object(Path, "lstat", redirected),
+                patch("modules_forge.flux3_klein.service.model_ready", return_value=True),
+                patch("modules_forge.gpu_ownership.GPUOwnership") as ownership,
+                patch("modules_forge.flux3_klein.service.threading.Thread"),
+            ):
+                with self.assertRaises(ValueError):
+                    service.start({"prompt": "a fox"})
+                ownership.assert_not_called()
+            self.assertFalse(service.outputs.exists())
+
     def test_completion_during_poll_keeps_one_consistent_snapshot(self):
         from modules_forge.flux3_klein.api import public_result
 
@@ -117,6 +143,39 @@ class ServiceTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "サイズ"):
                 service.validate_result(root)
+
+    def test_completion_rechecks_reference_content_and_redirects(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            reference = root / "reference-00.png"
+            Image.new("RGB", (64, 64), "red").save(reference)
+            digest = hashlib.sha256(reference.read_bytes()).hexdigest()
+            request = validate_request({"prompt": "a fox", "width": 64, "height": 64, "seed": 7})
+            request.update(images=[str(reference)], reference_sha256=[digest])
+            record = {
+                key: request[key] for key in ("model", "precision", "width", "height", "steps", "cfg", "seed", "boxes")
+            }
+            record.update(
+                input_prompt=request["prompt"], prompt=request["prompt"], reference_hashes=[digest], lora=None
+            )
+            metadata = PngImagePlugin.PngInfo()
+            metadata.add_text("flux3_klein", json.dumps(record))
+            Image.new("RGB", (64, 64)).save(root / "output.png", pnginfo=metadata)
+            (root / "request.json").write_text(json.dumps(request), encoding="utf-8")
+            record["image_path"] = str(root / "output.png")
+            (root / "result.json").write_text(json.dumps(record), encoding="utf-8")
+            self.assertEqual(Service.validate_result(root)["seed"], 7)
+            original = Path.lstat
+
+            def redirected(path):
+                return SimpleNamespace(st_mode=stat.S_IFLNK) if path == reference else original(path)
+
+            with self.subTest(mutation="redirect"), patch.object(Path, "lstat", redirected):
+                with self.assertRaises(ValueError):
+                    Service.validate_result(root)
+            Image.new("RGB", (64, 64), "blue").save(reference)
+            with self.subTest(mutation="pixels"), self.assertRaisesRegex(ValueError, "参照画像"):
+                Service.validate_result(root)
 
     def test_worker_result_must_match_the_original_request(self):
         with tempfile.TemporaryDirectory() as temporary:

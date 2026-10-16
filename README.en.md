@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v4.6.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.6.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.7.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.7.0)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,12 +10,11 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v4.6.0
+## What's new in v4.7.0
 
-- **[FLUX 3 Image Klein](docs/flux3-klein.md)**: distilled and Base models, editing with up to ten references, drawn layout boxes, and 4K output. Persistent history opens saved images, generation settings, and the user guide. Official INT8 is the default; PUP is off by default and installed separately.
-- **[Official Iris Turbo and extracted LoRAs](docs/iris-studio.md#公式iris-3b-turbo)**: fixed four-step Full FT inference, preserved distillation settings during quantization, and rank64/rank128 extraction. Cancellation recovery and invalid LoRA input handling are also improved.
-- **Everyday controls**: fixes for emphasis shortcuts, undo/redo, extra-network insertion/sorting/search, same-name checkpoints, mode switching, and restoring results after a reload.
-- **Saving, upscaling, setup, and APIs**: fixes for multi-image/ZIP saves, batch numbering, PNG-info overrides, tiled upscaling, stop waits, extension dependencies, repair capacity estimates, H3 orbit LoRA change detection, Windows short paths, `--skip-install`, and API inputs, with improved CI checks. See the [complete changelog](CHANGELOG.md#v460--2026-10-16).
+- **[FLUX 3 LoRAs](docs/flux3-klein.md#lora)**: select a local LoRA, adjust its strength, and refresh the list in Studio. Base-specific LoRAs select the Base model. PNG metadata, settings JSON, and history retain the name, SHA-256, and strength.
+- **Loading and UI settings**: validate adapter formats, shapes, finite values, and registration of every target; reject file replacements after submission. Start without a LoRA to keep restored UI settings consistent.
+- **History and APIs**: show up to 50 completed results even when many newer jobs are unfinished. Revalidate output links and reference-image hashes, and reject oversized numeric inputs. See the [complete changelog](CHANGELOG.md#v470--2026-10-16).
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 

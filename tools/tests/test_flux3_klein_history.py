@@ -98,6 +98,14 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(len(choices), 50)
         self.assertEqual([value for _, value in choices], [f"{number:032x}" for number in range(53, 3, -1)])
 
+    def test_unfinished_candidates_do_not_hide_older_completed_results(self):
+        identifier, _ = self.completed()
+        for number in range(2, 53):
+            directory = self.root / f"{number:032x}"
+            directory.mkdir()
+            os.utime(directory, (number, number))
+        self.assertEqual([value for _, value in self.history.list()], [identifier])
+
     def test_failed_cancelled_incomplete_and_corrupt_results_are_excluded(self):
         mutations = (
             lambda d: (d / "cancel").touch(),
@@ -120,6 +128,16 @@ class HistoryTests(unittest.TestCase):
         (directory / "result.json").write_text(json.dumps(record), encoding="utf-8")
         with self.assertRaises(ValueError):
             self.history.load(identifier)
+
+    def test_nonobject_png_conditions_are_excluded_without_breaking_history(self):
+        for number, value in enumerate(([], None, "broken"), 1):
+            identifier, directory = self.completed(number)
+            metadata = PngImagePlugin.PngInfo()
+            metadata.add_text("flux3_klein", json.dumps(value))
+            Image.new("RGB", (64, 64), "white").save(directory / "output.png", pnginfo=metadata)
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.history.load(identifier)
+        self.assertEqual(self.history.list(), [])
 
     def test_modified_reference_pixels_are_rejected_even_with_the_same_dimensions(self):
         identifier, directory = self.completed()

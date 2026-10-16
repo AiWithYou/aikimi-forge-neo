@@ -5,6 +5,7 @@ import json
 import gradio as gr
 
 from modules import script_callbacks
+from modules_forge.flux3_klein import lora as local_lora
 from modules_forge.flux3_klein.core import RUNTIME, model_ready
 from modules_forge.flux3_klein.history import History
 from modules_forge.flux3_klein.service import SERVICE
@@ -33,7 +34,9 @@ def model_defaults(model):
     )
 
 
-def start(state, mode, model, precision, prompt, images, boxes, size, steps, cfg, seed, pup):
+def start(
+    state, mode, model, precision, prompt, images, boxes, size, steps, cfg, seed, pup, lora=None, lora_strength=1.0
+):
     state = dict(state or {})
     if state.get("job"):
         raise gr.Error("生成中です。完了または中断を待ってください。")
@@ -55,6 +58,8 @@ def start(state, mode, model, precision, prompt, images, boxes, size, steps, cfg
             cfg=cfg,
             seed=seed,
             pup=pup,
+            lora=lora or None,
+            lora_strength=lora_strength,
         )
         if width is not None:
             request.update(width=width, height=height)
@@ -105,6 +110,23 @@ def select_history(identifier):
     return result["image_path"], result["files"], result.get("prompt", "")
 
 
+def lora_choices():
+    return [("なし", ""), *[(name.removesuffix(".safetensors"), name) for name in local_lora.inventory(RUNTIME)]]
+
+
+def refresh_loras(selected):
+    choices = lora_choices()
+    return gr.update(choices=choices, value=selected if selected in {value for _, value in choices} else "")
+
+
+def select_lora(selected):
+    try:
+        required = local_lora.required_model(RUNTIME, selected)
+    except ValueError as error:
+        raise gr.Error(str(error)) from error
+    return gr.update(value=required) if required else gr.skip(), gr.update(interactive=bool(selected))
+
+
 def on_ui_tabs():
     from modules_forge.image_workspace import ImageWorkspace
 
@@ -121,6 +143,11 @@ def on_ui_tabs():
                 value="int8",
                 label="保存形式",
             )
+        with gr.Row() as lora_controls:
+            lora = gr.Dropdown(lora_choices(), value="", label="LoRA", elem_id="flux3-lora-choice")
+            lora.do_not_save_to_config = True
+            lora_strength = gr.Slider(0, 2, value=1, step=0.05, label="LoRA強度", interactive=False)
+            lora_refresh = gr.Button("更新", size="sm", scale=0, min_width=60)
         prompt = gr.Textbox(label="プロンプト", lines=4, placeholder="生成したい完成画像や、参照画像への変更を記述")
         run = gr.Button("生成", variant="primary")
         cancel = gr.Button("中断", interactive=True)
@@ -185,7 +212,7 @@ def on_ui_tabs():
             blocks,
             "flux3",
             editable=True,
-            models=[models],
+            models=[models, lora_controls],
             prompts=[prompt],
             actions=[run, cancel],
             settings=[settings],
@@ -207,9 +234,26 @@ def on_ui_tabs():
         state = gr.State({})
         timer = gr.Timer(0.5, active=False)
         model.change(model_defaults, inputs=model, outputs=[steps, cfg], queue=False, api_visibility="private")
+        lora_refresh.click(refresh_loras, inputs=lora, outputs=lora, queue=False, api_visibility="private")
+        lora.change(select_lora, inputs=lora, outputs=[model, lora_strength], queue=False, api_visibility="private")
         run.click(
             start,
-            inputs=[state, workspace.mode, model, precision, prompt, references, boxes, size, steps, cfg, seed, pup],
+            inputs=[
+                state,
+                workspace.mode,
+                model,
+                precision,
+                prompt,
+                references,
+                boxes,
+                size,
+                steps,
+                cfg,
+                seed,
+                pup,
+                lora,
+                lora_strength,
+            ],
             outputs=[state, status, run, cancel, timer],
             api_visibility="private",
         )

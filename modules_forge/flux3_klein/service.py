@@ -12,7 +12,9 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from . import lora
 from .core import ROOT, RUNTIME, Flux3Error, atomic_json, model_ready, python_path, validate_request
+from .paths import canonical_path
 
 
 class Service:
@@ -29,12 +31,14 @@ class Service:
         from modules_forge.gpu_ownership import GPUOwnership
 
         request = validate_request(value)
+        lora.bind(self.root, request)
         images = request.get("images", [])
         for image in images:
             if not isinstance(image, Image.Image):
                 raise Flux3Error("参照画像をアップロードしてください。")
             if image.width * image.height > 40_000_000:
                 raise Flux3Error("参照画像は1枚40メガピクセルまでです。")
+        outputs = canonical_path(self.outputs)
         if not model_ready(self.root, request):
             raise Flux3Error("選択したモデルをセットアップしてください。")
         lease = GPUOwnership()
@@ -42,7 +46,7 @@ class Service:
         if not lease.acquire(False):
             raise Flux3Error("GPUを使用中です。処理の終了後に実行してください。")
         identifier = uuid.uuid4().hex
-        directory = self.outputs / identifier
+        directory = outputs / identifier
         try:
             directory.mkdir(parents=True)
             paths, hashes = [], []
@@ -65,9 +69,9 @@ class Service:
 
     @staticmethod
     def validate_result(directory):
-        directory = Path(directory).resolve()
-        result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
-        path = Path(result["image_path"]).resolve()
+        directory = canonical_path(directory)
+        result = json.loads(canonical_path(directory / "result.json").read_text(encoding="utf-8"))
+        path = canonical_path(result["image_path"])
         if path != directory / "output.png" or not path.is_file():
             raise Flux3Error("生成結果の出力パスが一致しません。")
         with Image.open(path) as image:
@@ -77,7 +81,7 @@ class Service:
             if image.size != (result["width"], result["height"]):
                 raise Flux3Error("生成結果のサイズが記録と一致しません。")
             embedded = image.info.get("flux3_klein")
-        request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
+        request = json.loads(canonical_path(directory / "request.json").read_text(encoding="utf-8"))
         fields = ("model", "precision", "steps", "cfg", "seed", "boxes")
         if (
             any(result.get(key) != request.get(key) for key in fields)
@@ -86,15 +90,22 @@ class Service:
             raise Flux3Error("生成条件が元の要求と一致しません。")
         if result.get("reference_hashes") != request.get("reference_sha256", []):
             raise Flux3Error("参照画像の生成条件が元の要求と一致しません。")
+        expected_lora = lora.record(request)
+        if result.get("lora") != expected_lora:
+            raise Flux3Error("LoRAの生成条件が元の要求と一致しません。")
         from .conditioning import prepare_images
 
-        references = []
+        references, reference_hashes = [], []
         for value in request.get("images", []):
-            source = Path(value).resolve()
+            source = canonical_path(value)
             if source.parent != directory:
                 raise Flux3Error("参照画像の保存場所が一致しません。")
+            with source.open("rb") as stream:
+                reference_hashes.append(hashlib.file_digest(stream, "sha256").hexdigest())
             with Image.open(source) as reference:
                 references.append(reference.copy())
+        if reference_hashes != request.get("reference_sha256", []):
+            raise Flux3Error("参照画像が元の入力と一致しません。")
         prepared = prepare_images(references, request.get("width"), request.get("height"))
         expected_size = (prepared.width, prepared.height)
         if prepared.crop is not None:
@@ -105,6 +116,10 @@ class Service:
         if not embedded:
             raise Flux3Error("PNG内の生成条件がありません。")
         metadata = json.loads(embedded)
+        if not isinstance(metadata, dict):
+            raise Flux3Error("PNG内の生成条件を読み取れません。")
+        if metadata.get("lora") != expected_lora:
+            raise Flux3Error("PNG内のLoRAが保存記録と一致しません。")
         if any(result.get(key) != value for key, value in metadata.items()) or any(
             key not in metadata for key in fields
         ):

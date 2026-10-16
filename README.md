@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.6.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.6.0)** · [変更履歴](CHANGELOG.md)
+**[v4.7.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.7.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,12 +10,11 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v4.6.0の主な変更
+## v4.7.0の主な変更
 
-- **[FLUX 3 Image Klein](docs/flux3-klein.md)**：蒸留版／Base、最大10枚の参照編集、ドラッグでの配置指定、4K生成。履歴から保存画像・生成条件・使い方を開けます。公式INT8を既定にし、PUPは標準OFFの任意追加にしました。
-- **[Iris公式Turboと抽出LoRA](docs/iris-studio.md#公式iris-3b-turbo)**：公式Full FTの固定4ステップ生成、量子化時の蒸留設定保持、rank64／128への差分抽出に対応。中断・失敗後の復帰とLoRA入力エラーも改善しました。
-- **普段の操作**：強調ショートカット、Undo／Redo、追加ネットワークの挿入・並べ替え・検索、同名チェックポイント、モード切替、再読込後の結果復元を修正しました。
-- **保存・拡大・導入とAPI**：複数画像／ZIP保存、バッチ番号、PNG情報の上書き、タイル拡大、停止待ち、拡張の依存解決、モデル修復の容量見積もり、H3周回LoRAの変更検出、Windows短縮パス、`--skip-install`、API入力処理を修正し、CI検査も改善しました。[全変更](CHANGELOG.md#v460--2026-10-16)
+- **[FLUX 3のLoRA](docs/flux3-klein.md#lora)**：Studioから選択・強度調整・一覧更新ができ、Base用LoRAではモデルも切り替わります。PNG・条件JSON・履歴に名前とSHA-256、強度を記録します。
+- **読み込みと画面設定**：LoRAの形式・形状・有限値と全対象の登録を検証し、生成受付後の差し替えを拒否します。起動時の保存済みLoRA選択による設定の不整合も防ぎます。
+- **履歴とAPI**：未完了の生成が多くても最新50件までの完成結果を表示。保存先のリンク・参照画像のSHA-256・大きすぎる入力数値の検証を修正しました。[全変更](CHANGELOG.md#v470--2026-10-16)
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 

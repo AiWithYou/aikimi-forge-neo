@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 import re
 import secrets
@@ -22,7 +21,21 @@ COMFY_REVISION = "20b46065ef7f34fa21e8abebe8d0cca90a904d6d"
 MODEL_REVISION = "bfec4ea10ad389929f0f483d54508fc21e6c2ede"
 PUP_PROMPTS_REVISION = "a03efc6b895ae4220aebb3a958488b939df9caf0"
 MANIFEST = ROOT / "tools/flux3_klein_manifest.json"
-_KEYS = {"model", "precision", "prompt", "images", "boxes", "width", "height", "steps", "cfg", "seed", "pup"}
+_KEYS = {
+    "model",
+    "precision",
+    "prompt",
+    "images",
+    "boxes",
+    "width",
+    "height",
+    "steps",
+    "cfg",
+    "seed",
+    "pup",
+    "lora",
+    "lora_strength",
+}
 _ID = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 
 
@@ -39,7 +52,7 @@ def _integer(value, name, lower, upper):
 def _box(value):
     if not isinstance(value, list) or len(value) != 4:
         raise Flux3Error("配置座標は[上, 左, 下, 右]の4要素の配列で指定してください。")
-    if any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in value):
+    if any(type(v) not in (int, float) or not 0 <= v <= 1 for v in value):
         raise Flux3Error("配置座標は0〜1の有限の数値で指定してください。")
     if value[0] >= value[2] or value[1] >= value[3]:
         raise Flux3Error("配置ボックスの下・右は上・左より大きくしてください。")
@@ -119,7 +132,7 @@ def validate_request(value) -> dict:
         width = height = 1024
     steps = _integer(value.get("steps", 16 if model == "distilled" else 50), "Steps", 1, 200)
     cfg = value.get("cfg", 1.0 if model == "distilled" else 3.5)
-    if type(cfg) not in (int, float) or not math.isfinite(cfg) or not 0 < cfg <= 100:
+    if type(cfg) not in (int, float) or not 0 < cfg <= 100:
         raise Flux3Error("CFGは0より大きく100以下の有限の数値で指定してください。")
     if model == "distilled" and cfg != 1:
         raise Flux3Error("蒸留版のCFGは1です。")
@@ -129,6 +142,14 @@ def validate_request(value) -> dict:
     pup = value.get("pup", False)
     if type(pup) is not bool:
         raise Flux3Error("PUPはtrueまたはfalseで指定してください。")
+    from .lora import validate_name
+
+    lora = value.get("lora") or None
+    if value.get("lora") not in (None, ""):
+        lora = validate_name(value["lora"])
+    strength = value.get("lora_strength", 1.0)
+    if type(strength) not in (int, float) or not 0 <= strength <= 2:
+        raise Flux3Error("LoRA強度は0〜2の有限の数値で指定してください。")
     return {
         "model": model,
         "precision": precision,
@@ -141,6 +162,8 @@ def validate_request(value) -> dict:
         "cfg": float(cfg),
         "seed": seed,
         "pup": pup,
+        "lora": lora,
+        "lora_strength": float(strength),
     }
 
 

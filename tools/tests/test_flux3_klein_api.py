@@ -46,6 +46,24 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(result, {"status": "running", "id": "abc", "stage": "text"})
 
+    def test_oversized_numeric_inputs_are_validation_errors(self):
+        app = FastAPI()
+        register_api(app)
+        options = SimpleNamespace(cmd_opts=SimpleNamespace(api_auth=None, api_auth_path=None))
+        huge = 10**1000
+        with (
+            patch.dict(sys.modules, {"modules.shared_cmd_options": options}),
+            TestClient(app, raise_server_exceptions=False) as client,
+        ):
+            for changes in (
+                {"cfg": huge},
+                {"lora_strength": huge},
+                {"boxes": [{"id": "item", "desc": "fox", "bbox": [0, 0, huge, 1]}]},
+            ):
+                with self.subTest(field=next(iter(changes))):
+                    response = client.post("/sdapi/v1/flux3/jobs", json={"prompt": "a fox", **changes})
+                    self.assertEqual(response.status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()

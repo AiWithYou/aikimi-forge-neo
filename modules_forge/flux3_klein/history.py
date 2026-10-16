@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from datetime import datetime
@@ -65,18 +64,9 @@ class History:
             ):
                 raise Flux3Error("履歴の出力パスが一致しません。")
             request = _json(directory / "request.json")
-            validate_request({key: value for key, value in request.items() if key != "reference_sha256"})
-            reference_hashes = []
-            for value in request.get("images", []):
-                path = canonical_path(value)
-                if not path.is_file() or path.parent != directory:
-                    raise Flux3Error("履歴の参照画像の保存場所が一致しません。")
-                with path.open("rb") as source:
-                    reference_hashes.append(hashlib.file_digest(source, "sha256").hexdigest())
-            if reference_hashes != request.get("reference_sha256", []) or reference_hashes != record.get(
-                "reference_hashes", []
-            ):
-                raise Flux3Error("履歴の参照画像が元の入力と一致しません。")
+            validate_request(
+                {key: value for key, value in request.items() if key not in {"reference_sha256", "lora_identity"}}
+            )
             result = Service.validate_result(directory)
             return {
                 **result,
@@ -95,13 +85,17 @@ class History:
         except (OSError, ValueError):
             return []
         choices = []
-        for modified, identifier in sorted(candidates, reverse=True)[:MAX_RESULTS]:
+        for modified, identifier in sorted(candidates, reverse=True):
             try:
                 result = self.load(identifier)
             except ValueError:
                 continue
             stamp = datetime.fromtimestamp(modified).strftime("%Y-%m-%d %H:%M:%S")
             model = "Base" if result["model"] == "base" else "Klein"
+            if result.get("lora"):
+                model += f" · {Path(result['lora']['name']).stem} ×{result['lora']['strength']:g}"
             prompt = " ".join(result["input_prompt"].split())[:60]
             choices.append((f"{stamp} · {model} · seed {result['seed']} · {prompt}", identifier))
+            if len(choices) == MAX_RESULTS:
+                break
         return choices

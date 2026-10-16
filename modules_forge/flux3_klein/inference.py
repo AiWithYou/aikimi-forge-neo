@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image, PngImagePlugin
 
-from . import conditioning
+from . import conditioning, lora
 from .paths import canonical_path
 
 
@@ -140,6 +140,7 @@ class Runner:
         if boxes:
             conditioning.to_canvas(boxes)
         paths = model_paths(self.root, request)
+        selected_lora = lora.bind(self.root, request)
         images, references = [], []
         for index, path in enumerate(request.get("images") or []):
             check()
@@ -193,6 +194,14 @@ class Runner:
                 runtime.offload()
             progress("loading_model")
             model = runtime.load_dit(paths["dit"], model_kind)
+            if selected_lora and request.get("lora_strength", 1.0):
+                progress("loading_lora")
+                lora.bind(self.root, request)
+                model, applied = runtime.apply_lora(
+                    model, lora.resolve(self.root, request["lora"]), request.get("lora_strength", 1.0)
+                )
+                if applied != selected_lora["targets"]:
+                    raise ValueError("FLUX 3 LoRA was not fully applied")
             progress("sampling", 0, steps)
             latent = runtime.sample(
                 model,
@@ -223,6 +232,8 @@ class Runner:
             runtime.offload()
             from . import core
 
+            lora.bind(self.root, request)
+
             record = {
                 "model": model_kind,
                 "precision": request.get("precision", "int8"),
@@ -241,6 +252,7 @@ class Runner:
                 "upsampled": upsampled,
                 "references": references,
                 "reference_hashes": [reference["sha256"] for reference in references],
+                "lora": lora.record(request),
             }
             metadata = PngImagePlugin.PngInfo()
             metadata.add_text("flux3_klein", json.dumps(record, ensure_ascii=False, allow_nan=False))
@@ -427,6 +439,20 @@ class ComfyRuntime:
                 disable_pbar=True,
                 seed=seed,
             )
+
+    def apply_lora(self, model, path, strength):
+        state, _metadata = self.utils.load_torch_file(str(path), return_metadata=True)
+        mapper = importlib.import_module("comfy.lora")
+        key_map = mapper.model_lora_keys_unet(model.model, {})
+        count = lora.validate_tensors(state, key_map, model.model.state_dict(), self.torch)
+        targets = {key_map[prefix] for prefix in lora.pairs(state)}
+        patches = mapper.load_lora(state, key_map)
+        if len(targets) != count or set(patches) != targets:
+            raise ValueError("FLUX 3 LoRAの全対象を読み込めませんでした。")
+        patched = model.clone()
+        if set(patched.add_patches(patches, strength)) != targets:
+            raise ValueError("FLUX 3 LoRAの全対象をモデルへ登録できませんでした。")
+        return patched, count
 
     def decode(self, vae, latent):
         import numpy as np
