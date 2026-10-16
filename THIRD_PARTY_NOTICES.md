@@ -50,6 +50,10 @@ QwenのINT8 ConvRot実行には専用環境の`comfy-kitchen==0.2.31`を利用�
 
 SenseNova runtimeは、固定commit`e6dfd45762eb46f805067fe079c14bcb643ccccd`から取得します。runtime directoryへApache-2.0の`LICENSE`も配置します。
 
+## Irodori TTS
+
+[公式推論コード](https://github.com/Aratako/Irodori-TTS/tree/89f9d8fbd4d51ea019867ee1197725ede1df13c5)はMITライセンスです。[Irodori-TTS-v4-Large](https://huggingface.co/Aratako/Irodori-TTS-v4-Large/tree/2e0c55428ce97268a507f1feeb2478f8d9148e8b)にはGemma利用規約とモデル配布元の追加条件が適用されます。[DACVAE](https://huggingface.co/Aratako/Semantic-DACVAE-Japanese-32dim)と[SilentCipher](https://huggingface.co/Sony/SilentCipher)は各配布元の条件も参照してください。コード・重みはGitへ同梱せず、専用セットアップが固定revisionを利用者のローカル環境へ取得します。[使い方と制限](docs/irodori-tts.md)
+
 ## Iris-3B Turbo sampler
 
 `modules_forge/iris/turbo.py`は、pentaCoxianの[Iris-3B Turbo Spaceの`iris3b/distill.py`](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo/blob/5243039779e896b9dc884433e76b33cbe9f4f5e7/iris3b/distill.py)、commit `5243039779e896b9dc884433e76b33cbe9f4f5e7`のsamplerを基にしています。NeoのIris推論へ統合し、任意の手動CFG・Negative Prompt指定を追加しました。

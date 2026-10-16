@@ -358,6 +358,7 @@ def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | Non
         "qwen_image21": _qwen_image21_check,
         "ming_image": _ming_image_check,
         "yue2": _yue2_check,
+        "irodori": _irodori_check,
     }.get(feature)
     return check(paths) if check else None
 
@@ -377,6 +378,20 @@ def _ming_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
         "Ming専用環境とINT8・W4A8モデルを確認しました。" if ready else "Ming専用環境またはモデルが不足しています。",
         "Ming Imageタブの「実行環境とモデル」から準備できます。",
         available=ready,
+    )
+
+
+def _irodori_check(paths: DiagnosticPaths) -> DiagnosticCheck:
+    from modules_forge.irodori.core import ready
+
+    available = ready(paths.root / "repositories/irodori", paths.models_root / "Irodori-TTS")
+    return DiagnosticCheck(
+        "irodori",
+        "Irodori TTS",
+        CheckState.READY if available else CheckState.BLOCKED,
+        "実行環境とモデルを確認しました。" if available else "実行環境またはモデルが不足しています。",
+        "" if available else "aikimi-irodori-setup.batで準備してください。",
+        available=available,
     )
 
 

@@ -60,6 +60,7 @@ class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
             ("qwen_image21_studio", "Qwen Image 2.1"),
             ("clef_studio", "Clef"),
             ("iris_studio", "Iris"),
+            ("irodori_studio", "Irodori TTS"),
             ("flux3_klein_studio", "FLUX 3"),
             ("settings", "Settings"),
             ("extensions", "Extensions"),
@@ -455,7 +456,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 12
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 13
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -704,6 +705,13 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         nativeHidden: getComputedStyle(fixtureNativeButton("tab_flux3_klein_studio")).display === "none",
         forgeModesHidden: ["tab_txt2img", "tab_img2img"].every((id) => !fixtureNativeButton(id) || getComputedStyle(fixtureNativeButton(id)).display === "none")
     }};
+    document.querySelector("#aikimi-tab-irodori").click();
+    await waitFor(() => window.AikimiTabs.getActiveFeature() === "irodori");
+    const irodoriResult = {{
+        active: window.AikimiTabs.getActiveFeature(),
+        container: window.AikimiTabs.getActiveContainer()?.id || null,
+        nativeHidden: getComputedStyle(fixtureNativeButton("tab_irodori_studio")).display === "none",
+    }};
     const narrowNav = document.querySelector("#aikimi-feature-nav");
     narrowNav.style.width = "320px";
     const narrowNavFits = narrowNav.scrollWidth === narrowNav.clientWidth;
@@ -727,6 +735,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
     result.textContent = JSON.stringify({{
         aliasesReady: Boolean(aliasesReady),
         featureLabels: featureButtons.map((button) => button.textContent.trim()),
+        irodoriResult,
         kreaCount: document.querySelectorAll("#aikimi-tab-krea2").length,
         animaCount: document.querySelectorAll("#aikimi-tab-anima38").length,
         kreaHidden: Boolean(document.querySelector("#aikimi-tab-krea2")?.hidden),
@@ -823,6 +832,9 @@ class AikimiTabsChromiumTests(unittest.TestCase):
         self.assertEqual(result["kreaCount"], 1)
         self.assertEqual(result["animaCount"], 1)
         self.assertEqual(
+            result["irodoriResult"], {"active": "irodori", "container": "tab_irodori_studio", "nativeHidden": True}
+        )
+        self.assertEqual(
             result["featureLabels"],
             [
                 "Krea2",
@@ -834,6 +846,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "Nanosaur2",
                 "MiniMax H3",
                 "YuE2 Music",
+                "Irodori TTS",
                 "Clef",
                 "Iris",
                 "FLUX 3",
@@ -1043,6 +1056,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "Nanosaur2",
                 "MiniMax H3",
                 "YuE2 Music",
+                "Irodori TTS",
                 "Clef",
                 "Iris",
                 "FLUX 3",

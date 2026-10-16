@@ -78,6 +78,12 @@
             label: "Clef",
             kind: "native",
         }),
+        irodori: Object.freeze({
+            buttonId: "aikimi-tab-irodori",
+            containerId: "tab_irodori_studio",
+            label: "Irodori TTS",
+            kind: "native",
+        }),
         iris: Object.freeze({
             buttonId: "aikimi-tab-iris",
             containerId: "tab_iris_studio",
@@ -101,6 +107,7 @@
         "nanosaur2",
         "minimax_h3",
         "yue2",
+        "irodori",
         "clef",
         "iris",
         "flux3",

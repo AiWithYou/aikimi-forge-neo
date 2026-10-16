@@ -7,6 +7,34 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CiWorkflowBoundaryTests(unittest.TestCase):
+    def test_irodori_contracts_are_linted_and_run_on_windows(self):
+        lint, windows = self.workflow("lint.yml"), self.workflow("windows-smoke.yml")
+        for path in (
+            "modules_forge/irodori/**",
+            "extensions-builtin/irodori-studio/**",
+            "tools/*irodori*.py",
+            "tools/tests/test_irodori*.py",
+        ):
+            with self.subTest(trigger=path):
+                self.assertEqual(lint.count(f'"{path}"'), 2)
+                self.assertEqual(windows.count(f'"{path}"'), 2)
+        for path in (
+            "modules_forge/irodori",
+            "extensions-builtin/irodori-studio/scripts",
+            "tools/*irodori*.py",
+            "tools/tests/test_irodori*.py",
+        ):
+            self.assertIn(f"            {path}\n", lint)
+        step = windows.split("      - name: Run Irodori TTS CPU contracts without model downloads\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn('python tools/run_ci_tests.py --pattern "test_irodori*.py" --verbosity 2', step)
+        self.assertIn(
+            "        if: ${{ !cancelled() && "
+            "(steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}\n",
+            step,
+        )
+
     def test_shared_image_workspace_is_linted_in_ci(self):
         lint = self.workflow("lint.yml")
         for path in (

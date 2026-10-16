@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.7.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.7.1)** · [変更履歴](CHANGELOG.md)
+**[v4.8.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.8.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,13 +10,11 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v4.7.1の主な変更
+## v4.8.0の主な変更
 
-- **[LoRAと本体の選択](docs/local-models.md#loraとモデルの変更)**：学習元や推奨と使用条件を区別します。FLUX 3のモデル自動切替・学習元名による使用拒否を撤去し、選んだモデル・Steps・CFGを維持します。Base学習LoRAも、実際の対象と形状が対応すれば蒸留版で使えます。
-- **Qwen・Iris・SenseNovaのLoRA**：Qwenの学習時精度による許可ゲートを撤去。Irisの通常LoRAは強度変更・複数併用・img2imgに使え、Turbo方式は明示選択できます。SenseNovaの推奨値も手動変更でき、画像編集にLoRAを適用できます。
-- **[FLUX 3のLoRA](docs/flux3-klein.md#lora)**：Studioから選択・強度調整・一覧更新ができ、PNG・条件JSON・履歴に名前とSHA-256、強度を記録します。
-- **読み込みと画面設定**：LoRAの形式・形状・有限値と全対象の登録を検証し、生成受付後の差し替えを拒否します。起動時の保存済みLoRA選択による設定の不整合も防ぎます。
-- **履歴とAPI**：未完了の生成が多くても最新50件までの完成結果を表示。保存先のリンク・参照画像のSHA-256・大きすぎる入力数値の検証を修正しました。[全変更](CHANGELOG.md#v471--2026-10-16)
+- **[Irodori TTS](docs/irodori-tts.md)**：Irodori-TTS-v4-Largeで日本語の音声を生成できます。文章だけの読み上げ、声の説明、同じ話者の複数参照音声に対応します。
+- **生成と保存**：BF16／FP32、長さ・CFG・seedを指定し、48kHz WAVと生成条件を保存できます。1回最大30秒で、生成音声の透かし適用状態を表示します。
+- **導入とモデル保持**：専用BATがPython 3.11の環境とモデルを準備します。Forge本体の依存関係を更新せず、モデル再利用・解放・中断をForgeのGPU管理と連携します。[全変更](CHANGELOG.md#v480--2026-10-16)
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 
@@ -47,7 +45,7 @@ cd aikimi-forge-neo
 
 ### モデルを選んで導入する
 
-Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニュー番号（1〜6）を選びます。Qwen・YuE2・Clef・Iris・FLUX 3は表にある専用BATを実行してください。
+Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニュー番号（1〜6）を選びます。Qwen・YuE2・Irodori TTS・Clef・Iris・FLUX 3は表にある専用BATを実行してください。
 
 ```powershell
 .\aikimi-setup.bat
@@ -63,6 +61,7 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 | [Ming Image Design](extensions-builtin/ming-image-studio/README.md) | ポスター・UI案・透過素材の生成。専用Studioを使用 | `.\aikimi-setup.bat` → **6**（INT8／W4A8選択） |
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | 画像生成・編集・透過PNG・拡張。専用画面を使用 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | 作曲・ABC楽譜編集。**YuE2 Music** タブを使用 | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1：公式Python** |
+| [Irodori TTS](docs/irodori-tts.md) | 日本語読み上げ、声の説明によるVoice Design、参照音声からの声の再現。**Irodori TTS** タブを使用 | [`aikimi-irodori-setup.bat`](aikimi-irodori-setup.bat) |
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
 | [Iris-3B](extensions-builtin/iris-studio/README.md) | 画像生成・img2img・相対深度推定・復元と4倍拡大。通常版／INT8／W4A8、互換Full FT・LoRAと4ステップTurbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
 | [FLUX 3 Image Klein](docs/flux3-klein.md) | 蒸留版／Baseの画像生成、最大10枚の参照編集、配置ボックス。PUPは任意の追加機能。**FLUX 3** タブを使用 | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |

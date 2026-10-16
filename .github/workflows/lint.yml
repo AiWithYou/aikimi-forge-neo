@@ -24,6 +24,10 @@ on:
       - "tools/flux3_klein_manifest.json"
       - "tools/requirements-flux3-klein.*"
       - "modules_forge/iris/**"
+      - "modules_forge/irodori/**"
+      - "extensions-builtin/irodori-studio/**"
+      - "tools/*irodori*.py"
+      - "tools/tests/test_irodori*.py"
       - "extensions-builtin/iris-studio/**"
       - "tools/*iris*.py"
       - "tools/tests/test_iris*.py"
@@ -165,6 +169,10 @@ on:
       - "tools/flux3_klein_manifest.json"
       - "tools/requirements-flux3-klein.*"
       - "modules_forge/iris/**"
+      - "modules_forge/irodori/**"
+      - "extensions-builtin/irodori-studio/**"
+      - "tools/*irodori*.py"
+      - "tools/tests/test_irodori*.py"
       - "extensions-builtin/iris-studio/**"
       - "tools/*iris*.py"
       - "tools/tests/test_iris*.py"
@@ -323,6 +331,10 @@ jobs:
             tools/*flux3*.py
             tools/tests/test_flux3*.py
             modules_forge/iris
+            modules_forge/irodori
+            extensions-builtin/irodori-studio/scripts
+            tools/*irodori*.py
+            tools/tests/test_irodori*.py
             extensions-builtin/iris-studio/scripts
             tools/*iris*.py
             tools/tests/test_iris*.py
