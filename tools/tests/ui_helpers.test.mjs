@@ -68,3 +68,18 @@ test('settings comments preserve globals and insert both before and after hints'
     assert.equal(context.comment, 'extension-owned');
     assert.deepEqual(parent.children.filter(child => child.className === 'settings-comment').map(child => child.innerHTML), ['before', 'after']);
 });
+
+test('metadata hierarchy preserves false-like values and prototype-named keys', () => {
+    const context = load('extraNetworks.js', {
+        window: {addEventListener() {}}, onUiLoaded() {}, onUiUpdate() {},
+    });
+    const input = JSON.parse('{"zero":0,"zero/child":1,"flag":false,"flag/child":2,"__proto__":"text","constructor":{"child":3},"toString":{"child":4}}');
+    const flattened = context.extraNetworksFlattenMetadata(input);
+    assert.equal(flattened.zero, 0);
+    assert.equal(flattened.flag, false);
+    assert.equal(flattened.__proto__, 'text');
+    assert.equal(Object.hasOwn(flattened, 'constructor'), true);
+    assert.equal(Object.hasOwn(flattened, 'toString'), true);
+    assert.equal(flattened['constructor/child'], 3);
+    assert.equal(flattened['toString/child'], 4);
+});

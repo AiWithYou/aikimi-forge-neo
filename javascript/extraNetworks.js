@@ -645,7 +645,7 @@ function popupId(id) {
 }
 
 function extraNetworksFlattenMetadata(obj) {
-    const result = {};
+    const result = Object.create(null);
 
     // Convert any stringified JSON objects to actual objects
     for (const key of Object.keys(obj)) {
@@ -686,7 +686,7 @@ function extraNetworksFlattenMetadata(obj) {
         const parts = key.split("/");
         for (let i = 1; i < parts.length; i++) {
             const parent = parts.slice(0, i).join("/");
-            if (!result[parent]) {
+            if (!Object.hasOwn(result, parent)) {
                 result[parent] = "";
             }
         }
