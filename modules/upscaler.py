@@ -59,7 +59,7 @@ class Upscaler:
 
             img = self.do_upscale(img, selected_model)
 
-            if (img.width >= dest_w and img.height >= dest_h) or img.size == _orig:
+            if (img.width >= dest_w and img.height >= dest_h) or (img.width <= _orig[0] and img.height <= _orig[1]):
                 break
 
         if (img.width != dest_w) or (img.height != dest_h):
