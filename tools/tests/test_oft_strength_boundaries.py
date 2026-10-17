@@ -21,6 +21,43 @@ def constrained_rotation(blocks, alpha, outputs):
 
 
 class OftStrengthBoundaryTests(unittest.TestCase):
+    def test_boft_missing_constraint_matches_unconstrained_rotation(self):
+        blocks = torch.tensor([[[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]]])
+        original = torch.arange(1, 13, dtype=torch.float32).reshape(4, 3) / 10
+        rotation = torch.block_diag(*constrained_rotation(blocks, 0.0, 4)[0])
+        adapter = BOFTAdapter.load("layer", self.saved_weights(blocks), None, None)
+        actual = merge_lora_to_weight([(1.0, adapter, 1.0, None, None)], original.clone(), "weight")
+        torch.testing.assert_close(actual, rotation @ original)
+
+    def test_boft_dora_normalizes_full_butterfly_then_interpolates_once(self):
+        blocks = torch.tensor([
+            [[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]],
+            [[[0.0, -0.3], [0.1, 0.0]], [[0.0, 0.1], [-0.15, 0.0]]],
+        ])
+        for dimensions in ((4, 3), (4, 3, 1, 1)):
+            original = torch.arange(1, 13, dtype=torch.float32).reshape(dimensions) / 10
+            magnitude = torch.arange(2, 6, dtype=torch.float32).reshape(4, *([1] * (len(dimensions) - 1)))
+            for alpha in (None, 0.0, 0.03):
+                rotations = constrained_rotation(blocks, alpha or 0.0, 4)
+                rotated = original.flatten(1)
+                for stage_number, groups in enumerate((((0, 1), (2, 3)), ((0, 2), (1, 3)))):
+                    stage = torch.zeros(4, 4)
+                    for rotation, group in zip(rotations[stage_number], groups, strict=True):
+                        for row, output in enumerate(group):
+                            for column, input_channel in enumerate(group):
+                                stage[output, input_channel] = rotation[row, column]
+                    rotated = stage @ rotated
+                rotated = rotated.reshape(dimensions)
+                for rescale in (None, magnitude / 3):
+                    full = rotated if rescale is None else rotated * rescale
+                    norm = full.flatten(1).norm(dim=1).reshape(magnitude.shape)
+                    normalized = full * magnitude / (norm + torch.finfo(original.dtype).eps)
+                    adapter = BOFTAdapter.load("layer", self.saved_weights(blocks, rescale), alpha, magnitude)
+                    for strength in (0.0, 0.5, 1.0, -0.5):
+                        with self.subTest(dimensions=dimensions, alpha=alpha, rescaled=rescale is not None, strength=strength):
+                            actual = merge_lora_to_weight([(strength, adapter, 1.0, None, None)], original.clone(), "weight")
+                            torch.testing.assert_close(actual, original + strength * (normalized - original))
+
     def test_oft_dora_normalizes_full_rotation_then_interpolates_strength(self):
         blocks = torch.tensor([[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]])
         original = torch.arange(1, 13, dtype=torch.float32).reshape(4, 3) / 10

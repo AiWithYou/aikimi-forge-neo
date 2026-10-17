@@ -62,6 +62,8 @@ class BOFTAdapter(WeightAdapterBase):
         blocks = v[0]
         rescale = v[1]
         alpha = v[2]
+        if alpha is None:
+            alpha = 0
         dora_scale = v[3]
 
         blocks = memory_management.cast_to_device(blocks, weight.device, intermediate_dtype)
@@ -88,12 +90,13 @@ class BOFTAdapter(WeightAdapterBase):
             inp = org = weight
 
             r_b = boft_b // 2
+            rotation_strength = 1.0 if dora_scale is not None else strength
             for i in range(boft_m):
                 bi = r[i]
                 g = 2
                 k = 2**i * r_b
-                if strength != 1:
-                    bi = bi * strength + (1 - strength) * I
+                if rotation_strength != 1:
+                    bi = bi * rotation_strength + (1 - rotation_strength) * I
                 inp = inp.unflatten(0, (-1, g, k)).transpose(1, 2).flatten(0, 2).unflatten(0, (-1, boft_b))
                 inp = torch.einsum("b i j, b j ...-> b i ...", bi, inp)
                 inp = inp.flatten(0, 1).unflatten(0, (-1, k, g)).transpose(1, 2).flatten(0, 2)
@@ -104,7 +107,7 @@ class BOFTAdapter(WeightAdapterBase):
             lora_diff = inp - org
             lora_diff = memory_management.cast_to_device(lora_diff, weight.device, intermediate_dtype)
             if dora_scale is not None:
-                weight = weight_decompose(dora_scale, weight, lora_diff, alpha, strength, intermediate_dtype, function)
+                weight = weight_decompose(dora_scale, weight, lora_diff, 1.0, strength, intermediate_dtype, function)
             else:
                 if rescale is not None:
                     lora_diff *= strength
