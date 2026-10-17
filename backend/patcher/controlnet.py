@@ -444,7 +444,7 @@ class ControlLora(ControlNet):
             weight = sd[k]
             try:
                 utils.set_attr(self.control_model, k, weight)
-            except:
+            except AttributeError:
                 pass
 
         for k in self.control_weights:
