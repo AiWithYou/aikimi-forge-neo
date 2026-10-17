@@ -10,8 +10,9 @@ import os
 import re
 import string
 import struct
-import uuid
+import threading
 import time
+import uuid
 from collections import namedtuple
 
 import numpy as np
@@ -29,6 +30,7 @@ from modules.shared import opts
 register_heif_opener()
 LANCZOS = Image.Resampling.LANCZOS
 NEAREST = Image.Resampling.NEAREST
+_image_save_lock = threading.Lock()
 
 
 def get_font(fontsize: int):
@@ -749,15 +751,16 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
         try:
             save_image_with_geninfo(image_to_save, info, temp_file_path, extension, existing_pnginfo=params.pnginfo, pnginfo_section_name=pnginfo_section_name)
 
-            filename = filename_without_extension + extension
-            without_extension = filename_without_extension
-            if shared.opts.save_images_replace_action != "Override":
-                n = 0
-                while os.path.lexists(filename):
-                    n += 1
-                    without_extension = _fit_filename_stem(filename_without_extension, extension, f"-{n}")
-                    filename = without_extension + extension
-            os.replace(temp_file_path, filename)
+            with _image_save_lock:
+                filename = filename_without_extension + extension
+                without_extension = filename_without_extension
+                if shared.opts.save_images_replace_action != "Override":
+                    n = 0
+                    while os.path.lexists(filename):
+                        n += 1
+                        without_extension = _fit_filename_stem(filename_without_extension, extension, f"-{n}")
+                        filename = without_extension + extension
+                os.replace(temp_file_path, filename)
             return without_extension
         finally:
             try:

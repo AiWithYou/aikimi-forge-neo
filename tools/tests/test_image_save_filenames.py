@@ -4,8 +4,11 @@ import ast
 import os
 import stat
 import tempfile
+import threading
+import time
 import unittest
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,12 +32,35 @@ class ImageSaveFilenameTests(unittest.TestCase):
         self.host_os, self.callbacks = host_os, callbacks
         scope = {
             "os": host_os, "tempfile": tempfile, "uuid": uuid, "opts": self.options, "shared": SimpleNamespace(opts=self.options),
+            "_image_save_lock": threading.Lock(),
             "FilenameGenerator": lambda *args, **kwargs: None, "script_callbacks": callbacks,
             "save_image_with_geninfo": lambda image, info, filename, extension, **kwargs: image.save(filename, format="JPEG" if extension == ".jpg" else "PNG"),
         }
         exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), scope)  # noqa: S102 -- isolated production save path with real file writes
         self.save = scope["save_image"]
         self.scope = scope
+
+    def test_parallel_saves_keep_both_images_when_overwrite_is_disabled(self):
+        self.options.save_images_replace_action = "Add number"
+        ready = threading.Barrier(2)
+        def encode(image, info, filename, extension, **kwargs):
+            image.save(filename, format="PNG")
+            ready.wait(timeout=5)
+        def replace(source, destination):
+            # Widen the interval between name selection and publication.
+            time.sleep(0.05)
+            os.replace(source, destination)
+        self.scope["save_image_with_geninfo"] = encode
+        self.host_os.replace = replace
+        with tempfile.TemporaryDirectory() as temporary, ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(self.save, Image.new("RGB", (8, 8), (index, 0, 0)), temporary, "",
+                                   forced_filename="parallel", save_to_dirs=False) for index in range(2)]
+            paths = [future.result(timeout=10)[0] for future in futures]
+            self.assertEqual(len(set(paths)), 2)
+            for index, filename in enumerate(paths):
+                with Image.open(filename) as image:
+                    self.assertEqual(image.getpixel((0, 0)), (index, 0, 0))
+            self.assertEqual(len(list(Path(temporary).iterdir())), 2)
 
     def test_temp_creation_is_exclusive_with_normal_creation_permissions(self):
         calls = []
