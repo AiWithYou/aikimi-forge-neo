@@ -31,18 +31,21 @@
 /* Show one mode selector for the active image model. */
 body:has(#aikimi-feature-nav:is(
     [data-active-feature="qwen_image21"], [data-active-feature="ming_image"], [data-active-feature="sensenova"],
-    [data-active-feature="minimax_h3_image"], [data-active-feature="nanosaur2"], [data-active-feature="iris"], [data-active-feature="flux3"]
+    [data-active-feature="minimax_h3_image"], [data-active-feature="nanosaur2"], [data-active-feature="iris"], [data-active-feature="flux3"], [data-active-feature="moss_image"]
 )) #tabs > :is(.tab-nav, .tab-wrapper) [role="tablist"] > button:is(
     [aria-controls="tab_txt2img"], [aria-controls="tab_img2img"]
 ) { display: none !important; }
 body:has(#aikimi-feature-nav:is(
     [data-active-feature="qwen_image21"], [data-active-feature="ming_image"], [data-active-feature="sensenova"],
-    [data-active-feature="minimax_h3_image"], [data-active-feature="nanosaur2"], [data-active-feature="iris"], [data-active-feature="flux3"]
+    [data-active-feature="minimax_h3_image"], [data-active-feature="nanosaur2"], [data-active-feature="iris"], [data-active-feature="flux3"], [data-active-feature="moss_image"]
 )) #tabs > .tab-nav > button:is([aria-controls="tab_txt2img"], [aria-controls="tab_img2img"]) { display: none !important; }
 #aikimi-feature-nav + #tabs > :is(.tab-nav, .tab-wrapper) [role="tablist"] > button[aria-controls="tab_iris_studio"],
 #aikimi-feature-nav + #tabs > .tab-nav > button[aria-controls="tab_iris_studio"] { display: none !important; }
 
 @media (max-width: 760px) {
+    #moss-image-model { flex-direction: column; align-items: stretch; }
+    #moss-image-model > .row { flex-direction: column; align-items: stretch; width: 100%; }
+    #moss-image-model > .row > * { min-width: 0 !important; width: 100%; }
     .aikimi-image-toprow, .aikimi-image-workspace { flex-direction: column; }
     .aikimi-image-prompts, .aikimi-image-actions, .aikimi-image-settings, .aikimi-image-output { width: 100%; }
     .aikimi-image-actions { flex-direction: row; flex-wrap: wrap; }
@@ -109,14 +112,14 @@ body:has(#aikimi-feature-nav:is(
 body:has(#aikimi-feature-nav:is(
     [data-active-feature="qwen_image21"], [data-active-feature="ming_image"], [data-active-feature="sensenova"],
     [data-active-feature="minimax_h3"], [data-active-feature="minimax_h3_image"],
-    [data-active-feature="nanosaur2"], [data-active-feature="yue2"], [data-active-feature="irodori"], [data-active-feature="clef"], [data-active-feature="flux3"]
+    [data-active-feature="nanosaur2"], [data-active-feature="yue2"], [data-active-feature="irodori"], [data-active-feature="clef"], [data-active-feature="flux3"], [data-active-feature="moss_image"]
 )) #quicksettings { display: none !important; }
 
 #aikimi-feature-nav + #tabs > .tab-wrapper > .tab-container[role="tablist"] > button:is(
-    [aria-controls="tab_minimax_h3_image_studio"], [aria-controls="tab_nanosaur2_studio"], [aria-controls="tab_aikimi_yue2_studio"], [aria-controls="tab_irodori_studio"], [aria-controls="tab_ming_image_studio"], [aria-controls="tab_clef_studio"], [aria-controls="tab_flux3_klein_studio"]
+    [aria-controls="tab_minimax_h3_image_studio"], [aria-controls="tab_nanosaur2_studio"], [aria-controls="tab_aikimi_yue2_studio"], [aria-controls="tab_irodori_studio"], [aria-controls="tab_ming_image_studio"], [aria-controls="tab_clef_studio"], [aria-controls="tab_flux3_klein_studio"], [aria-controls="tab_moss_image_studio"]
 ),
 #aikimi-feature-nav + #tabs > .tab-nav > button:is(
-    [aria-controls="tab_minimax_h3_image_studio"], [aria-controls="tab_nanosaur2_studio"], [aria-controls="tab_aikimi_yue2_studio"], [aria-controls="tab_irodori_studio"], [aria-controls="tab_ming_image_studio"], [aria-controls="tab_clef_studio"], [aria-controls="tab_flux3_klein_studio"]
+    [aria-controls="tab_minimax_h3_image_studio"], [aria-controls="tab_nanosaur2_studio"], [aria-controls="tab_aikimi_yue2_studio"], [aria-controls="tab_irodori_studio"], [aria-controls="tab_ming_image_studio"], [aria-controls="tab_clef_studio"], [aria-controls="tab_flux3_klein_studio"], [aria-controls="tab_moss_image_studio"]
 ) { display: none !important; }
 
 #aikimi-feature-nav + #tabs > .tab-wrapper > .tab-container[role="tablist"] > button[aria-controls="tab_sensenova_u15_studio"],

@@ -96,6 +96,12 @@
             label: "FLUX 3",
             kind: "native",
         }),
+        moss_image: Object.freeze({
+            buttonId: "aikimi-tab-moss-image",
+            containerId: "tab_moss_image_studio",
+            label: "MOSS Image",
+            kind: "native",
+        }),
     });
     const FEATURE_ORDER = Object.freeze([
         "krea2",
@@ -111,6 +117,7 @@
         "clef",
         "iris",
         "flux3",
+        "moss_image",
     ]);
 
     if (window.AikimiTabs?.apiVersion === API_VERSION) {

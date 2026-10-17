@@ -4,6 +4,8 @@
 
 FLUX 3は専用のモデル選択から公式の蒸留版／Baseと保存形式を選び、対応するローカルLoRAを追加できます。任意の追加チェックポイントには対応しません。[導入と対応形式](flux3-klein.md)を参照してください。
 
+MOSS ImageはMOSS-Image-SFTの画像生成本体とテキストエンコーダーを個別にINT8／BF16などの対応形式から選択します。`aikimi-moss-image-setup.bat`で導入し、互換の線形LoRAを追加できます。[使い方](moss-image.md)を参照してください。
+
 ## フォルダー構造
 
 手元のモデルを追加する標準の置き場は `models/<系列>/checkpoints/` です。起動時に追加用フォルダーを用意します。Forge・Qwen・Ming・IrisのLoRAフォルダーも同様に用意し、下位フォルダーを作って整理できます。
@@ -17,6 +19,7 @@ models/
 ├─ Ming-Image/checkpoints/
 ├─ Iris-3B/checkpoints/
 ├─ Iris-3B/loras/             # 画像生成用の互換LoRA（下位フォルダーで整理可能）
+├─ MOSS-Image/loras/          # MOSS画像生成本体の互換LoRA（下位フォルダーで整理可能）
 ├─ Clef/checkpoints/
 ├─ SenseNova-U1/checkpoints/
 ├─ MiniMax-H3/checkpoints/
@@ -70,6 +73,8 @@ Qwenは `models/Qwen-Image-2.1/loras/`、Mingは `models/Ming-Image/loras/` と�
 ForgeでPNGの生成情報を読み込むと、LoRA選択欄は空に戻ります。保存されたプロンプトのLoRAタグを使用するため、前回の選択が二重に適用されません。
 
 Irisは `models/Iris-3B/loras/` と下位フォルダーの互換LoRAを複数選択し、各強度を指定できます。通常版・INT8・W4A8と互換Full FTに対応します。コミュニティ製Turbo LoRAも通常LoRAとして使え、専用の少ステップ生成方式は詳細設定で明示的に選べます。[対応形式と導入](iris-studio.md#任意のloraとコミュニティ製turbo)。ほかの専用Studioでは、それぞれのLoRA機能と対応形式を使います。すべてのLoRA形式や異なるモデル間の組み合わせを一律に適用できるものではありません。
+
+MOSSは `models/MOSS-Image/loras/` と下位フォルダーのLoRAを複数選択し、表で各強度を−2〜2に設定します。初期値は1、0は適用を省略します。選択は初期状態では空欄です。画像生成本体のINT8／BF16の双方で、実際の対象と形状が一致する線形LoRAを適用します。本体やSteps・CFGはLoRAの選択によって自動変更しません。[対応形式](moss-image.md#lora)を参照してください。
 
 本体やLoRAの変更、同名ファイルの上書きは必要に応じて再読み込みします。専用Studioでは受付時のLoRAを生成中も確認し、待機中や読み込み中にファイルが変わった場合は再実行を求めます。量子化キャッシュは元モデルと変換条件ごとに分離し、元ファイルには書き込みません。初回の本体識別ではSHA-256の計算に時間がかかる場合があります。生成情報にモデルのパスや識別情報が含まれるため、共有する際は保存場所を確認してください。
 

@@ -25,6 +25,7 @@ WindowsではNeoを終了して`aikimi-setup.bat`を実行し、モデルを選�
 | Anima 3.8B v1.1 | `download_anima38_v11_int8_convrot_models.bat` | BF16取得・INT8変換・エンコーダー・VAE |
 | SenseNova U1.5 | `download_sensenova_u15_models.bat` | INT8・8-Step LoRA |
 | MiniMax H3 | `download_minimax_h3_models.bat` | 標準INT8モデル・エンコーダー・映像／音声VAE |
+| [MOSS-Image-SFT](moss-image.md) | `aikimi-moss-image-setup.bat` | 標準はINT8本体・INT8テキスト・FP32 VAE、約14.1GB。W4A8テキスト／BF16は個別選択 |
 
 Animaの変換には通常起動で準備済みのNeo環境とNVIDIA GPU、H3のダウンロードにはPython 3.12以上が必要です。H3の保存先は`models/MiniMax-H3`です。
 

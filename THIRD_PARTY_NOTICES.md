@@ -69,6 +69,14 @@ SenseNova runtimeは、固定commit`e6dfd45762eb46f805067fe079c14bcb643ccccd`か
 
 モデル重み・専用ランタイム・依存wheelはGitへ同梱せず、利用者の環境へ別途取得します。[導入と対応形式](docs/flux3-klein.md)を参照してください。
 
+## MOSS Image
+
+- モデル原作: [OpenMOSS-Team/MOSS-Image-SFT](https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT/tree/daf706d2e1c7a6369c17b6d1658671aee6db1ebe)、Apache-2.0。VAEは公式のFP32を使用します。
+- INT8 ConvRot配布: [Abiray/MOSS-Image-SFT-INT8-convrot](https://huggingface.co/Abiray/MOSS-Image-SFT-INT8-convrot/tree/a4b94ff815a4e3853e630f0e965fbbf0a1912e31)。W4A8テキスト配布: [nif0/MOSS-Image-SFT-ComfyUI](https://huggingface.co/nif0/MOSS-Image-SFT-ComfyUI/tree/61af6917a6c23f513b0cb8167db6ca5b652263ca)。固定revisionとSHA-256を検証して別途取得し、重みはGitへ同梱しません。
+- 推論: [ComfyUI固定版](https://github.com/Comfy-Org/ComfyUI/tree/e087d8f6cb7c6cdb11b59dc7c9bf17c79f8d877d)、GPL-3.0。MOSS標準対応を専用環境で使用します。Comfy Kitchen 0.2.37とcomfy-aimdo 0.5.6のライセンス・NOTICEは上記FLUX 3と同じです。
+
+[導入と使い方](docs/moss-image.md)を参照してください。
+
 ## fontとUI asset
 
 `modules/Roboto-Regular.ttf`は、font metadataでApache-2.0を示しています。`modules/web/fonts/sourcesanspro`にはSource Sans Proのwoff2が含まれます。release担当者は、fontの配布元と必要なlicense本文をrelease前に再確認してください。

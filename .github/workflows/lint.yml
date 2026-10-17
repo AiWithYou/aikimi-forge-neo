@@ -23,6 +23,12 @@ on:
       - "tools/tests/flux3_layout.test.mjs"
       - "tools/flux3_klein_manifest.json"
       - "tools/requirements-flux3-klein.*"
+      - "modules_forge/moss_image/**"
+      - "extensions-builtin/moss-image-studio/**"
+      - "tools/*moss_image*.py"
+      - "tools/tests/test_moss_image*.py"
+      - "tools/moss_image_manifest.json"
+      - "tools/requirements-moss-image.*"
       - "modules_forge/iris/**"
       - "modules_forge/irodori/**"
       - "extensions-builtin/irodori-studio/**"
@@ -168,6 +174,12 @@ on:
       - "tools/tests/flux3_layout.test.mjs"
       - "tools/flux3_klein_manifest.json"
       - "tools/requirements-flux3-klein.*"
+      - "modules_forge/moss_image/**"
+      - "extensions-builtin/moss-image-studio/**"
+      - "tools/*moss_image*.py"
+      - "tools/tests/test_moss_image*.py"
+      - "tools/moss_image_manifest.json"
+      - "tools/requirements-moss-image.*"
       - "modules_forge/iris/**"
       - "modules_forge/irodori/**"
       - "extensions-builtin/irodori-studio/**"
@@ -330,6 +342,10 @@ jobs:
             extensions-builtin/flux3-klein-studio/scripts
             tools/*flux3*.py
             tools/tests/test_flux3*.py
+            modules_forge/moss_image
+            extensions-builtin/moss-image-studio/scripts
+            tools/*moss_image*.py
+            tools/tests/test_moss_image*.py
             modules_forge/iris
             modules_forge/irodori
             extensions-builtin/irodori-studio/scripts

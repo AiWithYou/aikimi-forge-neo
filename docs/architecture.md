@@ -104,6 +104,15 @@ bridgeは、runtime path、process identity、ComfyUI revision、必要node、mo
 
 参照画像は受付時に画素を保存し、順序とハッシュを保持します。PUP・テキストエンコーダー・VAE・生成本体を必要な段階で読み込み、使わないモデルをGPUから退避します。PUPは標準OFFの別途導入です。FP32 VAEは空きメモリに応じて分割処理し、保存前に数値と生成条件を検証します。中断・失敗時はworkerの終了を確認してからGPU使用権を返します。[使い方と制限](flux3-klein.md)
 
+## MOSS-Image-SFT
+
+`extensions-builtin/moss-image-studio`は`modules_forge/moss_image`へ生成を渡します。専用Pythonと固定ComfyUIの標準MOSS対応をresident workerから使用し、HTTPサーバーは起動しません。テキストエンコーダーとDiTを段階的に読み込み、共有GPU使用権で他エンジンとの重複を防ぎます。
+
+`tools/setup_moss_image.py`は選択した形式のファイルを固定リビジョンとSHA-256で検証します。既定は本体・テキストともINT8で、W4A8テキストとBF16も選択できます。VAEはFP32を保持します。互換LoRAは元の量子化ファイルを変更せずモデルのcloneへ適用し、全対象の形状・登録を確認します。PNG内にモデル・量子化元・LoRAの識別と生成条件を保存します。中断時はworkerの終了を確認してからGPU使用権を返します。[使い方と制限](moss-image.md)
+
+テキストの計算精度は、読み込んだComfyUIテキストモデルが宣言するdtypeから記録します。保存形式と計算精度、出力されたテキスト特徴の精度はそれぞれ分けて保存します。
+配布ファイルの`language_model.*`形式は、量子化情報を保持したまま標準ローダーの`model.language_model.*`へ揃えます。Qwen3.5-9BとMOSSのトークナイザーを確認し、別のエンコーダーへフォールバックしません。
+
 ## model setup
 
 `tools/aikimi_setup.py`はstdlibだけで動作し、固定manifest、download、resume、size、SHA-256、path containment、disk preflight、verify、repairを共通化します。Anima conversionだけは、準備済みForge venvとCUDAを使って既存converterを実行します。

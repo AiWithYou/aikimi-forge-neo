@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v4.8.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.8.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.9.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.9.0)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,11 +10,11 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v4.8.0
+## What's new in v4.9.0
 
-- **[Irodori TTS](docs/irodori-tts.md)**: generate Japanese speech with Irodori-TTS-v4-Large, using text alone, a voice description, or multiple reference clips from the same speaker.
-- **Generation and output**: choose BF16 or FP32, duration, CFG, and seed. Save 48kHz WAV and generation settings, with up to 30 seconds per request and an explicit watermark status.
-- **Setup and model retention**: a dedicated BAT prepares Python 3.11 and the model without changing Forge's dependencies. Model reuse, release, and cancellation use Forge's GPU management. See the [complete changelog](CHANGELOG.md#v480--2026-10-16).
+- **[MOSS Image](docs/moss-image.md)**: generate anime, photos, and other images with MOSS-Image-SFT using natural language, tags, or JSON layouts. See the [RTX 3090 sample and settings](docs/moss-image.md#作例).
+- **INT8 by default**: install the diffusion model and text encoder in INT8. Select W4A8 text or BF16 separately, while keeping the VAE in FP32.
+- **LoRA and output**: combine compatible linear LoRAs with individual strengths. PNG and JSON outputs retain generation settings, model and quantization sources, and LoRA identities. See the [complete changelog](CHANGELOG.md#v490--2026-10-17).
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 
@@ -41,7 +41,7 @@ Choose a model and run its setup BAT file. **You only need to install the models
 
 ### Choose and install models
 
-For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choose a menu entry (1–6). Use the dedicated BAT files in the table for Qwen, YuE2, Irodori TTS, Clef, Iris, and FLUX 3.
+For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choose a menu entry (1–6). Use the dedicated BAT files in the table for Qwen, YuE2, Irodori TTS, Clef, Iris, FLUX 3, and MOSS Image.
 
 ```powershell
 .\aikimi-setup.bat
@@ -61,6 +61,7 @@ For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choos
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | Image, text, and JSON evaluation; image curation and per-criterion probabilities | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
 | [Iris-3B](extensions-builtin/iris-studio/README.md) | Image generation, img2img, relative depth, restoration, and 4× upscaling; standard, INT8, and W4A8 modes, compatible full fine-tunes and LoRAs, and 4-step Turbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
 | [FLUX 3 Image Klein](docs/flux3-klein.md) | Distilled/Base generation, editing with up to 10 references, bounding boxes, and separately installed optional prompt upsampling in **FLUX 3** | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
+| [MOSS-Image-SFT](docs/moss-image.md) | Image generation from natural language, tags, or JSON layouts in **MOSS Image** | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
 
 The initial download and runtime setup or conversion can take time. Qwen defaults to the standard Q4_K_M model. Iris downloads weights for the selected task; INT8 and W4A8 use preconverted Hugging Face distributions. W4A8 also compresses the text encoder for image generation. See the [Iris guide](docs/iris-studio.md).
 

@@ -1,0 +1,198 @@
+{
+  "schema_version": 2,
+  "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+  "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "checkpoints/MOSS-Image-SFT/LICENSE",
+      "size": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "LICENSE"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/model_index.json",
+      "size": 412,
+      "sha256": "ca80b1f562a506e0eb24afb1acb464fb583163e3c240c04e4bc69fea090db173",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "model_index.json"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/scheduler/scheduler_config.json",
+      "size": 494,
+      "sha256": "707322832cc507dfb8c51c0e0cd04d44ee2d30a9b036b6f3c47d6c17aa71adf0",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "scheduler/scheduler_config.json"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/text_encoder/config.json",
+      "size": 2813,
+      "sha256": "b31ee18a242bcfcccbe740f825f6b1d3ae231b0655eeecb5de3e98d504b7d68c",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "text_encoder/config.json"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/text_encoder/model-00001-of-00004.safetensors",
+      "size": 4973910744,
+      "sha256": "abfaa3d3a8612508c85ee8f6da9c734b862f10298b903765c4ad384177c32b0b",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "text_encoder/model-00001-of-00004.safetensors"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/text_encoder/model-00002-of-00004.safetensors",
+      "size": 4988364288,
+      "sha256": "9112637fa6bf4d07bafd6ae268852b18d3d0c1242f4ee901c5579006e5bd4894",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "text_encoder/model-00002-of-00004.safetensors"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/text_encoder/model-00003-of-00004.safetensors",
+      "size": 4954202112,
+      "sha256": "956f1ef51d0cfe610b0d22987c0b7821c36e3ce228abceccef523518bcf079dc",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "text_encoder/model-00003-of-00004.safetensors"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/text_encoder/model-00004-of-00004.safetensors",
+      "size": 1869001848,
+      "sha256": "9e21d20e8adde88c3e0b65d4a0d251f143d98ee9d52db36b4348361091e4e208",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "text_encoder/model-00004-of-00004.safetensors"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/text_encoder/model.safetensors.index.json",
+      "size": 64641,
+      "sha256": "0af6fa3fa36ba8dcbb6b7ad0325a36c5b1b69862a9a1f1486b1b80385bd8f5ee",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "text_encoder/model.safetensors.index.json"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/tokenizer/chat_template.jinja",
+      "size": 7756,
+      "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "tokenizer/chat_template.jinja"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/tokenizer/tokenizer.json",
+      "size": 19989325,
+      "sha256": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "tokenizer/tokenizer.json"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/tokenizer/tokenizer_config.json",
+      "size": 1123,
+      "sha256": "bee8eba30f0eb4af73c0fe2cd06d0f89b657d7819941c438157ec42f7c80ea87",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "tokenizer/tokenizer_config.json"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/transformer/config.json",
+      "size": 240,
+      "sha256": "3291c3a1c7adc22b8182a0de25ca8ec97474d72715ce84adbab09cc0be24f666",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "transformer/config.json"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/transformer/diffusion_pytorch_model-00001-of-00003.safetensors",
+      "size": 4991978016,
+      "sha256": "e40d3444940a0b0fd7cd45ba7959a5bd3d5efd7ddf87aae5ce4d87ce8aa03d01",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "transformer/diffusion_pytorch_model-00001-of-00003.safetensors"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/transformer/diffusion_pytorch_model-00002-of-00003.safetensors",
+      "size": 4983137016,
+      "sha256": "d106da790ec2924ffd8af04b4ffa8f8de281a974b58e55649c3ec596dc8ef033",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "transformer/diffusion_pytorch_model-00002-of-00003.safetensors"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/transformer/diffusion_pytorch_model-00003-of-00003.safetensors",
+      "size": 189549184,
+      "sha256": "11f637ab17c7093344a6110a1e87ffda8e56558dc55183d8e790222cfcdcf52d",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "transformer/diffusion_pytorch_model-00003-of-00003.safetensors"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/transformer/diffusion_pytorch_model.safetensors.index.json",
+      "size": 40298,
+      "sha256": "b609327fc75dbe5080e7e095d8b727d74d728b4f98e8b047133b0082cfa2fb03",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "transformer/diffusion_pytorch_model.safetensors.index.json"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/vae/config.json",
+      "size": 838,
+      "sha256": "cc77f3f0ce0357039c71018dc19edaa4fcceb0c2f7488fdc2b9c0580d6baafa1",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "vae/config.json"
+    },
+    {
+      "path": "checkpoints/MOSS-Image-SFT/vae/diffusion_pytorch_model.safetensors",
+      "size": 249521372,
+      "sha256": "c3bdf94dc67ec69b30ea9fe1fa8340085679cae64d019f7c7e4a9921f1a7f17a",
+      "repo_id": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "daf706d2e1c7a6369c17b6d1658671aee6db1ebe",
+      "filename": "vae/diffusion_pytorch_model.safetensors"
+    }
+  ],
+  "assets": {
+    "dit_int8": {
+      "repo_id": "Abiray/MOSS-Image-SFT-INT8-convrot",
+      "revision": "a4b94ff815a4e3853e630f0e965fbbf0a1912e31",
+      "filename": "diffusion_models/moss-image-sft-dit-int8-convrot.safetensors",
+      "path": "diffusion_models/moss-image-sft-dit-int8-convrot.safetensors",
+      "size": 5413723736,
+      "sha256": "2191eebd9d7172f51df4427282773915dc6b1cc0193a563c96855f87d9ecaaae"
+    },
+    "text_int8": {
+      "repo_id": "Abiray/MOSS-Image-SFT-INT8-convrot",
+      "revision": "a4b94ff815a4e3853e630f0e965fbbf0a1912e31",
+      "filename": "text_encoders/moss-image-sft-qwen35-int8-convrot.safetensors",
+      "path": "text_encoders/moss-image-sft-qwen35-int8-convrot.safetensors",
+      "size": 8452951612,
+      "sha256": "8923ce220050546cdaf0e58e077b74a40f9aa788959c8d0c19ff0e68c0b4ad0f"
+    },
+    "text_w4a8": {
+      "repo_id": "nif0/MOSS-Image-SFT-ComfyUI",
+      "revision": "61af6917a6c23f513b0cb8167db6ca5b652263ca",
+      "filename": "text_encoders/qwen3.5_9b_moss_image_sft_w4a8_gptq.safetensors",
+      "path": "text_encoders/qwen3.5_9b_moss_image_sft_w4a8_gptq.safetensors",
+      "size": 5428937108,
+      "sha256": "b5f31a430e4912decb152f3a0761350f52282176823b597edd43b2e3f6403da4"
+    }
+  },
+  "runtime": {
+    "comfy_repository": "https://github.com/Comfy-Org/ComfyUI.git",
+    "comfy_revision": "e087d8f6cb7c6cdb11b59dc7c9bf17c79f8d877d"
+  },
+  "uv": {
+    "artifact_id": "flux3-uv",
+    "relative_path": "bootstrap/uv.whl",
+    "url": "https://files.pythonhosted.org/packages/a6/b7/aebd3504d559315be6137ebfe1f6d2258e8e2f48e528d7cc799aea3441ef/uv-0.12.12-py3-none-win_amd64.whl",
+    "size": 17654279,
+    "sha256": "4a5acd0c6087970bdf210eeb1203835117f6fb8b84828604205de510f68aa6a7",
+    "license_url": "https://github.com/astral-sh/uv/blob/0.12.12/LICENSE-MIT"
+  }
+}

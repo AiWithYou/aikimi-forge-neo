@@ -12,6 +12,9 @@ on:
       - "tools/requirements*.txt"
       - "tools/flux3_klein_manifest.json"
       - "tools/requirements-flux3-klein.*"
+      - "tools/moss_image_manifest.json"
+      - "tools/requirements-moss-image.*"
+      - "aikimi-moss-image-setup.bat"
       - ".github/workflows/unit-tests.yml"
   push:
     branches: [neo]
@@ -25,6 +28,9 @@ on:
       - "tools/requirements*.txt"
       - "tools/flux3_klein_manifest.json"
       - "tools/requirements-flux3-klein.*"
+      - "tools/moss_image_manifest.json"
+      - "tools/requirements-moss-image.*"
+      - "aikimi-moss-image-setup.bat"
       - ".github/workflows/unit-tests.yml"
   workflow_dispatch:
 

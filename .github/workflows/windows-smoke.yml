@@ -30,6 +30,12 @@ on:
       - "tools/tests/test_flux3_klein*.py"
       - "tools/flux3_klein_manifest.json"
       - "tools/requirements-flux3-klein.*"
+      - "modules_forge/moss_image/**"
+      - "extensions-builtin/moss-image-studio/**"
+      - "tools/*moss_image*.py"
+      - "tools/tests/test_moss_image*.py"
+      - "tools/moss_image_manifest.json"
+      - "tools/requirements-moss-image.*"
       - "tools/*qwen_image21*.py"
       - "tools/tests/test_qwen_image21*.py"
       - "tools/tests/test_qwen21_style_lora.py"
@@ -170,6 +176,12 @@ on:
       - "tools/tests/test_flux3_klein*.py"
       - "tools/flux3_klein_manifest.json"
       - "tools/requirements-flux3-klein.*"
+      - "modules_forge/moss_image/**"
+      - "extensions-builtin/moss-image-studio/**"
+      - "tools/*moss_image*.py"
+      - "tools/tests/test_moss_image*.py"
+      - "tools/moss_image_manifest.json"
+      - "tools/requirements-moss-image.*"
       - "tools/*qwen_image21*.py"
       - "tools/tests/test_qwen_image21*.py"
       - "tools/tests/test_qwen21_style_lora.py"
@@ -430,6 +442,9 @@ jobs:
       - name: Run Irodori TTS CPU contracts without model downloads
         if: ${{ !cancelled() && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}
         run: python tools/run_ci_tests.py --pattern "test_irodori*.py" --verbosity 2
+      - name: Run MOSS Image CPU contracts without model downloads
+        if: ${{ !cancelled() && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}
+        run: python tools/run_ci_tests.py --pattern "test_moss_image*.py" --verbosity 2
       - name: Start the real UI and run the full Chromium smoke
         shell: pwsh
         run: |

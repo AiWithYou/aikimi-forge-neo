@@ -92,3 +92,49 @@ class ImageWorkspaceJavascriptTests(unittest.TestCase):
     def test_text_only_studio_does_not_erase_the_desired_edit_mode(self):
         self.assertEqual(self.result["textOnlyMode"], [True, False])
         self.assertEqual(self.result["qwenMode"], [False, True])
+
+    def test_model_help_waits_for_lazy_settings_and_survives_remount(self):
+        script = r"""
+const fs = require('fs'), vm = require('vm'), assert = require('assert');
+let loaded, updated, modules = null, token = false;
+const preset = {value: 'sd'};
+const titles = [];
+function mount() {
+    const title = {links: [], appendChild(link) { this.links.push(link); link.isConnected = true; }};
+    titles.push(title);
+    modules = {querySelector(selector) {
+        if (selector === 'span') return title;
+        if (selector === 'div.wrap-inner') return {querySelector: () => token};
+        return null;
+    }};
+    return title;
+}
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), {
+    onUiLoaded: fn => loaded = fn, onAfterUiUpdate: fn => updated = fn,
+    document: {
+        getElementById(id) {
+            return id === 'setting_sd_modules' ? modules : {querySelector: () => preset};
+        },
+        createElement: () => ({style: {}, isConnected: false})
+    }
+});
+loaded(); updated(); // lazy settings have not mounted yet
+const first = mount(); updated(); updated();
+assert.equal(first.links.length, 1);
+assert.equal(first.links[0].style.visibility, 'hidden');
+preset.value = 'krea'; updated();
+assert.equal(first.links[0].style.visibility, 'visible');
+token = true; updated();
+assert.equal(first.links[0].style.visibility, 'hidden');
+first.links[0].isConnected = false;
+const second = mount(); updated(); updated();
+assert.equal(second.links.length, 1);
+assert.ok(second.links[0].href.endsWith('/wiki/Download-Models'));
+"""
+        result = subprocess.run(  # noqa: S603 -- Fixed local lifecycle fixture and repository JavaScript.
+            [shutil.which("node"), "-e", script, str(ROOT / "javascript/modelHelp.js")],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)

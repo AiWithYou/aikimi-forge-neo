@@ -62,6 +62,7 @@ class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
             ("iris_studio", "Iris"),
             ("irodori_studio", "Irodori TTS"),
             ("flux3_klein_studio", "FLUX 3"),
+            ("moss_image_studio", "MOSS Image"),
             ("settings", "Settings"),
             ("extensions", "Extensions"),
         ]
@@ -456,7 +457,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 13
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 14
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -705,6 +706,14 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         nativeHidden: getComputedStyle(fixtureNativeButton("tab_flux3_klein_studio")).display === "none",
         forgeModesHidden: ["tab_txt2img", "tab_img2img"].every((id) => !fixtureNativeButton(id) || getComputedStyle(fixtureNativeButton(id)).display === "none")
     }};
+    document.querySelector("#aikimi-tab-moss-image").click();
+    await waitFor(() => window.AikimiTabs.getActiveFeature() === "moss_image");
+    const mossResult = {{
+        active: window.AikimiTabs.getActiveFeature(),
+        container: window.AikimiTabs.getActiveContainer()?.id || null,
+        nativeHidden: getComputedStyle(fixtureNativeButton("tab_moss_image_studio")).display === "none",
+        presetUnchanged: (presetInput?.value || null) === presetBeforeQwen,
+    }};
     document.querySelector("#aikimi-tab-irodori").click();
     await waitFor(() => window.AikimiTabs.getActiveFeature() === "irodori");
     const irodoriResult = {{
@@ -736,6 +745,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         aliasesReady: Boolean(aliasesReady),
         featureLabels: featureButtons.map((button) => button.textContent.trim()),
         irodoriResult,
+        mossResult,
         kreaCount: document.querySelectorAll("#aikimi-tab-krea2").length,
         animaCount: document.querySelectorAll("#aikimi-tab-anima38").length,
         kreaHidden: Boolean(document.querySelector("#aikimi-tab-krea2")?.hidden),
@@ -835,6 +845,15 @@ class AikimiTabsChromiumTests(unittest.TestCase):
             result["irodoriResult"], {"active": "irodori", "container": "tab_irodori_studio", "nativeHidden": True}
         )
         self.assertEqual(
+            result["mossResult"],
+            {
+                "active": "moss_image",
+                "container": "tab_moss_image_studio",
+                "nativeHidden": True,
+                "presetUnchanged": True,
+            },
+        )
+        self.assertEqual(
             result["featureLabels"],
             [
                 "Krea2",
@@ -850,6 +869,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "Clef",
                 "Iris",
                 "FLUX 3",
+                "MOSS Image",
             ],
         )
         self.assertTrue(result["externalRowBeforeTabs"])
@@ -1060,6 +1080,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "Clef",
                 "Iris",
                 "FLUX 3",
+                "MOSS Image",
             ],
         )
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])

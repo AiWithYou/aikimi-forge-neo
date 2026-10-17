@@ -1,12 +1,96 @@
 from __future__ import annotations
 
+import re
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class CiWorkflowBoundaryTests(unittest.TestCase):
+    def event_paths(self, workflow, event):
+        section = re.search(rf"^  {event}:\n(.*?)(?=^  \w+:|\Z)", workflow, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(section, f"Missing workflow event: {event}")
+        return re.findall(r'^      - "([^"]+)"$', section.group(1), re.MULTILINE)
+
+    def test_moss_changes_trigger_lint_cpu_and_windows_validation(self):
+        changes = (
+            "modules_forge/moss_image/core.py",
+            "modules_forge/moss_image/inference.py",
+            "modules_forge/moss_image/service.py",
+            "modules_forge/moss_image/api.py",
+            "extensions-builtin/moss-image-studio/scripts/moss_image_studio.py",
+            "tools/setup_moss_image.py",
+            "tools/moss_image_worker.py",
+            "tools/moss_image_manifest.json",
+            "tools/requirements-moss-image.in",
+            "tools/requirements-moss-image.lock",
+            "aikimi-moss-image-setup.bat",
+            "tools/tests/test_moss_image_core.py",
+            "tools/tests/test_moss_image_inference.py",
+            "tools/tests/test_moss_image_service.py",
+            "tools/tests/test_moss_image_api.py",
+            "tools/tests/test_moss_image_setup.py",
+            "tools/tests/test_moss_image_ui.py",
+            "tools/tests/test_moss_image_future_feature.py",
+        )
+        for name in ("lint.yml", "unit-tests.yml", "windows-smoke.yml"):
+            for event in ("pull_request", "push"):
+                patterns = self.event_paths(self.workflow(name), event)
+                for change in changes:
+                    with self.subTest(workflow=name, event=event, change=change):
+                        self.assertTrue(
+                            any(PurePosixPath(change).full_match(pattern) for pattern in patterns),
+                            f"{name} does not validate a change to {change}",
+                        )
+
+    def test_moss_python_surface_is_included_in_ruff_execution(self):
+        lint = self.workflow("lint.yml")
+        for path in (
+            "modules_forge/moss_image",
+            "extensions-builtin/moss-image-studio/scripts",
+            "tools/*moss_image*.py",
+            "tools/tests/test_moss_image*.py",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(f"            {path}\n" in lint, f"Missing MOSS Image lint target: {path}")
+
+    def test_moss_windows_cpu_contracts_run_after_main_smoke_success_or_failure(self):
+        windows = self.workflow("windows-smoke.yml")
+        marker = "      - name: Run MOSS Image CPU contracts without model downloads\n"
+        self.assertTrue(marker in windows, "Windows must run all MOSS Image CPU contracts")
+        step = windows.split(marker, 1)[1].split("\n      - name:", 1)[0]
+        self.assertIn('python tools/run_ci_tests.py --pattern "test_moss_image*.py" --verbosity 2', step)
+        self.assertIn(
+            "        if: ${{ !cancelled() && "
+            "(steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}\n",
+            step,
+        )
+
+    def test_moss_installer_tracks_its_inputs_and_runs_download_free_contracts(self):
+        installer = self.workflow("installer-tests.yml")
+        for event in ("pull_request", "push"):
+            patterns = self.event_paths(installer, event)
+            for change in (
+                "aikimi-moss-image-setup.bat",
+                "tools/setup_moss_image.py",
+                "tools/moss_image_manifest.json",
+                "tools/requirements-moss-image.in",
+                "tools/requirements-moss-image.lock",
+                "modules_forge/moss_image/core.py",
+                "modules/aikimi_security/redaction.py",
+                "modules_forge/yue2_studio/core.py",
+                "tools/tests/test_moss_image_setup.py",
+            ):
+                with self.subTest(event=event, change=change):
+                    self.assertTrue(any(PurePosixPath(change).full_match(pattern) for pattern in patterns))
+        self.assertTrue(
+            "          tools.tests.test_moss_image_setup\n" in installer, "MOSS installer contracts must run"
+        )
+        self.assertTrue(
+            "os: [ubuntu-latest, windows-latest]" in installer, "Installer contracts must cover both platforms"
+        )
+
     def test_irodori_contracts_are_linted_and_run_on_windows(self):
         lint, windows = self.workflow("lint.yml"), self.workflow("windows-smoke.yml")
         for path in (
@@ -230,6 +314,21 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
             "internal-be-careful-allow-failure:",
         ):
             self.assertNotIn(bypass, job)
+
+    def test_moss_dependency_audit_checks_every_pin_without_platform_resolution(self):
+        import yaml
+
+        security = yaml.safe_load(self.workflow("security.yml"))
+        job = security["jobs"].get("moss-image-pip-audit")
+        self.assertIsNotNone(job, "MOSS Image needs an independent complete-lock audit")
+        self.assertNotIn("needs", job)
+        audit = next(step for step in job["steps"] if "gh-action-pip-audit@" in step.get("uses", ""))
+        self.assertEqual(audit["with"]["inputs"], "tools/requirements-moss-image.lock")
+        self.assertEqual(audit["with"]["vulnerability-service"], "OSV")
+        self.assertEqual(audit["with"]["internal-be-careful-extra-flags"], "--strict --no-deps --disable-pip")
+        for bypass in ("ignore-vulns", "internal-be-careful-allow-failure"):
+            self.assertNotIn(bypass, audit["with"])
+        self.assertNotIn("continue-on-error", audit)
 
     def workflow(self, name: str) -> str:
         return (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")

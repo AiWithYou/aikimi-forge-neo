@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.8.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.8.0)** · [変更履歴](CHANGELOG.md)
+**[v4.9.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.9.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,11 +10,11 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v4.8.0の主な変更
+## v4.9.0の主な変更
 
-- **[Irodori TTS](docs/irodori-tts.md)**：Irodori-TTS-v4-Largeで日本語の音声を生成できます。文章だけの読み上げ、声の説明、同じ話者の複数参照音声に対応します。
-- **生成と保存**：BF16／FP32、長さ・CFG・seedを指定し、48kHz WAVと生成条件を保存できます。1回最大30秒で、生成音声の透かし適用状態を表示します。
-- **導入とモデル保持**：専用BATがPython 3.11の環境とモデルを準備します。Forge本体の依存関係を更新せず、モデル再利用・解放・中断をForgeのGPU管理と連携します。[全変更](CHANGELOG.md#v480--2026-10-16)
+- **[MOSS Image](docs/moss-image.md)**：MOSS-Image-SFTの画像生成に対応。自然文・タグ列・JSONレイアウトから、アニメや写真などの画像を生成できます。[RTX 3090での作例と設定](docs/moss-image.md#作例)
+- **INT8を標準に**：画像生成本体・テキストエンコーダーをINT8で導入します。テキストのW4A8とBF16も個別に選択でき、VAEはFP32を使用します。
+- **LoRAと保存**：互換の線形LoRAを複数選び、個別の強度を設定できます。生成条件・モデル・量子化元・LoRAの識別をPNGとJSONへ保存します。[全変更](CHANGELOG.md#v490--2026-10-17)
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 
@@ -45,7 +45,7 @@ cd aikimi-forge-neo
 
 ### モデルを選んで導入する
 
-Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニュー番号（1〜6）を選びます。Qwen・YuE2・Irodori TTS・Clef・Iris・FLUX 3は表にある専用BATを実行してください。
+Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニュー番号（1〜6）を選びます。Qwen・YuE2・Irodori TTS・Clef・Iris・FLUX 3・MOSS Imageは表にある専用BATを実行してください。
 
 ```powershell
 .\aikimi-setup.bat
@@ -65,6 +65,7 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
 | [Iris-3B](extensions-builtin/iris-studio/README.md) | 画像生成・img2img・相対深度推定・復元と4倍拡大。通常版／INT8／W4A8、互換Full FT・LoRAと4ステップTurbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
 | [FLUX 3 Image Klein](docs/flux3-klein.md) | 蒸留版／Baseの画像生成、最大10枚の参照編集、配置ボックス。PUPは任意の追加機能。**FLUX 3** タブを使用 | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
+| [MOSS-Image-SFT](docs/moss-image.md) | 自然文・タグ・JSONレイアウトから画像生成。**MOSS Image** タブを使用 | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
 
 初回はモデルと必要な実行環境のダウンロード・変換に時間がかかります。Qwenの既定モデルは通常版Q4_K_Mです。Irisは選択した用途の重みを取得し、INT8・W4A8はHugging Faceの変換済み配布を使います。W4A8は画像生成用のテキストエンコーダーも圧縮します。[Irisの導入・検証](docs/iris-studio.md)
 
