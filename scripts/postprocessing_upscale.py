@@ -138,7 +138,7 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
             image = upscaler.scaler.upscale(image, upscale_by, upscaler.data_path)
 
         upscale_cache[cache_key] = image
-        if len(upscale_cache) > shared.opts.upscaling_max_images_in_cache:
+        while len(upscale_cache) > max(0, shared.opts.upscaling_max_images_in_cache):
             upscale_cache.pop(next(iter(upscale_cache), None), None)
 
         if upscale_mode == 1 and upscale_crop:
@@ -173,8 +173,7 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
 
             pp.shared.target_width, pp.shared.target_height = limit_size_by_one_dimension(pp.shared.target_width, pp.shared.target_height, max_side_length)
 
-        if upscale_cc:
-            upscale_cache["cc"] = setup_color_correction(pp.image)
+        pp.shared.upscale_color_correction = setup_color_correction(pp.image) if upscale_enabled and upscale_cc else None
 
     def process(
         self,
@@ -218,8 +217,8 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
 
             pp.info["Postprocess upscaler 2"] = upscaler2.name
 
-        if upscale_cc and "cc" in upscale_cache:
-            pp.image = apply_color_correction(upscale_cache["cc"], upscaled_image)
+        if upscale_cc and pp.shared.upscale_color_correction is not None:
+            pp.image = apply_color_correction(pp.shared.upscale_color_correction, upscaled_image)
         else:
             pp.image = upscaled_image
 

@@ -6,6 +6,7 @@ import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import numpy as np
 from PIL import Image
@@ -20,17 +21,22 @@ class UpscaleCacheTests(unittest.TestCase):
         script = next(
             node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ScriptPostprocessingUpscale"
         )
-        method = next(node for node in script.body if isinstance(node, ast.FunctionDef) and node.name == "_upscale")
+        methods = [node for node in script.body if isinstance(node, ast.FunctionDef) and node.name in {"_upscale", "process", "process_firstpass"}]
+        helpers = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "limit_size_by_one_dimension"]
         namespace = {
             "Image": Image,
             "np": np,
             "shared": SimpleNamespace(opts=SimpleNamespace(upscaling_max_images_in_cache=4)),
             "upscale_cache": {},
+            "scripts_postprocessing": SimpleNamespace(PostprocessedImage=object),
+            "setup_color_correction": Mock(return_value="correction"),
+            "apply_color_correction": Mock(side_effect=lambda _correction, image: Image.new("RGB", image.size, "blue")),
         }
         exec(  # noqa: S102 - execute only the extracted repository method in isolation
-            compile(ast.Module(body=[method], type_ignores=[]), str(source), "exec"), namespace
+            compile(ast.Module(body=[*helpers, *methods], type_ignores=[]), str(source), "exec"), namespace
         )
         self.upscale = namespace["_upscale"]
+        self.namespace = namespace
         self.calls = 0
 
         def scale(image, factor, _path):
@@ -38,6 +44,7 @@ class UpscaleCacheTests(unittest.TestCase):
             return image.convert("RGBA").resize((int(image.width * factor), int(image.height * factor)))
 
         self.upscaler = SimpleNamespace(name="fixture", data_path=None, scaler=SimpleNamespace(upscale=scale))
+        namespace["shared"].sd_upscalers = [self.upscaler]
 
     def run_upscale(self, image):
         return self.upscale(None, image, {}, self.upscaler, 0, 2.0, 0, 1024, 1024, False)
@@ -62,6 +69,27 @@ class UpscaleCacheTests(unittest.TestCase):
         first, second = self.run_upscale(source), self.run_upscale(source.copy())
         self.assertEqual(second.tobytes(), first.tobytes())
         self.assertEqual(self.calls, 1)
+
+    def test_color_correction_survives_disabled_or_single_image_cache(self):
+        script = SimpleNamespace()
+        script._upscale = self.upscale.__get__(script)
+        for limit in (0, 1):
+            with self.subTest(limit=limit):
+                self.namespace["upscale_cache"].clear()
+                self.namespace["shared"].opts.upscaling_max_images_in_cache = limit
+                pp = SimpleNamespace(image=Image.new("RGB", (4, 4), "red"), info={}, shared=SimpleNamespace())
+                args = dict(upscale_mode=0, upscale_by=2.0, upscale_cc=True, upscaler_1_name="fixture")
+                self.namespace["process_firstpass"](script, pp, **args)
+                self.namespace["process"](script, pp, **args)
+                self.assertEqual(pp.image.getpixel((0, 0)), (0, 0, 255))
+                self.assertLessEqual(len(self.namespace["upscale_cache"]), limit)
+
+    def test_lowering_cache_limit_evicts_all_excess_images(self):
+        for color in ("red", "blue", "green", "yellow"):
+            self.run_upscale(Image.new("RGB", (4, 4), color))
+        self.namespace["shared"].opts.upscaling_max_images_in_cache = 1
+        self.run_upscale(Image.new("RGB", (4, 4), "white"))
+        self.assertEqual(len(self.namespace["upscale_cache"]), 1)
 
 
 if __name__ == "__main__":

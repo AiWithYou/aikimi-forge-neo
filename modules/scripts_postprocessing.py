@@ -9,6 +9,7 @@ from modules import errors, shared
 class PostprocessedImageSharedInfo:
     target_width: int = None
     target_height: int = None
+    upscale_color_correction: object = None
 
 
 class PostprocessedImage:
