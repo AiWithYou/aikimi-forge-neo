@@ -68,24 +68,20 @@ def pad_tensor_to_shape(tensor: torch.Tensor, new_shape: list[int]) -> torch.Ten
     Returns:
         torch.Tensor: A new tensor padded with zeros to the specified shape.
 
-    Note:
-        If the new shape is smaller than the original tensor in any dimension,
-        the original tensor will be truncated in that dimension.
+    Raises:
+        ValueError: If the rank differs or any dimension would shrink.
     """
-    if any([new_shape[i] < tensor.shape[i] for i in range(len(new_shape))]):
-        raise ValueError("The new shape must be larger than the original tensor in all dimensions")
-
     if len(new_shape) != len(tensor.shape):
         raise ValueError("The new shape must have the same number of dimensions as the original tensor")
+
+    if any(new < old for new, old in zip(new_shape, tensor.shape)):
+        raise ValueError("The new shape must be larger than the original tensor in all dimensions")
 
     # Create a new tensor filled with zeros
     padded_tensor = torch.zeros(new_shape, dtype=tensor.dtype, device=tensor.device)
 
-    # Create slicing tuples for both tensors
+    # Copy the original data into the matching region of the padded tensor.
     orig_slices = tuple(slice(0, dim) for dim in tensor.shape)
-    new_slices = tuple(slice(0, dim) for dim in tensor.shape)
-
-    # Copy the original tensor into the new tensor
-    padded_tensor[new_slices] = tensor[orig_slices]
+    padded_tensor[orig_slices] = tensor
 
     return padded_tensor
