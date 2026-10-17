@@ -5,8 +5,7 @@ from __future__ import annotations
 import importlib
 import io
 import socket
-import unittest
-from unittest import mock
+from unittest import TestCase, main, mock
 
 import gradio as gr
 from fastapi import FastAPI
@@ -17,7 +16,7 @@ from PIL import Image
 from modules.aikimi_security import url_fetch
 
 
-class RemoteImageRouteTests(unittest.TestCase):
+class RemoteImageRouteTests(TestCase):
     def setUp(self):
         self.route = importlib.import_module("modules.aikimi_security.remote_image")
         image = io.BytesIO()
@@ -111,4 +110,4 @@ class RemoteImageRouteTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

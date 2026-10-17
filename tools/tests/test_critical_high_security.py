@@ -9,9 +9,8 @@ import sys
 import tarfile
 import tempfile
 import types
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 from zipfile import ZipFile
 
 import httpx
@@ -22,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA_TOOL = ROOT / "extensions-builtin/forge_legacy_preprocessors/annotator/leres/pix2pix/util/get_data.py"
 
 
-class StartupTLSValidationTests(unittest.TestCase):
+class StartupTLSValidationTests(TestCase):
     def setUp(self):
         shared = types.ModuleType("modules.shared")
         shared.cmd_opts = types.SimpleNamespace(tls_certfile=None)
@@ -66,7 +65,7 @@ class StartupTLSValidationTests(unittest.TestCase):
                 self.assertTrue(self.probe("http://127.0.0.1:7861"))
 
 
-class LegacyArchiveBoundaryTests(unittest.TestCase):
+class LegacyArchiveBoundaryTests(TestCase):
     def setUp(self):
         spec = importlib.util.spec_from_file_location("_legacy_dataset_security", DATA_TOOL)
         self.tool = importlib.util.module_from_spec(spec)
@@ -122,7 +121,7 @@ class LegacyArchiveBoundaryTests(unittest.TestCase):
         self.assertEqual((self.destination / "normal/zip.txt").read_bytes(), b"zip dataset")
 
 
-class H3CommandBoundaryTests(unittest.TestCase):
+class H3CommandBoundaryTests(TestCase):
     def test_shared_model_path_is_a_literal_argument_and_never_a_shell_command(self):
         from modules_forge import minimax_h3_setup_ui
 
@@ -140,4 +139,4 @@ class H3CommandBoundaryTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()
