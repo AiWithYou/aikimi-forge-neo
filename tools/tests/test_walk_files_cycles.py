@@ -74,6 +74,15 @@ class WalkFilesCycleTests(unittest.TestCase):
             self.link(self.models / name, self.models)
         self.assertEqual(list(self.walk(str(self.models))), [str(self.models / "model.safetensors")])
 
+    def test_unicode_numeric_names_do_not_break_sorting(self):
+        names = ["model１０.safetensors", "model２.safetensors", "model①.safetensors", "².safetensors", "１２.safetensors", "12.safetensors", "model10.safetensors", "model2.safetensors"]
+        for name in names:
+            (self.models / name).touch()
+        result = [Path(path).name for path in self.walk(str(self.models))]
+        self.assertCountEqual(result, names)
+        self.assertLess(result.index("model２.safetensors"), result.index("model１０.safetensors"))
+        self.assertLess(result.index("model2.safetensors"), result.index("model10.safetensors"))
+
 
 if __name__ == "__main__":
     unittest.main()

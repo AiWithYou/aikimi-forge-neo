@@ -5,8 +5,8 @@ from modules import shared
 from modules.paths_internal import cwd, script_path
 
 
-def natural_sort_key(s: str, regex=re.compile(r"([0-9]+)")):
-    return [[int(text) if text.isdigit() else text.lower() for text in regex.split(part)] for part in os.path.splitext(s)]
+def natural_sort_key(s: str, regex=re.compile(r"(\d+)")):
+    return [[int(text) if text.isdecimal() else text.lower() for text in regex.split(part)] for part in os.path.splitext(s)]
 
 
 def listfiles(dirname):
