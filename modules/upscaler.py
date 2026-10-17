@@ -125,7 +125,7 @@ class UpscalerLanczos(Upscaler):
 
     def do_upscale(self, img: Image.Image, *args, **kwargs):
         return img.resize(
-            size=(max(1, int(img.width * self.scale)), max(1, int(img.height * self.scale))),
+            size=(max(8, round(img.width * self.scale / 8) * 8), max(8, round(img.height * self.scale / 8) * 8)),
             resample=LANCZOS,
         )
 
@@ -141,6 +141,6 @@ class UpscalerNearest(Upscaler):
 
     def do_upscale(self, img: Image.Image, *args, **kwargs):
         return img.resize(
-            size=(max(1, int(img.width * self.scale)), max(1, int(img.height * self.scale))),
+            size=(max(8, round(img.width * self.scale / 8) * 8), max(8, round(img.height * self.scale / 8) * 8)),
             resample=NEAREST,
         )
