@@ -21,6 +21,22 @@ def constrained_rotation(blocks, alpha, outputs):
 
 
 class OftStrengthBoundaryTests(unittest.TestCase):
+    def test_boft_low_precision_weights_match_float_intermediate_rotation(self):
+        blocks = torch.tensor([[[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]]])
+        adapter = BOFTAdapter.load("layer", self.saved_weights(blocks), 0.0, None)
+        rotation = torch.block_diag(*constrained_rotation(blocks, 0.0, 4)[0])
+        for dtype in (torch.float16, torch.bfloat16, torch.float32):
+            original = (torch.arange(1, 13, dtype=torch.float32).reshape(4, 3) / 10).to(dtype)
+            for computation_dtype in (torch.float32, torch.float64):
+                for strength in (0.0, 0.5, 1.0, -0.5):
+                    with self.subTest(dtype=dtype, computation_dtype=computation_dtype, strength=strength):
+                        delta = strength * ((rotation - torch.eye(4)) @ original.float())
+                        expected = original + delta.to(dtype)
+                        actual = merge_lora_to_weight(
+                            [(strength, adapter, 1.0, None, None)], original.clone(), "weight", computation_dtype
+                        )
+                        torch.testing.assert_close(actual, expected, atol=0.002 if dtype != torch.bfloat16 else 0.02, rtol=0.002)
+
     def test_boft_unit_rescale_is_equivalent_to_absent_rescale(self):
         blocks = torch.tensor([
             [[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]],

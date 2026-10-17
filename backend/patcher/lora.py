@@ -59,6 +59,10 @@ def merge_lora_to_weight(patches: list[tuple], weight: torch.Tensor, key: str, c
             output = v.calculate_weight(weight, key, strength, strength_model, offset, function, computation_dtype)
             if output is None:
                 logger.error("Calculate Weight Failed: {} {}".format(v.name, key))
+            elif old_weight is not None:
+                if output.shape != weight.shape:
+                    raise ValueError(f"LoRA offset shape mismatch for {key}: {tuple(output.shape)} != {tuple(weight.shape)}")
+                weight.copy_(output)
             else:
                 weight = output
             if old_weight is not None:
@@ -75,6 +79,8 @@ def merge_lora_to_weight(patches: list[tuple], weight: torch.Tensor, key: str, c
             diff: torch.Tensor = v[0]
             do_pad_weight = len(v) > 1 and v[1]["pad_weight"]
             if do_pad_weight and diff.shape != weight.shape:
+                if old_weight is not None:
+                    raise ValueError(f"LoRA offset shape mismatch for {key}: {tuple(diff.shape)} != {tuple(weight.shape)}")
                 logger.debug("Pad weight {} from {} to shape: {}".format(key, weight.shape, diff.shape))
                 weight = weight_adapter.base.pad_tensor_to_shape(weight, diff.shape)
 

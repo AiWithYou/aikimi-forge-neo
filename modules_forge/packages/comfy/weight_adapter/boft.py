@@ -84,10 +84,11 @@ class BOFTAdapter(WeightAdapterBase):
                 q_norm = torch.norm(q) + 1e-8
                 if q_norm > constraint:
                     normed_q = q * constraint / q_norm
-            # use float() to prevent unsupported type in .inverse()
-            r = (I + normed_q) @ (I - normed_q).float().inverse()
-            r = r.to(weight)
-            inp = org = weight
+            # Inversion needs float32 or float64; keep both operands in that dtype.
+            inverse_dtype = torch.float64 if intermediate_dtype == torch.float64 else torch.float32
+            q_inverse, identity_inverse = normed_q.to(inverse_dtype), I.to(inverse_dtype)
+            r = ((identity_inverse + q_inverse) @ (identity_inverse - q_inverse).inverse()).to(intermediate_dtype)
+            inp = org = memory_management.cast_to_device(weight, weight.device, intermediate_dtype)
 
             r_b = boft_b // 2
             rotation_strength = 1.0 if dora_scale is not None else strength
