@@ -66,11 +66,13 @@ class CoreTests(unittest.TestCase):
     def test_component_paths_follow_the_selected_precision(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            (root / "alias").mkdir()
             request = core.validate_request({"prompt": "cat", "precision": "bf16", "text_precision": "int8"})
+            root = root / "alias" / ".."
             paths = core.asset_paths(root, request)
-            self.assertEqual(paths["dit"], root / "checkpoints/MOSS-Image-SFT")
+            self.assertEqual(paths["dit"], root.resolve() / "checkpoints/MOSS-Image-SFT")
             self.assertTrue(paths["text_encoder"].name.endswith("int8-convrot.safetensors"))
-            self.assertTrue(paths["vae"].is_relative_to(root))
+            self.assertTrue(paths["vae"].is_relative_to(root.resolve()))
 
     def test_verified_model_receipt_requires_the_selected_components_and_content(self):
         with tempfile.TemporaryDirectory() as directory:
