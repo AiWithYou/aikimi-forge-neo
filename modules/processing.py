@@ -1170,8 +1170,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                 p.batch_index = i
                 x_sample = 255.0 * np.moveaxis(x_sample.cpu().numpy(), 0, 2)
                 x_sample = x_sample.astype(np.uint8)
-                if _is_video:
-                    frames.append(x_sample)
 
                 if p.restore_faces:
                     if save_samples and opts.save_images_before_face_restoration:
@@ -1230,6 +1228,8 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                 if opts.enable_pnginfo:
                     image.info["parameters"] = text
                 output_images.append(image)
+                if _is_video:
+                    frames.append(np.asarray(image.convert("RGB")))
 
                 if mask_for_overlay is not None:
                     if opts.return_mask or opts.save_mask:
