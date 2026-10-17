@@ -64,16 +64,15 @@ class GetData(object):
             r = requests.get(dataset_url)
             f.write(r.content)
 
+        self._print("Unpacking Data...")
         if base.endswith('.tar.gz'):
-            obj = tarfile.open(temp_save_path)
+            with tarfile.open(temp_save_path) as archive:
+                archive.extractall(save_path, filter='data')
         elif base.endswith('.zip'):
-            obj = ZipFile(temp_save_path, 'r')
+            with ZipFile(temp_save_path, 'r') as archive:
+                archive.extractall(save_path)
         else:
             raise ValueError("Unknown File Type: {0}.".format(base))
-
-        self._print("Unpacking Data...")
-        obj.extractall(save_path)
-        obj.close()
         os.remove(temp_save_path)
 
     def get(self, save_path, dataset=None):

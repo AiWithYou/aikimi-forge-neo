@@ -62,7 +62,7 @@ class CanvasSizeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             item = h3.HistoryItem(video.resolve(), video.stat().st_mtime, "Forge Neo")
-            restored = h3.load_history_request(str(video), [item], output)
+            restored = h3.load_history_request(item.public_id, [item], output)
             self.assertEqual(restored.dimensions, (736, 1120))
 
 

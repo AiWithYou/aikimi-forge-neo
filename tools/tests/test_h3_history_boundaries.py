@@ -2,13 +2,49 @@ from __future__ import annotations
 
 import os
 import tempfile
-import unittest
 from pathlib import Path
+from unittest import TestCase, main, mock
 
-from modules_forge.minimax_h3_bridge import HistoryItem, cache_history_video, list_history
+from modules_forge.minimax_h3_bridge import (
+    H3BridgeError,
+    HistoryItem,
+    _resolve_history_selection,
+    cache_history_video,
+    list_history,
+)
 
 
-class H3HistoryBoundaryTests(unittest.TestCase):
+class H3HistoryBoundaryTests(TestCase):
+    def test_unknown_selections_are_rejected_without_resolving_the_supplied_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            video = root / "MiniMax_H3_valid.mp4"
+            video.write_bytes(b"generated")
+            item = HistoryItem(video, 1.0, "Forge Neo")
+            for value in ("../../private.mp4", r"\\untrusted.invalid\share\private.mp4", "unknown-id"):
+                queried = []
+                supplied = Path(value)
+                original = Path.resolve
+
+                def resolve(path, *args, supplied=supplied, queried=queried, original=original, **kwargs):
+                    if path == supplied:
+                        queried.append(path)
+                        return root / "unlisted.mp4"
+                    return original(path, *args, **kwargs)
+
+                with self.subTest(value=value), mock.patch.object(Path, "resolve", resolve):
+                    with self.assertRaises(H3BridgeError):
+                        _resolve_history_selection(value, [item])
+                self.assertEqual(queried, [])
+
+    def test_registered_file_paths_are_not_accepted_as_browser_history_ids(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            video = Path(temporary) / "MiniMax_H3_valid.mp4"
+            video.write_bytes(b"generated")
+            item = HistoryItem(video, 1.0, "Forge Neo")
+            with self.assertRaises(H3BridgeError):
+                _resolve_history_selection(str(video), [item])
+
     def test_history_does_not_adopt_links_outside_each_output_root(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -60,4 +96,4 @@ class H3HistoryBoundaryTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

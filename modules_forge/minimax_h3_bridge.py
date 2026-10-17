@@ -875,6 +875,16 @@ def _same_local_path(left: Path, right: Path) -> bool:
     return os.path.normcase(os.fspath(left.resolve())) == os.path.normcase(os.fspath(right.resolve()))
 
 
+def _validated_prompt_id(value: str) -> str:
+    try:
+        normalized = str(uuid.UUID(value))
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise H3BridgeError("H3のジョブIDが正規形式のUUIDではありません。") from exc
+    if normalized != value:
+        raise H3BridgeError("H3のジョブIDが正規形式のUUIDではありません。")
+    return normalized
+
+
 class ComfyH3Client:
     def __init__(self, server_url: str = H3_SERVER_URL, timeout: float = 15.0):
         self.server_url = normalize_loopback_url(server_url)
@@ -972,8 +982,7 @@ class ComfyH3Client:
         return nodes
 
     def submit(self, workflow: dict[str, Any], prompt_id: str) -> str:
-        if str(uuid.UUID(prompt_id)) != prompt_id:
-            raise H3BridgeError("H3のジョブIDが正規形式のUUIDではありません。")
+        prompt_id = _validated_prompt_id(prompt_id)
         response = self._request_json(
             "/prompt",
             {
@@ -990,12 +999,14 @@ class ComfyH3Client:
         return str(result)
 
     def job(self, prompt_id: str) -> dict[str, Any]:
+        prompt_id = _validated_prompt_id(prompt_id)
         value = self._request_json(f"/api/jobs/{urllib.parse.quote(prompt_id)}")
         if not isinstance(value, dict):
             raise H3BridgeError("ComfyUI job status の形式が不正です。")
         return value
 
     def history(self, prompt_id: str) -> dict[str, Any]:
+        prompt_id = _validated_prompt_id(prompt_id)
         value = self._request_json(f"/history/{urllib.parse.quote(prompt_id)}")
         if not isinstance(value, dict):
             raise H3BridgeError("ComfyUI history の形式が不正です。")
@@ -1003,6 +1014,7 @@ class ComfyH3Client:
 
     def cancel(self, prompt_id: str) -> None:
         if prompt_id:
+            prompt_id = _validated_prompt_id(prompt_id)
             _mark_cancelled_job(prompt_id)
             pending_jobs.update(prompt_id, cancel_requested=True)
             response = self._request_json(f"/api/jobs/{urllib.parse.quote(prompt_id)}/cancel", {})
@@ -2920,20 +2932,16 @@ def history_choices(items: Sequence[HistoryItem]) -> list[tuple[str, str]]:
 
 
 def _resolve_history_selection(selected: str, items: Sequence[HistoryItem]) -> Path:
+    if not isinstance(selected, str) or not re.fullmatch(r"h3-[0-9a-f]{32}", selected):
+        raise H3BridgeError("選択された履歴ファイルは現在の一覧にありません。")
     try:
         public_matches = {
             item.public_id: item.path.resolve() for item in items
         }
-        if selected in public_matches:
-            selected_path = public_matches[selected]
-        else:
-            # Preserve the server-side Python API during the UI migration. The
-            # browser only receives opaque IDs from history_choices().
-            selected_path = Path(selected).resolve()
-        allowed = set(public_matches.values())
+        selected_path = public_matches.get(selected)
     except (OSError, RuntimeError) as exc:
         raise H3BridgeError(f"履歴ファイルを確認できません: {exc}") from exc
-    if selected_path not in allowed:
+    if selected_path is None:
         raise H3BridgeError("選択された履歴ファイルは現在の一覧にありません。")
     if not selected_path.is_file():
         raise H3BridgeError("選択された履歴ファイルは削除されたか、移動されています。")

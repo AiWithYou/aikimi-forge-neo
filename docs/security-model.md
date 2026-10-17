@@ -83,6 +83,18 @@ Browser
 
 管理されたoutput、temporary、Canvas assetがsymlinkやjunctionを経由して管理root外へ解決される場合は、起動を停止します。外部保存先を使う場合でも、WebUIの公開pathへ任意directoryを追加せず、生成後の別工程で移動してください。
 
+### 外部画像・接続確認・展開先
+
+URLから画像をドラッグ＆ドロップする場合も、APIと同じsafe fetch policyを使います。WebUIと同じ認証境界の画像取得用POST endpointを呼び、接続先のDNSとredirect、応答サイズ、画像形式をサーバーで確認します。日本語や空白を含む画像URLも取り込めます。ブラウザーのCookieや認証情報を画像の配布元へ転送しません。ファイルの直接ドロップと貼り付けは従来どおり利用できます。
+
+H3のジョブ確認・履歴取得・停止は、送信時と同じ正規形式のUUIDで指定します。ジョブIDからAPIのパスを変更する指定は受け付けません。生成履歴の選択は、現在の一覧にある公開IDだけを参照し、入力値をファイルパスとして解決しません。
+
+画像取得用endpointの入力検証エラーは、元のURLや認証情報を含まない要約で返します。不正なUnicodeを含む入力も、内部エラーにせず拒否します。
+
+HTTPSの起動確認では証明書と接続先名を検証します。ローカルTLSの`--tls-certfile`を指定した場合は、その証明書を信頼する設定で確認します。自己署名証明書にも、接続するホスト名またはIPアドレスに一致するSANが必要です。
+
+旧プリプロセッサーに同梱するデータセット取得ツールは、tarのdata filterを使い、展開先外へのパスやリンク、特殊ファイルを拒否します。通常のtar.gz・zipデータセットは引き続き展開できます。
+
 ### Gradio 6の静的asset
 
 Gradio 6へ埋め込むJavaScriptとCSSは、現在のmount pathを保持できる相対URL `gradio_api/file=`から取得します。静的UI資産についてはparent directoryを`allowed_paths`へ加えず、起動時に使う個別fileだけを列挙します。対象はrootの`script.js`と`style.css`、activeなroot／extensionの`.js`と`.mjs`、active extensionの`style.css`、Forge Canvasの`canvas.js`と`canvas.css`、有効時の`notification.mp3`、card placeholderです。outputとtemporaryは、従来どおり管理directory単位で許可します。

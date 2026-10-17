@@ -441,6 +441,28 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn(f"inputs: {manifest}", security)
         self.assertIn('directory: "/extensions-builtin/forge_legacy_preprocessors"', dependabot)
 
+    def test_security_regressions_run_without_weakening_codeql(self):
+        paths = (
+            "tools/tests/test_critical_high_security.py",
+            "tools/tests/test_remote_image_route.py",
+            "tools/tests/dragdrop_security.test.mjs",
+        )
+        for name in ("lint.yml", "windows-smoke.yml", "unit-tests.yml"):
+            workflow = self.workflow(name)
+            for event in ("pull_request", "push"):
+                patterns = self.event_paths(workflow, event)
+                for path in paths:
+                    with self.subTest(workflow=name, event=event, path=path):
+                        self.assertTrue(any(PurePosixPath(path).match(pattern) for pattern in patterns))
+        for path in paths[:2]:
+            self.assertGreaterEqual(self.workflow("lint.yml").count(path), 3)
+        self.assertIn("node --test tools/tests/dragdrop_security.test.mjs", self.workflow("unit-tests.yml"))
+        codeql = self.workflow("codeql.yml")
+        self.assertIn("queries: security-extended,security-and-quality", codeql)
+        self.assertIn("github/codeql-action/analyze@", codeql)
+        for bypass in ("paths-ignore:", "query-filters:", "continue-on-error:"):
+            self.assertNotIn(bypass, codeql)
+
     def test_runtime_and_asset_toolchain_share_the_pinned_scipy_boundary(self):
         runtime = (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
         assets = (ROOT / "tools" / "requirements-aikimi-assets.txt").read_text(encoding="utf-8").splitlines()
