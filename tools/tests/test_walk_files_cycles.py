@@ -83,6 +83,35 @@ class WalkFilesCycleTests(unittest.TestCase):
         self.assertLess(result.index("model２.safetensors"), result.index("model１０.safetensors"))
         self.assertLess(result.index("model2.safetensors"), result.index("model10.safetensors"))
 
+    def test_filesystem_without_inode_still_prunes_cycles(self):
+        (self.models / "model.safetensors").touch()
+        self.link(self.models / "cycle", self.models)
+        real_stat = os.stat
+
+        def no_inode(*args, **kwargs):
+            result = real_stat(*args, **kwargs)
+            return SimpleNamespace(st_dev=result.st_dev, st_ino=0)
+
+        with patch("os.stat", side_effect=no_inode):
+            found = list(self.walk(str(self.models)))
+        self.assertEqual(found, [str(self.models / "model.safetensors")])
+
+    def test_directory_removed_after_enumeration_does_not_abort_other_files(self):
+        (self.models / "model.safetensors").touch()
+        missing = self.models / "vanished"
+        missing.mkdir()
+        (missing / "stale.safetensors").touch()
+        real_stat = os.stat
+
+        def disappeared(path, *args, **kwargs):
+            if os.fspath(path) == str(missing):
+                raise FileNotFoundError(path)
+            return real_stat(path, *args, **kwargs)
+
+        with patch("os.stat", side_effect=disappeared):
+            found = list(self.walk(str(self.models)))
+        self.assertEqual(found, [str(self.models / "model.safetensors")])
+
 
 if __name__ == "__main__":
     unittest.main()

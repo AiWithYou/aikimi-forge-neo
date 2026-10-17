@@ -38,8 +38,17 @@ def walk_files(path, allowed_extensions=None):
     items = []
     ancestors_by_path = {}
     for root, directories, files in os.walk(path, followlinks=True):
-        ancestors = ancestors_by_path.pop(root, frozenset()) | {os.path.normcase(os.path.realpath(root))}
-        directories[:] = [name for name in directories if os.path.normcase(os.path.realpath(os.path.join(root, name))) not in ancestors]
+        ancestors = ancestors_by_path.pop(root, frozenset())
+        try:
+            stat = os.stat(root)
+        except FileNotFoundError:
+            directories.clear()
+            continue
+        identity = (stat.st_dev, stat.st_ino) if stat.st_ino else os.path.normcase(os.path.realpath(root))
+        if identity in ancestors:
+            directories.clear()
+            continue
+        ancestors = ancestors | {identity}
         for name in directories:
             ancestors_by_path[os.path.join(root, name)] = ancestors
         items.append((root, directories, files))
