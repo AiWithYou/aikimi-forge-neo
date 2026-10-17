@@ -97,9 +97,6 @@ class TorchCompileForForge(scripts.Script):
         if prev_config == preset and getattr(kmodel, _ORIG_APPLY_KEY, None) is not None:
             return
 
-        if prev_config is not None:
-            self._remove_compile_wrapper(kmodel)
-
         match preset:
             case "guard_filter_fn":
                 config = dict(backend="inductor", dynamic=False, fullgraph=False, options={"guard_filter_fn": skip_torch_compile_dict})
@@ -110,7 +107,12 @@ class TorchCompileForForge(scripts.Script):
             case "max-autotune-no-cudagraphs":
                 config = dict(backend="inductor", dynamic=True, fullgraph=False, options={"guard_filter_fn": skip_torch_compile_dict, "coordinate_descent_tuning": True, "max_autotune": True})
             case "reduce-overhead":
-                config = dict(backend="inductor", mode="reduce-overhead", dynamic=False, fullgraph=False, options={"guard_filter_fn": skip_torch_compile_dict})
+                config = dict(backend="inductor", mode="reduce-overhead", dynamic=False, fullgraph=False)
+            case _:
+                raise ValueError(f"Unknown Torch Compile preset: {preset}")
+
+        if prev_config is not None:
+            self._remove_compile_wrapper(kmodel)
 
         self._wrap_apply_model(kmodel, config)
         setattr(kmodel, _COMPILE_CONFIG_KEY, preset)
