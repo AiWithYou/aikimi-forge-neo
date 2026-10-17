@@ -92,13 +92,15 @@ class OFTAdapter(WeightAdapterBase):
             _, *shape = weight.shape
             lora_diff = torch.einsum(
                 "k n m, k n ... -> k m ...",
-                (r * strength) - strength * I_w,
+                r - I_w,
                 weight.view(block_num, block_size, *shape),
             ).view(-1, *shape)
+            if rescale is not None:
+                lora_diff = lora_diff * rescale + (rescale - 1) * weight
             if dora_scale is not None:
-                weight = weight_decompose(dora_scale, weight, lora_diff, alpha, strength, intermediate_dtype, function)
+                weight = weight_decompose(dora_scale, weight, lora_diff, 1.0, strength, intermediate_dtype, function)
             else:
-                weight += function(lora_diff.type(weight.dtype))
+                weight += function((strength * lora_diff).type(weight.dtype))
         except Exception as e:
             from backend.memory_management import is_oom
 

@@ -21,6 +21,42 @@ def constrained_rotation(blocks, alpha, outputs):
 
 
 class OftStrengthBoundaryTests(unittest.TestCase):
+    def test_oft_dora_normalizes_full_rotation_then_interpolates_strength(self):
+        blocks = torch.tensor([[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]])
+        original = torch.arange(1, 13, dtype=torch.float32).reshape(4, 3) / 10
+        magnitude = torch.tensor([[2.0], [3.0], [4.0], [5.0]])
+        for alpha in (0.0, 0.03):
+            rotation = torch.block_diag(*constrained_rotation(blocks, alpha, 4).transpose(-1, -2))
+            for rescale in (None, torch.tensor([[0.7], [1.2], [1.4], [0.8]])):
+                adapter = OFTAdapter.load("layer", self.saved_weights(blocks, rescale), alpha, magnitude)
+                rotated = rotation @ original
+                if rescale is not None:
+                    rotated = rotated * rescale
+                normalized = rotated * magnitude / (rotated.norm(dim=1, keepdim=True) + torch.finfo(original.dtype).eps)
+                for strength in (0.0, 0.5, 1.0, -0.5):
+                    with self.subTest(alpha=alpha, rescaled=rescale is not None, strength=strength):
+                        actual = merge_lora_to_weight([(strength, adapter, 1.0, None, None)], original.clone(), "weight")
+                        torch.testing.assert_close(actual, original + strength * (normalized - original))
+
+    def test_oft_saved_rescale_contributes_to_the_scaled_rotation_delta(self):
+        blocks = torch.tensor([[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]])
+        for alpha in (0.0, 0.03):
+            rotation = torch.block_diag(*constrained_rotation(blocks, alpha, 4).transpose(-1, -2))
+            for dimensions in ((6, 3), (6, 3, 1, 1)):
+                original = torch.arange(1, 19, dtype=torch.float32).reshape(dimensions) / 10
+                rescale = torch.tensor([0.7, 1.2, 1.4, 0.8]).reshape(4, *([1] * (len(dimensions) - 1)))
+                adapter = OFTAdapter.load("layer", self.saved_weights(blocks, rescale), alpha, None)
+                base = original[1:5] * 0.8
+                rotated = (rotation @ base.flatten(1)).reshape(base.shape) * rescale
+                for strength in (0.0, 0.5, 1.0, -0.5):
+                    with self.subTest(alpha=alpha, dimensions=dimensions, strength=strength):
+                        expected = original.clone()
+                        expected[1:5] = base + 1.5 * strength * (rotated - base)
+                        actual = merge_lora_to_weight(
+                            [(strength, adapter, 0.8, (0, 1, 4), lambda delta: delta * 1.5)], original.clone(), "weight"
+                        )
+                        torch.testing.assert_close(actual, expected)
+
     def saved_weights(self, blocks, rescale=None):
         with tempfile.TemporaryDirectory() as temporary:
             filename = Path(temporary) / "回転 重み.pt"
