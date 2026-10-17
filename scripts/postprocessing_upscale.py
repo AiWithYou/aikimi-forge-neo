@@ -109,7 +109,12 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
         upscale_crop: bool,
     ):
         if upscale_mode == 1:
-            upscale_by = max(upscale_to_width / image.width, upscale_to_height / image.height)
+            if upscale_crop:
+                covered_width = (upscale_to_width + 7) // 8 * 8
+                covered_height = (upscale_to_height + 7) // 8 * 8
+                upscale_by = max(covered_width / image.width, covered_height / image.height)
+            else:
+                upscale_by = max(upscale_to_width / image.width, upscale_to_height / image.height)
             info["Postprocess upscale to"] = f"{upscale_to_width}x{upscale_to_height}"
         else:
             info["Postprocess upscale by"] = upscale_by

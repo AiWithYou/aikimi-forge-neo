@@ -156,6 +156,24 @@ class UpscaleCacheTests(unittest.TestCase):
                 self.assertEqual(result.tobytes(), image.crop((2, 2, 8, 6)).tobytes())
                 self.assertEqual(result.convert("RGBA").tobytes(), image.crop((2, 2, 8, 6)).convert("RGBA").tobytes())
 
+    def test_non_multiple_of_eight_crop_has_no_padding_after_real_size_rounding(self):
+        path = ROOT / "modules/upscaler.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        base = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Upscaler")
+        method = next(n for n in base.body if isinstance(n, ast.FunctionDef) and n.name == "upscale")
+        scope = {"Image": Image, "LANCZOS": Image.Resampling.LANCZOS, "UPSCALE_ITERATIONS": 4,
+                 "shared": SimpleNamespace(state=SimpleNamespace(interrupted=False))}
+        exec(compile(ast.Module(body=[method], type_ignores=[]), str(path), "exec"), scope)  # noqa: S102
+        scaler = SimpleNamespace(do_upscale=lambda image, model: image)
+        scaler.upscale = scope["upscale"].__get__(scaler)
+        self.upscaler.scaler = scaler
+        for source, target in (((100, 100), (100, 100)), ((141, 97), (97, 99))):
+            with self.subTest(source=source, target=target):
+                image = Image.new("RGBA", source, "white")
+                actual = self.upscale(None, image, {}, self.upscaler, 1, 1, 0, *target, True)
+                self.assertEqual(actual.size, target)
+                self.assertEqual(actual.getextrema(), ((255, 255),) * 4)
+
     def test_blend_expands_palette_and_retains_alpha_from_either_upscaler(self):
         palette = Image.new("P", (8, 8), 0)
         palette.putpalette([255, 0, 0] + [0] * 765)

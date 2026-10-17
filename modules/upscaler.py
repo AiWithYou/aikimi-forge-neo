@@ -124,6 +124,11 @@ class UpscalerLanczos(Upscaler):
         return
 
     def do_upscale(self, img: Image.Image, *args, **kwargs):
+        if img.mode == "P":
+            has_alpha = "transparency" in img.info or (img.palette is not None and img.palette.mode == "RGBA")
+            img = img.convert("RGBA" if has_alpha else "RGB")
+        elif img.mode == "1":
+            img = img.convert("L")
         return img.resize(
             size=(max(8, round(img.width * self.scale / 8) * 8), max(8, round(img.height * self.scale / 8) * 8)),
             resample=LANCZOS,

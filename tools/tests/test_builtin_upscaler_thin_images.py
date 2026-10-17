@@ -10,6 +10,27 @@ from PIL import Image
 
 
 class BuiltinUpscalerThinImageTests(unittest.TestCase):
+    def test_lanczos_expands_indexed_and_binary_images_before_resampling(self):
+        path = Path(__file__).resolve().parents[2] / "modules/upscaler.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "UpscalerLanczos")
+        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "do_upscale")
+        scope = {"Image": Image, "LANCZOS": Image.Resampling.LANCZOS}
+        exec(compile(ast.Module(body=[method], type_ignores=[]), str(path), "exec"), scope)  # noqa: S102
+        for transparent, mode, expected_mode in ((False, "P", "RGB"), (True, "P", "RGBA"), (False, "1", "L")):
+            with self.subTest(mode=mode, transparent=transparent):
+                image = Image.new(mode, (8, 8))
+                if mode == "P":
+                    image.putpalette([0, 0, 0, 255, 255, 255] + [0] * 762)
+                image.putdata([i % 2 for i in range(64)])
+                if transparent:
+                    image.info["transparency"] = 0
+                expected = image.convert(expected_mode).resize((16, 16), Image.Resampling.LANCZOS)
+                actual = scope["do_upscale"](SimpleNamespace(scale=2), image)
+                self.assertEqual(actual.mode, expected_mode)
+                self.assertEqual(actual.tobytes(), expected.tobytes())
+                self.assertEqual(image.mode, mode)
+
     def test_nearest_final_rounding_does_not_introduce_colors(self):
         path = Path(__file__).resolve().parents[2] / "modules/upscaler.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
