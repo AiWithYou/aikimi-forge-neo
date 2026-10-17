@@ -141,6 +141,21 @@ class UpscaleCacheTests(unittest.TestCase):
         self.upscale(None, image, {}, self.upscaler, 0, 2.0, 64, 1024, 1024, False)
         self.assertEqual(upscale.call_args.args[1], 64 / 1000)
 
+    def test_crop_preserves_mode_alpha_and_center_alignment(self):
+        for mode, color in (("RGBA", (10, 20, 30, 85)), ("RGB", (10, 20, 30)), ("L", 80), ("P", 1)):
+            with self.subTest(mode=mode):
+                self.namespace["upscale_cache"].clear()
+                image = Image.new(mode, (11, 9), color)
+                if mode == "P":
+                    image.putpalette([0, 0, 0, 10, 20, 30] + [0] * 762)
+                    image.info["transparency"] = 1
+                image.putpixel((2, 2), 0)
+                self.upscaler.scaler.upscale = Mock(return_value=image)
+                result = self.upscale(None, image, {}, self.upscaler, 1, 1, 0, 6, 4, True)
+                self.assertEqual(result.mode, mode)
+                self.assertEqual(result.tobytes(), image.crop((2, 2, 8, 6)).tobytes())
+                self.assertEqual(result.convert("RGBA").tobytes(), image.crop((2, 2, 8, 6)).convert("RGBA").tobytes())
+
     def test_planned_size_matches_minimum_output_dimensions(self):
         path = ROOT / "modules/extras_workflow.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))

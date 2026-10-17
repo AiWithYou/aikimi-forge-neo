@@ -147,9 +147,9 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
             upscale_cache.pop(next(iter(upscale_cache), None), None)
 
         if upscale_mode == 1 and upscale_crop:
-            cropped = Image.new("RGB", (upscale_to_width, upscale_to_height))
-            cropped.paste(image, box=(upscale_to_width // 2 - image.width // 2, upscale_to_height // 2 - image.height // 2))
-            image = cropped
+            left = image.width // 2 - upscale_to_width // 2
+            top = image.height // 2 - upscale_to_height // 2
+            image = image.crop((left, top, left + upscale_to_width, top + upscale_to_height))
             info["Postprocess crop to"] = f"{image.width}x{image.height}"
 
         return image
