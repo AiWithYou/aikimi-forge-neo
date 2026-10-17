@@ -58,9 +58,38 @@ class ImageSaveFilenameTests(unittest.TestCase):
         for size, expected in (((1, 4096), (1, 1024)), ((4096, 1), (1024, 1))):
             with self.subTest(size=size), tempfile.TemporaryDirectory() as temporary:
                 filename, _ = self.save(Image.new("RGB", size), temporary, "", forced_filename="thin", save_to_dirs=False)
-                with Image.open(Path(filename).with_suffix(".jpg")) as exported:
+                with Image.open(Path(filename).with_name("thin-downscaled.jpg")) as exported:
                     self.assertEqual(exported.format, "JPEG")
                     self.assertEqual(exported.size, expected)
+
+    def test_jpeg_export_preserves_full_size_original_even_with_long_name(self):
+        self.options.export_for_4chan = True
+        self.scope["LANCZOS"] = Image.Resampling.LANCZOS
+        with tempfile.TemporaryDirectory() as temporary:
+            filename, _ = self.save(Image.new("RGB", (2048, 16)), temporary, "", extension="jpg",
+                                    forced_filename="original" * 20, save_to_dirs=False)
+            with Image.open(filename) as original:
+                self.assertEqual(original.size, (2048, 16))
+            copies = list(Path(temporary).glob("*-downscaled.jpg"))
+            self.assertEqual(len(copies), 1)
+            self.assertLessEqual(len(os.fsencode(copies[0].name)), 48)
+            with Image.open(copies[0]) as copy:
+                self.assertEqual(copy.size, (1024, 8))
+            self.assertEqual(self.saved, [filename])
+
+    def test_export_suffix_cannot_collapse_to_the_original_filename(self):
+        self.options.export_for_4chan = True
+        self.scope["LANCZOS"] = Image.Resampling.LANCZOS
+        with tempfile.TemporaryDirectory() as temporary:
+            name = "x" * 33 + "-downscaled"
+            filename, _ = self.save(Image.new("RGB", (2048, 16)), temporary, "", extension="jpg",
+                                    forced_filename=name, save_to_dirs=False)
+            with Image.open(filename) as original:
+                self.assertEqual(original.size, (2048, 16))
+            copies = list(Path(temporary).glob("*-downscaled-1.jpg"))
+            self.assertEqual(len(copies), 1)
+            with Image.open(copies[0]) as copy:
+                self.assertEqual(copy.size, (1024, 8))
 
     def test_collision_numbers_fit_byte_limit_and_callbacks_report_saved_path(self):
         self.options.save_images_replace_action = "Add number"

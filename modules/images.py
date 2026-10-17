@@ -781,7 +781,10 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
             except Exception:
                 image = image.resize(resize_to)
         try:
-            _ = _atomically_save_image(image, fullfn_without_extension, ".jpg")
+            copy_stem = _fit_filename_stem(fullfn_without_extension, ".jpg", "-downscaled")
+            if os.path.normcase(copy_stem + ".jpg") == os.path.normcase(fullfn):
+                copy_stem = _fit_filename_stem(fullfn_without_extension, ".jpg", "-downscaled-1")
+            _atomically_save_image(image, copy_stem, ".jpg")
         except Exception as e:
             errors.display(e, "saving image as downscaled JPG")
 
