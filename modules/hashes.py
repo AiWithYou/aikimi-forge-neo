@@ -115,9 +115,14 @@ def addnet_hash_safetensors(b):
 
     b.seek(0)
     header = b.read(8)
+    if len(header) != 8:
+        raise ValueError("Truncated safetensors header length")
     n = int.from_bytes(header, "little")
 
     offset = n + 8
+    b.seek(0, os.SEEK_END)
+    if offset > b.tell():
+        raise ValueError("Safetensors header extends beyond the file")
     b.seek(offset)
     for chunk in iter(lambda: b.read(blksize), b""):
         hash_sha256.update(chunk)

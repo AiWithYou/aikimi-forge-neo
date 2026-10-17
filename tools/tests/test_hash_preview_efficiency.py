@@ -61,6 +61,12 @@ class HashCacheTests(unittest.TestCase):
         self.output.__enter__()
         self.addCleanup(self.output.__exit__, None, None, None)
 
+    def test_truncated_addnet_header_is_not_cached(self):
+        self.path.write_bytes((100).to_bytes(8, "little") + b"{}")
+        with self.assertRaises(ValueError):
+            self.module.sha256(self.path, "model", use_addnet_hash=True)
+        self.assertNotIn("model", self.caches["hashes-addnet"])
+
     def test_addnet_and_full_file_hashes_are_distinct_and_cached(self):
         full = self.module.sha256(self.path, "model")
         addnet = self.module.sha256(self.path, "model", use_addnet_hash=True)
