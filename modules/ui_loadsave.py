@@ -161,7 +161,10 @@ class UiLoadsave:
 
     def read_from_file(self):
         with open(self.filename, "r", encoding="utf8") as file:
-            return json.load(file)
+            settings = json.load(file)
+        if not isinstance(settings, dict):
+            raise ValueError("UI defaults must contain a JSON object")
+        return settings
 
     def write_to_file(self, current_ui_settings):
         from modules.atomic_file import atomic_write_json
