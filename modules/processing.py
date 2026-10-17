@@ -59,21 +59,24 @@ def _change_hires_modules_if_needed(hr_additional_modules: list | None) -> bool:
 
 
 def setup_color_correction(image: Image.Image) -> np.ndarray:
-    correction_target = cv2.cvtColor(np.asarray(image.copy(), dtype=np.uint8), cv2.COLOR_RGB2LAB)
+    correction_target = cv2.cvtColor(np.asarray(image.convert("RGB"), dtype=np.uint8), cv2.COLOR_RGB2LAB)
     return correction_target
 
 
 def apply_color_correction(correction_target: np.ndarray, original_image: Image.Image):
     image = cv2.cvtColor(
         match_histograms(
-            cv2.cvtColor(np.asarray(original_image, dtype=np.uint8), cv2.COLOR_RGB2LAB),
+            cv2.cvtColor(np.asarray(original_image.convert("RGB"), dtype=np.uint8), cv2.COLOR_RGB2LAB),
             correction_target,
             channel_axis=2,
         ),
         cv2.COLOR_Lab2RGB,
     )
 
-    return Image.fromarray(image.astype("uint8")).convert("RGB")
+    corrected_image = Image.fromarray(image.astype("uint8")).convert("RGB")
+    if "A" in original_image.getbands() or "transparency" in original_image.info:
+        corrected_image.putalpha(original_image.convert("RGBA").getchannel("A"))
+    return corrected_image
 
 
 def uncrop(image, dest_size, paste_loc):
