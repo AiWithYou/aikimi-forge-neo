@@ -35,7 +35,14 @@ def walk_files(path, allowed_extensions=None):
     if allowed_extensions is not None:
         allowed_extensions = set(allowed_extensions)
 
-    items = list(os.walk(path, followlinks=True))
+    items = []
+    ancestors_by_path = {}
+    for root, directories, files in os.walk(path, followlinks=True):
+        ancestors = ancestors_by_path.pop(root, frozenset()) | {os.path.normcase(os.path.realpath(root))}
+        directories[:] = [name for name in directories if os.path.normcase(os.path.realpath(os.path.join(root, name))) not in ancestors]
+        for name in directories:
+            ancestors_by_path[os.path.join(root, name)] = ancestors
+        items.append((root, directories, files))
     items = sorted(items, key=lambda x: natural_sort_key(x[0]))
 
     for root, _, files in items:
