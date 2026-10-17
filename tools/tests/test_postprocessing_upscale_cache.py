@@ -91,6 +91,17 @@ class UpscaleCacheTests(unittest.TestCase):
         self.run_upscale(Image.new("RGB", (4, 4), "white"))
         self.assertEqual(len(self.namespace["upscale_cache"]), 1)
 
+    def test_unlimited_firstpass_preserves_requested_dimensions(self):
+        pp = SimpleNamespace(image=Image.new("RGB", (30, 20)), shared=SimpleNamespace())
+        self.namespace["process_firstpass"](None, pp, upscale_mode=0, upscale_by=2.0, max_side_length=0)
+        self.assertEqual((pp.shared.target_width, pp.shared.target_height), (60, 40))
+
+    def test_limit_never_produces_zero_for_thin_images(self):
+        limit = self.namespace["limit_size_by_one_dimension"]
+        self.assertEqual(limit(1000, 1, 64), (64, 1))
+        self.assertEqual(limit(1, 1000, 64), (1, 64))
+        self.assertEqual(limit(100, 50, 64), (64, 32))
+
 
 if __name__ == "__main__":
     unittest.main()

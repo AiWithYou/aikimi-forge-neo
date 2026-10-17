@@ -14,6 +14,8 @@ upscale_cache = {}
 
 
 def limit_size_by_one_dimension(w: int, h: int, limit: int) -> tuple[int, int]:
+    if limit <= 0:
+        return max(1, int(w)), max(1, int(h))
     if h > w and h > limit:
         w = limit * w // h
         h = limit
@@ -21,7 +23,7 @@ def limit_size_by_one_dimension(w: int, h: int, limit: int) -> tuple[int, int]:
         h = limit * h // w
         w = limit
 
-    return (int(w), int(h))
+    return max(1, int(w)), max(1, int(h))
 
 
 class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
