@@ -33,15 +33,10 @@ def planned_size(size, values):
         scale = values["upscale_by"]
         limit = values["max_side_length"]
         if limit and max(size) * scale > limit:
-            target = (
-                (int(limit * width / height), int(limit))
-                if height > width
-                else (int(limit), int(limit * height / width))
-            )
-            scale = max(target[0] / width, target[1] / height)
+            scale = limit / max(size)
     if crop:
         return int(values["upscale_to_width"]), int(values["upscale_to_height"])
-    return round(width * scale / 8) * 8, round(height * scale / 8) * 8
+    return max(8, round(width * scale / 8) * 8), max(8, round(height * scale / 8) * 8)
 
 
 def plan_html(size, tab, operations):

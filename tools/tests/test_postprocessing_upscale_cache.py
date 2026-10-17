@@ -120,6 +120,23 @@ class UpscaleCacheTests(unittest.TestCase):
         self.upscaler.data_path = "blue"
         self.assertEqual(self.run_upscale(image).getpixel((0, 0)), (0, 0, 255))
 
+    def test_thin_image_limit_uses_long_edge_for_the_scale(self):
+        image = Image.new("RGB", (1000, 1))
+        upscale = Mock(return_value=image)
+        self.upscaler.scaler.upscale = upscale
+        self.upscale(None, image, {}, self.upscaler, 0, 2.0, 64, 1024, 1024, False)
+        self.assertEqual(upscale.call_args.args[1], 64 / 1000)
+
+    def test_planned_size_matches_minimum_output_dimensions(self):
+        path = ROOT / "modules/extras_workflow.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "planned_size")
+        scope = {}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), scope)  # noqa: S102
+        values = dict(upscale_enabled=True, upscaler_1_name="fixture", upscale_mode=0, upscale_crop=False, upscale_by=2, max_side_length=64)
+        self.assertEqual(scope["planned_size"]((1000, 1), values), (64, 8))
+        self.assertEqual(scope["planned_size"]((1, 1000), values), (8, 64))
+
 
 if __name__ == "__main__":
     unittest.main()

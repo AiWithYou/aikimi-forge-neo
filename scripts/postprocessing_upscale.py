@@ -117,7 +117,7 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
                 upscale_mode = 1
                 upscale_crop = False
                 upscale_to_width, upscale_to_height = limit_size_by_one_dimension(image.width * upscale_by, image.height * upscale_by, max_side_length)
-                upscale_by = max(upscale_to_width / image.width, upscale_to_height / image.height)
+                upscale_by = max_side_length / max(image.size)
                 info["Max side length"] = max_side_length
 
         pixels = image.convert("RGBA").tobytes() if image.mode == "P" else image.tobytes()
