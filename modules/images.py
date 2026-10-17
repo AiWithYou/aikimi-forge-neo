@@ -774,6 +774,7 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
             resize_to = round(image.width * opts.target_side_length / image.height), round(opts.target_side_length)
 
         if resize_to is not None:
+            resize_to = tuple(max(1, dimension) for dimension in resize_to)
             try:
                 # Resizing image with LANCZOS could throw an exception if e.g. image mode is I;16
                 image = image.resize(resize_to, LANCZOS)

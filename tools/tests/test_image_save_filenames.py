@@ -28,7 +28,7 @@ class ImageSaveFilenameTests(unittest.TestCase):
         scope = {
             "os": host_os, "tempfile": tempfile, "opts": self.options, "shared": SimpleNamespace(opts=self.options),
             "FilenameGenerator": lambda *args, **kwargs: None, "script_callbacks": callbacks,
-            "save_image_with_geninfo": lambda image, info, filename, extension, **kwargs: image.save(filename, format="PNG"),
+            "save_image_with_geninfo": lambda image, info, filename, extension, **kwargs: image.save(filename, format="JPEG" if extension == ".jpg" else "PNG"),
         }
         exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), scope)  # noqa: S102 -- isolated production save path with real file writes
         self.save = scope["save_image"]
@@ -51,6 +51,16 @@ class ImageSaveFilenameTests(unittest.TestCase):
             self.assertEqual((directory / "image.png").read_bytes(), b"existing image")
             self.assertEqual({path.name for path in directory.iterdir()}, {"image.tmp", "image.png"})
             self.assertEqual(self.saved, [])
+
+    def test_thin_image_export_keeps_both_dimensions_positive(self):
+        self.options.export_for_4chan = True
+        self.scope["LANCZOS"] = Image.Resampling.LANCZOS
+        for size, expected in (((1, 4096), (1, 1024)), ((4096, 1), (1024, 1))):
+            with self.subTest(size=size), tempfile.TemporaryDirectory() as temporary:
+                filename, _ = self.save(Image.new("RGB", size), temporary, "", forced_filename="thin", save_to_dirs=False)
+                with Image.open(Path(filename).with_suffix(".jpg")) as exported:
+                    self.assertEqual(exported.format, "JPEG")
+                    self.assertEqual(exported.size, expected)
 
     def test_collision_numbers_fit_byte_limit_and_callbacks_report_saved_path(self):
         self.options.save_images_replace_action = "Add number"
