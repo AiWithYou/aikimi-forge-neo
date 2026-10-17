@@ -15,10 +15,10 @@ def gradio_url_ok_fix(url: str) -> bool:
         verify.load_verify_locations(cafile=shared.cmd_opts.tls_certfile)
     try:
         for _ in range(5):
-            response = httpx.head(url, timeout=999, verify=verify)
+            response = httpx.head(url, timeout=5.0, verify=verify, trust_env=False)
             if response.status_code in (200, 401, 302):
                 return True
             time.sleep(0.500)
-    except (ConnectionError, httpx.ConnectError, httpx.TimeoutException):
+    except (ConnectionError, httpx.RequestError):
         return False
     return False

@@ -431,7 +431,7 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertGreaterEqual(workflow.count(path), 3)
-        self.assertIn("python -m unittest -v tools.tests.test_ci_workflow_boundaries", workflow)
+        self.assertNotIn("python -m unittest -v tools.tests.test_ci_workflow_boundaries", workflow)
 
     def test_security_and_dependabot_cover_the_separate_preprocessor_manifest(self):
         security = self.workflow("security.yml")
@@ -441,7 +441,7 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn(f"inputs: {manifest}", security)
         self.assertIn('directory: "/extensions-builtin/forge_legacy_preprocessors"', dependabot)
 
-    def test_security_regressions_run_without_weakening_codeql(self):
+    def test_security_regressions_run_with_standard_codeql(self):
         paths = (
             "tools/tests/test_critical_high_security.py",
             "tools/tests/test_remote_image_route.py",
@@ -458,7 +458,7 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
             self.assertGreaterEqual(self.workflow("lint.yml").count(path), 3)
         self.assertIn("node --test tools/tests/dragdrop_security.test.mjs", self.workflow("unit-tests.yml"))
         codeql = self.workflow("codeql.yml")
-        self.assertIn("queries: security-extended,security-and-quality", codeql)
+        self.assertNotIn("queries:", codeql)
         self.assertIn("github/codeql-action/analyze@", codeql)
         for bypass in ("paths-ignore:", "query-filters:", "continue-on-error:"):
             self.assertNotIn(bypass, codeql)

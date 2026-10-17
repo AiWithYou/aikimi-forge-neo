@@ -57,12 +57,13 @@ uv pip install --python .\venv\Scripts\python.exe -r tools\requirements-test.txt
   tools.tests.test_sensenova_u15_download_script
 ```
 
-変更したfirst-party codeはRuffでも確認します。
+変更したfirst-party codeはRuffで構文・不具合につながる問題を確認します。formatの適用は任意です。
 
 ```powershell
 .\venv\Scripts\python.exe -m ruff check <changed-python-paths>
-.\venv\Scripts\python.exe -m ruff format --check <changed-python-paths>
 ```
+
+CodeQLは標準の解析を使います。追加の品質解析と拡張セキュリティ解析は既定のCIに含めません。CI定義の契約テストはCPU suiteで実行し、lintからの重複実行は行いません。
 
 PowerShell、security、dependencyのCI相当手順は[docs/release-checklist.md](docs/release-checklist.md)を参照してください。GPU live testは通常のunit testと分け、使用したモデル、revision、GPU、条件、実出力を記録します。
 

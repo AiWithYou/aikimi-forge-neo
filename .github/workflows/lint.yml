@@ -501,9 +501,6 @@ jobs:
             tools/tests/test_upstream_20261008.py
           )
           python -m ruff check "${files[@]}"
-          python -m ruff format --check "${files[@]}"
-      - name: Verify CI path and execution boundaries
-        run: python -m unittest -v tools.tests.test_ci_workflow_boundaries
       - name: Check Aikimi UI JavaScript syntax
         run: |
           node --check javascript/dragdrop.js

@@ -40,6 +40,8 @@ secrets/api-auth.txt
 
 各行は`username:password`形式です。複数利用者は1行ずつ記載できます。空のusername、空のpassword、64 KiBを超えるファイルは拒否します。`secrets/`はGit管理外です。
 
+Basic認証のusernameとpasswordは、UTF-8として比較します。日本語を含む認証情報も使用できます。
+
 ```powershell
 New-Item -ItemType Directory -Force .\secrets | Out-Null
 notepad .\secrets\gradio-auth.txt
@@ -93,6 +95,8 @@ H3のジョブ確認・履歴取得・停止は、送信時と同じ正規形式
 
 HTTPSの起動確認では証明書と接続先名を検証します。ローカルTLSの`--tls-certfile`を指定した場合は、その証明書を信頼する設定で確認します。自己署名証明書にも、接続するホスト名またはIPアドレスに一致するSANが必要です。
 
+起動確認はproxy環境変数を使わず、接続・読み取りの待機をそれぞれ5秒に制限します。通信に失敗した場合は確認失敗として返し、長時間待ち続けません。
+
 旧プリプロセッサーに同梱するデータセット取得ツールは、tarのdata filterを使い、展開先外へのパスやリンク、特殊ファイルを拒否します。通常のtar.gz・zipデータセットは引き続き展開できます。
 
 ### Gradio 6の静的asset
@@ -120,6 +124,10 @@ remote modeでは、これらを含むAPI routeが認証境界を通ります。
 共通redactionは、password、token、secret、auth、Cookie、Authorization、URL userinfo、credentialに見えるquery parameterをマスクします。例外をclientへ返す場合は、長さを制限した安全な要約を使います。
 
 redactionは最後の防御です。利用者は、共有前に[SECURITY.md](../SECURITY.md)の確認項目を目視してください。
+
+## 静的解析の範囲
+
+CodeQLはGitHub標準の解析を使用します。追加の拡張セキュリティ解析と品質解析は有効にしません。Ruffによる問題の検出は維持し、formatの一致はCIの成功条件から外します。認証、画像取得の接続先検証、証明書検証、ファイル公開範囲、依存関係監査は継続します。
 
 ## 2026年9月24日の依存関係修正
 

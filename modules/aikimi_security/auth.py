@@ -118,8 +118,8 @@ def request_has_basic_auth(request, credentials: Iterable[tuple[str, str]]) -> b
     supplied_user, supplied_password = supplied
     matched = False
     for username, password in credentials:
-        username_ok = compare_digest(supplied_user, username)
-        password_ok = compare_digest(supplied_password, password)
+        username_ok = compare_digest(supplied_user.encode("utf-8"), username.encode("utf-8"))
+        password_ok = compare_digest(supplied_password.encode("utf-8"), password.encode("utf-8"))
         matched = matched or (username_ok and password_ok)
     return matched
 

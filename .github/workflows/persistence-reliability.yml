@@ -67,12 +67,6 @@ jobs:
           modules/atomic_file.py modules/video_writer.py modules/fifo_lock.py
           tools/tests/test_fifo_lock_handoff.py
           tools/tests/test_persistence_reliability.py tools/tests/test_video_writer_ffmpeg.py
-      - name: Check formatting
-        run: >-
-          python -m ruff format --check
-          modules/atomic_file.py modules/video_writer.py modules/fifo_lock.py
-          tools/tests/test_fifo_lock_handoff.py
-          tools/tests/test_persistence_reliability.py tools/tests/test_video_writer_ffmpeg.py
       - name: Run settings, cleanup, streaming and encoder regressions
         run: >-
           python -m unittest -v

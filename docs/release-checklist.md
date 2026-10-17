@@ -36,7 +36,7 @@ Private Vulnerability Reportingを有効にできないreleaseは、第三者向
 - [ ] Python 3.13のCPU／offline unit testが通る
 - [ ] Windows smoke testが通る
 - [ ] installer functional testが通る
-- [ ] Ruff checkとformat checkが通る
+- [ ] Ruff checkが通る。formatの適用は任意とする
 - [ ] 共通画像画面と各Studioの操作・モード切替がCIの検査対象に含まれる
 - [ ] FLUX 3の本体module・Studio・setup・worker・テストがlint対象で、Python契約テストはLinux/WindowsのCPU CIが自動探索し、配置JavaScriptの構文確認とNode契約テストも実行される
 - [ ] Irodori TTSの本体・Studio・setup・worker・テストがlint対象で、入力・成果物・モデル保持の契約テストをLinux/WindowsのCPU CIで実行する
@@ -48,7 +48,7 @@ Private Vulnerability Reportingを有効にできないreleaseは、第三者向
 - [ ] FLUX 3の全固定依存が独立したOSV監査を通り、Windows用lockの再解決や依存スキップ、無断例外を行っていない
 - [ ] MOSS Imageの全固定依存も独立したOSV監査を通り、Windows用lockの全pinを検査した
 - [ ] `docs/security-model.md`の期限付きadvisory例外を再審査し、期限切れを残していない
-- [ ] CodeQLのfindingを確認した
+- [ ] CodeQLの標準解析のfindingを確認した
 - [ ] dependency reviewを確認した
 - [ ] GitHub Actionsの`uses`が確認済みcommit SHAへ固定されている
 
@@ -58,7 +58,6 @@ Private Vulnerability Reportingを有効にできないreleaseは、第三者向
 .\venv\Scripts\python.exe .\tools\run_ci_tests.py --verbosity 1
 .\venv\Scripts\python.exe -m unittest -v tools.tests.test_aikimi_setup
 .\venv\Scripts\python.exe -m ruff check tools\aikimi_setup.py tools\tests\test_aikimi_setup.py
-.\venv\Scripts\python.exe -m ruff format --check tools\aikimi_setup.py tools\tests\test_aikimi_setup.py
 ```
 
 ## 4. model installer
