@@ -26,7 +26,7 @@ class UpscaleCacheTests(unittest.TestCase):
         namespace = {
             "Image": Image,
             "np": np,
-            "shared": SimpleNamespace(opts=SimpleNamespace(upscaling_max_images_in_cache=4)),
+            "shared": SimpleNamespace(opts=SimpleNamespace(upscaling_max_images_in_cache=4, ESRGAN_tile=256, ESRGAN_tile_overlap=16)),
             "upscale_cache": {},
             "scripts_postprocessing": SimpleNamespace(PostprocessedImage=object),
             "setup_color_correction": Mock(return_value="correction"),
@@ -101,6 +101,24 @@ class UpscaleCacheTests(unittest.TestCase):
         self.assertEqual(limit(1000, 1, 64), (64, 1))
         self.assertEqual(limit(1, 1000, 64), (1, 64))
         self.assertEqual(limit(100, 50, 64), (64, 32))
+
+    def test_tiling_setting_changes_recompute_the_image(self):
+        options = self.namespace["shared"].opts
+        self.upscaler.scaler.upscale = lambda image, factor, path: Image.new("RGB", image.size, (options.ESRGAN_tile // 2, options.ESRGAN_tile_overlap, 0))
+        image = Image.new("RGB", (4, 4))
+        self.assertEqual(self.run_upscale(image).getpixel((0, 0)), (128, 16, 0))
+        options.ESRGAN_tile = 128
+        self.assertEqual(self.run_upscale(image).getpixel((0, 0)), (64, 16, 0))
+        options.ESRGAN_tile_overlap = 32
+        self.assertEqual(self.run_upscale(image).getpixel((0, 0)), (64, 32, 0))
+
+    def test_same_name_different_model_path_does_not_reuse_output(self):
+        self.upscaler.scaler.upscale = lambda image, factor, path: Image.new("RGB", image.size, path)
+        image = Image.new("RGB", (4, 4))
+        self.upscaler.data_path = "red"
+        self.assertEqual(self.run_upscale(image).getpixel((0, 0)), (255, 0, 0))
+        self.upscaler.data_path = "blue"
+        self.assertEqual(self.run_upscale(image).getpixel((0, 0)), (0, 0, 255))
 
 
 if __name__ == "__main__":
