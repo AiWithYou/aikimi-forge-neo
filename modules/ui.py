@@ -994,6 +994,10 @@ def setup_ui_api(app):
     from fastapi import Depends, HTTPException, Request, status
     from pydantic import BaseModel, Field
 
+    from modules.aikimi_security.remote_image import register_remote_image_route
+
+    register_remote_image_route(app)
+
     class QuicksettingsHint(BaseModel):
         name: str = Field(title="Name of the quicksettings field")
         label: str = Field(title="Label of the quicksettings field")

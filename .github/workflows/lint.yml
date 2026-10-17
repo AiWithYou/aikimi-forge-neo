@@ -8,6 +8,7 @@ on:
       - "**/*.bat"
       - "**/*.ps1"
       - "extensions-builtin/aikimi-ui/**/*.js"
+      - "javascript/dragdrop.js"
       - "modules/aikimi_capabilities.py"
       - "modules_forge/image_workspace.py"
       - "tools/tests/test_image_workspace*.py"
@@ -146,6 +147,9 @@ on:
       - "tools/tests/test_repository_privacy.py"
       - "tools/tests/test_run_ci_tests.py"
       - "tools/tests/test_safe_image_fetch.py"
+      - "tools/tests/test_critical_high_security.py"
+      - "tools/tests/test_remote_image_route.py"
+      - "tools/tests/dragdrop_security.test.mjs"
       - "tools/tests/test_security_redaction.py"
       - "tools/tests/test_sysinfo_security.py"
       - "tools/tests/test_studio_css_boundaries.py"
@@ -159,6 +163,7 @@ on:
       - "**/*.bat"
       - "**/*.ps1"
       - "extensions-builtin/aikimi-ui/**/*.js"
+      - "javascript/dragdrop.js"
       - "modules/aikimi_capabilities.py"
       - "modules_forge/image_workspace.py"
       - "tools/tests/test_image_workspace*.py"
@@ -297,6 +302,9 @@ on:
       - "tools/tests/test_repository_privacy.py"
       - "tools/tests/test_run_ci_tests.py"
       - "tools/tests/test_safe_image_fetch.py"
+      - "tools/tests/test_critical_high_security.py"
+      - "tools/tests/test_remote_image_route.py"
+      - "tools/tests/dragdrop_security.test.mjs"
       - "tools/tests/test_security_redaction.py"
       - "tools/tests/test_sysinfo_security.py"
       - "tools/tests/test_studio_css_boundaries.py"
@@ -483,6 +491,8 @@ jobs:
             tools/tests/test_repository_privacy.py
             tools/tests/test_run_ci_tests.py
             tools/tests/test_safe_image_fetch.py
+            tools/tests/test_critical_high_security.py
+            tools/tests/test_remote_image_route.py
             tools/tests/test_security_redaction.py
             tools/tests/test_sysinfo_security.py
             tools/tests/test_studio_css_boundaries.py
@@ -496,6 +506,7 @@ jobs:
         run: python -m unittest -v tools.tests.test_ci_workflow_boundaries
       - name: Check Aikimi UI JavaScript syntax
         run: |
+          node --check javascript/dragdrop.js
           node --check extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js
           node --check extensions-builtin/aikimi-ui/javascript/aikimiStatus.js
           node --check modules_forge/forge_canvas/canvas.js

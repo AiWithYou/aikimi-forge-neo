@@ -138,6 +138,9 @@ on:
       - "tools/tests/test_repository_privacy.py"
       - "tools/tests/test_run_ci_tests.py"
       - "tools/tests/test_safe_image_fetch.py"
+      - "tools/tests/test_critical_high_security.py"
+      - "tools/tests/test_remote_image_route.py"
+      - "tools/tests/dragdrop_security.test.mjs"
       - "tools/tests/test_security_redaction.py"
       - "tools/tests/test_sensenova_u15_studio.py"
       - "tools/tests/test_studio_css_boundaries.py"
@@ -284,6 +287,9 @@ on:
       - "tools/tests/test_repository_privacy.py"
       - "tools/tests/test_run_ci_tests.py"
       - "tools/tests/test_safe_image_fetch.py"
+      - "tools/tests/test_critical_high_security.py"
+      - "tools/tests/test_remote_image_route.py"
+      - "tools/tests/dragdrop_security.test.mjs"
       - "tools/tests/test_security_redaction.py"
       - "tools/tests/test_sensenova_u15_studio.py"
       - "tools/tests/test_studio_css_boundaries.py"
@@ -408,6 +414,8 @@ jobs:
           --module tools.tests.test_gradio_chromium_smoke
           --module tools.tests.test_gradio_file_security
           --module tools.tests.test_gradio_file_url_guard
+          --module tools.tests.test_critical_high_security
+          --module tools.tests.test_remote_image_route
           --module tools.tests.test_legacy_yaml_security
           --module tools.tests.test_launch_utils_environment
           --module tools.tests.test_extension_git

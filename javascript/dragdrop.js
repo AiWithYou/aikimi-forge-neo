@@ -83,9 +83,14 @@ window.document.addEventListener("drop", async (e) => {
             fileInput.dispatchEvent(new Event("change"));
         } else if (url) {
             try {
-                const request = await fetch(url);
+                const request = await fetch("internal/remote-image", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url }),
+                });
                 if (!request.ok) {
-                    console.error("Error fetching URL:", url, request.status);
+                    console.error("Image import was rejected:", request.status);
                     return;
                 }
                 const data = new DataTransfer();
@@ -93,7 +98,7 @@ window.document.addEventListener("drop", async (e) => {
                 fileInput.files = data.files;
                 fileInput.dispatchEvent(new Event("change"));
             } catch (error) {
-                console.error("Error fetching URL:", url, error);
+                console.error("Image import failed:", error);
                 return;
             }
         }
