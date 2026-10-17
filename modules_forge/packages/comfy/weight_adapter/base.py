@@ -39,22 +39,21 @@ class WeightAdapterBase:
 
 def weight_decompose(dora_scale, weight, lora_diff, alpha, strength, intermediate_dtype, function):
     dora_scale = memory_management.cast_to_device(dora_scale, weight.device, intermediate_dtype)
-    lora_diff *= alpha
-    weight_calc = weight + function(lora_diff).type(weight.dtype)
+    lora_diff = lora_diff * alpha
+    weight_orig = memory_management.cast_to_device(weight, weight.device, intermediate_dtype)
+    weight_calc = weight_orig + function(lora_diff).to(device=weight.device, dtype=intermediate_dtype)
 
     wd_on_output_axis = dora_scale.shape[0] == weight_calc.shape[0] and dora_scale.numel() == dora_scale.shape[0]
     if wd_on_output_axis:
         weight_norm = weight_calc.reshape(weight_calc.shape[0], -1).norm(dim=1, keepdim=True).reshape(weight_calc.shape[0], *[1] * (weight_calc.dim() - 1))
     else:
         weight_norm = weight_calc.transpose(0, 1).reshape(weight_calc.shape[1], -1).norm(dim=1, keepdim=True).reshape(weight_calc.shape[1], *[1] * (weight_calc.dim() - 1)).transpose(0, 1)
-    weight_norm = weight_norm + torch.finfo(weight.dtype).eps
+    weight_norm = weight_norm + torch.finfo(intermediate_dtype).eps
 
-    weight_calc *= (dora_scale / weight_norm).type(weight.dtype)
+    weight_calc *= dora_scale.reshape_as(weight_norm) / weight_norm
     if strength != 1.0:
-        weight_calc -= weight
-        weight += strength * (weight_calc)
-    else:
-        weight[:] = weight_calc
+        weight_calc = weight_orig + strength * (weight_calc - weight_orig)
+    weight.copy_(weight_calc)
     return weight
 
 
