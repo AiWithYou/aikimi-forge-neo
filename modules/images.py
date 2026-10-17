@@ -10,6 +10,7 @@ import os
 import re
 import string
 import struct
+import tempfile
 import time
 from collections import namedtuple
 
@@ -736,20 +737,26 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
         save image with .tmp extension to avoid race condition when another process detects new image in the directory
         """
         filename_without_extension = _fit_filename_stem(filename_without_extension, extension)
-        temp_file_path = f"{filename_without_extension}.tmp"
+        descriptor, temp_file_path = tempfile.mkstemp(prefix=".forge-image-", suffix=".tmp", dir=os.path.dirname(filename_without_extension) or ".")
+        os.close(descriptor)
+        try:
+            save_image_with_geninfo(image_to_save, info, temp_file_path, extension, existing_pnginfo=params.pnginfo, pnginfo_section_name=pnginfo_section_name)
 
-        save_image_with_geninfo(image_to_save, info, temp_file_path, extension, existing_pnginfo=params.pnginfo, pnginfo_section_name=pnginfo_section_name)
-
-        filename = filename_without_extension + extension
-        without_extension = filename_without_extension
-        if shared.opts.save_images_replace_action != "Override":
-            n = 0
-            while os.path.exists(filename):
-                n += 1
-                without_extension = _fit_filename_stem(filename_without_extension, extension, f"-{n}")
-                filename = without_extension + extension
-        os.replace(temp_file_path, filename)
-        return without_extension
+            filename = filename_without_extension + extension
+            without_extension = filename_without_extension
+            if shared.opts.save_images_replace_action != "Override":
+                n = 0
+                while os.path.exists(filename):
+                    n += 1
+                    without_extension = _fit_filename_stem(filename_without_extension, extension, f"-{n}")
+                    filename = without_extension + extension
+            os.replace(temp_file_path, filename)
+            return without_extension
+        finally:
+            try:
+                os.unlink(temp_file_path)
+            except FileNotFoundError:
+                pass
 
     fullfn_without_extension, extension = os.path.splitext(params.filename)
     fullfn_without_extension = _atomically_save_image(image, fullfn_without_extension, extension)

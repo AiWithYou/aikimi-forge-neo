@@ -26,12 +26,31 @@ class ImageSaveFilenameTests(unittest.TestCase):
         )
         self.host_os, self.callbacks = host_os, callbacks
         scope = {
-            "os": host_os, "opts": self.options, "shared": SimpleNamespace(opts=self.options),
+            "os": host_os, "tempfile": tempfile, "opts": self.options, "shared": SimpleNamespace(opts=self.options),
             "FilenameGenerator": lambda *args, **kwargs: None, "script_callbacks": callbacks,
             "save_image_with_geninfo": lambda image, info, filename, extension, **kwargs: image.save(filename, format="PNG"),
         }
         exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), scope)  # noqa: S102 -- isolated production save path with real file writes
         self.save = scope["save_image"]
+        self.scope = scope
+
+    def test_failed_save_cleans_its_temp_and_preserves_existing_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / "image.tmp").write_bytes(b"unrelated temp")
+            (directory / "image.png").write_bytes(b"existing image")
+
+            def fail(image, info, filename, extension, **kwargs):
+                Path(filename).write_bytes(b"partial image")
+                raise OSError("encoder failed")
+
+            self.scope["save_image_with_geninfo"] = fail
+            with self.assertRaisesRegex(OSError, "encoder failed"):
+                self.save(Image.new("RGB", (8, 8)), temporary, "", forced_filename="image", save_to_dirs=False)
+            self.assertEqual((directory / "image.tmp").read_bytes(), b"unrelated temp")
+            self.assertEqual((directory / "image.png").read_bytes(), b"existing image")
+            self.assertEqual({path.name for path in directory.iterdir()}, {"image.tmp", "image.png"})
+            self.assertEqual(self.saved, [])
 
     def test_collision_numbers_fit_byte_limit_and_callbacks_report_saved_path(self):
         self.options.save_images_replace_action = "Add number"
