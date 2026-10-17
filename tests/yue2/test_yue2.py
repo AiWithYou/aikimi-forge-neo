@@ -327,6 +327,41 @@ def test_real_gradio_layout_and_callback_contract(monkeypatch, tmp_path):
         ui.make_request(values)
 
 
+def _process_is_running(pid):
+    """Observe Linux child exit, including disappearance during a proc read."""
+    stat = Path(f"/proc/{pid}/stat")
+    try:
+        status = stat.read_text()
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+    return status.rsplit(")", 1)[1].split()[0] != "Z"
+
+
+@pytest.mark.parametrize("error", [FileNotFoundError, ProcessLookupError])
+def test_process_exit_during_proc_read_is_terminal(monkeypatch, error):
+    monkeypatch.setattr(Path, "exists", lambda self: True)
+    def read(self):
+        raise error("process disappeared")
+    monkeypatch.setattr(Path, "read_text", read)
+    assert not _process_is_running(123)
+
+
+@pytest.mark.parametrize("state, running", [("S", True), ("R", True), ("Z", False)])
+def test_proc_state_handles_spaces_in_process_name(monkeypatch, state, running):
+    monkeypatch.setattr(Path, "exists", lambda self: True)
+    monkeypatch.setattr(Path, "read_text", lambda self: f"123 (worker name) {state} 1 2 3")
+    assert _process_is_running(123) is running
+
+
+def test_proc_permission_error_is_not_success(monkeypatch):
+    monkeypatch.setattr(Path, "exists", lambda self: True)
+    def read(self):
+        raise PermissionError("denied")
+    monkeypatch.setattr(Path, "read_text", read)
+    with pytest.raises(PermissionError):
+        _process_is_running(123)
+
+
 def test_parent_pipe_loss_terminates_worker_tree(cpp_studio):
     if os.name == "nt":
         pytest.skip("Windows Job Object requires a Windows runner")
@@ -348,11 +383,10 @@ def test_parent_pipe_loss_terminates_worker_tree(cpp_studio):
         child_pid = int(pid_file.read_text())
         process.stdin.close()
         assert process.wait(timeout=5) != 0
-        stat = Path(f"/proc/{child_pid}/stat")
         deadline = time.monotonic() + 3
-        while stat.exists() and stat.read_text().split()[2] != "Z" and time.monotonic() < deadline:
+        while _process_is_running(child_pid) and time.monotonic() < deadline:
             time.sleep(0.05)
-        assert not stat.exists() or stat.read_text().split()[2] == "Z"
+        assert not _process_is_running(child_pid)
     finally:
         if process.poll() is None:
             os.killpg(process.pid, 9)
