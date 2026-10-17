@@ -21,6 +21,40 @@ def constrained_rotation(blocks, alpha, outputs):
 
 
 class OftStrengthBoundaryTests(unittest.TestCase):
+    def test_boft_unit_rescale_is_equivalent_to_absent_rescale(self):
+        blocks = torch.tensor([
+            [[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]],
+            [[[0.0, -0.3], [0.1, 0.0]], [[0.0, 0.1], [-0.15, 0.0]]],
+        ])
+        original = torch.arange(1, 13, dtype=torch.float32).reshape(4, 3) / 10
+        for stages in (1, 2):
+            plain = BOFTAdapter.load("layer", self.saved_weights(blocks[:stages]), 0.0, None)
+            scaled = BOFTAdapter.load("layer", self.saved_weights(blocks[:stages], torch.ones(4, 1)), 0.0, None)
+            for strength in (0.0, 0.5, 1.0, -0.5):
+                with self.subTest(stages=stages, strength=strength):
+                    expected = merge_lora_to_weight([(strength, plain, 1.0, None, None)], original.clone(), "weight")
+                    actual = merge_lora_to_weight([(strength, scaled, 1.0, None, None)], original.clone(), "weight")
+                    torch.testing.assert_close(actual, expected)
+
+    def test_boft_rescale_interpolates_separately_from_rotation(self):
+        blocks = torch.tensor([[[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]]])
+        rotation = torch.block_diag(*constrained_rotation(blocks, 0.0, 4)[0])
+        for dimensions in ((6, 3), (6, 3, 1, 1)):
+            original = torch.arange(1, 19, dtype=torch.float32).reshape(dimensions) / 10
+            rescale = torch.tensor([0.7, 1.2, 1.4, 0.8]).reshape(4, *([1] * (len(dimensions) - 1)))
+            adapter = BOFTAdapter.load("layer", self.saved_weights(blocks, rescale), 0.0, None)
+            base = original[1:5] * 0.8
+            for strength in (0.0, 0.5, 1.0, -0.5):
+                with self.subTest(dimensions=dimensions, strength=strength):
+                    stage = torch.eye(4) + strength * (rotation - torch.eye(4))
+                    full = (stage @ base.flatten(1)).reshape(base.shape) * (1 + strength * (rescale - 1))
+                    expected = original.clone()
+                    expected[1:5] = base + 1.5 * (full - base)
+                    actual = merge_lora_to_weight(
+                        [(strength, adapter, 0.8, (0, 1, 4), lambda delta: delta * 1.5)], original.clone(), "weight"
+                    )
+                    torch.testing.assert_close(actual, expected)
+
     def test_boft_missing_constraint_matches_unconstrained_rotation(self):
         blocks = torch.tensor([[[[0.0, 0.2], [-0.1, 0.0]], [[0.0, -0.15], [0.05, 0.0]]]])
         original = torch.arange(1, 13, dtype=torch.float32).reshape(4, 3) / 10

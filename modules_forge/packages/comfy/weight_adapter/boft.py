@@ -102,15 +102,14 @@ class BOFTAdapter(WeightAdapterBase):
                 inp = inp.flatten(0, 1).unflatten(0, (-1, k, g)).transpose(1, 2).flatten(0, 2)
 
             if rescale is not None:
-                inp = inp * rescale
+                scale = rescale if dora_scale is not None else 1 + strength * (rescale - 1)
+                inp = inp * scale
 
             lora_diff = inp - org
             lora_diff = memory_management.cast_to_device(lora_diff, weight.device, intermediate_dtype)
             if dora_scale is not None:
                 weight = weight_decompose(dora_scale, weight, lora_diff, 1.0, strength, intermediate_dtype, function)
             else:
-                if rescale is not None:
-                    lora_diff *= strength
                 weight += function(lora_diff.type(weight.dtype))
         except Exception as e:
             from backend.memory_management import is_oom
