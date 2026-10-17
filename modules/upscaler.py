@@ -48,8 +48,8 @@ class Upscaler:
 
     def upscale(self, img: Image.Image, scale: float, selected_model: str = None):
         self.scale = scale
-        dest_w: int = round(img.width * scale / 8) * 8
-        dest_h: int = round(img.height * scale / 8) * 8
+        dest_w: int = max(8, round(img.width * scale / 8) * 8)
+        dest_h: int = max(8, round(img.height * scale / 8) * 8)
 
         for _ in range(UPSCALE_ITERATIONS):
             if shared.state.interrupted:
