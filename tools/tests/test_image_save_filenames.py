@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import ast
 import os
+import stat
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,13 +28,65 @@ class ImageSaveFilenameTests(unittest.TestCase):
         )
         self.host_os, self.callbacks = host_os, callbacks
         scope = {
-            "os": host_os, "tempfile": tempfile, "opts": self.options, "shared": SimpleNamespace(opts=self.options),
+            "os": host_os, "tempfile": tempfile, "uuid": uuid, "opts": self.options, "shared": SimpleNamespace(opts=self.options),
             "FilenameGenerator": lambda *args, **kwargs: None, "script_callbacks": callbacks,
             "save_image_with_geninfo": lambda image, info, filename, extension, **kwargs: image.save(filename, format="JPEG" if extension == ".jpg" else "PNG"),
         }
         exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), scope)  # noqa: S102 -- isolated production save path with real file writes
         self.save = scope["save_image"]
         self.scope = scope
+
+    def test_temp_creation_is_exclusive_with_normal_creation_permissions(self):
+        calls = []
+        def create(path, flags, mode=0o777):
+            calls.append((flags, mode))
+            return os.open(path, flags, mode)
+        self.host_os.open = create
+        with tempfile.TemporaryDirectory() as temporary:
+            self.save(Image.new("RGB", (8, 8)), temporary, "", forced_filename="mode", save_to_dirs=False)
+        self.assertEqual(len(calls), 1)
+        flags, mode = calls[0]
+        self.assertTrue(flags & os.O_EXCL)
+        self.assertTrue(flags & os.O_CREAT)
+        self.assertEqual(mode, 0o666)
+
+    def test_existing_temp_name_is_never_overwritten_or_deleted(self):
+        self.scope["uuid"] = SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="collision"))
+        with tempfile.TemporaryDirectory() as temporary:
+            existing = Path(temporary) / ".forge-image-collision.tmp"
+            existing.write_bytes(b"other writer")
+            with self.assertRaises(FileExistsError):
+                self.save(Image.new("RGB", (8, 8)), temporary, "", forced_filename="image", save_to_dirs=False)
+            self.assertEqual(existing.read_bytes(), b"other writer")
+            self.assertEqual(list(Path(temporary).iterdir()), [existing])
+
+    @unittest.skipIf(os.name == "nt", "POSIX file permissions")
+    def test_saved_image_permissions_follow_umask(self):
+        for mask in (0o022, 0o077):
+            with self.subTest(mask=mask), tempfile.TemporaryDirectory() as temporary:
+                previous = os.umask(mask)
+                try:
+                    filename, _ = self.save(Image.new("RGB", (8, 8)), temporary, "", forced_filename="mode", save_to_dirs=False)
+                finally:
+                    os.umask(previous)
+                self.assertEqual(stat.S_IMODE(os.stat(filename).st_mode), 0o666 & ~mask)
+
+    @unittest.skipUnless(os.name == "nt", "Native Windows filename limits")
+    def test_windows_long_names_and_collision_suffixes_fit_utf16_limit(self):
+        del self.host_os.statvfs
+        self.options.save_images_replace_action = "Add number"
+        for name in ("x" * 300, "絵" * 300, "😀" * 180):
+            with self.subTest(name=name[:1]), tempfile.TemporaryDirectory() as temporary:
+                paths = []
+                for index in range(2):
+                    filename, _ = self.save(Image.new("RGB", (8, 8), (index, 0, 0)), temporary, "",
+                                            forced_filename=name, save_to_dirs=False)
+                    paths.append(filename)
+                    self.assertLessEqual(len(Path(filename).name.encode("utf-16-le")) // 2, 255)
+                self.assertNotEqual(*paths)
+                for index, filename in enumerate(paths):
+                    with Image.open(filename) as image:
+                        self.assertEqual(image.getpixel((0, 0)), (index, 0, 0))
 
     def test_failed_save_cleans_its_temp_and_preserves_existing_files(self):
         with tempfile.TemporaryDirectory() as temporary:

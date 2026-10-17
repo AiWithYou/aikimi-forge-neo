@@ -10,7 +10,7 @@ import os
 import re
 import string
 import struct
-import tempfile
+import uuid
 import time
 from collections import namedtuple
 
@@ -725,11 +725,17 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
         directory, filename_stem = os.path.split(stem)
         if hasattr(os, "statvfs"):
             max_name_len = os.statvfs(directory or ".").f_namemax
-            stem_limit = max_name_len - max(4, len(os.fsencode(extension))) - len(os.fsencode(suffix))
-            if stem_limit < 1:
-                raise ValueError("Image extension or suffix exceeds the filesystem filename limit")
-            while len(os.fsencode(filename_stem)) > stem_limit:
-                filename_stem = filename_stem[:-1]
+            def name_length(name):
+                return len(os.fsencode(name))
+        else:
+            max_name_len = 255
+            def name_length(name):
+                return len(name.encode("utf-16-le")) // 2
+        stem_limit = max_name_len - max(4, name_length(extension)) - name_length(suffix)
+        if stem_limit < 1:
+            raise ValueError("Image extension or suffix exceeds the filesystem filename limit")
+        while name_length(filename_stem) > stem_limit:
+            filename_stem = filename_stem[:-1]
         return os.path.join(directory, filename_stem + suffix)
 
     def _atomically_save_image(image_to_save, filename_without_extension, extension):
@@ -737,7 +743,8 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
         save image with .tmp extension to avoid race condition when another process detects new image in the directory
         """
         filename_without_extension = _fit_filename_stem(filename_without_extension, extension)
-        descriptor, temp_file_path = tempfile.mkstemp(prefix=".forge-image-", suffix=".tmp", dir=os.path.dirname(filename_without_extension) or ".")
+        temp_file_path = os.path.join(os.path.dirname(filename_without_extension) or ".", f".forge-image-{uuid.uuid4().hex}.tmp")
+        descriptor = os.open(temp_file_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
         os.close(descriptor)
         try:
             save_image_with_geninfo(image_to_save, info, temp_file_path, extension, existing_pnginfo=params.pnginfo, pnginfo_section_name=pnginfo_section_name)
