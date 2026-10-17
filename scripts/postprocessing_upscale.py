@@ -216,8 +216,10 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
 
         if upscaler2 and upscaler_2_visibility > 0:
             second_upscale = self._upscale(pp.image, pp.info, upscaler2, upscale_mode, upscale_by, max_side_length, upscale_to_width, upscale_to_height, upscale_crop)
-            if upscaled_image.mode != second_upscale.mode:
-                second_upscale = second_upscale.convert(upscaled_image.mode)
+            pair = (upscaled_image, second_upscale)
+            if upscaled_image.mode != second_upscale.mode or upscaled_image.mode not in ("L", "LA", "RGB", "RGBA") or any("transparency" in image.info for image in pair):
+                blend_mode = "RGBA" if any("A" in image.getbands() or "transparency" in image.info for image in pair) else "RGB"
+                upscaled_image, second_upscale = (image.convert(blend_mode) for image in pair)
             upscaled_image = Image.blend(upscaled_image, second_upscale, upscaler_2_visibility)
 
             pp.info["Postprocess upscaler 2"] = upscaler2.name

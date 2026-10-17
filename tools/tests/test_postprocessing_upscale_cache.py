@@ -156,6 +156,23 @@ class UpscaleCacheTests(unittest.TestCase):
                 self.assertEqual(result.tobytes(), image.crop((2, 2, 8, 6)).tobytes())
                 self.assertEqual(result.convert("RGBA").tobytes(), image.crop((2, 2, 8, 6)).convert("RGBA").tobytes())
 
+    def test_blend_expands_palette_and_retains_alpha_from_either_upscaler(self):
+        palette = Image.new("P", (8, 8), 0)
+        palette.putpalette([255, 0, 0] + [0] * 765)
+        palette.info["transparency"] = 0
+        opaque = Image.new("RGB", (8, 8), "blue")
+        transparent = Image.new("RGBA", (8, 8), (255, 0, 0, 0))
+        for first, second in ((palette, palette.copy()), (opaque, transparent), (transparent, opaque)):
+            with self.subTest(first=first.mode, second=second.mode):
+                secondary = SimpleNamespace(name="secondary")
+                self.namespace["shared"].sd_upscalers = [self.upscaler, secondary]
+                script = SimpleNamespace(_upscale=Mock(side_effect=[first, second]))
+                pp = SimpleNamespace(image=opaque, info={}, shared=SimpleNamespace(upscale_color_correction=None))
+                self.namespace["process"](script, pp, upscaler_1_name="fixture", upscaler_2_name="secondary", upscaler_2_visibility=0.5)
+                expected = Image.blend(first.convert("RGBA"), second.convert("RGBA"), 0.5)
+                self.assertEqual(pp.image.mode, "RGBA")
+                self.assertEqual(pp.image.tobytes(), expected.tobytes())
+
     def test_planned_size_matches_minimum_output_dimensions(self):
         path = ROOT / "modules/extras_workflow.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
