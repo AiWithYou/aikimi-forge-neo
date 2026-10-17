@@ -70,6 +70,20 @@ class UpscaleCacheTests(unittest.TestCase):
         self.assertEqual(second.tobytes(), first.tobytes())
         self.assertEqual(self.calls, 1)
 
+    def test_transparent_color_metadata_is_part_of_cache_identity(self):
+        for mode, color, transparent, opaque in (
+            ("L", 10, 10, 20),
+            ("RGB", (10, 20, 30), (10, 20, 30), (1, 2, 3)),
+        ):
+            with self.subTest(mode=mode):
+                self.namespace["upscale_cache"].clear()
+                first = Image.new(mode, (4, 4), color)
+                second = first.copy()
+                first.info["transparency"] = transparent
+                second.info["transparency"] = opaque
+                self.assertEqual(self.run_upscale(first).getpixel((0, 0))[3], 0)
+                self.assertEqual(self.run_upscale(second).getpixel((0, 0))[3], 255)
+
     def test_color_correction_survives_disabled_or_single_image_cache(self):
         script = SimpleNamespace()
         script._upscale = self.upscale.__get__(script)

@@ -120,7 +120,7 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
                 upscale_by = max_side_length / max(image.size)
                 info["Max side length"] = max_side_length
 
-        pixels = image.convert("RGBA").tobytes() if image.mode == "P" else image.tobytes()
+        pixels = image.convert("RGBA").tobytes() if image.mode == "P" or "transparency" in image.info else image.tobytes()
         cache_key = (
             image.size,
             image.mode,
