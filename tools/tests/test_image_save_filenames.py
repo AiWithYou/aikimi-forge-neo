@@ -60,6 +60,21 @@ class ImageSaveFilenameTests(unittest.TestCase):
             self.assertEqual(existing.read_bytes(), b"other writer")
             self.assertEqual(list(Path(temporary).iterdir()), [existing])
 
+    def test_broken_symlink_is_preserved_when_overwrite_is_disabled(self):
+        self.options.save_images_replace_action = "Add number"
+        with tempfile.TemporaryDirectory() as temporary:
+            link = Path(temporary) / "image.png"
+            try:
+                link.symlink_to("missing.png")
+            except OSError as error:
+                if os.name == "nt" and error.winerror == 1314:
+                    self.skipTest("Windows symlink privilege is unavailable")
+                raise
+            filename, _ = self.save(Image.new("RGB", (8, 8)), temporary, "", forced_filename="image", save_to_dirs=False)
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(os.readlink(link), "missing.png")
+            self.assertEqual(Path(filename).name, "image-1.png")
+
     @unittest.skipIf(os.name == "nt", "POSIX file permissions")
     def test_saved_image_permissions_follow_umask(self):
         for mask in (0o022, 0o077):
