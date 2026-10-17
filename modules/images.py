@@ -720,10 +720,22 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
     fullfn = params.filename
     info = params.pnginfo.get(pnginfo_section_name, None)
 
+    def _fit_filename_stem(stem, extension, suffix=""):
+        directory, filename_stem = os.path.split(stem)
+        if hasattr(os, "statvfs"):
+            max_name_len = os.statvfs(directory or ".").f_namemax
+            stem_limit = max_name_len - max(4, len(os.fsencode(extension))) - len(os.fsencode(suffix))
+            if stem_limit < 1:
+                raise ValueError("Image extension or suffix exceeds the filesystem filename limit")
+            while len(os.fsencode(filename_stem)) > stem_limit:
+                filename_stem = filename_stem[:-1]
+        return os.path.join(directory, filename_stem + suffix)
+
     def _atomically_save_image(image_to_save, filename_without_extension, extension):
         """
         save image with .tmp extension to avoid race condition when another process detects new image in the directory
         """
+        filename_without_extension = _fit_filename_stem(filename_without_extension, extension)
         temp_file_path = f"{filename_without_extension}.tmp"
 
         save_image_with_geninfo(image_to_save, info, temp_file_path, extension, existing_pnginfo=params.pnginfo, pnginfo_section_name=pnginfo_section_name)
@@ -734,26 +746,15 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
             n = 0
             while os.path.exists(filename):
                 n += 1
-                without_extension = f"{filename_without_extension}-{n}"
+                without_extension = _fit_filename_stem(filename_without_extension, extension, f"-{n}")
                 filename = without_extension + extension
         os.replace(temp_file_path, filename)
         return without_extension
 
     fullfn_without_extension, extension = os.path.splitext(params.filename)
-    if hasattr(os, "statvfs"):
-        max_name_len = os.statvfs(path).f_namemax
-        directory, filename_stem = os.path.split(fullfn_without_extension)
-        stem_limit = max_name_len - max(4, len(os.fsencode(extension)))
-        if stem_limit < 1:
-            raise ValueError("Image extension exceeds the filesystem filename limit")
-        while len(os.fsencode(filename_stem)) > stem_limit:
-            filename_stem = filename_stem[:-1]
-        fullfn_without_extension = os.path.join(directory, filename_stem)
-        params.filename = fullfn_without_extension + extension
-        fullfn = params.filename
-
     fullfn_without_extension = _atomically_save_image(image, fullfn_without_extension, extension)
     fullfn = fullfn_without_extension + extension
+    params.filename = fullfn
     image.already_saved_as = fullfn
 
     oversize = image.width > opts.target_side_length or image.height > opts.target_side_length
