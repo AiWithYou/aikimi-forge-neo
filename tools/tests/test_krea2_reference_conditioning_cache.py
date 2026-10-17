@@ -8,6 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import torch
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -64,7 +66,8 @@ class Krea2ReferenceConditioningCacheTests(unittest.TestCase):
     def setUp(self):
         self.dynamic = SimpleNamespace(ref_latents=[], last_extra_generation_params={})
         self.opts = SimpleNamespace(
-            krea2_do_reference=True, CLIP_stop_at_last_layers=1, sdxl_crop_left=0, sdxl_crop_top=0, emphasis="Original"
+            krea2_do_reference=True, CLIP_stop_at_last_layers=1, sdxl_crop_left=0, sdxl_crop_top=0, emphasis="Original",
+            sdxl_zero_neg=False, sdxl_refiner_low_aesthetic_score=2.5, sdxl_refiner_high_aesthetic_score=6.0,
         )
         self.model = SimpleNamespace(
             ref_latents=[],
@@ -208,6 +211,64 @@ class Krea2ReferenceConditioningCacheTests(unittest.TestCase):
         self.assertIs(self.dynamic.ref_latents, references)
         self.assertEqual(len(self.p.cached_c), 3)
         self.assertEqual(self.function.call_count, 1)
+
+    def test_highres_prompt_dimensions_invalidate_cache_with_unchanged_base_size(self):
+        self.opts.sdxl_zero_neg = False
+        self.model.text_processing_engine_l = lambda _prompt: torch.zeros(1, 1, 1)
+        self.model.text_processing_engine_g = lambda _prompt: (torch.zeros(1, 1, 1), torch.zeros(1, 1))
+        self.model.embedder = lambda value: value
+        namespace = dict(torch=torch, opts=self.opts, memory_management=SimpleNamespace(load_model_gpu=Mock()))
+        condition = _load_methods("backend/diffusion_engine/sdxl.py", "StableDiffusionXL", namespace)["get_learned_conditioning"]
+        self.function.side_effect = lambda model, prompt, *_args: condition(model, prompt)
+        for width, height in ((1024, 1024), (1536, 1024), (1536, 2048)):
+            prompt = _Prompt()
+            prompt.width, prompt.height = width, height
+            result = self.generate(prompt=prompt)
+            self.assertEqual(result["vector"].tolist(), [[0, height, width, 0, 0, height, width]])
+        self.assertEqual(self.function.call_count, 3)
+
+    def test_prompt_only_cache_still_ignores_dimensions(self):
+        self.opts.krea2_do_reference = False
+        for size in (1024, 2048):
+            prompt = _Prompt()
+            prompt.width = prompt.height = size
+            self.generate(prompt=prompt)
+        self.assertEqual(self.function.call_count, 1)
+
+    def test_prompt_guidance_and_polarity_are_part_of_the_cache_key(self):
+        self.function.side_effect = lambda _model, prompt, *_args: (prompt.distilled_cfg_scale, prompt.is_negative_prompt)
+        for scale, negative in ((3.0, False), (0.0, False), (0.0, True)):
+            prompt = _Prompt(negative=negative)
+            prompt.distilled_cfg_scale = scale
+            self.assertEqual(self.generate(prompt=prompt), (scale, negative))
+        self.assertEqual(self.function.call_count, 3)
+
+    def test_mutating_prompt_text_does_not_rewrite_the_saved_cache_key(self):
+        self.function.side_effect = lambda _model, prompt, *_args: tuple(prompt)
+        prompt = _Prompt("before")
+        self.assertEqual(self.generate(prompt=prompt), ("before",))
+        prompt[0] = "after"
+        self.assertEqual(self.generate(prompt=prompt), ("after",))
+        self.assertEqual(self.function.call_count, 2)
+
+    def test_sdxl_conditioning_options_invalidate_cached_vectors(self):
+        self.model.text_processing_engine_g = lambda _prompt: (torch.ones(1, 1, 1), torch.ones(1, 1))
+        self.model.embedder = lambda value: value
+        namespace = dict(torch=torch, opts=self.opts, memory_management=SimpleNamespace(load_model_gpu=Mock()))
+        condition = _load_methods("backend/diffusion_engine/sdxl.py", "StableDiffusionXLRefiner", namespace)["get_learned_conditioning"]
+        self.function.side_effect = lambda model, prompt, *_args: condition(model, prompt)
+        for negative, option in ((False, "sdxl_refiner_high_aesthetic_score"), (True, "sdxl_refiner_low_aesthetic_score")):
+            prompt = _Prompt("", negative=negative)
+            cache = [None, None, None]
+            first = self.generate(prompt=prompt, caches=[cache])
+            setattr(self.opts, option, 4.0)
+            changed = self.generate(prompt=prompt, caches=[cache])
+            self.assertEqual(changed["vector"][0, -1].item(), 4.0)
+            self.assertFalse(torch.equal(first["vector"], changed["vector"]))
+        self.opts.sdxl_zero_neg = True
+        zeroed = self.generate(prompt=prompt, caches=[cache])
+        self.assertEqual(zeroed["vector"][0, 0].item(), 0.0)
+        self.assertEqual(zeroed["crossattn"].sum().item(), 0.0)
 
 
 if __name__ == "__main__":

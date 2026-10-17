@@ -471,21 +471,26 @@ class StableDiffusionProcessing:
             self, StableDiffusionProcessingImg2Img
         ):
             init_latent_hash = hash_tensor(self.init_latent)
+        prompt_guidance = getattr(required_prompts, "distilled_cfg_scale", None)
         return (
-            required_prompts,
+            tuple(required_prompts),
             steps,
             hires_steps,
             extra_network_data,
-            None if prompt_only_conditioning else self.width,
-            None if prompt_only_conditioning else self.height,
-            self.distilled_cfg_scale,
+            None if prompt_only_conditioning else (getattr(required_prompts, "width", None) or self.width),
+            None if prompt_only_conditioning else (getattr(required_prompts, "height", None) or self.height),
+            self.distilled_cfg_scale if prompt_guidance is None else prompt_guidance,
             getattr(self, "hr_distilled_cfg", None),
             str(sd_models.model_data.forge_loading_parameters),
             opts.CLIP_stop_at_last_layers,
             opts.sdxl_crop_left,
             opts.sdxl_crop_top,
+            opts.sdxl_zero_neg,
+            opts.sdxl_refiner_low_aesthetic_score,
+            opts.sdxl_refiner_high_aesthetic_score,
             opts.emphasis,
             init_latent_hash,
+            getattr(required_prompts, "is_negative_prompt", False),
         )
 
     def get_conds_with_caching(self, function: prompt_parser.get_learned_conditioning | prompt_parser.get_multicond_learned_conditioning, required_prompts, steps, caches, extra_network_data, hires_steps=None):

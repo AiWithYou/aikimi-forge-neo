@@ -157,7 +157,7 @@ class SdConditioning(list):
         self.is_negative_prompt = is_negative_prompt or getattr(copy_from, "is_negative_prompt", False)
         self.width = width or getattr(copy_from, "width", None)
         self.height = height or getattr(copy_from, "height", None)
-        self.distilled_cfg_scale = distilled_cfg_scale or getattr(copy_from, "distilled_cfg_scale", None)
+        self.distilled_cfg_scale = distilled_cfg_scale if distilled_cfg_scale is not None else getattr(copy_from, "distilled_cfg_scale", None)
 
 
 def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps: int, hires_steps: int = None):

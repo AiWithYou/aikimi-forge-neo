@@ -64,7 +64,9 @@ class Flux(ForgeDiffusionEngine):
         cond = dict(crossattn=cond_t5, vector=pooled_l)
 
         if self.use_distilled_cfg_scale:
-            distilled_cfg_scale = getattr(prompt, "distilled_cfg_scale", 3.0) or 3.0
+            distilled_cfg_scale = getattr(prompt, "distilled_cfg_scale", None)
+            if distilled_cfg_scale is None:
+                distilled_cfg_scale = 3.0
             cond["guidance"] = torch.FloatTensor([distilled_cfg_scale] * len(prompt))
             memory_management.logger.debug(f"Distilled CFG Scale: {distilled_cfg_scale}")
 
