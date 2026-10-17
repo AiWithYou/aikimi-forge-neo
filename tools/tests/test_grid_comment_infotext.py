@@ -29,6 +29,11 @@ class GridCommentInfotextTests(unittest.TestCase):
         function = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "infotext" and "use_main_prompt" in {a.arg for a in n.args.args})
         scope = {"p": p, "n": 1, "opts": fixture.opts, "create_infotext": fixture.create}
         exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), scope)  # noqa: S102
+        hr_prompt = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "get_hr_prompt")
+        hr_prompt.decorator_list = []
+        exec(compile(ast.Module(body=[hr_prompt], type_ignores=[]), str(path), "exec"), scope)  # noqa: S102
+        p.all_hr_prompts = ["first hires", "second hires"]
+        p.extra_generation_params = {"Per image": ["first extra", "second extra"], "Hires prompt": scope["get_hr_prompt"]}
         for save_comments, main, prompt, negative, seed, variation in (
             (True, True, p._all_prompts_c[0], p._all_negative_prompts_c[0], "101", "303"),
             (True, False, p._all_prompts_c[1], p._all_negative_prompts_c[1], "202", "404"),
@@ -42,6 +47,8 @@ class GridCommentInfotextTests(unittest.TestCase):
                 self.assertEqual(parsed["Negative prompt"], negative)
                 self.assertEqual(parsed["Seed"], seed)
                 self.assertEqual(parsed["Variation seed"], variation)
+                self.assertEqual(parsed["Per image"], "first extra" if main else "second extra")
+                self.assertEqual(parsed["Hires prompt"], "first hires" if main else "second hires")
 
         video_call = next(
             n for n in ast.walk(tree) if isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
@@ -57,6 +64,35 @@ class GridCommentInfotextTests(unittest.TestCase):
                 self.assertEqual(parsed["Prompt"], p._all_prompts_c[1] if save_comments else "second")
                 self.assertEqual(parsed["Seed"], "202")
                 self.assertEqual(parsed["Variation seed"], "404")
+                self.assertEqual(parsed["Per image"], "second extra")
+                self.assertEqual(parsed["Hires prompt"], "second hires")
+
+        fixture.opts.save_prompt_comments = False
+        p.prompts, p.negative_prompts = ["effective prompt"], ["effective negative"]
+        p.seeds, p.subseeds = [999], [888]
+        parsed = fixture.info.parse_generation_parameters(scope["infotext"]())
+        self.assertEqual(parsed["Prompt"], "effective prompt")
+        self.assertEqual(parsed["Negative prompt"], "effective negative")
+        self.assertEqual(parsed["Seed"], "999")
+        self.assertEqual(parsed["Variation seed"], "888")
+        self.assertEqual(parsed["Per image"], "second extra")
+        self.assertEqual(p.all_prompts, ["first", "second"])
+        self.assertEqual(p.all_seeds, [101, 202])
+
+        p.batch_size = 2
+        p.all_prompts = ["first", "second", "third", "fourth"]
+        p.all_negative_prompts = [""] * 4
+        p.all_seeds, p.all_subseeds = [1, 2, 3, 4], [5, 6, 7, 8]
+        p.prompts, p.negative_prompts = ["third effective", "fourth effective"], ["", ""]
+        p.seeds, p.subseeds = [33, 44], [77, 88]
+        p.all_hr_prompts = ["hr1", "hr2", "hr3", "hr4"]
+        p.extra_generation_params["Per image"] = ["extra1", "extra2", "extra3", "extra4"]
+        parsed = fixture.info.parse_generation_parameters(scope["infotext"](1))
+        self.assertEqual(parsed["Prompt"], "fourth effective")
+        self.assertEqual(parsed["Seed"], "44")
+        self.assertEqual(parsed["Variation seed"], "88")
+        self.assertEqual(parsed["Per image"], "extra4")
+        self.assertEqual(parsed["Hires prompt"], "hr4")
 
 
 if __name__ == "__main__":

@@ -1153,14 +1153,22 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                 x_samples_ddim = batch_params.images
 
             def infotext(index=0, use_main_prompt=False):
-                if opts.save_prompt_comments and hasattr(p, "_all_prompts_c") and hasattr(p, "_all_negative_prompts_c"):
-                    if use_main_prompt:
-                        return create_infotext(p, p._all_prompts_c, p.all_seeds, p.all_subseeds, use_main_prompt=False, index=0, all_negative_prompts=p._all_negative_prompts_c)
-                    _prompts = p._all_prompts_c[n * p.batch_size : (n + 1) * p.batch_size]
-                    _negative_prompts = p._all_negative_prompts_c[n * p.batch_size : (n + 1) * p.batch_size]
-                    return create_infotext(p, _prompts, p.seeds, p.subseeds, use_main_prompt=False, index=index, all_negative_prompts=_negative_prompts)
-
-                return create_infotext(p, p.prompts, p.seeds, p.subseeds, use_main_prompt=use_main_prompt, index=index, all_negative_prompts=p.negative_prompts)
+                start = n * p.batch_size
+                end = start + p.batch_size
+                _prompts, _negative_prompts, _seeds, _subseeds = [
+                    [*all_values[:start], *batch_values, *all_values[end:]]
+                    for all_values, batch_values in (
+                        (p.all_prompts, p.prompts), (p.all_negative_prompts, p.negative_prompts),
+                        (p.all_seeds, p.seeds), (p.all_subseeds, p.subseeds),
+                    )
+                ]
+                raw_comments = opts.save_prompt_comments and hasattr(p, "_all_prompts_c") and hasattr(p, "_all_negative_prompts_c")
+                if raw_comments:
+                    _prompts, _negative_prompts = p._all_prompts_c, p._all_negative_prompts_c
+                return create_infotext(
+                    p, _prompts, _seeds, _subseeds, use_main_prompt=use_main_prompt and not raw_comments,
+                    index=0 if use_main_prompt else start + index, all_negative_prompts=_negative_prompts,
+                )
 
             save_samples = p.save_samples(is_video=_is_video)
             if _is_video:
