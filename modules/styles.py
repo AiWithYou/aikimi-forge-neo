@@ -1,9 +1,12 @@
-from pathlib import Path
-from modules import errors
 import csv
+import io
 import os
-import typing
 import shutil
+import typing
+from pathlib import Path
+
+from modules import errors
+from modules.atomic_file import atomic_write_text
 
 
 class PromptStyle(typing.NamedTuple):
@@ -178,7 +181,7 @@ class StyleDatabase:
                 shutil.copy(style_path, f"{style_path}.bak")
 
             # Write the styles to the CSV file
-            with open(style_path, "w", encoding="utf-8-sig", newline="") as file:
+            with io.StringIO(newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=self.prompt_fields)
                 writer.writeheader()
                 for style in (s for s in self.styles.values() if s.path == style_path):
@@ -187,6 +190,7 @@ class StyleDatabase:
                         continue
                     # Write style fields, ignoring the path field
                     writer.writerow({k: v for k, v in style._asdict().items() if k != "path"})
+                atomic_write_text(style_path, "\ufeff" + file.getvalue())
 
     def extract_styles_from_prompt(self, positive, negative):
         extracted = []

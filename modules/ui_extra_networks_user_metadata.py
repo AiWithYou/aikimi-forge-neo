@@ -129,6 +129,8 @@ class UserMetadataEditor:
         return html.escape(name), user_metadata.get("description", ""), table, self.get_card_html(name), user_metadata.get("notes", "")
 
     def write_user_metadata(self, name, metadata):
+        from modules.atomic_file import atomic_write_json
+
         item = self.page.items.get(name, {})
         filename = item.get("filename", None)
         basename, ext = os.path.splitext(filename)
@@ -137,8 +139,7 @@ class UserMetadataEditor:
         resolved_metadata_path = os.path.realpath(metadata_path)
         if not ui_extra_networks.path_is_parent(os.path.dirname(metadata_path), resolved_metadata_path) or os.path.splitext(resolved_metadata_path)[1].lower() != ".json":
             raise AssertionError("metadata target must be a JSON file in the model directory")
-        with open(resolved_metadata_path, "w", encoding="utf8") as file:
-            json.dump(metadata, file, indent=4, ensure_ascii=False)
+        atomic_write_json(resolved_metadata_path, metadata)
         self.page.lister.update_file_entry(metadata_path)
 
     def save_user_metadata(self, name, desc, notes):

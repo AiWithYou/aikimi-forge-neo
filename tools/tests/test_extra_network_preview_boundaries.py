@@ -10,6 +10,7 @@ import unittest
 from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -109,6 +110,30 @@ class ExtraNetworkPreviewBoundaryTests(unittest.TestCase):
         except OSError as error:
             self.skipTest(f"symlink creation is unavailable: {error}")
         return link, target
+
+    def test_metadata_serialization_failure_preserves_existing_notes(self):
+        self.assert_failed_metadata_save_preserves_notes({"notes": "new", "invalid": object()}, TypeError)
+
+    def test_metadata_replace_failure_preserves_existing_notes_and_cleans_temp(self):
+        with patch("modules.atomic_file.os.replace", side_effect=OSError("disk write failed")):
+            self.assert_failed_metadata_save_preserves_notes({"notes": "new"}, OSError)
+
+    def assert_failed_metadata_save_preserves_notes(self, metadata, expected_error):
+        sidecar = self.models / "model.json"
+        original = b'{"notes": "keep this"}'
+        sidecar.write_bytes(original)
+        updates = []
+        page = SimpleNamespace(
+            extra_networks_tabname="lora",
+            items={"model": {"filename": str(self.models / "model.safetensors")}},
+            lister=SimpleNamespace(update_file_entry=updates.append),
+        )
+        editor = self.namespace["UserMetadataEditor"](None, "txt2img", page)
+        with self.assertRaises(expected_error):
+            editor.write_user_metadata("model", metadata)
+        self.assertEqual(sidecar.read_bytes(), original)
+        self.assertEqual(updates, [])
+        self.assertEqual(list(self.models.iterdir()), [sidecar])
 
     def test_model_file_name_is_literal_in_metadata_table(self):
         for name in ("日本語 &copy; &notin;.safetensors", "normal.safetensors"):
