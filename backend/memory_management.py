@@ -1493,11 +1493,14 @@ if args.pin_shared_memory:
 
 def discard_cuda_async_error():
     try:
-        a = torch.tensor([1], dtype=torch.uint8, device=get_torch_device())
-        b = torch.tensor([1], dtype=torch.uint8, device=get_torch_device())
+        device = get_torch_device()
+        if device.type != "cuda":
+            return
+        a = torch.tensor([1], dtype=torch.uint8, device=device)
+        b = torch.tensor([1], dtype=torch.uint8, device=device)
         _ = a + b
-        torch.cuda.synchronize()
-    except torch.AcceleratorError:
+        torch.cuda.synchronize(device)
+    except RuntimeError:
         pass
 
 

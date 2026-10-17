@@ -49,7 +49,11 @@ def apply_control(h, control, name):
         if ctrl is not None:
             try:
                 h += ctrl
-            except:
+            except Exception as error:
+                from backend.memory_management import is_oom
+
+                if isinstance(error, MemoryError) or is_oom(error):
+                    raise
                 print("warning control could not be applied", h.shape, ctrl.shape)
     return h
 
