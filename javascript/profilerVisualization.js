@@ -55,7 +55,7 @@ function createVisualizationTable(data, cutoff = 0, sort = "") {
     cols[0].colSpan = maxLength;
 
     function arraysEqual(a, b) {
-        return !(a < b || b < a);
+        return a.length === b.length && a.every((value, index) => value === b[index]);
     }
 
     let addLevel = function (level, parent, hide) {
@@ -82,7 +82,7 @@ function createVisualizationTable(data, cutoff = 0, sort = "") {
             }
             cells.push(cutoff === 0 ? x.value : x.value.toFixed(3));
             let cols = createRow(table, "td", cells);
-            for (i = 0; i < level; i++) {
+            for (let i = 0; i < level; i++) {
                 cols[i].className = "muted";
             }
 
@@ -122,7 +122,7 @@ function createVisualizationTable(data, cutoff = 0, sort = "") {
             cells.push(othersTime.toFixed(3));
             cells[level] = "others";
             let cols = createRow(table, "td", cells);
-            for (i = 0; i < level; i++) {
+            for (let i = 0; i < level; i++) {
                 cols[i].className = "muted";
             }
 

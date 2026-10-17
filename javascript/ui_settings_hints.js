@@ -38,7 +38,7 @@ onOptionsChanged(function () {
                 span.parentElement.insertBefore(document.createTextNode("\xa0"), span);
             }
             if (commentAfter) {
-                comment = document.createElement("DIV");
+                let comment = document.createElement("DIV");
                 comment.className = "settings-comment";
                 comment.innerHTML = commentAfter;
                 span.parentElement.insertBefore(comment, span.nextSibling);

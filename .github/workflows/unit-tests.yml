@@ -91,6 +91,8 @@ jobs:
         run: node --test tools/tests/flux3_layout.test.mjs
       - name: Run image drop security contracts
         run: node --test tools/tests/dragdrop_security.test.mjs
+      - name: Run UI helper contracts
+        run: node --test tools/tests/ui_helpers.test.mjs
       - name: Run Clef contracts without model downloads
         run: python tools/run_ci_tests.py --pytest tools/tests/test_clef*.py -q
       - name: Run SenseNova checkpoint contracts without model downloads
