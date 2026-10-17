@@ -1,6 +1,8 @@
 """Authenticated browser image imports through the shared safe downloader."""
 
-from fastapi import Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 
 from modules.aikimi_security.auth import request_has_gradio_auth_async
@@ -9,6 +11,19 @@ from modules.aikimi_security.url_fetch import SafeFetchError, fetch_remote_image
 
 class RemoteImageRequest(BaseModel):
     url: str = Field(min_length=1, max_length=4096)
+
+
+class RemoteImageRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def validate_request(request: Request):
+            try:
+                return await handler(request)
+            except RequestValidationError as error:
+                raise HTTPException(status_code=422, detail="Invalid image import request.") from error
+
+        return validate_request
 
 
 def register_remote_image_route(app) -> None:
@@ -27,9 +42,11 @@ def register_remote_image_route(app) -> None:
             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
         )
 
-    app.add_api_route(
+    router = APIRouter(route_class=RemoteImageRoute)
+    router.add_api_route(
         "/internal/remote-image",
         remote_image,
         methods=["POST"],
         dependencies=[Depends(require_auth)],
     )
+    app.include_router(router)

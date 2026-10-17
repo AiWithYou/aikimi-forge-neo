@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
 import ssl
 import sys
 import tarfile
 import tempfile
 import types
+import uuid
 from pathlib import Path
 from unittest import TestCase, main, mock
 from zipfile import ZipFile
@@ -122,6 +124,22 @@ class LegacyArchiveBoundaryTests(TestCase):
 
 
 class H3CommandBoundaryTests(TestCase):
+    def test_real_setup_child_receives_metacharacters_only_as_path_data(self):
+        from modules_forge import minimax_h3_setup_ui
+
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        script = root / "tools/setup_minimax_h3.py"
+        script.parent.mkdir()
+        script.write_text(
+            "import json, sys\nfrom pathlib import Path\n"
+            "Path(__file__).resolve().parents[1].joinpath('argv.json').write_text("
+            "json.dumps(sys.argv[1:]), encoding='utf-8')\n",
+            encoding="utf-8",
+        )
+        value = r'C:\models\shared & echo unintended | command "quoted"'
+        list(minimax_h3_setup_ui._setup_process(value, root, root / "runtime"))
+        self.assertEqual(json.loads((root / "argv.json").read_text(encoding="utf-8")), ["--share-models", value])
+
     def test_shared_model_path_is_a_literal_argument_and_never_a_shell_command(self):
         from modules_forge import minimax_h3_setup_ui
 
@@ -136,6 +154,69 @@ class H3CommandBoundaryTests(TestCase):
         self.assertEqual(arguments[0], sys.executable)
         self.assertEqual(arguments[2], str(root / "tools/setup_minimax_h3.py"))
         self.assertFalse(popen.call_args.kwargs.get("shell", False))
+
+
+class H3JobIdentifierBoundaryTests(TestCase):
+    def setUp(self):
+        from modules_forge import minimax_h3_bridge
+
+        self.bridge = minimax_h3_bridge
+        self.requests = []
+
+        def respond(request):
+            self.requests.append(request)
+            value = {"prompt_id": json.loads(request.content)["prompt_id"]} if request.url.path == "/prompt" else {}
+            return httpx.Response(200, json=value)
+
+        client_type = httpx.Client
+
+        def client_factory(**kwargs):
+            return client_type(transport=httpx.MockTransport(respond), **kwargs)
+
+        with mock.patch.object(self.bridge.httpx, "Client", side_effect=client_factory):
+            self.client = self.bridge.ComfyH3Client()
+        self.addCleanup(self.client.close)
+        self.enterContext(mock.patch.object(self.bridge, "_mark_cancelled_job"))
+        self.record = self.enterContext(mock.patch.object(self.bridge.pending_jobs, "update"))
+
+    def test_invalid_ids_cannot_change_the_backend_api_path(self):
+        invalid = ("../../system_stats", "../queue", "..", ".", r"..\system_stats", "not-a-job", "a" * 32)
+        for operation in (self.client.job, self.client.history, self.client.cancel, self.client.submit):
+            for value in invalid:
+                with (
+                    self.subTest(operation=operation.__name__, value=value),
+                    self.assertRaises(self.bridge.H3BridgeError),
+                ):
+                    if operation == self.client.submit:
+                        operation({}, value)
+                    else:
+                        operation(value)
+        self.assertEqual(self.requests, [])
+        self.record.assert_not_called()
+
+    def test_canonical_ids_still_use_the_exact_job_routes(self):
+        identifier = str(uuid.uuid4())
+        self.assertEqual(self.client.submit({}, identifier), identifier)
+        self.client.job(identifier)
+        self.client.history(identifier)
+        self.client.cancel(identifier)
+        self.assertEqual(
+            [(request.method, request.url.path) for request in self.requests],
+            [
+                ("POST", "/prompt"),
+                ("GET", f"/api/jobs/{identifier}"),
+                ("GET", f"/history/{identifier}"),
+                ("POST", f"/api/jobs/{identifier}/cancel"),
+            ],
+        )
+
+    def test_backend_redirects_are_not_followed_to_another_origin(self):
+        with mock.patch.object(
+            self.client._client,
+            "_transport",
+            httpx.MockTransport(lambda request: httpx.Response(302, headers={"Location": "https://outside.example/"})),
+        ):
+            self.assertEqual(self.client.job(str(uuid.uuid4())), {})
 
 
 if __name__ == "__main__":

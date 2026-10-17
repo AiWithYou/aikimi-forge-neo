@@ -71,6 +71,41 @@ class RemoteImageRouteTests(TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.content, self.png)
 
+    def test_unicode_and_escaped_image_urls_reach_the_real_http_transport(self):
+        cases = (
+            (
+                "http://images.example/写真 1.png?説明=猫&literal=%2F+plus",
+                "/%E5%86%99%E7%9C%9F%201.png?%E8%AA%AC%E6%98%8E=%E7%8C%AB&literal=%2F+plus",
+            ),
+            ("http://images.example/already%20quoted.png?raw=%2f%2B", "/already%20quoted.png?raw=%2f%2B"),
+        )
+        for url, expected_target in cases:
+            with self.subTest(url=url):
+                transport = mock.Mock()
+                transport.makefile.return_value = io.BytesIO(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: "
+                    + str(len(self.png)).encode("ascii")
+                    + b"\r\nConnection: close\r\n\r\n"
+                    + self.png
+                )
+                with (
+                    TestClient(self.app()) as client,
+                    mock.patch.object(
+                        socket,
+                        "getaddrinfo",
+                        return_value=[
+                            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))
+                        ],
+                    ),
+                    mock.patch.object(socket, "create_connection", return_value=transport) as connect,
+                ):
+                    response = client.post("/internal/remote-image", json={"url": url})
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.content, self.png)
+                sent = b"".join(call.args[0] for call in transport.sendall.call_args_list)
+                self.assertEqual(sent.split(b"\r\n", 1)[0], f"GET {expected_target} HTTP/1.1".encode("ascii"))
+                self.assertEqual(connect.call_args.args[0], ("93.184.216.34", 80))
+
     def test_internal_network_urls_are_rejected_without_opening_a_connection(self):
         app = self.app()
         with TestClient(app) as client:
@@ -100,13 +135,37 @@ class RemoteImageRouteTests(TestCase):
     def test_get_and_cross_origin_simple_post_cannot_start_a_download(self):
         with TestClient(self.app()) as client, mock.patch.object(self.route, "fetch_remote_image") as fetch:
             self.assertEqual(client.get("/internal/remote-image").status_code, 405)
+            for content_type in (None, "text/plain", "application/x-www-form-urlencoded", "multipart/form-data"):
+                headers = {"Origin": "https://untrusted.example"}
+                if content_type:
+                    headers["Content-Type"] = content_type
+                with self.subTest(content_type=content_type):
+                    response = client.post(
+                        "/internal/remote-image",
+                        content=b'{"url":"https://images.example/a.png"}',
+                        headers=headers,
+                    )
+                    self.assertEqual(response.status_code, 422)
+        fetch.assert_not_called()
+
+    def test_invalid_unicode_url_is_rejected_without_opening_a_connection(self):
+        with (
+            TestClient(self.app()) as client,
+            mock.patch.object(
+                socket,
+                "getaddrinfo",
+                return_value=[(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))],
+            ),
+            mock.patch.object(socket, "create_connection") as connect,
+        ):
             response = client.post(
                 "/internal/remote-image",
-                content='{"url":"https://images.example/a.png"}',
-                headers={"Content-Type": "text/plain", "Origin": "https://untrusted.example"},
+                content=b'{"url":"http://images.example/\\ud800.png"}',
+                headers={"Content-Type": "application/json"},
             )
-            self.assertEqual(response.status_code, 422)
-        fetch.assert_not_called()
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json(), {"detail": "Invalid image import request."})
+        connect.assert_not_called()
 
 
 if __name__ == "__main__":

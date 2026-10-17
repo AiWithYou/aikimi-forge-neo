@@ -883,7 +883,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             )
             client = ComfyH3Client()
             with self.assertRaisesRegex(H3JobNotFound, "HTTP 404.*missing"):
-                client.job("missing-job")
+                client.job("00000000-0000-4000-8000-000000000000")
             client.close()
 
     def test_adaptive_generation_poll_interval_is_responsive_then_backs_off(self):
@@ -1093,21 +1093,21 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
         client = ComfyH3Client.__new__(ComfyH3Client)
 
         def assert_intent(_path, _payload):
-            self.assertTrue(_is_cancelled_job("cancel-race-job"))
+            self.assertTrue(_is_cancelled_job("00000000-0000-4000-8000-000000000001"))
             return {}
 
         client._request_json = mock.Mock(side_effect=assert_intent)
         try:
-            client.cancel("cancel-race-job")
-            self.assertTrue(_is_cancelled_job("cancel-race-job"))
+            client.cancel("00000000-0000-4000-8000-000000000001")
+            self.assertTrue(_is_cancelled_job("00000000-0000-4000-8000-000000000001"))
         finally:
-            _clear_cancelled_job("cancel-race-job")
+            _clear_cancelled_job("00000000-0000-4000-8000-000000000001")
 
         client._request_json = mock.Mock(side_effect=H3BridgeError("cancel failed"))
         with self.assertRaisesRegex(H3BridgeError, "cancel failed"):
-            client.cancel("cancel-failure-job")
-        self.assertTrue(_is_cancelled_job("cancel-failure-job"))
-        _clear_cancelled_job("cancel-failure-job")
+            client.cancel("00000000-0000-4000-8000-000000000002")
+        self.assertTrue(_is_cancelled_job("00000000-0000-4000-8000-000000000002"))
+        _clear_cancelled_job("00000000-0000-4000-8000-000000000002")
 
     @mock.patch("modules_forge.minimax_h3_bridge.time.sleep")
     @mock.patch("modules_forge.minimax_h3_bridge.cleanup_prepared_media")
@@ -1616,7 +1616,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             item = HistoryItem(video.resolve(), video.stat().st_mtime, "Forge Neo")
             video.unlink()
             with self.assertRaisesRegex(H3BridgeError, "削除されたか、移動"):
-                cache_history_video(str(video), [item], output)
+                cache_history_video(item.public_id, [item], output)
 
     def test_history_request_restores_valid_forge_metadata(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1639,7 +1639,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             video.with_suffix(".json").write_text(json.dumps(metadata), encoding="utf-8")
             item = HistoryItem(video.resolve(), video.stat().st_mtime, "Forge Neo")
 
-            request = load_history_request(str(video), [item], output)
+            request = load_history_request(item.public_id, [item], output)
 
             self.assertEqual(request.mode, MODE_REFERENCES)
             self.assertEqual(request.prompt, metadata["prompt"])
@@ -1659,7 +1659,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             external.write_bytes(b"video")
             external_item = HistoryItem(external.resolve(), external.stat().st_mtime, "ComfyUI")
             with self.assertRaisesRegex(H3BridgeError, "Forge Neoで保存"):
-                load_history_request(str(external), [external_item], output)
+                load_history_request(external_item.public_id, [external_item], output)
 
             video = output / "MiniMax_H3_incomplete.mp4"
             video.write_bytes(b"video")
@@ -1669,7 +1669,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             )
             item = HistoryItem(video.resolve(), video.stat().st_mtime, "Forge Neo")
             with self.assertRaisesRegex(H3BridgeError, "設定が不足"):
-                load_history_request(str(video), [item], output)
+                load_history_request(item.public_id, [item], output)
 
     def test_mirror_result_writes_video_and_utf8_metadata_without_bom(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1782,8 +1782,8 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
             ]
             output = root / "output"
 
-            first_cached = Path(cache_history_video(str(first), items, output))
-            second_cached = Path(cache_history_video(str(second), items, output))
+            first_cached = Path(cache_history_video(items[0].public_id, items, output))
+            second_cached = Path(cache_history_video(items[1].public_id, items, output))
 
             self.assertNotEqual(first_cached, second_cached)
             self.assertEqual(first_cached.read_bytes(), b"first video")

@@ -14,7 +14,7 @@ import ssl
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Protocol
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 
 class SafeFetchError(ValueError):
@@ -170,11 +170,15 @@ def validate_remote_url(url: str) -> ValidatedTarget:
     if not 1 <= port <= 65535:
         raise SafeFetchError("The remote image URL uses an invalid port.")
     addresses = resolve_public_addresses(host, port)
-    path = parsed.path or "/"
-    request_target = f"{path}?{parsed.query}" if parsed.query else path
+    try:
+        path = quote(parsed.path or "/", safe="/%:@!$&'()*+,;=")
+        query = quote(parsed.query, safe="/?%:@!$&'()*+,;=")
+    except UnicodeError as exc:
+        raise SafeFetchError("The remote image URL is invalid.") from exc
+    request_target = f"{path}?{query}" if query else path
     display_host = f"[{host}]" if ":" in host else host
     explicit_port = f":{port}" if parsed.port is not None else ""
-    normalized_url = urlunsplit((scheme, f"{display_host}{explicit_port}", path, parsed.query, ""))
+    normalized_url = urlunsplit((scheme, f"{display_host}{explicit_port}", path, query, ""))
     return ValidatedTarget(
         url=normalized_url,
         scheme=scheme,
