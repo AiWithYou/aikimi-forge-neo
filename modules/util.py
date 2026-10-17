@@ -76,8 +76,15 @@ class MassFileListerCachedDir:
         self.files_cased = None
         self.dirname = dirname
 
-        stats = ((x.name, x.stat(follow_symlinks=False)) for x in os.scandir(self.dirname))
-        files = [(n, s.st_mtime, s.st_ctime) for n, s in stats]
+        files = []
+        with os.scandir(self.dirname) as entries:
+            for entry in entries:
+                try:
+                    stat = entry.stat(follow_symlinks=False)
+                except FileNotFoundError:
+                    # Model downloads and removals can race directory refreshes.
+                    continue
+                files.append((entry.name, stat.st_mtime, stat.st_ctime))
         self.files = {x[0].lower(): x for x in files}
         self.files_cased = {x[0]: x for x in files}
 
