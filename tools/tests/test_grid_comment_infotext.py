@@ -4,6 +4,7 @@ import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from tools.tests.test_infotext_prompt_restore import RestoreFixture
 
@@ -41,6 +42,21 @@ class GridCommentInfotextTests(unittest.TestCase):
                 self.assertEqual(parsed["Negative prompt"], negative)
                 self.assertEqual(parsed["Seed"], seed)
                 self.assertEqual(parsed["Variation seed"], variation)
+
+        video_call = next(
+            n for n in ast.walk(tree) if isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+            and isinstance(n.value.func, ast.Attribute) and n.value.func.attr == "save_video"
+        )
+        for save_comments in (False, True):
+            with self.subTest(video=True, save_comments=save_comments):
+                fixture.opts.save_prompt_comments = save_comments
+                images = SimpleNamespace(save_video=Mock(return_value="fixture.mp4"))
+                scope.update(images=images, frames=[])
+                exec(compile(ast.Module(body=[video_call], type_ignores=[]), str(path), "exec"), scope)  # noqa: S102
+                parsed = fixture.info.parse_generation_parameters(images.save_video.call_args.kwargs["info"])
+                self.assertEqual(parsed["Prompt"], p._all_prompts_c[1] if save_comments else "second")
+                self.assertEqual(parsed["Seed"], "202")
+                self.assertEqual(parsed["Variation seed"], "404")
 
 
 if __name__ == "__main__":
