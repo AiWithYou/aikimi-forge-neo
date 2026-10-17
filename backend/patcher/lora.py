@@ -61,8 +61,8 @@ def merge_lora_to_weight(patches: list[tuple], weight: torch.Tensor, key: str, c
                 logger.error("Calculate Weight Failed: {} {}".format(v.name, key))
             else:
                 weight = output
-                if old_weight is not None:
-                    weight = old_weight
+            if old_weight is not None:
+                weight = old_weight
             continue
 
         if len(v) == 1:

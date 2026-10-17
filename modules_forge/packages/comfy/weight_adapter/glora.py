@@ -55,6 +55,7 @@ class GLoRAAdapter(WeightAdapterBase):
         dora_scale = v[5]
 
         old_glora = False
+        rank = None
         if v[3].shape[1] == v[2].shape[0] == v[0].shape[0] == v[1].shape[1]:
             rank = v[0].shape[0]
             old_glora = True
@@ -65,6 +66,10 @@ class GLoRAAdapter(WeightAdapterBase):
             else:
                 old_glora = False
                 rank = v[1].shape[0]
+
+        if rank is None or rank <= 0:
+            logging.error("ERROR %s %s invalid rank or incompatible factor shapes", self.name, key)
+            return weight
 
         a1 = memory_management.cast_to_device(v[0].flatten(start_dim=1), weight.device, intermediate_dtype)
         a2 = memory_management.cast_to_device(v[1].flatten(start_dim=1), weight.device, intermediate_dtype)
