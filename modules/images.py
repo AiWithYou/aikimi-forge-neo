@@ -742,7 +742,13 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
     fullfn_without_extension, extension = os.path.splitext(params.filename)
     if hasattr(os, "statvfs"):
         max_name_len = os.statvfs(path).f_namemax
-        fullfn_without_extension = fullfn_without_extension[: max_name_len - max(4, len(extension))]
+        directory, filename_stem = os.path.split(fullfn_without_extension)
+        stem_limit = max_name_len - max(4, len(os.fsencode(extension)))
+        if stem_limit < 1:
+            raise ValueError("Image extension exceeds the filesystem filename limit")
+        while len(os.fsencode(filename_stem)) > stem_limit:
+            filename_stem = filename_stem[:-1]
+        fullfn_without_extension = os.path.join(directory, filename_stem)
         params.filename = fullfn_without_extension + extension
         fullfn = params.filename
 
