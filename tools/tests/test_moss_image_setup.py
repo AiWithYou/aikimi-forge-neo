@@ -89,6 +89,15 @@ class MossImageSetupTests(unittest.TestCase):
                 setup.run(root=self.root, download=download)
         download.assert_not_called()
 
+    def test_download_returning_same_file_with_a_path_alias_is_verified(self):
+        def download(**kwargs):
+            actual = self.populate()
+            return str(actual.parent / ".." / actual.parent.name / actual.name)
+
+        with patch.object(setup, "manifest", return_value=self.manifest):
+            self.assertTrue(setup.run(root=self.root, download=download)["ok"])
+        self.assertTrue((self.root / ".forge-moss-image.json").is_file())
+
     def test_failure_invalidates_an_old_ready_receipt(self):
         self.populate(b"x" * len(self.data))
         receipt = self.root / ".forge-moss-image.json"

@@ -241,7 +241,7 @@ def run(*, root=MODEL_ROOT, dry_run=False, download=None, precision="int8", text
                 # local_dir follows the Hub filename, which can differ from our managed path.
                 filename_parts = PurePosixPath(spec["filename"]).parts
                 local_dir = path.parents[len(filename_parts) - 1]
-                source = Path(
+                source = core.safe_model_root(
                     download(
                         repo_id=spec["repo_id"],
                         revision=spec["revision"],
