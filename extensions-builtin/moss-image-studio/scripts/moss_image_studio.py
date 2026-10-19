@@ -1,9 +1,10 @@
-"""MOSS-Image-SFT text generation in the shared image workspace."""
+"""MOSS generation, reference editing and distillation in the shared workspace."""
 
 import gradio as gr
 
 from modules import script_callbacks
 from modules_forge import local_assets
+from modules_forge.moss_image import checkpoints, core
 from modules_forge.moss_image import lora as local_lora
 from modules_forge.moss_image.core import MODEL_ROOT
 from modules_forge.moss_image.service import SERVICE
@@ -24,27 +25,62 @@ def start(
     text_precision="int8",
     loras=None,
     lora_rows=None,
+    checkpoint="official",
+    mode="txt2img",
+    images=None,
+    edit_method="redraw",
+    denoise=0.65,
+    edit_lora="",
+    edit_strength=1.0,
+    kv_cache=True,
+    hires_enabled=False,
+    hires_scale=1.5,
+    hires_steps=20,
+    hires_denoise=0.35,
 ):
     state = dict(state or {})
     if state.get("job"):
         raise gr.Error("生成中です。完了または中断を待ってください。")
     try:
-        state["job"] = SERVICE.start(
-            dict(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                width=width,
-                height=height,
-                steps=steps,
-                cfg=cfg,
-                shift=shift,
-                seed=seed,
-                skip_layer=skip_layer,
-                precision=precision,
-                text_precision=text_precision,
-                loras=list(local_assets.lora_settings(loras, lora_rows)),
-            )
+        request = dict(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=width,
+            height=height,
+            steps=steps,
+            cfg=cfg,
+            shift=shift,
+            seed=seed,
+            skip_layer=skip_layer,
+            precision=precision,
+            text_precision=text_precision,
+            loras=list(local_assets.lora_settings(loras, lora_rows)),
         )
+        if checkpoint != "official":
+            request["checkpoint"] = checkpoint
+        if mode == "txt2img" and hires_enabled:
+            request["width"], request["height"] = core.hires_output_size(width, height, hires_scale)
+            request["hires"] = {
+                "base_width": width,
+                "base_height": height,
+                "steps": hires_steps,
+                "denoise": hires_denoise,
+            }
+        if mode == "img2img":
+            request.update(
+                mode=mode,
+                images=[item[0] if isinstance(item, (list, tuple)) else item for item in images or []],
+                edit_method=edit_method,
+                denoise=denoise,
+                kv_cache=kv_cache,
+            )
+            if edit_method == "reference":
+                if not edit_lora or edit_strength <= 0:
+                    raise ValueError("MOSSの編集用LoRAを選択し、強度を0より大きくしてください。")
+                if any(item["name"] == edit_lora for item in request["loras"]):
+                    raise ValueError("編集用LoRAを通常のLoRA欄と重複して選択しないでください。")
+                request["loras"].append({"name": edit_lora, "strength": edit_strength})
+        state["job"] = SERVICE.start(request)
     except ValueError as exc:
         raise gr.Error(str(exc)) from exc
     return (
@@ -70,6 +106,54 @@ def refresh_loras(names):
     return gr.update(choices=choices, value=[name for name in names or [] if name in choices])
 
 
+def refresh_models(name):
+    choices = checkpoints.inventory(MODEL_ROOT)
+    if name not in {value for _, value in choices}:
+        raise gr.Error("選択したモデルが見つからないか、形式を確認できません。モデルを選び直してください。")
+    return gr.update(choices=choices, value=name)
+
+
+def select_model(name):
+    if name == "official":
+        return gr.update(interactive=True)
+    try:
+        path = checkpoints.resolve(MODEL_ROOT, name)
+        precision = checkpoints.header_precision(checkpoints.local_assets.read_header(path))
+    except ValueError as error:
+        raise gr.Error(str(error)) from error
+    return gr.update(value=precision, interactive=False)
+
+
+def edit_controls(method):
+    multiple = method == "reference"
+    return (
+        gr.update(visible=not multiple),
+        gr.update(visible=multiple),
+        gr.update(label="参照画像（最大3枚・入力順にPicture 1〜3）" if multiple else "参照画像（1枚）"),
+    )
+
+
+def reference_size(images):
+    if not images:
+        raise gr.Error("参照画像を入力してください。")
+    image = images[0][0] if isinstance(images[0], (tuple, list)) else images[0]
+    from PIL import ImageOps
+
+    width, height = ImageOps.exif_transpose(image).size
+    scale = min(4096 / max(width, height), max(1, 512 / min(width, height)))
+    return max(512, int(width * scale) // 16 * 16), max(512, int(height * scale) // 16 * 16)
+
+
+def hires_preview(enabled, width, height, scale):
+    if not enabled:
+        return ""
+    try:
+        width, height = core.hires_output_size(width, height, scale)
+    except ValueError as error:
+        return str(error)
+    return f"最終サイズ: **{width}×{height}**"
+
+
 def poll(state):
     state = dict(state or {})
     identifier = state.get("job")
@@ -87,13 +171,17 @@ def poll(state):
         "loading_text_encoder": "生成準備中…",
         "loading_diffusion": "生成準備中…",
         "encoding_prompt": "プロンプトを処理中…",
+        "encoding_references": "参照画像を処理中…",
         "sampling": "画像を生成中…",
+        "hires_upscaling": "画像を拡大中…",
+        "hires_encoding": "拡大した画像を処理中…",
+        "hires_sampling": "拡大した画像を仕上げ中…",
         "decoding": "画像を仕上げ中…",
         "saving": "保存中…",
         "complete": "保存中…",
     }.get(stage, "生成中…")
     current, total = result.get("current"), result.get("total")
-    if stage == "sampling" and type(current) is int and type(total) is int and 0 <= current <= total:
+    if stage in {"sampling", "hires_sampling"} and type(current) is int and type(total) is int and 0 <= current <= total:
         message += f" {current}/{total}"
     image, files = gr.skip(), gr.skip()
     if status == "complete":
@@ -124,7 +212,15 @@ def on_ui_tabs():
     from modules_forge.image_workspace import ImageWorkspace
 
     with gr.Blocks(analytics_enabled=False) as blocks:
-        model = gr.Textbox(value="MOSS-Image-SFT", label="モデル", interactive=False, elem_id="moss-image-model-name")
+        with gr.Row() as model_controls:
+            model = gr.Dropdown(
+                checkpoints.inventory(MODEL_ROOT),
+                value="official",
+                label="モデル",
+                interactive=True,
+                elem_id="moss-image-model-name",
+            )
+            model_refresh = gr.Button("モデル一覧を更新", size="sm", scale=0)
         model.do_not_save_to_config = True
         with gr.Row() as precisions:
             precision = gr.Dropdown(
@@ -167,12 +263,57 @@ def on_ui_tabs():
             lora_rows.do_not_save_to_config = True
         prompt = gr.Textbox(label="プロンプト", lines=4, placeholder="生成したい画像を自然文、タグ列、JSONで記述")
         negative = gr.Textbox(label="ネガティブプロンプト", lines=2)
+        with gr.Column() as reference_controls:
+            images = gr.Gallery(
+                label="参照画像（1枚）",
+                type="pil",
+                columns=3,
+                height=220,
+                object_fit="contain",
+                interactive=True,
+                elem_id="moss-image-references-gallery",
+            )
+            match_size = gr.Button("画像のサイズを使う", size="sm")
+            method = gr.Dropdown(
+                [("元画像から再描画", "redraw"), ("編集LoRAで複数参照", "reference")],
+                value="redraw",
+                label="編集方法",
+                elem_id="moss-image-edit-method",
+            )
+            denoise = gr.Slider(0.01, 1, value=0.65, step=0.01, label="変更量", elem_id="moss-image-denoise")
+            with gr.Column(visible=False, elem_id="moss-image-edit-settings") as edit_settings:
+                edit_lora = gr.Dropdown(
+                    [("選択してください", ""), *local_lora.inventory(MODEL_ROOT)],
+                    value="",
+                    label="編集用LoRA",
+                    elem_id="moss-image-edit-lora",
+                )
+                edit_refresh = gr.Button("編集用LoRA一覧を更新", size="sm")
+                edit_strength = gr.Slider(0, 2, value=1, step=0.05, label="編集LoRAの強度")
+                kv_cache = gr.Checkbox(value=True, label="参照キャッシュ", elem_id="moss-image-kv-cache")
+            for component in (images, method, edit_lora):
+                component.do_not_save_to_config = True
         run = gr.Button("生成", variant="primary")
         cancel = gr.Button("中断", interactive=False)
         with gr.Column() as settings:
             with gr.Row():
-                width = gr.Number(value=1024, precision=0, minimum=512, maximum=2048, step=16, label="幅")
-                height = gr.Number(value=1024, precision=0, minimum=512, maximum=2048, step=16, label="高さ")
+                width = gr.Number(value=1024, precision=0, minimum=512, maximum=4096, step=16, label="幅")
+                height = gr.Number(value=1024, precision=0, minimum=512, maximum=4096, step=16, label="高さ")
+            with gr.Group(elem_id="moss-image-hires-controls"):
+                hires_enabled = gr.Checkbox(
+                    value=False, label="拡大して仕上げる（Hires.fix）", elem_id="moss-image-hires-enabled"
+                )
+                with gr.Group(visible="hidden", elem_id="moss-image-hires-settings") as hires_settings:
+                    hires_scale = gr.Slider(
+                        1.05, 4, value=1.5, step=0.05, label="倍率", elem_id="moss-image-hires-scale"
+                    )
+                    hires_steps = gr.Slider(
+                        1, 200, value=20, step=1, label="仕上げSteps", elem_id="moss-image-hires-steps"
+                    )
+                    hires_denoise = gr.Slider(
+                        0.01, 1, value=0.35, step=0.01, label="仕上げの変更量", elem_id="moss-image-hires-denoise"
+                    )
+                    hires_size = gr.Markdown("", elem_id="moss-image-hires-size")
             steps = gr.Slider(1, 200, value=50, step=1, label="Steps")
             cfg = gr.Slider(0, 100, value=3, step=0.1, label="CFG")
             shift = gr.Slider(0.1, 100, value=5, step=0.1, label="Shift")
@@ -182,15 +323,17 @@ def on_ui_tabs():
             status = gr.Markdown("")
             image = gr.Image(label="生成結果", type="filepath", format="png", interactive=False)
             files = gr.File(label="PNG・生成条件", file_count="multiple", interactive=False)
-        ImageWorkspace(
+        workspace = ImageWorkspace(
             blocks,
             "moss-image",
-            models=[model, precisions],
+            editable=True,
+            models=[model_controls],
             prompts=[prompt, negative],
             actions=[run, cancel],
             settings=[settings],
+            references=[reference_controls],
             outputs=[output],
-            panels={"LoRA": [lora_controls]},
+            panels={"LoRA": [lora_controls], "モデル詳細": [precisions]},
             badges={"LoRA": loras},
         )
         state = gr.State({})
@@ -212,12 +355,59 @@ def on_ui_tabs():
                 text_precision,
                 loras,
                 lora_rows,
+                model,
+                workspace.mode,
+                images,
+                method,
+                denoise,
+                edit_lora,
+                edit_strength,
+                kv_cache,
+                hires_enabled,
+                hires_scale,
+                hires_steps,
+                hires_denoise,
             ],
             outputs=[state, status, run, cancel, timer],
             api_visibility="private",
         )
         loras.change(select_loras, inputs=[loras, lora_rows], outputs=lora_rows, queue=False, api_visibility="private")
         lora_refresh.click(refresh_loras, inputs=loras, outputs=loras, queue=False, api_visibility="private")
+        model.change(select_model, inputs=model, outputs=precision, queue=False, api_visibility="private")
+        model_refresh.click(refresh_models, inputs=model, outputs=model, queue=False, api_visibility="private")
+        hires_enabled.change(
+            lambda enabled: gr.update(visible=True if enabled else "hidden"),
+            inputs=hires_enabled,
+            outputs=hires_settings,
+            queue=False,
+            api_visibility="private",
+        )
+        for component in (hires_enabled, width, height, hires_scale):
+            component.change(
+                hires_preview,
+                inputs=[hires_enabled, width, height, hires_scale],
+                outputs=hires_size,
+                queue=False,
+                api_visibility="private",
+            )
+        method.change(
+            edit_controls,
+            inputs=method,
+            outputs=[denoise, edit_settings, images],
+            queue=False,
+            api_visibility="private",
+        )
+        match_size.click(reference_size, inputs=images, outputs=[width, height], queue=False, api_visibility="private")
+        edit_refresh.click(
+            lambda name: gr.update(
+                choices=[("選択してください", ""), *local_lora.inventory(MODEL_ROOT)],
+                value=name,
+            ),
+            inputs=edit_lora,
+            outputs=edit_lora,
+            queue=False,
+            api_visibility="private",
+        )
         cancel.click(
             lambda current: SERVICE.cancel((current or {}).get("job")),
             inputs=state,

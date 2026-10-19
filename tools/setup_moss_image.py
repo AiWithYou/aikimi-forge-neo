@@ -31,8 +31,9 @@ def manifest():
     return core.manifest()
 
 
-def download_plan(*, precision="int8", text_precision="int8"):
-    return core.model_specs({"precision": precision, "text_precision": text_precision})
+def download_plan(*, precision="int8", text_precision="int8", with_dmd=False):
+    selected = core.model_specs({"precision": precision, "text_precision": text_precision})
+    return selected + ([dict(manifest()["assets"]["dmd_lora"])] if with_dmd else [])
 
 
 def target_path(root, relative):
@@ -201,19 +202,29 @@ def prepare_runtime(root=MODEL_ROOT):
     )
 
 
-def run(*, root=MODEL_ROOT, dry_run=False, download=None, precision="int8", text_precision="int8", runtime_only=False):
+def run(
+    *,
+    root=MODEL_ROOT,
+    dry_run=False,
+    download=None,
+    precision="int8",
+    text_precision="int8",
+    runtime_only=False,
+    with_dmd=False,
+):
     value = manifest()
     request = core.validate_request(
         {"prompt": "setup", "seed": 0, "precision": precision, "text_precision": text_precision}
     )
     root = core.safe_model_root(root)
-    plan = download_plan(precision=precision, text_precision=text_precision)
+    plan = download_plan(precision=precision, text_precision=text_precision, with_dmd=with_dmd)
     targets = [(spec, target_path(root, spec["path"])) for spec in plan]
     result = {
         "model_id": value["repo_id"],
         "model_revision": value["revision"],
         "precision": precision,
         "text_precision": text_precision,
+        "with_dmd": with_dmd,
         "bytes": 0 if runtime_only else sum(spec["size"] for spec in plan),
         "dry_run": dry_run,
     }
@@ -284,6 +295,7 @@ def main(argv=None):
     parser.add_argument("--runtime-only", action="store_true")
     parser.add_argument("--precision", choices=("int8", "bf16"), default="int8")
     parser.add_argument("--text-precision", choices=("int8", "w4a8", "bf16"), default="int8")
+    parser.add_argument("--with-dmd", action="store_true", help="also download the optional Euler-compatible DMD LoRA")
     args = parser.parse_args(argv)
     try:
         print(  # noqa: T201 -- Setup CLI status.
@@ -293,6 +305,7 @@ def main(argv=None):
                     runtime_only=args.runtime_only,
                     precision=args.precision,
                     text_precision=args.text_precision,
+                    with_dmd=args.with_dmd,
                 ),
                 ensure_ascii=False,
             )

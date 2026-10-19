@@ -128,7 +128,7 @@ class MossImageSetupTests(unittest.TestCase):
     def test_selected_precision_is_passed_to_download_plan(self):
         with patch.object(setup, "manifest", return_value=self.manifest):
             setup.run(root=self.root, dry_run=True, precision="bf16", text_precision="w4a8")
-        self.assertEqual(self.plan.call_args.kwargs, {"precision": "bf16", "text_precision": "w4a8"})
+        self.assertEqual(self.plan.call_args.kwargs, {"precision": "bf16", "text_precision": "w4a8", "with_dmd": False})
 
     def test_fresh_checkout_is_pinned_before_dirty_worktree_check(self):
         calls = []

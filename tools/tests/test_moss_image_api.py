@@ -1,6 +1,7 @@
 """Every MOSS route authenticates and exposes image bytes without local paths."""
 
 import base64
+import io
 import sys
 import tempfile
 import unittest
@@ -16,6 +17,33 @@ from modules_forge.moss_image.api import public_result, register_api
 
 
 class ApiTests(unittest.TestCase):
+    def test_reference_uploads_are_decoded_and_paths_are_rejected_before_dispatch(self):
+        app = FastAPI()
+        register_api(app)
+        options = SimpleNamespace(cmd_opts=SimpleNamespace(api_auth=None, api_auth_path=None))
+        stream = io.BytesIO()
+        Image.new("RGB", (512, 768), "red").save(stream, format="PNG")
+        encoded = base64.b64encode(stream.getvalue()).decode()
+        with (
+            patch.dict(sys.modules, {"modules.shared_cmd_options": options}),
+            patch("modules_forge.moss_image.api.SERVICE") as service,
+            TestClient(app) as client,
+        ):
+            service.start.return_value = "abc"
+            response = client.post(
+                "/sdapi/v1/moss-image/jobs", json={"prompt": "blue coat", "mode": "img2img", "images": [encoded]}
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(service.start.call_args.args[0]["images"][0].size, (512, 768))
+            service.start.reset_mock()
+            for value in ("H:/private/image.png", "https://example.test/image.png"):
+                response = client.post(
+                    "/sdapi/v1/moss-image/jobs", json={"prompt": "edit", "mode": "img2img", "images": [value]}
+                )
+                self.assertEqual(response.status_code, 422)
+                self.assertNotIn(value, response.text)
+            service.start.assert_not_called()
+
     def test_all_routes_require_configured_api_credentials(self):
         app = FastAPI()
         register_api(app)

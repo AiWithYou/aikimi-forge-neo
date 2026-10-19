@@ -35,7 +35,7 @@ class UITests(unittest.TestCase):
         self.assertIn('[data-active-feature="moss_image"]', (folder / "style.css").read_text(encoding="utf-8"))
         self.assertIn("MOSS-Image", STUDIO_FAMILIES)
 
-    def test_real_screen_has_fixed_sft_model_expected_controls_and_private_events(self):
+    def test_real_screen_has_model_selection_expected_controls_and_private_events(self):
         module = self.load_screen()
         blocks, label, identifier = module.on_ui_tabs()[0]
         self.addCleanup(blocks.close)
@@ -45,20 +45,24 @@ class UITests(unittest.TestCase):
         ids = [item["elem_id"] for item in props if item.get("elem_id")]
         self.assertEqual(len(ids), len(set(ids)))
         fixed = next(item for item in props if item.get("elem_id") == "moss-image-model-name")
-        self.assertEqual(fixed["value"], "MOSS-Image-SFT")
-        self.assertFalse(fixed["interactive"])
-        self.assertFalse(
+        self.assertEqual(fixed["value"], "official")
+        self.assertTrue(fixed["interactive"])
+        self.assertNotIn("moss-image-profile", ids)
+        self.assertTrue(
             any(isinstance(item, gr.Dropdown) and getattr(item, "label", None) == "モデル" for item in components)
         )
         for label, value in (("幅", 1024), ("高さ", 1024), ("Steps", 50), ("CFG", 3), ("Shift", 5), ("Seed", -1)):
             with self.subTest(label=label):
                 self.assertEqual(next(item for item in props if item.get("label") == label)["value"], value)
+        for label in ("幅", "高さ"):
+            with self.subTest(maximum=label):
+                self.assertEqual(next(item for item in props if item.get("label") == label)["maximum"], 4096)
         self.assertTrue(any(item.get("label") == "ネガティブプロンプト" for item in props))
         skip = next(item for item in props if item.get("elem_id") == "moss-image-skip-layer")
         self.assertTrue(skip["value"])
         self.assertTrue(any(item.get("label") == "PNG・生成条件" for item in props))
         mode = next(item for item in components if item.elem_id == "moss-image-img2img")
-        self.assertFalse(mode.interactive)
+        self.assertTrue(mode.interactive)
         for event in blocks.fns.values():
             self.assertEqual(event.api_visibility, "private")
 
@@ -86,6 +90,112 @@ class UITests(unittest.TestCase):
         self.assertEqual(result[0], {"job": "job"})
         self.assertFalse(result[2]["interactive"])
         self.assertTrue(result[-1]["active"])
+
+    def test_text_mode_excludes_retained_images_and_edit_lora(self):
+        from PIL import Image
+
+        module = self.load_screen()
+        with patch.object(module.SERVICE, "start", return_value="job") as dispatch:
+            module.start(
+                {},
+                "cat",
+                "",
+                512,
+                512,
+                50,
+                3,
+                5,
+                7,
+                True,
+                mode="txt2img",
+                images=[(Image.new("RGB", (512, 512)), None)],
+                edit_method="reference",
+                edit_lora="edit.safetensors",
+            )
+        request = dispatch.call_args.args[0]
+        self.assertNotIn("images", request)
+        self.assertEqual(request["loras"], [])
+
+    def test_redraw_hides_edit_adapter_controls_until_reference_method_is_selected(self):
+        module = self.load_screen()
+        blocks = module.on_ui_tabs()[0][0]
+        self.addCleanup(blocks.close)
+        edit = next(item for item in blocks.blocks.values() if item.elem_id == "moss-image-edit-lora")
+        parent = edit.parent
+        while not isinstance(parent, gr.Column):
+            parent = parent.parent
+        self.assertFalse(parent.visible)
+        self.assertFalse(module.edit_controls("redraw")[1]["visible"])
+
+    def test_reference_size_uses_4096_as_its_maximum_side(self):
+        from types import SimpleNamespace
+
+        module = self.load_screen()
+        with patch("PIL.ImageOps.exif_transpose", return_value=SimpleNamespace(size=(7680, 4320))):
+            self.assertEqual(module.reference_size([object()]), (4096, 2304))
+        self.assertTrue(module.edit_controls("reference")[1]["visible"])
+
+    def test_reference_mode_dispatches_ordered_images_and_separate_edit_adapter(self):
+        from PIL import Image
+
+        module = self.load_screen()
+        images = [Image.new("RGB", (512, 512), "red"), Image.new("RGB", (512, 768), "blue")]
+        with patch.object(module.SERVICE, "start", return_value="job") as dispatch:
+            module.start(
+                {},
+                "Picture 1 wears Picture 2",
+                "",
+                512,
+                512,
+                30,
+                3,
+                5,
+                7,
+                True,
+                mode="img2img",
+                images=[(image, None) for image in images],
+                edit_method="reference",
+                edit_lora="edit.safetensors",
+                edit_strength=0.8,
+            )
+        request = dispatch.call_args.args[0]
+        self.assertEqual(request["images"], images)
+        self.assertEqual(request["loras"], [{"name": "edit.safetensors", "strength": 0.8}])
+        self.assertEqual((request["mode"], request["edit_method"]), ("img2img", "reference"))
+        with self.assertRaises(gr.Error):
+            module.start(
+                {}, "edit", "", 512, 512, 30, 3, 5, 7, True, mode="img2img", images=images, edit_method="reference"
+            )
+
+    def test_custom_model_is_dispatched_and_precision_selection_does_not_change_sampling(self):
+        module = self.load_screen()
+        with patch.object(module.SERVICE, "start", return_value="job") as start:
+            module.start(
+                {},
+                "pastelstyle, a fox",
+                "blur",
+                768,
+                1024,
+                50,
+                3,
+                5,
+                7,
+                True,
+                "bf16",
+                "int8",
+                [],
+                [],
+                "Pastel.safetensors",
+            )
+        request = start.call_args.args[0]
+        self.assertEqual(request["checkpoint"], "Pastel.safetensors")
+        self.assertEqual((request["steps"], request["cfg"], request["precision"]), (50, 3, "bf16"))
+        with (
+            patch.object(module.checkpoints, "resolve", return_value=Path("Pastel.safetensors")),
+            patch.object(module.checkpoints.local_assets, "read_header", return_value={}),
+            patch.object(module.checkpoints, "header_precision", return_value="bf16"),
+        ):
+            self.assertEqual(module.select_model("Pastel.safetensors"), gr.update(value="bf16", interactive=False))
 
     def test_precision_and_multi_lora_controls_do_not_change_model_or_sampling(self):
         module = self.load_screen()

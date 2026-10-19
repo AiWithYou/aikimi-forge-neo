@@ -34,6 +34,13 @@ _KEYS = {
     "precision",
     "text_precision",
     "loras",
+    "checkpoint",
+    "mode",
+    "images",
+    "edit_method",
+    "denoise",
+    "kv_cache",
+    "hires",
 }
 
 
@@ -58,8 +65,22 @@ def _number(value, name, lower, upper, *, inclusive=False):
     return float(value)
 
 
+def image_size(width, height):
+    width = _integer(width, "幅", 512, 4096)
+    height = _integer(height, "高さ", 512, 4096)
+    if width % 16 or height % 16 or width * height > 16777216:
+        raise MossImageError("幅と高さは16の倍数、合計16777216画素以内で指定してください。")
+    return width, height
+
+
+def hires_output_size(width, height, scale):
+    width, height = image_size(width, height)
+    scale = _number(scale, "倍率", 1.05, 4, inclusive=True)
+    return image_size(int(width * scale / 16 + 0.5) * 16, int(height * scale / 16 + 0.5) * 16)
+
+
 def validate_request(value, *, internal=False) -> dict:
-    allowed = _KEYS | ({"lora_identities"} if internal else set())
+    allowed = _KEYS | ({"lora_identities", "checkpoint_identity", "reference_sha256"} if internal else set())
     if not isinstance(value, dict) or set(value) - allowed:
         raise MossImageError("生成要求は対応するキーだけを持つオブジェクトで指定してください。")
     prompt, negative = value.get("prompt"), value.get("negative_prompt", "")
@@ -67,10 +88,26 @@ def validate_request(value, *, internal=False) -> dict:
         raise MossImageError("プロンプトは1〜32000文字で入力してください。")
     if not isinstance(negative, str) or len(negative) > 32000:
         raise MossImageError("負のプロンプトは32000文字以内の文字列で指定してください。")
-    width = _integer(value.get("width", 1024), "幅", 512, 2048)
-    height = _integer(value.get("height", 1024), "高さ", 512, 2048)
-    if width % 16 or height % 16 or width * height > 4194304:
-        raise MossImageError("幅と高さは16の倍数、合計4194304画素以内で指定してください。")
+    width, height = image_size(value.get("width", 1024), value.get("height", 1024))
+    mode = value.get("mode", "txt2img")
+    method = value.get("edit_method", "redraw")
+    if mode not in ("txt2img", "img2img"):
+        raise MossImageError("生成方式または画像モードを選び直してください。")
+    if method not in ("redraw", "reference"):
+        raise MossImageError("編集方法を選び直してください。")
+    from . import references
+
+    images = references.validate_inputs(value.get("images", []), internal=internal)
+    if mode == "txt2img" and images:
+        raise MossImageError("参照画像を使う場合はimg2imgを選択してください。")
+    if mode == "img2img" and (not images or (method == "redraw" and len(images) != 1)):
+        raise MossImageError("再描画は参照画像1枚、複数参照は1〜3枚を入力してください。")
+    kv_cache = value.get("kv_cache", True)
+    if type(kv_cache) is not bool:
+        raise MossImageError("参照キャッシュはtrueまたはfalseで指定してください。")
+    denoise = _number(value.get("denoise", 0.65 if mode == "img2img" and method == "redraw" else 1), "変更量", 0, 1)
+    if mode == "txt2img" or method == "reference":
+        denoise = 1.0
     seed = _integer(value.get("seed", -1), "Seed", -1, 2**32 - 1)
     skip_layer = value.get("skip_layer", True)
     if type(skip_layer) is not bool:
@@ -102,6 +139,8 @@ def validate_request(value, *, internal=False) -> dict:
             raise MossImageError("LoRAは専用フォルダー内の重複しないsafetensors名で指定してください。")
         names.add(name.casefold())
         normalized.append({"name": name, "strength": _number(item["strength"], "LoRA強度", -2, 2, inclusive=True)})
+    if mode == "img2img" and method == "reference" and not any(item["strength"] for item in normalized):
+        raise MossImageError("複数参照ではMOSSの編集用LoRAを選択してください。")
     result = {
         "prompt": prompt,
         "negative_prompt": negative,
@@ -115,9 +154,38 @@ def validate_request(value, *, internal=False) -> dict:
         "precision": precision,
         "text_precision": text_precision,
         "loras": normalized,
+        "mode": mode,
+        "images": images,
+        "edit_method": method,
+        "denoise": denoise,
+        "kv_cache": kv_cache,
     }
+    if "hires" in value:
+        if mode != "txt2img":
+            raise MossImageError("Hires.fixはtxt2imgで使用してください。")
+        hires = value["hires"]
+        if not isinstance(hires, dict) or set(hires) - {"base_width", "base_height", "steps", "denoise"}:
+            raise MossImageError("Hires.fixには最初の幅・高さ、仕上げSteps・変更量を指定してください。")
+        base_width, base_height = image_size(hires.get("base_width"), hires.get("base_height"))
+        if base_width > width or base_height > height or (base_width, base_height) == (width, height):
+            raise MossImageError("Hires.fixの最終サイズは最初のサイズより大きく指定してください。")
+        result["hires"] = {
+            "base_width": base_width,
+            "base_height": base_height,
+            "steps": _integer(hires.get("steps", 20), "仕上げSteps", 1, 200),
+            "denoise": _number(hires.get("denoise", 0.35), "仕上げの変更量", 0, 1),
+        }
+    if internal and "reference_sha256" in value:
+        result["reference_sha256"] = references.validate_hashes(images, value["reference_sha256"])
     if internal and "lora_identities" in value:
         result["lora_identities"] = value["lora_identities"]
+    checkpoint = value.get("checkpoint", "official")
+    if checkpoint != "official":
+        from .checkpoints import validate_name
+
+        result["checkpoint"] = validate_name(checkpoint)
+        if internal and "checkpoint_identity" in value:
+            result["checkpoint_identity"] = value["checkpoint_identity"]
     return result
 
 
@@ -150,7 +218,8 @@ def model_specs(request=None) -> list[dict]:
     if precision not in {"int8", "bf16"} or text_precision not in {"int8", "w4a8", "bf16"}:
         raise MossImageError("モデルの保存形式が不正です。")
     prefixes = ["checkpoints/MOSS-Image-SFT/vae/"]
-    if precision == "bf16":
+    custom = request.get("checkpoint", "official") != "official"
+    if precision == "bf16" and not custom:
         prefixes.append("checkpoints/MOSS-Image-SFT/transformer/")
     if text_precision == "bf16":
         prefixes.extend(("checkpoints/MOSS-Image-SFT/text_encoder/", "checkpoints/MOSS-Image-SFT/tokenizer/"))
@@ -159,7 +228,7 @@ def model_specs(request=None) -> list[dict]:
         for spec in value["files"]
         if spec["path"].startswith(tuple(prefixes)) or spec["path"].endswith("/LICENSE")
     ]
-    if precision == "int8":
+    if precision == "int8" and not custom:
         selected.append(dict(value["assets"]["dit_int8"]))
     if text_precision != "bf16":
         selected.append(dict(value["assets"]["text_" + text_precision]))
@@ -167,16 +236,23 @@ def model_specs(request=None) -> list[dict]:
 
 
 def asset_paths(root, request) -> dict:
+    from . import checkpoints
+
     root = safe_model_root(root)
     bundle = root / "checkpoints/MOSS-Image-SFT"
     assets = manifest()["assets"]
-    return {
+    paths = {
         "dit": root / assets["dit_int8"]["path"] if request["precision"] == "int8" else bundle,
-        "text_encoder": root / assets["text_" + request["text_precision"]]["path"]
-        if request["text_precision"] != "bf16"
-        else bundle,
+        "text_encoder": (
+            root / assets["text_" + request["text_precision"]]["path"]
+            if request["text_precision"] != "bf16"
+            else bundle
+        ),
         "vae": bundle / "vae/diffusion_pytorch_model.safetensors",
     }
+    if request.get("checkpoint", "official") != "official":
+        paths["dit"] = checkpoints.resolve(root, request["checkpoint"])
+    return paths
 
 
 def runtime_paths(root=MODEL_ROOT) -> dict:
@@ -227,7 +303,11 @@ def runtime_ready(root=MODEL_ROOT) -> bool:
 
 def model_ready(root: Path = MODEL_ROOT, request=None) -> bool:
     try:
+        from . import checkpoints
+
         root = safe_model_root(root)
+        if request is not None:
+            checkpoints.bind(root, request)
         if not runtime_ready(root):
             return False
         receipt = json.loads((root / RECEIPT).read_text(encoding="utf-8"))

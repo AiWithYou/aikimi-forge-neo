@@ -15,6 +15,7 @@
 .aikimi-image-actions :is(#qwen21-stop, #ming-cancel) { width: 100%; flex: 0 0 auto !important; }
 .aikimi-image-workspace { align-items: start; gap: 16px; }
 .aikimi-image-settings, .aikimi-image-output { min-width: 0 !important; gap: 12px; }
+.aikimi-image-ui .block.auto-margin { margin-inline: 0 !important; }
 .aikimi-image-output > .column { min-width: 0 !important; width: 100%; max-width: none !important; }
 .aikimi-image-references { border: 0 !important; padding: 0 !important; background: transparent !important; }
 .aikimi-image-parameters { border: 0 !important; padding: 0 !important; background: transparent !important; }

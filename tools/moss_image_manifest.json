@@ -158,6 +158,14 @@
     }
   ],
   "assets": {
+    "dmd_lora": {
+      "repo_id": "lodestones/MOSS-Image-SFT-8-steps-dmd",
+      "revision": "f95df83b5e90ae91ea412434b3f9b7f1c8c6314f",
+      "filename": "lora_latest.safetensors",
+      "path": "loras/presets/lora_latest.safetensors",
+      "size": 1189176800,
+      "sha256": "be82ab2bef78194651815bb6de443cec67553e01c14559f2ad365449445f0452"
+    },
     "dit_int8": {
       "repo_id": "Abiray/MOSS-Image-SFT-INT8-convrot",
       "revision": "a4b94ff815a4e3853e630f0e965fbbf0a1912e31",

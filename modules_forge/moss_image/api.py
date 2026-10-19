@@ -7,6 +7,7 @@ from pathlib import Path
 
 from starlette.requests import Request
 
+from .references import decode_uploads
 from .service import SERVICE
 
 
@@ -61,8 +62,26 @@ def public_result(value):
         "dit_patcher_mode",
         "text_compute_precision",
         "text_conditioning_precision",
+        "mode",
+        "edit_method",
+        "denoise",
+        "kv_cache",
+        "reference_sha256",
+        "reference_sizes",
+        "vision_sizes",
+        "reference_latent_tokens",
+        "hires",
+        "sampling_passes",
+        "upscaler",
     }
     result = {key: item for key, item in value.items() if key in allowed}
+    if "hires" in result:
+        result["hires"] = {
+            key: item for key, item in result["hires"].items() if key in {"base_width", "base_height", "steps", "denoise"}
+        }
+    if "sampling_passes" in result:
+        fields = {"width", "height", "steps", "denoise", "seed", "cfg", "shift", "skip_layer", "actual_steps", "sampler", "scheduler"}
+        result["sampling_passes"] = [{key: item for key, item in stage.items() if key in fields} for stage in result["sampling_passes"]]
     if "weight_sources" in result:
         source_fields = {"repo_id", "revision", "filename", "sha256", "precision"}
         result["weight_sources"] = {
@@ -95,6 +114,8 @@ def register_api(app):
 
     def start(value: dict):
         try:
+            if "images" in value:
+                value = {**value, "images": decode_uploads(value["images"])}
             return {"id": SERVICE.start(value), "status": "running"}
         except ValueError as exc:
             raise HTTPException(422, detail=str(exc)) from exc

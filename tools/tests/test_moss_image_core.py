@@ -53,6 +53,15 @@ class CoreTests(unittest.TestCase):
             core.validate_request(value)
         self.assertEqual(core.validate_request(value, internal=True)["lora_identities"], [])
 
+    def test_resolution_limit_allows_4k_dimensions_and_rejects_over_4096(self):
+        for width, height in ((3840, 2160), (4096, 4096)):
+            with self.subTest(width=width, height=height):
+                value = core.validate_request({"prompt": "cat", "width": width, "height": height})
+                self.assertEqual((value["width"], value["height"]), (width, height))
+        for width, height in ((4112, 512), (512, 4112)):
+            with self.subTest(width=width, height=height), self.assertRaises(ValueError):
+                core.validate_request({"prompt": "cat", "width": width, "height": height})
+
     def test_download_selection_keeps_fp32_vae_and_does_not_fetch_unused_weights(self):
         plan = core.model_specs(core.validate_request({"prompt": "cat"}))
         self.assertTrue(any("dit-int8" in x["path"] for x in plan))

@@ -154,6 +154,7 @@ class MossImageInferenceTests(unittest.TestCase):
 
     def test_selected_native_and_hf_loaders_never_change_precision(self):
         runtime = ComfyRuntime.__new__(ComfyRuntime)
+        runtime.root = Path("models/MOSS-Image")
         calls = []
         model = SimpleNamespace(model=SimpleNamespace(diffusion_model=object()))
         state = {"model.language_model.layers.0.input_layernorm.weight": object()}
@@ -188,6 +189,29 @@ class MossImageInferenceTests(unittest.TestCase):
                 ("text", ([state],), {"clip_type": "moss", "model_options": {"dtype": "bf16"}}),
             ],
         )
+
+    def test_custom_single_file_uses_requested_dtype_and_rejects_nonfinite_weights(self):
+        import torch
+
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = ComfyRuntime.__new__(ComfyRuntime)
+            runtime.root = Path(folder)
+            path = runtime.root / "checkpoints/Pastel.safetensors"
+            path.parent.mkdir()
+            path.touch()
+            state = {"weight": torch.ones(2, 2, dtype=torch.bfloat16)}
+            model = SimpleNamespace(model=SimpleNamespace(diffusion_model=object()))
+            calls = []
+            runtime.sd = SimpleNamespace(load_diffusion_model_state_dict=lambda *a, **k: calls.append((a, k)) or model)
+            runtime.utils = SimpleNamespace(load_torch_file=lambda *a, **k: (state, {"title": "Pastel"}))
+            runtime.torch = torch
+            runtime.moss_model = SimpleNamespace(MOSSImage=object)
+            self.assertIs(runtime.load_dit(path, "bf16"), model)
+            self.assertEqual(calls[0][1]["model_options"], {"dtype": torch.bfloat16})
+            state["weight"][0, 0] = float("nan")
+            with self.assertRaisesRegex(RuntimeError, "non-finite"):
+                runtime.load_dit(path, "bf16")
+            self.assertEqual(len(calls), 1)
 
     def test_quantized_text_prefixes_reach_native_moss_without_fallback(self):
         from unittest.mock import Mock

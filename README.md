@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.9.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.9.0)** · [変更履歴](CHANGELOG.md)
+**[v4.10.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.10.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,11 +10,12 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v4.9.0の主な変更
+## v4.10.0の主な変更
 
-- **[MOSS Image](docs/moss-image.md)**：MOSS-Image-SFTの画像生成に対応。自然文・タグ列・JSONレイアウトから、アニメや写真などの画像を生成できます。[RTX 3090での作例と設定](docs/moss-image.md#作例)
-- **INT8を標準に**：画像生成本体・テキストエンコーダーをINT8で導入します。テキストのW4A8とBF16も個別に選択でき、VAEはFP32を使用します。
-- **LoRAと保存**：互換の線形LoRAを複数選び、個別の強度を設定できます。生成条件・モデル・量子化元・LoRAの識別をPNGとJSONへ保存します。[全変更](CHANGELOG.md#v490--2026-10-17)
+- **[MOSS ImageのHires.fix](docs/moss-image.md#拡大して仕上げるhiresfix)**：通常サイズで構図を生成し、画像を拡大してから細部を再生成します。倍率・仕上げSteps・変更量を調整でき、最終サイズと両段階の生成条件を確認できます。
+- **[MOSSの参照画像入力](docs/moss-image.md#参照画像から編集)**：元画像からの再描画と、編集用LoRAを使う最大3枚の参照入力に対応しました。
+- **[マージモデル](docs/moss-image.md#マージモデル)と少ステップ生成**：BF16／INT8 ConvRotの本体を選択でき、INT8変換コマンドを追加しました。任意で取得できるEuler対応の蒸留LoRAは、通常のLoRA欄から使用します。
+- **表示と生成情報の修正**：画像生成ワークスペースの数値欄・スライダーのはみ出しを修正。複数バッチの生成情報、動画の保存・後処理、画像の拡大・透過処理も改善しました。[全変更](CHANGELOG.md#v4100--2026-10-19)
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 
@@ -65,7 +66,7 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
 | [Iris-3B](extensions-builtin/iris-studio/README.md) | 画像生成・img2img・相対深度推定・復元と4倍拡大。通常版／INT8／W4A8、互換Full FT・LoRAと4ステップTurbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
 | [FLUX 3 Image Klein](docs/flux3-klein.md) | 蒸留版／Baseの画像生成、最大10枚の参照編集、配置ボックス。PUPは任意の追加機能。**FLUX 3** タブを使用 | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
-| [MOSS-Image-SFT](docs/moss-image.md) | 自然文・タグ・JSONレイアウトから画像生成。**MOSS Image** タブを使用 | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
+| [MOSS-Image-SFT](docs/moss-image.md) | 自然文・タグ・JSONレイアウトから画像生成、Hires.fix、元画像からの再描画、編集用LoRAによる最大3枚の参照入力。**MOSS Image** タブを使用 | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
 
 初回はモデルと必要な実行環境のダウンロード・変換に時間がかかります。Qwenの既定モデルは通常版Q4_K_Mです。Irisは選択した用途の重みを取得し、INT8・W4A8はHugging Faceの変換済み配布を使います。W4A8は画像生成用のテキストエンコーダーも圧縮します。[Irisの導入・検証](docs/iris-studio.md)
 
@@ -219,6 +220,8 @@ git pull --ff-only origin neo
 必要な更新が終わったら`aikimi-launch.bat`で起動します。本体の依存環境は起動時に準備します。`TORCH_COMMAND`や`TORCH_INDEX_URL`を指定している場合は、その設定が優先されます。個別の注意事項は[変更履歴](CHANGELOG.md)を参照してください。
 
 v3.6.0より前の開発版でClefを導入した場合は、WebUIを終了して`.\aikimi-clef-setup.bat --runtime-only`を実行し、専用環境を更新してください。取得済みの量子化モデルをそのまま使えます。
+
+v4.9.0でMOSS Imageを導入した場合は、使用中の保存形式を指定してセットアップを一度実行し、ファイルの検証情報を更新してください。既定のINT8構成は`.\aikimi-moss-image-setup.bat`です。取得済みの同じ重みは検証して再利用します。BF16やW4A8を使用している場合は、[保存形式の指定方法](docs/moss-image.md#導入)を参照してください。
 
 <a id="troubleshooting"></a>
 

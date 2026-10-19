@@ -1,0 +1,5 @@
+#moss-image-references-gallery .thumbnail-item { height: 192px !important; aspect-ratio: auto; }
+
+#moss-image-image-ui:has(#moss-image-img2img-button[aria-selected="true"]) #moss-image-hires-controls {
+    display: none !important;
+}

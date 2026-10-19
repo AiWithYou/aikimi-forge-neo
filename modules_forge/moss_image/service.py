@@ -14,7 +14,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import lora
+from . import checkpoints, lora, references
 from .core import (
     MODEL_ID,
     MODEL_REVISION,
@@ -62,6 +62,7 @@ class Service:
         from modules_forge.gpu_ownership import GPUOwnership
 
         request = validate_request(value)
+        checkpoints.bind(self.root, request)
         lora.bind(self.root, request)
         outputs = _managed_path(self.outputs)
         if not model_ready(self.root, request):
@@ -77,6 +78,7 @@ class Service:
         directory = outputs / identifier
         try:
             directory.mkdir(parents=True)
+            references.snapshot(directory, request)
             atomic_json(directory / "request.json", request)
             job = {"id": identifier, "directory": str(directory), "status": "running", "error": ""}
             with self._guard:
@@ -94,6 +96,7 @@ class Service:
         directory = _managed_path(directory)
         result = json.loads(_managed_path(directory / "result.json").read_text(encoding="utf-8"))
         request = json.loads(_managed_path(directory / "request.json").read_text(encoding="utf-8"))
+        references.load(directory, request)
         path = _managed_path(result["image_path"])
         if path != directory / "output.png" or not path.is_file():
             raise MossImageError("生成結果の出力パスが一致しません。")

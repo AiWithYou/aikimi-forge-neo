@@ -112,6 +112,11 @@ The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comf
 - The author's [model card and license statement](https://huggingface.co/ausboss/Qwen-Image-2.1-Outpaint-LoRA/blob/449336db42ff074aee970ba0facc0ac0feb77863/README.md#license) apply the Qwen Research License to use with the Qwen base model.
 - The Forge integration maps the adapter's fused gate/up rows to native Diffusers projections and adds low-rank residuals without modifying the quantized base weights. It uses the existing Qwen worker and does not require ComfyUI.
 
+## MOSS Image reference editing and few-step adapter
+
+- Reference model patch: [ostris/ComfyUI-MOSS-Image-Ostris-Edit](https://github.com/ostris/ComfyUI-MOSS-Image-Ostris-Edit/tree/8f9b50c0d2b28248ecd48a4d4905c815e726f146), revision `8f9b50c0d2b28248ecd48a4d4905c815e726f146`, MIT, Copyright (c) 2026 Ostris, LLC. The original implementation and license are retained in `vendor/moss_image_ostris_edit.py` and `vendor/moss_image_ostris_edit.LICENSE`.
+- Optional DMD adapter: [lodestones/MOSS-Image-SFT-8-steps-dmd](https://huggingface.co/lodestones/MOSS-Image-SFT-8-steps-dmd/tree/f95df83b5e90ae91ea412434b3f9b7f1c8c6314f), Apache-2.0. The current Euler-compatible `lora_latest.safetensors` is downloaded separately at a pinned revision and verified by SHA-256. Model weights are not bundled in Git.
+
 ## Ming Image Design
 
 - モデル原作: [inclusionAI/Ming-Image-0.1-Design](https://huggingface.co/inclusionAI/Ming-Image-0.1-Design)、MIT。

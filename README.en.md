@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v4.9.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.9.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.10.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.10.0)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,11 +10,12 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v4.9.0
+## What's new in v4.10.0
 
-- **[MOSS Image](docs/moss-image.md)**: generate anime, photos, and other images with MOSS-Image-SFT using natural language, tags, or JSON layouts. See the [RTX 3090 sample and settings](docs/moss-image.md#作例).
-- **INT8 by default**: install the diffusion model and text encoder in INT8. Select W4A8 text or BF16 separately, while keeping the VAE in FP32.
-- **LoRA and output**: combine compatible linear LoRAs with individual strengths. PNG and JSON outputs retain generation settings, model and quantization sources, and LoRA identities. See the [complete changelog](CHANGELOG.md#v490--2026-10-17).
+- **[MOSS Image Hires.fix](docs/moss-image.md#拡大して仕上げるhiresfix)**: generate the composition first, enlarge the image, then run a second pass to refine details. Adjust scale, refinement steps, and denoising strength; preview final dimensions and save settings for both passes.
+- **[MOSS reference images](docs/moss-image.md#参照画像から編集)**: redraw an input image or use up to three references with an editing LoRA.
+- **[Merged checkpoints](docs/moss-image.md#マージモデル) and fewer steps**: select BF16 or INT8 ConvRot diffusion checkpoints and convert compatible BF16 checkpoints to INT8. An optional Euler-compatible distilled LoRA uses the regular LoRA controls.
+- **Layout and generation fixes**: keep number fields and sliders inside image workspaces, preserve per-image batch metadata, and improve video saving, postprocessing, image resizing, and transparency. See the [complete changelog](CHANGELOG.md#v4100--2026-10-19).
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 
@@ -61,7 +62,7 @@ For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choos
 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | Image, text, and JSON evaluation; image curation and per-criterion probabilities | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
 | [Iris-3B](extensions-builtin/iris-studio/README.md) | Image generation, img2img, relative depth, restoration, and 4× upscaling; standard, INT8, and W4A8 modes, compatible full fine-tunes and LoRAs, and 4-step Turbo | [`aikimi-iris-setup.bat`](aikimi-iris-setup.bat) |
 | [FLUX 3 Image Klein](docs/flux3-klein.md) | Distilled/Base generation, editing with up to 10 references, bounding boxes, and separately installed optional prompt upsampling in **FLUX 3** | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
-| [MOSS-Image-SFT](docs/moss-image.md) | Image generation from natural language, tags, or JSON layouts in **MOSS Image** | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
+| [MOSS-Image-SFT](docs/moss-image.md) | Natural-language, tag and JSON-layout generation, Hires.fix, image-to-image redraw, and up to 3 references with an edit-trained LoRA in **MOSS Image** | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
 
 The initial download and runtime setup or conversion can take time. Qwen defaults to the standard Q4_K_M model. Iris downloads weights for the selected task; INT8 and W4A8 use preconverted Hugging Face distributions. W4A8 also compresses the text encoder for image generation. See the [Iris guide](docs/iris-studio.md).
 
@@ -211,6 +212,8 @@ If your checkout uses an older repository URL, first run `git remote set-url ori
 After any required updates, launch `aikimi-launch.bat`. Core dependencies are prepared during startup. Custom `TORCH_COMMAND` or `TORCH_INDEX_URL` settings take priority. See the [changelog](CHANGELOG.md) for version-specific notes.
 
 If you installed Clef in a development build before v3.6.0, close the WebUI and run `.\aikimi-clef-setup.bat --runtime-only` to update its dedicated runtime. Existing quantized weights can be reused.
+
+If you installed MOSS Image in v4.9.0, run setup once with your current precision settings to refresh file verification. For the default INT8 configuration, run `.\aikimi-moss-image-setup.bat`. Matching downloaded weights are verified and reused. See [precision options](docs/moss-image.md#導入) for BF16 or W4A8 installations.
 
 ## Troubleshooting
 
