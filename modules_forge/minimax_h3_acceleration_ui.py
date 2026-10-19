@@ -23,6 +23,8 @@ def acceleration_note(*values) -> str:
         notes.append("MATLOWAI版はTurboとMysticを焼き込んだ派生モデルです。動き・質感・音が標準と変わります。モデル選択だけではStepsを変えません。4/8 Stepsボタンで明示適用してください。")
     if option.video_vae == "int8":
         notes.append("INT8 ConvRot VAEは量子化による画質差やGPU依存の不具合があり得ます。黒画面・ノイズが出る場合はFP16で比較してください。")
+    if option.video_vae in {"light_int8", "light_fp32", "lynnreal"}:
+        notes.append("軽量VAEは細部や色が変わることがあります。標準VAEDecodeを使用し、同じSeedでFP16と比較してください。")
     if option.decode_mode == "fp16_accumulation":
         notes.append("更新版の標準VAEDecodeを使用します。VAEの最適化・タイル境界修正・オフロード時の修正を含む専用ComfyUIが必要です。旧環境へは黙って戻しません。")
     if option.decode_mode == "fp16_accumulation":
@@ -76,14 +78,16 @@ def create_acceleration_controls(duration):
             turbo4 = gr.Button("Turbo + 4 Stepsを適用", interactive=False, elem_id="h3-turbo-4")
             turbo8 = gr.Button("Turbo + 8 Stepsを適用", interactive=False, elem_id="h3-turbo-8")
         vae = gr.Dropdown(
-            choices=[("FP16 · 標準", "fp16"), ("INT8 ConvRot · 量子化VAE", "int8")],
+            choices=[("FP16 · 標準", "fp16"), ("INT8 ConvRot · 量子化VAE", "int8"),
+                     ("LightVAE Lite · INT8", "light_int8"), ("LightVAE Lite · FP32", "light_fp32"),
+                     ("LynnReal Light VAE · INT8", "lynnreal")],
             value=defaults.video_vae, label="2. Video VAE", interactive=False,
-            info="Kijai配布のINT8 ConvRot Video VAEをmodels/vaeへ配置します。", elem_id="h3-video-vae",
+            info="軽量VAEはtools/setup_h3_lightvae.pyで導入できます。", elem_id="h3-video-vae",
         )
         decode = gr.Dropdown(
             choices=DECODE_CHOICES,
             value=defaults.decode_mode, label="3. Videoデコード", interactive=False,
-            info="更新版はtools/upgrade_minimax_h3_union2_vae.pyで導入。FP16積算は全体の精度設定。Fastは別の外部ノードです。",
+            info="Coreの更新はH3のセットアップを再実行。FP16積算は全体の精度設定。Fastは別の外部ノードです。",
             elem_id="h3-decode-mode",
         )
         batch = gr.Slider(1, 8, value=defaults.tile_batch_size, step=1, label="Fast VAE tile batch · 大きいほどVRAM増", visible=False, interactive=False, elem_id="h3-tile-batch")

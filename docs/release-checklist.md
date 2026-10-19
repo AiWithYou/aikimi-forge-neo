@@ -47,6 +47,7 @@ Private Vulnerability Reportingを有効にできないreleaseは、第三者向
 - [ ] pip-auditのfindingを確認した
 - [ ] FLUX 3の全固定依存が独立したOSV監査を通り、Windows用lockの再解決や依存スキップ、無断例外を行っていない
 - [ ] MOSS Imageの全固定依存も独立したOSV監査を通り、Windows用lockの全pinを検査した
+- [ ] H3の全固定依存も独立したOSV監査を通り、Windows用lockの全pinを検査した
 - [ ] `docs/security-model.md`の期限付きadvisory例外を再審査し、期限切れを残していない
 - [ ] CodeQLの標準解析のfindingを確認した
 - [ ] dependency reviewを確認した

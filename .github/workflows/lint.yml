@@ -85,6 +85,12 @@ on:
       - "tools/aikimi_setup.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "tools/setup_h3_lightvae.py"
+      - "tools/h3_lightvae_convert.py"
+      - "tools/tests/test_h3_lightvae_convert.py"
+      - "tools/h3_lightvae_manifest.json"
+      - "tools/tests/test_h3_core_update.py"
+      - "tools/tests/test_v5_runtime_features.py"
       - "modules_forge/local_assets.py"
       - "modules_forge/model_catalog.py"
       - "tools/tests/test_model_catalog.py"
@@ -240,6 +246,12 @@ on:
       - "tools/aikimi_setup.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "tools/setup_h3_lightvae.py"
+      - "tools/h3_lightvae_convert.py"
+      - "tools/tests/test_h3_lightvae_convert.py"
+      - "tools/h3_lightvae_manifest.json"
+      - "tools/tests/test_h3_core_update.py"
+      - "tools/tests/test_v5_runtime_features.py"
       - "modules_forge/local_assets.py"
       - "modules_forge/model_catalog.py"
       - "tools/tests/test_model_catalog.py"
@@ -417,6 +429,11 @@ jobs:
             tools/aikimi_setup.py
             tools/run_ci_tests.py
             tools/setup_minimax_h3.py
+            tools/setup_h3_lightvae.py
+            tools/h3_lightvae_convert.py
+            tools/tests/test_h3_lightvae_convert.py
+            tools/tests/test_h3_core_update.py
+            tools/tests/test_v5_runtime_features.py
             modules_forge/local_assets.py
             modules_forge/model_catalog.py
             tools/tests/test_model_catalog.py

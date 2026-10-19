@@ -8,7 +8,7 @@ Baseline controls verified against upstream sources on 2026-09-06; the optional 
 | --- | --- | --- | --- |
 | Diffusion model | Mode-specific official INT8 ConvRot weights | MATLOWAI Fused Turbo | Baked-in Turbo and Mystic change the model and its visual/audio behavior. |
 | Diffusion weight storage | Mode-specific official INT8 ConvRot weights | Kijai W4A8 | Optional 4-bit weights with INT8 activations. See [installation and validation](w4a8.md). Does not change steps or enable Turbo. |
-| Video VAE | FP16 | Kijai INT8 ConvRot | Quantization can change pixels and depends on GPU compatibility. |
+| Video VAE | FP16 | INT8 ConvRot, LightVAE Lite INT8/FP32, LynnReal Light VAE | Quantization and pruning can change pixels. LightVAE uses standard decoding. |
 | Video decoding | VAEDecode | MiniMax H3 Fast VAE Decode | Batched spatial tiles use more VRAM and can be slower. |
 | Attention | Comfy Kitchen dense | Sol-Attn or SLA via official BlockSparseAttention | Approximate attention can change motion, detail and audio. |
 | CLIP conditioning | Native encoder on each execution | CLIPCached auto / refresh | Stores conditioning and reference metadata on disk; repeated inputs can avoid the encoder. Incompatible with NegPiP. |
@@ -55,6 +55,20 @@ The inspected `fast_vae_decode.py` Git blob is `a3f5fb9cded5c30eacdbf9b6f890dadc
 Update ComfyUI to include [e308cc73 / PR #16072](https://github.com/Comfy-Org/ComfyUI/commit/e308cc73b466584b0c17be695e5de1a17438bb40), update that runtime's requirements, then restart it. That revision pins `comfy-kitchen==0.2.33`. The bridge requires at least 0.2.33 when sparse attention is selected and verifies the actual node input schema and core ancestry before submitting.
 
 It does not remove the original core gate for standard runs or silently turn off a requested optimization. Missing models, nodes, incompatible schemas, old Kitchen versions and mismatched custom-node permissions produce actionable errors before generation.
+
+## LightVAE
+
+**Video VAE**からLightVAE Lite（INT8／FP32）とLynnReal Light VAE（INT8）を選択できます。元のFP16・INT8 VAEと切り替えて、同じSeedと生成条件で細部・色・動きを比較してください。LightVAE Liteはエンコーダー・デコーダーを個別に導入し、FL2VAの入力画像には元のFP16エンコーダー、参照生成にはLiteエンコーダーを使用します。元のFP16 VAEも保持してください。
+
+H3のセットアップを実行して専用Coreを更新した後、次のコマンドで任意のVAEを取得します。モデルの取得元・固定リビジョン・サイズ・SHA-256を検証し、既存の標準VAEは保持します。LiteエンコーダーとFP32デコーダーは導入時に標準ローダー用の形式へ変換し、変換後もサイズとSHA-256を照合します。元の配布ファイルも保持するため、その2種類は保存先に元ファイルと同程度の追加空き容量が必要です。
+
+```powershell
+.\venv\Scripts\python.exe -m tools.setup_h3_lightvae
+```
+
+FP32は配布重みの保存形式を示し、計算精度は専用ランタイムの設定に従います。既定はLightVAE LiteのINT8デコーダーとLiteエンコーダーです。`--variant light_fp32`でFP32版、`--variant lynnreal`でLynnReal版、`--all`で全種類を取得します。`--dry-run`で保存前に必要量を確認できます。
+
+LightVAE Liteは[Lightx2vの配布](https://huggingface.co/lightx2v/LightVAE)、LynnReal版は[Kijaiの変換済み重み](https://huggingface.co/Kijai/MiniMax-H3-experimental)を使用します。標準の`VAEDecode`で利用し、Fast VAEの外部ノードは必要ありません。LightVAE選択時も生成結果からComfyUIへワークフローを引き継げます。H3専用ランタイムにはVAEオフロード時の正規化修正も含まれます。
 
 ## Reproducibility and limits
 

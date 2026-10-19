@@ -30,7 +30,7 @@ from tools.aikimi_setup import ArtifactSpec, Installer, ProfileSpec, SetupError 
 
 MANIFEST_PATH = ROOT / "tools/minimax_h3_runtime_manifest.json"
 LOCK_PATH = ROOT / "tools/requirements-minimax-h3.lock"
-PATCH_PATH = ROOT / "patches/minimax-h3/comfyui-0.34.0-compiler.patch"
+PATCH_PATH = ROOT / "patches/minimax-h3/comfyui-b9b290e4-compiler.patch"
 
 
 def manifest() -> dict:
@@ -183,23 +183,42 @@ class RuntimeInstaller:
         if not (self.runtime / ".git").is_dir():
             raise SetupError("H3実行環境の場所に管理対象外のフォルダーがあります。")
         revision = self.run(["git", "rev-parse", "HEAD"], cwd=self.runtime).stdout.strip()
-        if revision != self.data["comfy_revision"] or not (self.runtime / "main.py").is_file():
-            if (self.runtime / "main.py").exists():
-                raise SetupError("H3のComfyUIが固定版と異なります。既存の変更を確認してください。")
+        indexed = (self.runtime / ".git/index").is_file()
+        if indexed:
+            self.prepare_core_update(revision)
+        if not indexed or revision != self.data["comfy_revision"]:
+            self.run(["git", "fetch", "--no-tags", "origin", self.data["comfy_revision"]], cwd=self.runtime)
             self.run(["git", "checkout", "--detach", self.data["comfy_revision"]], cwd=self.runtime)
-        base_requirements = self.run(["git", "show", "HEAD:requirements.txt"], cwd=self.runtime).stdout
-        updated = base_requirements.replace("comfy-aimdo==0.5.2", "comfy-aimdo==0.5.3")
-        target = self.runtime / "requirements.txt"
-        if target.read_text(encoding="utf-8") not in {base_requirements, updated}:
-            raise SetupError("H3のrequirements.txtに管理対象外の変更があります。")
-        if target.read_text(encoding="utf-8") != updated:
-            target.write_text(updated, encoding="utf-8", newline="\n")
-        # 過去のパッチに含まれる開発版aimdo指定は使わず、上の正式版pinを維持する。
         patch_arguments = ["git", "apply", "--exclude=requirements.txt"]
         applied = self.run([*patch_arguments, "--reverse", "--check", PATCH_PATH], cwd=self.runtime, check=False)
         if applied.returncode:
             self.run([*patch_arguments, "--check", PATCH_PATH], cwd=self.runtime)
             self.run([*patch_arguments, PATCH_PATH], cwd=self.runtime)
+
+    def prepare_core_update(self, revision: str) -> None:
+        """Only replace exact installer-owned edits; preserve other changes."""
+        from tools.upgrade_minimax_h3_union2_vae import apply_reviewed_file_patch
+
+        known_patches = {
+            "efa6c8f804bff78b46a0fd458ebd2e47bba07a30": "comfyui-0.34.0-compiler.patch",
+            "912fca4f39b875a0360f2c5170568176ea813ded": "comfyui-h3-compiler-912fca4.patch",
+            "b9b290e43f1eb379946dfeb013faf9bbefa1a618": "comfyui-b9b290e4-compiler.patch",
+        }
+        changed = self.run(["git", "diff", "HEAD", "--name-only"], cwd=self.runtime).stdout.splitlines()
+        for filename in changed:
+            base = self.run(["git", "show", f"HEAD:{filename}"], cwd=self.runtime).stdout
+            allowed = {base}
+            if filename == "requirements.txt":
+                allowed.add(base.replace("comfy-aimdo==0.5.2", "comfy-aimdo==0.5.3"))
+            elif filename == "comfy/ldm/minimax/model.py" and revision in known_patches:
+                source = (ROOT / "patches/minimax-h3" / known_patches[revision]).read_text("utf-8")
+                allowed.add(apply_reviewed_file_patch(base, source, filename))
+            else:
+                raise SetupError("H3 Coreに管理対象外の変更があります。変更を保存してから更新してください。")
+            if (self.runtime / filename).read_text("utf-8") not in allowed:
+                raise SetupError("H3 Coreに管理対象外の変更があります。変更を保存してから更新してください。")
+        if changed:
+            self.run(["git", "restore", "--source=HEAD", "--", *changed], cwd=self.runtime)
 
     def install_python(self, uv: Path) -> Path:
         self.run([uv, "python", "install", self.data["python_version"], "--no-bin", "--no-registry"])
@@ -252,9 +271,9 @@ class RuntimeInstaller:
                     "assert Path(sys.base_prefix).resolve().is_relative_to(Path(sys.argv[1]).resolve()); "
                     "assert Path(sys.prefix).resolve() == Path(sys.argv[2]).resolve(); "
                     "assert sys.version_info[:3] == (3,12,13); "
-                    "assert torch.__version__ == '2.11.0+cu130'; "
-                    "assert m.version('comfy-aimdo') == '0.5.3'; "
-                    "assert m.version('comfy-kitchen') == '0.2.33'; "
+                    "assert torch.__version__ == '2.13.0+cu130'; "
+                    "assert m.version('comfy-aimdo') == '0.5.6'; "
+                    "assert m.version('comfy-kitchen') == '0.2.39'; "
                     "assert torch.cuda.is_available(), 'CUDA GPUを利用できません。GPUドライバーを確認してください。'; "
                     "print('H3 Python / CUDA OK')"
                 ),
@@ -294,6 +313,11 @@ class RuntimeInstaller:
                 emit("共有モデルを検証しています。モデルのコピーや再取得は行いません。")
                 verify_models(models, shared=True)
             (self.base / "setup.json").unlink(missing_ok=True)
+            pending = self.base / "runtime-update-in-progress.json"
+            self.base.mkdir(parents=True, exist_ok=True)
+            if pending.is_symlink() or not pending.resolve().is_relative_to(self.base.resolve()):
+                raise SetupError("H3更新記録の保存先が不正です。")
+            pending.write_text(json.dumps({"revision": self.data["comfy_revision"]}), encoding="utf-8")
             emit("H3専用のComfyUIを準備しています。")
             self.install_core()
             emit("H3専用のPythonとライブラリを準備しています。")
@@ -305,6 +329,7 @@ class RuntimeInstaller:
                 emit("標準H3モデルを準備しています。中断後も同じ操作で再開できます。")
                 verify_models(models, shared=False)
             self.complete_setup(models, shared=bool(shared_models))
+            pending.unlink()
             emit("準備ができました。H3の画像・動画生成を利用できます。")
         return self.runtime
 

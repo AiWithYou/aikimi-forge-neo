@@ -109,6 +109,7 @@ class UITests(unittest.TestCase):
                 precision="int8",
                 text_precision="int8",
                 loras=[],
+                rope={"scale_x": 1.0, "scale_y": 1.0},
             ),
         )
         self.assertEqual(result[0], {"job": "job"})

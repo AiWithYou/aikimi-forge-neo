@@ -37,6 +37,8 @@ def start(
     hires_scale=1.5,
     hires_steps=20,
     hires_denoise=0.35,
+    rope_x=1.0,
+    rope_y=1.0,
 ):
     state = dict(state or {})
     if state.get("job"):
@@ -55,6 +57,7 @@ def start(
             precision=precision,
             text_precision=text_precision,
             loras=list(local_assets.lora_settings(loras, lora_rows)),
+            rope={"scale_x": rope_x, "scale_y": rope_y},
         )
         if checkpoint != "official":
             request["checkpoint"] = checkpoint
@@ -336,6 +339,9 @@ def on_ui_tabs():
             shift = gr.Slider(0.1, 100, value=5, step=0.1, label="Shift")
             seed = gr.Number(value=-1, precision=0, label="Seed")
             skip_layer = gr.Checkbox(value=True, label="負条件の22層をスキップ", elem_id="moss-image-skip-layer")
+            with gr.Accordion("高解像度の構図調整（RoPE）", open=False):
+                rope_x = gr.Slider(0.25, 4, value=1, step=0.05, label="横スケール · 1で標準", elem_id="moss-image-rope-x")
+                rope_y = gr.Slider(0.25, 4, value=1, step=0.05, label="縦スケール · 1で標準", elem_id="moss-image-rope-y")
         with gr.Column() as output:
             status = gr.Markdown("")
             image = gr.Image(label="生成結果", type="filepath", format="png", interactive=False)
@@ -384,6 +390,8 @@ def on_ui_tabs():
                 hires_scale,
                 hires_steps,
                 hires_denoise,
+                rope_x,
+                rope_y,
             ],
             outputs=[state, status, run, cancel, timer],
             api_visibility="private",

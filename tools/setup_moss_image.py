@@ -187,7 +187,7 @@ def prepare_runtime(root=MODEL_ROOT):
             "import comfy.cli_args; comfy.cli_args.args.cpu=True; "
             "import comfy.sd,comfy.ldm.moss_image.model; "
             "assert torch.__version__=='2.13.0+cu130'; "
-            "assert m.version('comfy-kitchen')=='0.2.37'; "
+            "assert m.version('comfy-kitchen')=='0.2.39'; "
             "assert hasattr(comfy.sd.CLIPType,'MOSS_IMAGE')",
         ],
         cwd=paths["comfy"],

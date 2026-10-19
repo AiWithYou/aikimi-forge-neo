@@ -35,7 +35,7 @@ def registered_runtime(test, repository):
     for name in (
         "tools/minimax_h3_runtime_manifest.json",
         "tools/requirements-minimax-h3.lock",
-        "patches/minimax-h3/comfyui-0.34.0-compiler.patch",
+        "patches/minimax-h3/comfyui-b9b290e4-compiler.patch",
     ):
         path = repository / name
         path.parent.mkdir(parents=True, exist_ok=True)

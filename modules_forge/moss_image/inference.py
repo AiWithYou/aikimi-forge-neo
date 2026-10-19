@@ -349,6 +349,9 @@ class ComfyRuntime:
         # Native MOSS uses Flux's timestep_embedding, which already multiplies
         # by 1000; its sampling configuration therefore has multiplier=1.
         model = self.advanced.ModelSamplingSD3().patch(model, shift=request["shift"], multiplier=1.0)[0]
+        rope = request.get("rope", {"scale_x": 1.0, "scale_y": 1.0})
+        if any(value != 1 for value in rope.values()):
+            model.model_options.setdefault("transformer_options", {})["rope_options"] = dict(rope)
         if request["skip_layer"]:
             model = self.slg.SkipLayerGuidanceDiTSimple.execute(
                 model,
@@ -445,6 +448,7 @@ class ComfyRuntime:
         return {
             **{key: request[key] for key in ("width", "height", "steps", "denoise", "seed", "cfg", "shift", "skip_layer")},
             **{key: self.last_metadata[key] for key in ("actual_steps", "sampler", "scheduler")},
+            "rope": dict(request.get("rope", {"scale_x": 1.0, "scale_y": 1.0})),
         }
 
     def generate(self, request, progress, check, *, images=()):

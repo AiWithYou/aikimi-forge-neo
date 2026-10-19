@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "comfy_repository": "https://github.com/Comfy-Org/ComfyUI.git",
-  "comfy_revision": "efa6c8f804bff78b46a0fd458ebd2e47bba07a30",
+  "comfy_revision": "b9b290e43f1eb379946dfeb013faf9bbefa1a618",
   "python_version": "3.12.13",
   "uv": {
     "artifact_id": "h3-uv",

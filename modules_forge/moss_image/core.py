@@ -41,6 +41,7 @@ _KEYS = {
     "denoise",
     "kv_cache",
     "hires",
+    "rope",
 }
 
 
@@ -178,6 +179,13 @@ def validate_request(value, *, internal=False) -> dict:
             "steps": _integer(hires.get("steps", 20), "仕上げSteps", 1, 200),
             "denoise": _number(hires.get("denoise", 0.35), "仕上げの変更量", 0.01, 1, inclusive=True),
         }
+    rope = value.get("rope", {})
+    if not isinstance(rope, dict) or set(rope) - {"scale_x", "scale_y"}:
+        raise MossImageError("RoPEには横・縦のスケールを指定してください。")
+    result["rope"] = {
+        key: _number(rope.get(key, 1), "RoPEスケール", 0.25, 4, inclusive=True)
+        for key in ("scale_x", "scale_y")
+    }
     if internal and "reference_sha256" in value:
         result["reference_sha256"] = references.validate_hashes(images, value["reference_sha256"])
     if internal and "lora_identities" in value:

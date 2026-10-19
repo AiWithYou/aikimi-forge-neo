@@ -3,6 +3,7 @@
 Contracts checked 2026-09-06 against ComfyUI e308cc73 (BlockSparseAttention),
 MATLOWAI's fused-turbo model card and starsFriday's Fast VAE node. These are
 independent experiments, not a promise of faster or equivalent output.
+Native LightVAE encoder/decoder contracts follow ComfyUI PR #17049.
 """
 from __future__ import annotations
 
@@ -29,6 +30,12 @@ W4A8_MODELS = {
     "Ref2VA": "minimax_h3_ref2va_pruned_w4a8_mixed.safetensors",
 }
 INT8_VIDEO_VAE = "minimax_h3_video_vae_int8_convrot.safetensors"
+LIGHT_VAES = {
+    "light_int8": "lightvae-lite-h3-decoder-int8-convrot.safetensors",
+    "light_fp32": "aikimi_h3_lightvae_lite_decoder_fp32.safetensors",
+    "lynnreal": "minimax_h3_lynnreal_light_vae_int8_convrot.safetensors",
+}
+LIGHT_ENCODER = "aikimi_h3_lightvae_lite_encoder_fp32.safetensors"
 FAST_VAE_NODE = "MiniMaxH3FastVAEDecode"
 FAST_VAE_PACK = "ComfyUI-MiniMax-H3-MotionCache"
 SPARSE_NODE = "BlockSparseAttention"
@@ -78,7 +85,7 @@ class H3Acceleration:
         self.hybrid.validate()
         for name, allowed in (
             ("model_variant", {"base", "fused_turbo", "w4a8"}),
-            ("video_vae", {"fp16", "int8"}),
+            ("video_vae", {"fp16", "int8", *LIGHT_VAES}),
             ("decode_mode", {"standard", "fast", "fp16_accumulation"}),
             ("attention", {"dense", "sol", "sla"}),
             ("clip_cache", {"off", "auto", "refresh"}),
@@ -88,6 +95,8 @@ class H3Acceleration:
             if not isinstance(value, str) or value not in allowed:
                 raise ValueError(f"H3 高速化設定 {name} が不正です。")
         value = self.tile_batch_size
+        if self.video_vae in LIGHT_VAES and self.decode_mode == "fast":
+            raise ValueError("LightVAEは標準VAEDecodeで使用してください。")
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value != int(value) or not 1 <= value <= 8:
             raise ValueError("Fast VAE tile batchは1〜8の整数で指定してください。")
         for name, low, high in (
@@ -159,6 +168,11 @@ class H3Acceleration:
                 result[mode] = ("diffusion_models", filename)
         if self.video_vae == "int8":
             result["Video VAE"] = ("vae", INT8_VIDEO_VAE)
+        elif self.video_vae == "lynnreal":
+            result["Video VAE"] = ("vae", LIGHT_VAES[self.video_vae])
+        elif self.video_vae in LIGHT_VAES:
+            result["Video Encoder VAE"] = ("vae", LIGHT_ENCODER)
+            result["Video Decoder VAE"] = ("vae", LIGHT_VAES[self.video_vae])
         if self.checkpoint:
             from modules_forge.studio_checkpoints import h3_role
             role = h3_role(Path(self.checkpoint))
@@ -186,6 +200,11 @@ class H3Acceleration:
         model_files = self.model_files(base_files)
         workflow["1"]["inputs"]["unet_name"] = model_files["Ref2VA" if mode == "references" else "FL2VA"][1]
         workflow["3"]["inputs"]["vae_name"] = model_files["Video VAE"][1]
+        if self.video_vae in {"light_int8", "light_fp32"}:
+            if mode == "references":
+                workflow["3"]["inputs"]["vae_name"] = model_files["Video Encoder VAE"][1]
+            workflow["18"] = {"class_type": "VAELoader", "inputs": {"vae_name": model_files["Video Decoder VAE"][1]}}
+            workflow["11"]["inputs"]["vae"] = ["18", 0]
         if self.decode_mode == "fast":
             workflow["11"] = {
                 "class_type": FAST_VAE_NODE,

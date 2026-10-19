@@ -315,20 +315,22 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         ):
             self.assertNotIn(bypass, job)
 
-    def test_moss_dependency_audit_checks_every_pin_without_platform_resolution(self):
+    def test_model_runtime_audits_check_every_pin_without_platform_resolution(self):
         import yaml
 
         security = yaml.safe_load(self.workflow("security.yml"))
-        job = security["jobs"].get("moss-image-pip-audit")
-        self.assertIsNotNone(job, "MOSS Image needs an independent complete-lock audit")
-        self.assertNotIn("needs", job)
-        audit = next(step for step in job["steps"] if "gh-action-pip-audit@" in step.get("uses", ""))
-        self.assertEqual(audit["with"]["inputs"], "tools/requirements-moss-image.lock")
-        self.assertEqual(audit["with"]["vulnerability-service"], "OSV")
-        self.assertEqual(audit["with"]["internal-be-careful-extra-flags"], "--strict --no-deps --disable-pip")
-        for bypass in ("ignore-vulns", "internal-be-careful-allow-failure"):
-            self.assertNotIn(bypass, audit["with"])
-        self.assertNotIn("continue-on-error", audit)
+        for name, lock in (("moss-image", "moss-image"), ("minimax-h3", "minimax-h3")):
+            with self.subTest(runtime=name):
+                job = security["jobs"].get(name + "-pip-audit")
+                self.assertIsNotNone(job, name + " needs an independent complete-lock audit")
+                self.assertNotIn("needs", job)
+                audit = next(step for step in job["steps"] if "gh-action-pip-audit@" in step.get("uses", ""))
+                self.assertEqual(audit["with"]["inputs"], "tools/requirements-" + lock + ".lock")
+                self.assertEqual(audit["with"]["vulnerability-service"], "OSV")
+                self.assertEqual(audit["with"]["internal-be-careful-extra-flags"], "--strict --no-deps --disable-pip")
+                for bypass in ("ignore-vulns", "internal-be-careful-allow-failure"):
+                    self.assertNotIn(bypass, audit["with"])
+                self.assertNotIn("continue-on-error", audit)
 
     def workflow(self, name: str) -> str:
         return (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")

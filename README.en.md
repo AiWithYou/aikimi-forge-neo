@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v4.10.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.10.1)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v5.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v5.0.0)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,7 +10,15 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v4.10
+## What's new in v5.0.0
+
+- **[MOSS high-resolution composition controls](docs/moss-image.md#高解像度の構図調整)**: set horizontal and vertical RoPE scales for regular generation, Hires.fix, and reference editing. Settings are recorded with each image.
+- **Updated MOSS INT8 runtime**: fused SiTU activation and quantization, with GPU memory cleanup fixes in the pinned runtime.
+- **[H3 LightVAE](docs/minimax-h3-acceleration.md#lightvae)**: select a lightweight VAE and use the updated H3 VAE offloading implementation. Keep the original VAE to compare quality.
+
+Rerun the MOSS and H3 setup after updating. Existing identical model files are reused. See [all changes](CHANGELOG.md#v500--2026-10-20).
+
+### Existing v4.10 features
 
 - **MOSS Image reliability**: restore the Hires controls after restarting, validate API denoising strength before generation, and remove PNGs from cancelled or failed jobs. See [v4.10.1 changes](CHANGELOG.md#v4101--2026-10-19).
 - **[MOSS Image Hires.fix](docs/moss-image.md#拡大して仕上げるhiresfix)**: generate the composition first, enlarge the image, then run a second pass to refine details. Adjust scale, refinement steps, and denoising strength; preview final dimensions and save settings for both passes.

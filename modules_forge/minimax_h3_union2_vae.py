@@ -251,7 +251,7 @@ def check_runtime(readiness, *, decode_mode: str = "standard", union2: bool = Fa
         ready = ancestor(commit)
     if not ready:
         raise ValueError(
-            f"H3専用ComfyUIに必要な更新がありません（{commit[:12]}以降）。tools/upgrade_minimax_h3_union2_vae.pyで確認・更新してください。"
+            f"H3専用ComfyUIに必要な更新がありません（{commit[:12]}以降）。H3のセットアップを再実行してください。"
         )
     if decode_mode in OPTIMIZED_MODES or upgraded or union2:
         packages = readiness.package_versions
@@ -262,7 +262,15 @@ def check_runtime(readiness, *, decode_mode: str = "standard", union2: bool = Fa
 
 
 def preferred_python(runtime_root: Path) -> Path | None:
-    """The updater writes this receipt last. The original .venv stays intact."""
+    """Resolve one activation for both launch and generation validation."""
+    from modules_forge.minimax_h3_runtime import installed_runtime_root
+
+    runtime_root = Path(runtime_root).resolve()
+    current_pending = runtime_root.parent / "runtime-update-in-progress.json"
+    if current_pending.exists() or current_pending.is_symlink():
+        raise ValueError("H3更新が未完了です。セットアップを再実行してください。")
+    if installed_runtime_root(runtime_root.parent.parent.parent) == runtime_root:
+        return runtime_root.parent / ".venv/Scripts/python.exe"
     pending = runtime_root.parent / "union2-vae-update-in-progress.json"
     if pending.exists() or pending.is_symlink():
         raise ValueError("H3更新が未完了です。更新ログを確認してください。未確定の環境では起動しません。")

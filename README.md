@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.10.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.10.1)** · [変更履歴](CHANGELOG.md)
+**[v5.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v5.0.0)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,7 +10,15 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v4.10系の主な変更
+## v5.0.0の主な変更
+
+- **[MOSSの高解像度構図調整](docs/moss-image.md#高解像度の構図調整)**：RoPEの横・縦スケールを指定できます。通常生成、Hires.fix、参照編集に対応し、生成条件へ設定を保存します。
+- **MOSSのINT8処理を更新**：SiTU活性化と量子化をまとめる処理を導入し、GPUメモリー解放の修正も含む専用ランタイムへ更新しました。
+- **[H3の軽量VAE](docs/minimax-h3-acceleration.md#lightvae)**：LightVAEを選択でき、H3のVAEオフロード処理も更新しました。既存モデルは保持して画質を比較できます。
+
+更新後はMOSSとH3のセットアップを再実行してください。取得済みの同じモデルは再利用します。[全変更](CHANGELOG.md#v500--2026-10-20)
+
+### 引き続き使えるv4.10の機能
 
 - **MOSS Imageの安定性改善**：保存したHires設定の再起動後の表示、APIの変更量の入力検査、中断・失敗時のPNG削除を修正しました。[v4.10.1の変更](CHANGELOG.md#v4101--2026-10-19)
 - **[MOSS ImageのHires.fix](docs/moss-image.md#拡大して仕上げるhiresfix)**：通常サイズで構図を生成し、画像を拡大してから細部を再生成します。倍率・仕上げSteps・変更量を調整でき、最終サイズと両段階の生成条件を確認できます。

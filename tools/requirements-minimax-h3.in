@@ -1,11 +1,10 @@
-# ComfyUI efa6c8f8 + 正式版aimdo（修正 #109 を含む）。Python 3.12 / Windows / CUDA 13.0。
-comfyui-frontend-package==1.51.10
-comfyui-workflow-templates==0.11.55
-comfyui-embedded-docs==0.5.11
-torch==2.11.0
+# Pinned H3 ComfyUI b9b290e4. Python 3.12 / Windows / CUDA 13.0.
+comfyui-frontend-package==1.55.18
+comfyui-workflow-templates==0.11.89
+comfyui-embedded-docs==0.5.14
+torch==2.13.0+cu130
 torchsde
-torchvision==0.26.0
-torchaudio==2.11.0
+torchvision==0.28.0+cu130
 numpy>=1.25.0
 einops
 transformers>=4.50.3
@@ -23,8 +22,8 @@ alembic
 SQLAlchemy>=2.0.0
 filelock
 av>=17.0.0
-comfy-kitchen==0.2.33
-comfy-aimdo==0.5.3
+comfy-kitchen==0.2.39
+comfy-aimdo==0.5.6
 requests
 simpleeval>=1.0.0
 blake3

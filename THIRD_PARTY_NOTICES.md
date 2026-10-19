@@ -102,7 +102,7 @@ See [integration guide](docs/cd-tuner-negpip.md) for limitations and verificatio
 
 ## ComfyUI MiniMax H3 compiler patch
 
-The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comfy-Org/ComfyUI) revisions `efa6c8f804bff78b46a0fd458ebd2e47bba07a30` and `912fca4f39b875a0360f2c5170568176ea813ded`, distributed under GPL-3.0. They adjust the H3 compiler recording boundary and include regression tests. The separately installed official comfy-aimdo CI wheel is identified by source revision and SHA-256 in `runtime-provenance.json`; no wheel or model weights are bundled.
+The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comfy-Org/ComfyUI) revisions `efa6c8f804bff78b46a0fd458ebd2e47bba07a30`, `912fca4f39b875a0360f2c5170568176ea813ded`, and `b9b290e43f1eb379946dfeb013faf9bbefa1a618`, distributed under GPL-3.0. They adjust the H3 compiler recording boundary and include regression tests. The managed runtime uses the published comfy-aimdo package pinned by hash in `tools/requirements-minimax-h3.lock`; no wheel or model weights are bundled.
 
 
 ## ausboss Qwen Image 2.1 Outpaint LoRA
@@ -114,7 +114,7 @@ The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comf
 
 ## MOSS Image reference editing and few-step adapter
 
-- Reference model patch: [ostris/ComfyUI-MOSS-Image-Ostris-Edit](https://github.com/ostris/ComfyUI-MOSS-Image-Ostris-Edit/tree/8f9b50c0d2b28248ecd48a4d4905c815e726f146), revision `8f9b50c0d2b28248ecd48a4d4905c815e726f146`, MIT, Copyright (c) 2026 Ostris, LLC. The original implementation and license are retained in `vendor/moss_image_ostris_edit.py` and `vendor/moss_image_ostris_edit.LICENSE`.
+- Reference model patch: [ostris/ComfyUI-MOSS-Image-Ostris-Edit](https://github.com/ostris/ComfyUI-MOSS-Image-Ostris-Edit/tree/8f9b50c0d2b28248ecd48a4d4905c815e726f146), revision `8f9b50c0d2b28248ecd48a4d4905c815e726f146`, MIT, Copyright (c) 2026 Ostris, LLC. The implementation is adapted in `vendor/moss_image_ostris_edit.py` for the pinned native RoPE and fused SiTU interfaces; the original license is retained in `vendor/moss_image_ostris_edit.LICENSE`.
 - Optional DMD adapter: [lodestones/MOSS-Image-SFT-8-steps-dmd](https://huggingface.co/lodestones/MOSS-Image-SFT-8-steps-dmd/tree/f95df83b5e90ae91ea412434b3f9b7f1c8c6314f), Apache-2.0. The current Euler-compatible `lora_latest.safetensors` is downloaded separately at a pinned revision and verified by SHA-256. Model weights are not bundled in Git.
 
 ## Ming Image Design
@@ -125,3 +125,7 @@ The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comf
 - ConvRot/W4A8の実行はComfy Kitchenを使用。導入構成と検証範囲は [Mingガイド](extensions-builtin/ming-image-studio/README.md) を参照してください。
 - 本体W4A8の任意変換では、[Comfy-Org/comfy-model-toolsの変換スクリプト](https://github.com/Comfy-Org/comfy-model-tools/blob/d6797787e6bdb1a1fb0094d588a26f8e71a1c757/quant_int8_convrot.py) を固定コミット・SHA-256で別途取得して実行します。スクリプトとモデル重みは同梱しません。生成ファイルには、原本・変換ツール・出力の識別情報を添付します。
 - 変換済み本体W4A8は [Aikimi/Ming-Image-0.1-Design-W4A8](https://huggingface.co/Aikimi/Ming-Image-0.1-Design-W4A8) からも固定revision・SHA-256で取得できます。元のinclusionAI著作権表示を含むMITライセンスと変換記録を配布先に同梱しています。Gitにはモデル重みを含みません。
+
+## H3 lightweight VAEs
+
+Optional weights are downloaded separately and are not bundled. [LightVAE Lite](https://huggingface.co/lightx2v/LightVAE/tree/4925ea978147b9de492d7a5fd4f9c6d1854ca1cc) by ModelTC / Lightx2v is distributed under Apache-2.0. [LynnReal Onmi Light VAE](https://huggingface.co/stdstu123/LynnReal-Onmi-light-vae) and [Kijai’s Comfy conversion](https://huggingface.co/Kijai/MiniMax-H3-experimental/tree/137541ff66fbe22d35beb73e09bca5d663b70cc5) follow their model cards and the MiniMax H3 Community License. Fixed revisions, file sizes, and hashes are in `tools/h3_lightvae_manifest.json`.

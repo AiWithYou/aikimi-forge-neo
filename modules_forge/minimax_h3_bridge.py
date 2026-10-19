@@ -57,6 +57,15 @@ H3_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
 H3_VIDEO_VAE = "minimax_h3_video_vae_fp16.safetensors"
 H3_AUDIO_VAE = "minimax_h3_audio_vae_fp32.safetensors"
 H3_MINIMUM_COMFY_COMMIT = "62b3c94bd45154f6486c7abf1b9efcacee96ea69"
+LIGHT_VAE_COMMIT = "1d9cec9e8cab32f26360254031c967d25e3fbc6b"
+
+
+def required_core_commit(acceleration: H3Acceleration) -> str:
+    if acceleration.video_vae in {"light_int8", "light_fp32", "lynnreal"}:
+        return LIGHT_VAE_COMMIT
+    return SPARSE_COMMIT if acceleration.attention != "dense" else H3_MINIMUM_COMFY_COMMIT
+
+
 H3_HISTORY_METADATA_MAX_BYTES = 1024 * 1024
 H3_STATUS_POLL_MAX_FAILURES = 3
 
@@ -315,6 +324,8 @@ class RuntimeReadiness:
 
     def _ready_for_model(self, model: str) -> bool:
         required = (model, "Qwen3-VL 32B", "Video VAE", "Audio VAE")
+        if self.acceleration.video_vae in {"light_int8", "light_fp32"}:
+            required += ("Video Encoder VAE", "Video Decoder VAE")
         return (
             self.connected
             and not self.missing_nodes
@@ -1096,7 +1107,7 @@ def inspect_readiness(
         missing_nodes = tuple(sorted(required_nodes - set(nodes)))
         server_files = server_model_file_status(nodes, acceleration=acceleration)
         h3_core_optimized, core_revision = h3_core_optimization_status(
-            selected_root, SPARSE_COMMIT if acceleration.attention != "dense" else H3_MINIMUM_COMFY_COMMIT
+            selected_root, required_core_commit(acceleration)
         )
         packages = {
             str(item.get("name")): str(item.get("installed"))
@@ -1651,7 +1662,7 @@ def validate_readiness(
         revision = readiness.core_revision[:12] if readiness.core_revision else "未確認"
         raise H3BridgeError(
             "選択した設定に必要なH3 core修正を確認できません。"
-            f" ComfyUIを {(SPARSE_COMMIT if acceleration.attention != 'dense' else H3_MINIMUM_COMFY_COMMIT)[:12]} 以降へ更新してください（現在 {revision}）。"
+            f" ComfyUIを {required_core_commit(acceleration)[:12]} 以降へ更新してください（現在 {revision}）。"
         )
     kitchen = readiness.package_versions.get("comfy-kitchen", "")
     if not readiness.ck_attention_available or _version_tuple(kitchen) < (0, 2, 30):
@@ -1671,6 +1682,9 @@ def validate_readiness(
         raise H3BridgeError("Comfy Compilerの選択と起動引数が一致しません。「選択設定で再起動」を押してください。")
     whitelist = custom_node_whitelist(readiness.runtime_args)
     expected_whitelist = acceleration.runtime_packs()
+    if whitelist is not None:
+        # The managed H3 launcher also enables its bundled Orbit loader.
+        whitelist = tuple(pack for pack in whitelist if pack != orbit_assets.PACK)
     if whitelist != expected_whitelist:
         raise H3BridgeError(
             "追加ノード（Fast VAE / NegPiP / CLIPCached / 長尺生成）の許可設定が一致しません。「選択設定で再起動」を押してください。"
@@ -1692,6 +1706,8 @@ def validate_readiness(
         raise H3BridgeError(str(exc)) from exc
     if not (readiness.ready_for_fl2va or readiness.ready_for_ref2va):
         required = ("FL2VA", "Ref2VA", "Qwen3-VL 32B", "Video VAE", "Audio VAE")
+        if acceleration.video_vae in {"light_int8", "light_fp32"}:
+            required += ("Video Encoder VAE", "Video Decoder VAE")
         selected = acceleration.model_files(MODEL_FILES)
         missing_local = [f"{name}: models/{selected[name][0]}/{selected[name][1]}" for name in required if not readiness.model_files.get(name)]
         missing_server = [f"{name}: {selected[name][1]}" for name in required if not readiness.server_model_files.get(name)]
@@ -3211,7 +3227,7 @@ def readiness_html(
         if missing_server_files
         else "Comfy Kitchen INT8 attentionを利用できません。runtimeを更新してください。"
         if readiness.connected and not readiness.ck_attention_available
-        else f"H3 coreを {(SPARSE_COMMIT if readiness.acceleration.attention != 'dense' else H3_MINIMUM_COMFY_COMMIT)[:12]} 以降へ更新してください。"
+        else f"H3 coreを {required_core_commit(readiness.acceleration)[:12]} 以降へ更新してください。"
         if readiness.connected and not readiness.h3_core_optimized
         else (
             "選択した起動profileと接続中の設定が一致しません。"

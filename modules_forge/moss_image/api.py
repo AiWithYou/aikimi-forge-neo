@@ -73,15 +73,21 @@ def public_result(value):
         "hires",
         "sampling_passes",
         "upscaler",
+        "rope",
     }
     result = {key: item for key, item in value.items() if key in allowed}
+    if "rope" in result:
+        result["rope"] = {key: item for key, item in result["rope"].items() if key in {"scale_x", "scale_y"}}
     if "hires" in result:
         result["hires"] = {
             key: item for key, item in result["hires"].items() if key in {"base_width", "base_height", "steps", "denoise"}
         }
     if "sampling_passes" in result:
-        fields = {"width", "height", "steps", "denoise", "seed", "cfg", "shift", "skip_layer", "actual_steps", "sampler", "scheduler"}
+        fields = {"width", "height", "steps", "denoise", "seed", "cfg", "shift", "skip_layer", "actual_steps", "sampler", "scheduler", "rope"}
         result["sampling_passes"] = [{key: item for key, item in stage.items() if key in fields} for stage in result["sampling_passes"]]
+        for stage in result["sampling_passes"]:
+            if "rope" in stage:
+                stage["rope"] = {key: item for key, item in stage["rope"].items() if key in {"scale_x", "scale_y"}}
     if "weight_sources" in result:
         source_fields = {"repo_id", "revision", "filename", "sha256", "precision"}
         result["weight_sources"] = {

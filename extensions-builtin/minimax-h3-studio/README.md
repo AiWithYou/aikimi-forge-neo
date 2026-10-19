@@ -55,11 +55,9 @@ H3 Studioの「ComfyUIで続きを編集」から「現在の設定をComfyUIで
 
 Fun ControlNetのUnion 1に加えて、Union 2.0のCanny、Gray、前処理済み動画を選べます。Cannyだけなら、重みが小さいUnion 1をまず選んでください（Union 1 INT8は約2.14 GiB、Union 2.0 INT8は約4.22 GiB）。Union 2.0はGrayなど追加の制御方式が必要な場合の任意モデルです。CannyとGrayは入力動画から生成します。Depth・Pose・HED・MLSD・Scribble・Layoutなどは事前に加工した動画を指定してください。映像を24fpsにそろえ、中央切り抜きと短い動画の末尾補完を適用します。元動画の音声は制御に使いません。Union 1の重みを名前だけ変更してUnion 2.0に使うことはできません。
 
-Neoを停止し、既存のH3専用環境を準備したうえで、リポジトリのルートから以下を実行します。
+v5.0.0以降は通常のH3セットアップに対応CoreとVAE修正を含みます。H3の「環境とモデルを準備」、またはセットアップメニューの4で更新した後、必要なUnion 2.0の重みを取得してください。
 
 ```powershell
-venv\Scripts\python.exe tools\upgrade_minimax_h3_union2_vae.py --check
-venv\Scripts\python.exe tools\upgrade_minimax_h3_union2_vae.py --apply
 venv\Scripts\python.exe tools\prepare_minimax_h3_union2.py --list --precision int8
 venv\Scripts\python.exe tools\prepare_minimax_h3_union2.py --download --precision int8 --repository Kijai/MiniMax-H3-experimental --filename model_patches/minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors
 ```

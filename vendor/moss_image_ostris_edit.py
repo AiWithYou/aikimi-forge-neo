@@ -43,7 +43,7 @@ import comfy.utils
 import node_helpers
 from comfy.ldm.flux.layers import timestep_embedding
 from comfy.ldm.modules.attention import optimized_attention
-from comfy.ldm.moss_image.model import modulated_rms_norm, rope_split_half, situ
+from comfy.ldm.moss_image.model import modulated_rms_norm, rope_split_half
 
 # ---------------------------------------------------------------------------
 # Text encode (VL images -> conditioning, refs -> reference_latents)
@@ -158,8 +158,14 @@ def _text_ids(text_len, device):
     return ids
 
 
-def _pe(dit, ids):
-    return dit.pe_embedder(ids.unsqueeze(0)).transpose(1, 2).contiguous()
+def _pe(dit, ids, transformer_options):
+    options = transformer_options.get("rope_options", {})
+    scales = (1, 1, options.get("scale_y", 1), options.get("scale_x", 1))
+    pe = torch.cat([
+        comfy.ldm.flux.math.rope(ids[None, ..., axis], dim, 10000 * scale ** (-dim / (dim - 2)))
+        for axis, (dim, scale) in enumerate(zip(dit.rope_axes_dim, scales))
+    ], dim=-3)
+    return pe.unsqueeze(1).transpose(1, 2).contiguous()
 
 
 def _modulation(dit, vec):
@@ -217,8 +223,7 @@ def _block_kv_forward(block, x, mod, pe, transformer_options, kv_capture=None, k
     attn = _attention(q, k, v, block, pe, transformer_options, kv_capture, kv_cache)
     x = x + block.proj["o"](attn) * gate_a
     y = modulated_rms_norm(x, block.norm2, scale_f, shift_f)
-    hidden, gate = block.proj["ffn_up_gate"](y).chunk(2, dim=-1)
-    return x + block.proj["ffn_down"](situ(hidden, gate)) * gate_f
+    return x + comfy.ops.linear_input_act(block.proj["ffn_down"], block.proj["ffn_up_gate"](y), "situ") * gate_f
 
 
 def _block_ref_forward(block, x, mod, ref_mod, split, pe, transformer_options):
@@ -245,8 +250,7 @@ def _block_ref_forward(block, x, mod, ref_mod, split, pe, transformer_options):
     q, k, v = _qkv(block, y)
     x = x + gate(block.proj["o"](_attention(q, k, v, block, pe, transformer_options)), gate_a, rgate_a)
     y = norm_mod(block.norm2, x, scale_f, shift_f, rscale_f, rshift_f)
-    hidden, g = block.proj["ffn_up_gate"](y).chunk(2, dim=-1)
-    return x + gate(block.proj["ffn_down"](situ(hidden, g)), gate_f, rgate_f)
+    return x + gate(comfy.ops.linear_input_act(block.proj["ffn_down"], block.proj["ffn_up_gate"](y), "situ"), gate_f, rgate_f)
 
 
 def _run_blocks(dit, h, block_fn, vec, mod, pe, transformer_options):
@@ -299,7 +303,7 @@ def _forward_with_refs(dit, x, timestep, context, ref_latents, transformer_optio
 
     reftok, refids = _pack_refs(dit, ref_latents, B, text_len, device, dtype)
     ids = torch.cat((_image_ids(0, text_len, H, W, device), _text_ids(text_len, device), refids), dim=0)
-    pe = _pe(dit, ids)
+    pe = _pe(dit, ids, transformer_options)
 
     vec = _time_vec(dit, timestep, dtype)
     vec0 = _time_vec(dit, torch.zeros_like(timestep), dtype)
@@ -334,7 +338,7 @@ def _precompute_ref_kv(dit, x, timestep, text_len, ref_latents, transformer_opti
     dtype, device = x.dtype, x.device
     transformer_options = transformer_options.copy()
     reftok, refids = _pack_refs(dit, ref_latents, B, text_len, device, dtype)
-    pe = _pe(dit, refids)
+    pe = _pe(dit, refids, transformer_options)
     vec0 = _time_vec(dit, torch.zeros_like(timestep), dtype)
     mod0 = _modulation(dit, vec0)
     h = dit.video_embedder(reftok)
@@ -361,7 +365,7 @@ def _forward_with_cached_refs(dit, x, timestep, context, ref_kv, transformer_opt
     n_img, text_len = H * W, context.shape[1]
 
     ids = torch.cat((_image_ids(0, text_len, H, W, device), _text_ids(text_len, device)), dim=0)
-    pe = _pe(dit, ids)
+    pe = _pe(dit, ids, transformer_options)
     vec = _time_vec(dit, timestep, dtype)
     mod = _modulation(dit, vec)
 

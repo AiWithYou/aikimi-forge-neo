@@ -41,6 +41,9 @@ def local_directory(value: str | Path) -> Path:
 
 def installed_runtime_root(repository_root: Path = REPOSITORY_ROOT) -> Path | None:
     root = managed_runtime_root(repository_root)
+    pending = root.parent / "runtime-update-in-progress.json"
+    if pending.exists() or pending.is_symlink():
+        return None
     if not (root.parent / "setup.json").is_file():
         return None
     if not (root / "main.py").is_file() or not (root.parent / ".venv/Scripts/python.exe").is_file():
@@ -61,7 +64,7 @@ def setup_fingerprint(repository_root: Path = REPOSITORY_ROOT) -> str:
     files = (
         "tools/minimax_h3_runtime_manifest.json",
         "tools/requirements-minimax-h3.lock",
-        "patches/minimax-h3/comfyui-0.34.0-compiler.patch",
+        "patches/minimax-h3/comfyui-b9b290e4-compiler.patch",
     )
     return hashlib.sha256(b"".join((Path(repository_root) / name).read_bytes() for name in files)).hexdigest()
 

@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "artifacts": {
+    "encoder": {
+      "artifact_id": "h3-lightvae-encoder",
+      "relative_path": "vae/lightvae-lite-h3-encoder-comfy.safetensors",
+      "url": "https://huggingface.co/lightx2v/LightVAE/resolve/4925ea978147b9de492d7a5fd4f9c6d1854ca1cc/lightvae-lite-h3-encoder-comfy.safetensors",
+      "size": 406335616,
+      "sha256": "f5272977f759ec7a5f05f2f04871b2e0f3366c50a79644dd7dc36ae944d1f7b8",
+      "license_url": "https://huggingface.co/lightx2v/LightVAE/blob/4925ea978147b9de492d7a5fd4f9c6d1854ca1cc/README.md"
+    },
+    "decoder_int8": {
+      "artifact_id": "h3-lightvae-decoder_int8",
+      "relative_path": "vae/lightvae-lite-h3-decoder-int8-convrot.safetensors",
+      "url": "https://huggingface.co/lightx2v/LightVAE/resolve/4925ea978147b9de492d7a5fd4f9c6d1854ca1cc/lightvae-lite-h3-decoder-int8-convrot.safetensors",
+      "size": 833732248,
+      "sha256": "247de59ddd078d121ba9ba4bac1bcbf1285c2ce68304d9d78eaea3e5a947a7e8",
+      "license_url": "https://huggingface.co/lightx2v/LightVAE/blob/4925ea978147b9de492d7a5fd4f9c6d1854ca1cc/README.md"
+    },
+    "decoder_fp32": {
+      "artifact_id": "h3-lightvae-decoder_fp32",
+      "relative_path": "vae/lightvae-lite-h3-decoder-comfy.safetensors",
+      "url": "https://huggingface.co/lightx2v/LightVAE/resolve/4925ea978147b9de492d7a5fd4f9c6d1854ca1cc/lightvae-lite-h3-decoder-comfy.safetensors",
+      "size": 3248357112,
+      "sha256": "9af3547f4a00d358d8742df89480be61a8d834e47085428f36d82322014e59d2",
+      "license_url": "https://huggingface.co/lightx2v/LightVAE/blob/4925ea978147b9de492d7a5fd4f9c6d1854ca1cc/README.md"
+    },
+    "lynnreal": {
+      "artifact_id": "h3-lightvae-lynnreal",
+      "relative_path": "vae/minimax_h3_lynnreal_light_vae_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Kijai/MiniMax-H3-experimental/resolve/137541ff66fbe22d35beb73e09bca5d663b70cc5/minimax_h3_lynnreal_light_vae_int8_convrot.safetensors",
+      "size": 2137493384,
+      "sha256": "f11f8b9b96c9dd22b36bc6c18464b6929c207d247e6d865d90fe31588e58e7e2",
+      "license_url": "https://huggingface.co/stdstu123/LynnReal-Onmi-light-vae"
+    }
+  },
+  "native_exports": {
+    "encoder": {
+      "relative_path": "vae/aikimi_h3_lightvae_lite_encoder_fp32.safetensors",
+      "component": "encoder",
+      "size": 406332896,
+      "sha256": "ceaf147d641e794c344b93b59663fbaa46501eaecc462f3b23e301b9f5695599"
+    },
+    "decoder_fp32": {
+      "relative_path": "vae/aikimi_h3_lightvae_lite_decoder_fp32.safetensors",
+      "component": "decoder",
+      "size": 3248357336,
+      "sha256": "3bf4fbbb24bfe31fd7c18900be659f866724ef3f61443d3c24b6b4052ff9dbfd"
+    }
+  },
+  "variants": {
+    "light_int8": [
+      "encoder",
+      "decoder_int8"
+    ],
+    "light_fp32": [
+      "encoder",
+      "decoder_fp32"
+    ],
+    "lynnreal": [
+      "lynnreal"
+    ]
+  }
+}
