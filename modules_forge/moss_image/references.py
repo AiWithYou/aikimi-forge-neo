@@ -9,8 +9,6 @@ import io
 import math
 import re
 
-from PIL import Image, ImageOps, UnidentifiedImageError
-
 from .core import MossImageError, safe_model_root
 
 
@@ -21,8 +19,11 @@ def validate_inputs(values, *, internal=False):
         if internal:
             if image != f"reference-{index}.png":
                 raise MossImageError("参照画像の保存名が不正です。")
-        elif not isinstance(image, Image.Image) or min(image.size) < 16 or image.width * image.height > 40_000_000:
-            raise MossImageError("参照画像は各辺16ピクセル以上、1枚40メガピクセル以内で入力してください。")
+        else:
+            from PIL import Image
+
+            if not isinstance(image, Image.Image) or min(image.size) < 16 or image.width * image.height > 40_000_000:
+                raise MossImageError("参照画像は各辺16ピクセル以上、1枚40メガピクセル以内で入力してください。")
     return list(values)
 
 
@@ -37,6 +38,8 @@ def validate_hashes(images, hashes):
 
 
 def decode_uploads(values):
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
     if not isinstance(values, list) or len(values) > 3:
         raise MossImageError("参照画像はbase64配列で最大3枚です。")
     images = []
@@ -57,6 +60,8 @@ def decode_uploads(values):
 
 
 def snapshot(directory, request):
+    from PIL import Image, ImageOps
+
     images = validate_inputs(request.get("images", []))
     directory = safe_model_root(directory)
     names, hashes = [], []
@@ -73,6 +78,8 @@ def snapshot(directory, request):
 
 
 def load(directory, request):
+    from PIL import Image
+
     names = validate_inputs(request.get("images", []), internal=True)
     hashes = validate_hashes(names, request.get("reference_sha256", []))
     directory = safe_model_root(directory)
@@ -105,4 +112,6 @@ def fit_size(size, max_pixels=1024**2, *, snap=16):
 
 
 def prepare(images):
+    from PIL import Image
+
     return [image.resize(fit_size(image.size), Image.Resampling.LANCZOS) for image in images]

@@ -1,6 +1,8 @@
 """MOSS precision selection and verified component/runtime boundaries."""
 
 import hashlib
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +12,25 @@ from modules_forge.moss_image import core
 
 
 class CoreTests(unittest.TestCase):
+    def test_image_free_requests_validate_before_site_packages_are_installed(self):
+        source = (
+            "from modules_forge.moss_image.core import validate_request; "
+            "value=validate_request({'prompt':'setup','seed':0}); "
+            "assert value['images']==[]; "
+            "value=validate_request({'prompt':'cat','width':1536,'height':1536,"
+            "'hires':{'base_width':1024,'base_height':1024}}); "
+            "assert value['hires']['steps']==20"
+        )
+        result = subprocess.run(  # noqa: S603 -- Fixed source, current interpreter, no site packages.
+            [sys.executable, "-S", "-c", source],
+            cwd=core.ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_int8_defaults_preserve_generation_settings_and_loras(self):
         value = core.validate_request({"prompt": " anime ", "seed": 7})
         self.assertEqual((value["precision"], value["text_precision"]), ("int8", "int8"))
