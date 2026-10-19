@@ -184,6 +184,26 @@ class GradioRuntimeCleanupTests(unittest.TestCase):
 
 
 class GradioUiContractTests(unittest.TestCase):
+    def test_wrapped_load_and_change_can_share_an_always_last_event(self):
+        import_ui_tempdir()
+        from modules import gradio_extensions  # noqa: F401
+
+        with gr.Blocks() as demo:
+            enabled = gr.Checkbox()
+            preview = gr.Markdown()
+            dependency = gr.on(
+                triggers=[demo.load, enabled.change],
+                fn=lambda value: str(value),
+                inputs=enabled,
+                outputs=preview,
+                trigger_mode="always_last",
+                queue=False,
+            )
+        event = demo.get_config_file()["dependencies"][dependency["id"]]
+        self.assertEqual(event["targets"], [(demo._id, "load"), (enabled._id, "change")])
+        self.assertEqual(event["trigger_mode"], "always_last")
+        self.assertEqual(event["api_visibility"], "private")
+
     def test_gradio6_launch_keeps_security_and_app_level_parameters(self):
         parameters = inspect.signature(gr.Blocks.launch).parameters
         for name in ("auth", "allowed_paths", "blocked_paths", "theme", "head"):
