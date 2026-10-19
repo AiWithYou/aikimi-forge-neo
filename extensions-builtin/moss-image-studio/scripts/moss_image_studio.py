@@ -379,25 +379,12 @@ def on_ui_tabs():
         lora_refresh.click(refresh_loras, inputs=loras, outputs=loras, queue=False, api_visibility="private")
         model.change(select_model, inputs=model, outputs=precision, queue=False, api_visibility="private")
         model_refresh.click(refresh_models, inputs=model, outputs=model, queue=False, api_visibility="private")
-        hires_enabled.change(
-            lambda enabled: gr.update(visible=True if enabled else "hidden"),
-            inputs=hires_enabled,
-            outputs=hires_settings,
-            queue=False,
-            api_visibility="private",
-        )
-        for component in (hires_enabled, width, height, hires_scale):
-            component.change(
-                hires_preview,
-                inputs=[hires_enabled, width, height, hires_scale],
-                outputs=hires_size,
-                queue=False,
-                api_visibility="private",
-            )
-        blocks.load(
-            hires_controls,
+        gr.on(
+            triggers=[blocks.load, hires_enabled.change, width.change, height.change, hires_scale.change],
+            fn=hires_controls,
             inputs=[hires_enabled, width, height, hires_scale],
             outputs=[hires_settings, hires_size],
+            trigger_mode="always_last",
             queue=False,
             api_visibility="private",
         )

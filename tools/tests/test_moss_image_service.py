@@ -314,7 +314,7 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(events, ["stopped", "released"])
             self.assertFalse((root / "output.png").exists())
             self.assertFalse((root / ".output.png.tmp").exists())
-            self.assertEqual(json.loads((root / "result.json").read_text()), {"status": "cancelled", "error": ""})
+            self.assertEqual(json.loads((root / "result.json").read_text(encoding="utf-8")), {"status": "cancelled", "error": ""})
             service.worker.close.assert_called_once()
 
     def test_worker_failure_after_png_save_removes_output_only_after_stop(self):
@@ -337,7 +337,7 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(job["status"], "error")
             self.assertFalse((root / "output.png").exists())
             self.assertFalse((root / ".output.png.tmp").exists())
-            self.assertEqual(json.loads((root / "result.json").read_text())["status"], "error")
+            self.assertEqual(json.loads((root / "result.json").read_text(encoding="utf-8"))["status"], "error")
             lease.release.assert_called_once()
 
     def test_cleanup_error_is_logged_and_stopped_gpu_is_released(self):

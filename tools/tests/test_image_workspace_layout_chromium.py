@@ -140,6 +140,101 @@ class ImageWorkspaceLayoutChromiumTests(unittest.TestCase):
             self.assertEqual(captured[0]["hires"]["base_height"], 768)
             self.assertEqual(page.exceptions, [])
 
+    def test_delayed_hires_load_converges_to_changes_made_while_loading(self):
+        chromium = find_chromium()
+        if not chromium:
+            self.skipTest("Chrome or Chromium is not installed")
+        for case in ("disable", "width"):
+            with self.subTest(case=case):
+                self.assert_delayed_hires_load(chromium, case)
+
+    def assert_delayed_hires_load(self, chromium, case):
+        screen = test_moss_image_ui.UITests().load_screen()
+        original = screen.hires_controls
+        entered, release, independent, submitted = (threading.Event() for _ in range(4))
+        guard, calls, captured = threading.Lock(), [], []
+
+        def controlled(*values):
+            with guard:
+                calls.append(values)
+                number = len(calls)
+            if number == 1:
+                entered.set()
+                if not release.wait(30):
+                    raise RuntimeError("Initial Hires response was not released")
+            return (*original(*values), str(number))
+
+        with patch.object(screen, "hires_controls", controlled):
+            blocks = screen.on_ui_tabs()[0][0]
+        self.addCleanup(blocks.close)
+        test_moss_image_ui.restore_defaults(blocks, {
+            "moss_image_studio/拡大して仕上げる（Hires.fix）/value": True,
+            "moss_image_studio/幅/value": 1024,
+            "moss_image_studio/高さ/value": 768,
+            "moss_image_studio/倍率/value": 1.5,
+            "moss_image_studio/プロンプト/value": "cat",
+        })
+        width_selector = '#moss-image-settings input[aria-label="幅"]'
+        with blocks:
+            load_reply = gr.Markdown("waiting", elem_id="hires-test-load-reply")
+            change_reply = gr.Markdown("waiting", elem_id="hires-test-change-reply")
+        for event in blocks.fns.values():
+            if event.fn is controlled:
+                event.outputs.append(load_reply)
+            elif event.fn is screen.hires_preview:
+                original_preview = event.fn
+
+                def changed(*values, preview=original_preview):
+                    result = preview(*values)
+                    independent.set()
+                    return result, "changed"
+
+                event.fn = changed
+                event.outputs.append(change_reply)
+        _, url, _ = blocks.launch(server_name="127.0.0.1", server_port=reserve_local_port(),
+                                  prevent_thread_lock=True, quiet=True,
+                                  css=(ROOT / "extensions-builtin/moss-image-studio/style.css").read_text(encoding="utf-8"))
+
+        def capture(value):
+            captured.append(core.validate_request(value))
+            submitted.set()
+            return "test-job"
+
+        try:
+            with patch.object(screen.SERVICE, "start", side_effect=capture), cdp_page(chromium, url) as page:
+                self.assertTrue(entered.wait(10), "Initial Hires load did not start")
+                self.assertTrue(page.wait_for("#moss-image-hires-enabled input", "element.checked"))
+                if case == "disable":
+                    page.evaluate("document.querySelector('#moss-image-hires-enabled input').click()")
+                    self.assertTrue(page.wait_for("#moss-image-hires-enabled input", "!element.checked"))
+                else:
+                    self.assertTrue(page.wait_for(width_selector, "Number(element.value) === 1024"))
+                    page.evaluate(f"""(() => {{const input=document.querySelector({width_selector!r});
+                        for(const value of [768,512]) {{input.value=value;input.dispatchEvent(new Event('input',{{bubbles:true}}));
+                        input.dispatchEvent(new Event('change',{{bubbles:true}}));}} }})()""")
+                    self.assertTrue(page.wait_for(width_selector, "Number(element.value) === 512"))
+                # In the old implementation, wait for the independent change
+                # response to be applied before releasing the older load.
+                # A single always_last event instead retains this change locally.
+                if independent.wait(2):
+                    self.assertTrue(page.wait_for("#hires-test-change-reply", "element.textContent.trim() === 'changed'"))
+                release.set()
+                self.assertTrue(page.wait_for("#hires-test-load-reply", "element.textContent.trim() !== 'waiting'"))
+                page.evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))")
+                expected = "" if case == "disable" else "768×1152"
+                self.assertTrue(page.wait_for("#moss-image-hires-size",
+                    "element.textContent.trim() === ''" if not expected else f"element.textContent.includes('{expected}')"), str(calls))
+                self.assertTrue(page.wait_for("#moss-image-hires-settings",
+                    "element.getBoundingClientRect().height === 0" if case == "disable" else "element.getBoundingClientRect().height > 0"))
+                page.evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='生成').click()")
+                self.assertTrue(submitted.wait(10))
+                self.assertEqual((captured[0]["width"], captured[0]["height"]),
+                                 (1024,768) if case == "disable" else (768,1152))
+                self.assertEqual("hires" in captured[0], case != "disable")
+                self.assertEqual(page.exceptions, [])
+        finally:
+            release.set()
+
 
 if __name__ == "__main__":
     unittest.main()
