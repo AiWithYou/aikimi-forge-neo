@@ -155,7 +155,20 @@ def hires_preview(enabled, width, height, scale):
 
 
 def hires_controls(enabled, width, height, scale):
-    return gr.update(visible=True if enabled else "hidden"), hires_preview(enabled, width, height, scale)
+    visibility = gr.update(visible=True if enabled else "hidden")
+    if not enabled:
+        return visibility, ""
+    try:
+        dimensions = []
+        for value in (width, height):
+            if value is None:
+                dimensions.append(None)
+            else:
+                gr.Number.raise_if_out_of_bounds(value, 512, 4096)
+                dimensions.append(gr.Number.round_to_precision(value, 0))
+        return visibility, hires_preview(True, *dimensions, scale)
+    except (gr.Error, TypeError, ValueError, OverflowError) as error:
+        return visibility, str(error)
 
 
 def poll(state):
@@ -385,6 +398,7 @@ def on_ui_tabs():
             inputs=[hires_enabled, width, height, hires_scale],
             outputs=[hires_settings, hires_size],
             trigger_mode="always_last",
+            preprocess=False,
             queue=False,
             api_visibility="private",
         )

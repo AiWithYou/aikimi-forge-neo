@@ -1,3 +1,4 @@
+import copy
 import importlib.metadata
 import inspect
 import socket
@@ -184,6 +185,33 @@ class GradioRuntimeCleanupTests(unittest.TestCase):
 
 
 class GradioUiContractTests(unittest.TestCase):
+    def test_plain_event_replacements_keep_component_construction_and_calling(self):
+        import_ui_tempdir()
+        from modules import gradio_extensions  # noqa: F401
+
+        captured = {}
+
+        def plain_event(_button, **kwargs):
+            captured.update(kwargs)
+            return "called"
+
+        with patch.object(gr.Button, "click", plain_event), gr.Blocks(analytics_enabled=False):
+            button = gr.Button("Run")
+            result = button.click(fn=lambda: None, _js="() => []")
+        self.assertEqual(result, "called")
+        self.assertEqual(captured["js"], "() => []")
+        self.assertEqual(captured["api_visibility"], "private")
+
+    def test_wrapped_components_can_be_copied_for_callback_updates(self):
+        import_ui_tempdir()
+        from modules import gradio_extensions  # noqa: F401
+
+        component = gr.Dropdown(choices=["first", "second"], value="first", render=False)
+        duplicate = copy.deepcopy(component)
+        self.assertEqual(duplicate.choices, component.choices)
+        self.assertEqual(duplicate.value, "first")
+        self.assertIsNot(duplicate, component)
+
     def test_wrapped_load_and_change_can_share_an_always_last_event(self):
         import_ui_tempdir()
         from modules import gradio_extensions  # noqa: F401

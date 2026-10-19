@@ -73,6 +73,8 @@ Gradio 6.17.3の`/gradio_api/file=`には、外部URLを302へ返すopen redirec
 
 UI eventへ`api_name`と`api_visibility`の指定がない場合は、`api_visibility="private"`を既定値として設定します。明示した`api_name`の公開APIと`api_visibility="public"`は変更しません。private既定は意図しないcallbackの公開面を減らしますが、remote modeで必要なGradio認証とAPI認証は引き続き適用します。
 
+イベントラッパーはネイティブイベントの接続種別と固有引数を保持し、複数トリガーを持つ`gr.on`と結果更新用コンポーネントのコピーに対応します。これらの属性を持たない関数でも、コンポーネントの構築と通常のイベント呼び出しを維持します。
+
 ## 更新時の確認項目
 
 GradioまたはFastAPI関連の固定版を変更する場合は、少なくとも次を確認します。

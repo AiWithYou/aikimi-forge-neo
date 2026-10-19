@@ -149,9 +149,8 @@ class EventWrapper:
         self.event_name = getattr(replaced_event, "event_name", None)
         self.callback = getattr(replaced_event, "callback", None)
         self.real_self = getattr(replaced_event, "__self__", None)
-
-    def __getattr__(self, name):
-        return getattr(self.replaced_event, name)
+        self.connection = getattr(replaced_event, "connection", None)
+        self.event_specific_args = getattr(replaced_event, "event_specific_args", None)
 
     def __call__(self, *args, **kwargs):
         return self.replaced_event(*args, **_prepare_event_kwargs(kwargs))

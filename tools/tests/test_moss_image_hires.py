@@ -1,5 +1,6 @@
 """Two-pass MOSS generation keeps output contracts and never publishes a draft."""
 
+import asyncio
 import json
 import tempfile
 import unittest
@@ -31,6 +32,25 @@ def request(**changes):
 
 
 class HiresContractTests(unittest.TestCase):
+    def test_display_sync_handles_invalid_raw_dimensions_without_blocking_off(self):
+        screen = test_moss_image_ui.UITests().load_screen()
+        blocks = screen.on_ui_tabs()[0][0]
+        self.addCleanup(blocks.close)
+        index = next(index for index, event in blocks.fns.items() if event.fn is screen.hires_controls)
+        for width, height in ((511, 768), (1024, 4097), (None, None)):
+            with self.subTest(off=(width, height)):
+                result = asyncio.run(blocks.process_api(index, inputs=[False, width, height, 1.5]))["data"]
+                self.assertEqual(result[0]["visible"], "hidden")
+                self.assertEqual(result[1], "")
+        for width in (511, 511.6, 4097):
+            with self.subTest(invalid=width):
+                result = asyncio.run(blocks.process_api(index, inputs=[True, width, 768, 1.5]))["data"]
+                self.assertIs(result[0]["visible"], True)
+                self.assertIn(str(width), result[1])
+                self.assertNotIn("最終サイズ", result[1])
+        result = asyncio.run(blocks.process_api(index, inputs=[True, 1024.4, 768, 1.5]))["data"]
+        self.assertIn("1536×1152", result[1])
+
     def test_normal_requests_remain_single_pass_and_hires_is_explicit(self):
         self.assertNotIn("hires", core.validate_request({"prompt": "cat"}))
         value = request()

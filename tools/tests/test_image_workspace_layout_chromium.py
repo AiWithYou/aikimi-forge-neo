@@ -144,7 +144,7 @@ class ImageWorkspaceLayoutChromiumTests(unittest.TestCase):
         chromium = find_chromium()
         if not chromium:
             self.skipTest("Chrome or Chromium is not installed")
-        for case in ("disable", "width"):
+        for case in ("disable", "width", "invalid"):
             with self.subTest(case=case):
                 self.assert_delayed_hires_load(chromium, case)
 
@@ -169,7 +169,7 @@ class ImageWorkspaceLayoutChromiumTests(unittest.TestCase):
         self.addCleanup(blocks.close)
         test_moss_image_ui.restore_defaults(blocks, {
             "moss_image_studio/拡大して仕上げる（Hires.fix）/value": True,
-            "moss_image_studio/幅/value": 1024,
+            "moss_image_studio/幅/value": 511 if case == "invalid" else 1024,
             "moss_image_studio/高さ/value": 768,
             "moss_image_studio/倍率/value": 1.5,
             "moss_image_studio/プロンプト/value": "cat",
@@ -207,6 +207,13 @@ class ImageWorkspaceLayoutChromiumTests(unittest.TestCase):
                 if case == "disable":
                     page.evaluate("document.querySelector('#moss-image-hires-enabled input').click()")
                     self.assertTrue(page.wait_for("#moss-image-hires-enabled input", "!element.checked"))
+                elif case == "invalid":
+                    self.assertTrue(page.wait_for(width_selector, "Number(element.value) === 511"))
+                    page.evaluate(f"""(() => {{const input=document.querySelector({width_selector!r});
+                        input.value=512;input.dispatchEvent(new Event('input',{{bubbles:true}}));
+                        input.dispatchEvent(new Event('change',{{bubbles:true}}));
+                        document.querySelector('#moss-image-hires-enabled input').click();}})()""")
+                    self.assertTrue(page.wait_for("#moss-image-hires-enabled input", "!element.checked"))
                 else:
                     self.assertTrue(page.wait_for(width_selector, "Number(element.value) === 1024"))
                     page.evaluate(f"""(() => {{const input=document.querySelector({width_selector!r});
@@ -221,16 +228,17 @@ class ImageWorkspaceLayoutChromiumTests(unittest.TestCase):
                 release.set()
                 self.assertTrue(page.wait_for("#hires-test-load-reply", "element.textContent.trim() !== 'waiting'"))
                 page.evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))")
-                expected = "" if case == "disable" else "768×1152"
+                disabled = case in ("disable", "invalid")
+                expected = "" if disabled else "768×1152"
                 self.assertTrue(page.wait_for("#moss-image-hires-size",
                     "element.textContent.trim() === ''" if not expected else f"element.textContent.includes('{expected}')"), str(calls))
                 self.assertTrue(page.wait_for("#moss-image-hires-settings",
-                    "element.getBoundingClientRect().height === 0" if case == "disable" else "element.getBoundingClientRect().height > 0"))
+                    "element.getBoundingClientRect().height === 0" if disabled else "element.getBoundingClientRect().height > 0"))
                 page.evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='生成').click()")
                 self.assertTrue(submitted.wait(10))
                 self.assertEqual((captured[0]["width"], captured[0]["height"]),
-                                 (1024,768) if case == "disable" else (768,1152))
-                self.assertEqual("hires" in captured[0], case != "disable")
+                                 (512,768) if case == "invalid" else (1024,768) if case == "disable" else (768,1152))
+                self.assertEqual("hires" in captured[0], not disabled)
                 self.assertEqual(page.exceptions, [])
         finally:
             release.set()
