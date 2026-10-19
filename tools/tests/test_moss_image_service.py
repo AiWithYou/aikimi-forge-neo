@@ -194,10 +194,13 @@ class ServiceTests(unittest.TestCase):
             lease = Mock()
             lease.release.side_effect = lambda: events.append("released")
             job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
+            service.jobs["job"] = job
             with patch("modules_forge.gpu_ownership.release_forge_vram"), patch("modules_forge.gpu_residency.register"):
                 service.execute(job, lease)
             self.assertEqual(events, ["idle", "released"])
             self.assertEqual(job["status"], "complete")
+            self.assertTrue((root / "output.png").is_file())
+            self.assertIn("ありません", service.cancel("job"))
             service.worker.close.assert_not_called()
 
     def test_failed_worker_is_confirmed_stopped_before_release(self):
@@ -279,24 +282,89 @@ class ServiceTests(unittest.TestCase):
 
     def test_cancel_during_result_validation_wins_before_publication(self):
         with tempfile.TemporaryDirectory() as temporary:
-            service = Service(Path(temporary))
+            root = Path(temporary)
+            self.artifact(root)
+            service = Service(root)
             service.worker = Mock()
             service.worker.result.return_value = {"ok": True}
             job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
             service.jobs["job"] = job
+            events = []
+
+            def stop():
+                self.assertTrue((root / "output.png").exists())
+                (root / ".output.png.tmp").write_bytes(b"late write")
+                events.append("stopped")
+
+            service.worker.close.side_effect = stop
+            lease = Mock()
+            lease.release.side_effect = lambda: events.append("released")
 
             def validate(_directory):
                 self.assertIn("中断", service.cancel("job"))
-                return {}
+                return Service.validate_result(_directory)
 
             with (
                 patch("modules_forge.gpu_ownership.release_forge_vram"),
                 patch("modules_forge.gpu_residency.register"),
                 patch.object(service, "validate_result", side_effect=validate),
             ):
-                service.execute(job, Mock())
+                service.execute(job, lease)
             self.assertEqual(job["status"], "cancelled")
+            self.assertEqual(events, ["stopped", "released"])
+            self.assertFalse((root / "output.png").exists())
+            self.assertFalse((root / ".output.png.tmp").exists())
+            self.assertEqual(json.loads((root / "result.json").read_text()), {"status": "cancelled", "error": ""})
             service.worker.close.assert_called_once()
+
+    def test_worker_failure_after_png_save_removes_output_only_after_stop(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.artifact(root)
+            service = Service(root)
+            service.worker = Mock()
+            service.worker.result.return_value = {"ok": False, "error": "worker failed after saving"}
+            job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
+
+            def stop():
+                self.assertTrue((root / "output.png").exists())
+                (root / ".output.png.tmp").touch()
+
+            service.worker.close.side_effect = stop
+            lease = Mock()
+            with patch("modules_forge.gpu_ownership.release_forge_vram"), patch("modules_forge.gpu_residency.register"):
+                service.execute(job, lease)
+            self.assertEqual(job["status"], "error")
+            self.assertFalse((root / "output.png").exists())
+            self.assertFalse((root / ".output.png.tmp").exists())
+            self.assertEqual(json.loads((root / "result.json").read_text())["status"], "error")
+            lease.release.assert_called_once()
+
+    def test_cleanup_error_is_logged_and_stopped_gpu_is_released(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.artifact(root)
+            service = Service(root)
+            service.worker = Mock()
+            service.worker.result.return_value = {"ok": False, "error": "worker failed"}
+            job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
+            lease = Mock()
+            original = Path.unlink
+
+            def locked(path, *args, **kwargs):
+                if path == root / "output.png":
+                    raise PermissionError("output file is locked")
+                return original(path, *args, **kwargs)
+
+            with (
+                patch("modules_forge.gpu_ownership.release_forge_vram"),
+                patch("modules_forge.gpu_residency.register"),
+                patch.object(Path, "unlink", locked),
+            ):
+                service.execute(job, lease)
+            self.assertEqual(job["status"], "error")
+            self.assertIn("output file is locked", (root / "run.log").read_text(encoding="utf-8"))
+            lease.release.assert_called_once()
 
     def test_error_record_write_failure_still_releases_stopped_gpu(self):
         with tempfile.TemporaryDirectory() as temporary:

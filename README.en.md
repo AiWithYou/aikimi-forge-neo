@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v4.10.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.10.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v4.10.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.10.1)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,8 +10,9 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v4.10.0
+## What's new in v4.10
 
+- **MOSS Image reliability**: restore the Hires controls after restarting, validate API denoising strength before generation, and remove PNGs from cancelled or failed jobs. See [v4.10.1 changes](CHANGELOG.md#v4101--2026-10-19).
 - **[MOSS Image Hires.fix](docs/moss-image.md#拡大して仕上げるhiresfix)**: generate the composition first, enlarge the image, then run a second pass to refine details. Adjust scale, refinement steps, and denoising strength; preview final dimensions and save settings for both passes.
 - **[MOSS reference images](docs/moss-image.md#参照画像から編集)**: redraw an input image or use up to three references with an editing LoRA.
 - **[Merged checkpoints](docs/moss-image.md#マージモデル) and fewer steps**: select BF16 or INT8 ConvRot diffusion checkpoints and convert compatible BF16 checkpoints to INT8. An optional Euler-compatible distilled LoRA uses the regular LoRA controls.

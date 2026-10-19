@@ -1,7 +1,11 @@
 """Construct the actual MOSS Image controls and exercise their service bindings."""
 
+import ast
 import importlib.util
+import json
+import math
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -10,6 +14,26 @@ from unittest.mock import patch
 import gradio as gr
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def restore_defaults(blocks, values):
+    """Restore actual Gradio components through the production defaults methods."""
+    path = ROOT / "modules/ui_loadsave.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    choices = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "radio_choices")
+    owner = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "UiLoadsave")
+    names = {"__init__", "add_component", "add_block", "read_from_file"}
+    owner.body = [node for node in owner.body if isinstance(node, ast.FunctionDef) and node.name in names]
+    namespace = {
+        "gr": gr, "json": json, "math": math,
+        "InputAccordionImpl": type("InputAccordionImpl", (), {}), "ToolButton": type("ToolButton", (), {}),
+    }
+    exec(compile(ast.Module(body=[choices, owner], type_ignores=[]), str(path), "exec"), namespace)  # noqa: S102
+    with tempfile.TemporaryDirectory() as folder:
+        filename = Path(folder) / "ui.json"
+        filename.write_text(json.dumps(values), encoding="utf-8")
+        loader = namespace["UiLoadsave"](filename)
+        loader.add_block(blocks, "moss_image_studio")
 
 
 class UITests(unittest.TestCase):

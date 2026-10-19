@@ -89,6 +89,25 @@ class ApiTests(unittest.TestCase):
         ):
             self.assertEqual(client.post("/sdapi/v1/moss-image/jobs", json={"prompt": ""}).status_code, 422)
 
+    def test_tiny_hires_denoise_is_422_before_gpu_acquisition(self):
+        app = FastAPI()
+        register_api(app)
+        options = SimpleNamespace(cmd_opts=SimpleNamespace(api_auth=None, api_auth_path=None))
+        with (
+            patch.dict(sys.modules, {"modules.shared_cmd_options": options}),
+            patch("modules_forge.moss_image.service.model_ready", return_value=True),
+            patch("modules_forge.gpu_ownership.GPUOwnership",
+                  side_effect=AssertionError("invalid request reached GPU acquisition")) as ownership,
+            TestClient(app) as client,
+        ):
+            response = client.post(
+                "/sdapi/v1/moss-image/jobs",
+                json={"prompt": "cat", "width": 768, "height": 768,
+                      "hires": {"base_width": 512, "base_height": 512, "denoise": 5e-324}},
+            )
+            self.assertEqual(response.status_code, 422)
+            ownership.assert_not_called()
+
     def test_completed_image_is_base64_with_public_metadata_only(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "output.png"

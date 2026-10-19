@@ -105,7 +105,10 @@ def validate_request(value, *, internal=False) -> dict:
     kv_cache = value.get("kv_cache", True)
     if type(kv_cache) is not bool:
         raise MossImageError("参照キャッシュはtrueまたはfalseで指定してください。")
-    denoise = _number(value.get("denoise", 0.65 if mode == "img2img" and method == "redraw" else 1), "変更量", 0, 1)
+    denoise = _number(
+        value.get("denoise", 0.65 if mode == "img2img" and method == "redraw" else 1),
+        "変更量", 0.01, 1, inclusive=True,
+    )
     if mode == "txt2img" or method == "reference":
         denoise = 1.0
     seed = _integer(value.get("seed", -1), "Seed", -1, 2**32 - 1)
@@ -173,7 +176,7 @@ def validate_request(value, *, internal=False) -> dict:
             "base_width": base_width,
             "base_height": base_height,
             "steps": _integer(hires.get("steps", 20), "仕上げSteps", 1, 200),
-            "denoise": _number(hires.get("denoise", 0.35), "仕上げの変更量", 0, 1),
+            "denoise": _number(hires.get("denoise", 0.35), "仕上げの変更量", 0.01, 1, inclusive=True),
         }
     if internal and "reference_sha256" in value:
         result["reference_sha256"] = references.validate_hashes(images, value["reference_sha256"])

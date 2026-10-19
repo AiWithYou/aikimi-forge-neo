@@ -154,6 +154,10 @@ def hires_preview(enabled, width, height, scale):
     return f"最終サイズ: **{width}×{height}**"
 
 
+def hires_controls(enabled, width, height, scale):
+    return gr.update(visible=True if enabled else "hidden"), hires_preview(enabled, width, height, scale)
+
+
 def poll(state):
     state = dict(state or {})
     identifier = state.get("job")
@@ -390,6 +394,13 @@ def on_ui_tabs():
                 queue=False,
                 api_visibility="private",
             )
+        blocks.load(
+            hires_controls,
+            inputs=[hires_enabled, width, height, hires_scale],
+            outputs=[hires_settings, hires_size],
+            queue=False,
+            api_visibility="private",
+        )
         method.change(
             edit_controls,
             inputs=method,

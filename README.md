@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v4.10.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.10.0)** · [変更履歴](CHANGELOG.md)
+**[v4.10.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v4.10.1)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,8 +10,9 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v4.10.0の主な変更
+## v4.10系の主な変更
 
+- **MOSS Imageの安定性改善**：保存したHires設定の再起動後の表示、APIの変更量の入力検査、中断・失敗時のPNG削除を修正しました。[v4.10.1の変更](CHANGELOG.md#v4101--2026-10-19)
 - **[MOSS ImageのHires.fix](docs/moss-image.md#拡大して仕上げるhiresfix)**：通常サイズで構図を生成し、画像を拡大してから細部を再生成します。倍率・仕上げSteps・変更量を調整でき、最終サイズと両段階の生成条件を確認できます。
 - **[MOSSの参照画像入力](docs/moss-image.md#参照画像から編集)**：元画像からの再描画と、編集用LoRAを使う最大3枚の参照入力に対応しました。
 - **[マージモデル](docs/moss-image.md#マージモデル)と少ステップ生成**：BF16／INT8 ConvRotの本体を選択でき、INT8変換コマンドを追加しました。任意で取得できるEuler対応の蒸留LoRAは、通常のLoRA欄から使用します。

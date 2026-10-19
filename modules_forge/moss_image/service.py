@@ -197,6 +197,11 @@ class Service:
                         with self._guard:
                             job.update(status="stopping", error="停止を確認中…")
                         time.sleep(0.5)
+                for filename in ("output.png", ".output.png.tmp"):
+                    try:
+                        (directory / filename).unlink(missing_ok=True)
+                    except OSError as exc:
+                        _log_error(directory, exc)
             try:
                 if status != "complete":
                     atomic_json(directory / "result.json", {"status": status, "error": job["error"]})

@@ -1,11 +1,14 @@
 """Real Gradio controls remain inside the shared image settings column."""
 
 import os
+import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import gradio as gr
 
+from modules_forge.moss_image import core
 from tools.tests import test_moss_image_ui
 from tools.tests.chromium_helpers import cdp_page, find_chromium, reserve_local_port
 
@@ -48,6 +51,9 @@ class ImageWorkspaceLayoutChromiumTests(unittest.TestCase):
         screen = test_moss_image_ui.UITests().load_screen()
         blocks = screen.on_ui_tabs()[0][0]
         self.addCleanup(blocks.close)
+        test_moss_image_ui.restore_defaults(
+            blocks, {"moss_image_studio/拡大して仕上げる（Hires.fix）/value": False}
+        )
         with blocks:
             hydrated = gr.Markdown("loading", elem_id="workspace-test-ready")
             blocks.load(lambda: "ready", outputs=hydrated, api_visibility="private")
@@ -91,6 +97,47 @@ class ImageWorkspaceLayoutChromiumTests(unittest.TestCase):
             self.assertTrue(page.wait_for("#moss-image-hires-controls", "element.getBoundingClientRect().height > 0"))
             self.assertTrue(page.evaluate("document.querySelector('#moss-image-hires-enabled input').checked"))
             self.assert_controls_fit(page)
+            self.assertEqual(page.exceptions, [])
+
+    def test_saved_hires_on_is_visible_and_submits_the_displayed_size_after_load(self):
+        chromium = find_chromium()
+        if not chromium:
+            self.skipTest("Chrome or Chromium is not installed")
+        screen = test_moss_image_ui.UITests().load_screen()
+        blocks = screen.on_ui_tabs()[0][0]
+        self.addCleanup(blocks.close)
+        test_moss_image_ui.restore_defaults(blocks, {
+            "moss_image_studio/拡大して仕上げる（Hires.fix）/value": True,
+            "moss_image_studio/幅/value": 1024,
+            "moss_image_studio/高さ/value": 768,
+            "moss_image_studio/倍率/value": 1.5,
+            "moss_image_studio/プロンプト/value": "cat",
+        })
+        with blocks:
+            hydrated = gr.Markdown("loading", elem_id="workspace-test-ready")
+            blocks.load(lambda: "ready", outputs=hydrated, api_visibility="private")
+        css = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in (
+            "style.css", "extensions-builtin/aikimi-ui/style.css", "extensions-builtin/moss-image-studio/style.css"
+        ))
+        _, url, _ = blocks.launch(server_name="127.0.0.1", server_port=reserve_local_port(),
+                                  prevent_thread_lock=True, quiet=True, css=css)
+        captured = []
+        submitted = threading.Event()
+
+        def capture(value):
+            captured.append(core.validate_request(value))
+            submitted.set()
+            return "test-job"
+
+        with patch.object(screen.SERVICE, "start", side_effect=capture), cdp_page(chromium, url) as page:
+            self.assertTrue(page.wait_for("#workspace-test-ready", "element.textContent.trim() === 'ready'"))
+            self.assertTrue(page.evaluate("document.querySelector('#moss-image-hires-enabled input').checked"))
+            self.assertTrue(page.wait_for("#moss-image-hires-settings", "element.getBoundingClientRect().height > 0"))
+            self.assertTrue(page.wait_for("#moss-image-hires-size", "element.textContent.includes('1536×1152')"))
+            page.evaluate("[...document.querySelectorAll('button')].find(e => e.textContent.trim() === '生成').click()")
+            self.assertTrue(submitted.wait(10), "Restored controls did not submit a generation request")
+            self.assertEqual((captured[0]["width"], captured[0]["height"]), (1536, 1152))
+            self.assertEqual(captured[0]["hires"]["base_height"], 768)
             self.assertEqual(page.exceptions, [])
 
 

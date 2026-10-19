@@ -68,6 +68,25 @@ class HiresContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "txt2img"):
             request(mode="img2img", images=[Image.new("RGB", (512, 512))])
 
+    def test_denoise_rejects_unsafe_schedules_and_accepts_ui_boundaries(self):
+        image = Image.new("RGB", (512, 512))
+        for denoise in (5e-324, 1e-9, 0.009999):
+            for value in (
+                {"prompt": "cat", "mode": "img2img", "images": [image], "denoise": denoise},
+                {"prompt": "cat", "width": 768, "height": 1024,
+                 "hires": {"base_width": 512, "base_height": 688, "denoise": denoise}},
+            ):
+                with self.subTest(denoise=denoise, mode=value.get("mode", "hires")), self.assertRaises(ValueError):
+                    core.validate_request(value)
+        for denoise in (0.01, 0.35, 1):
+            with self.subTest(denoise=denoise):
+                self.assertEqual(request(hires={"base_width": 512, "base_height": 688,
+                                              "denoise": denoise})["hires"]["denoise"], denoise)
+                redraw = core.validate_request(
+                    {"prompt": "cat", "mode": "img2img", "images": [image], "denoise": denoise}
+                )
+                self.assertEqual(redraw["denoise"], denoise)
+
     def test_ui_size_preview_and_submission_use_the_same_grid_and_limits(self):
         for dimensions, scale, expected in (
             ((1024, 1024), 1.5, (1536, 1536)),
