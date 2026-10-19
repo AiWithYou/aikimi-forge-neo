@@ -63,7 +63,7 @@ class CheckpointTests(unittest.TestCase):
                 request = {"checkpoint": path.name, "precision": "bf16"}
                 checkpoints.bind(root, request)
                 self.assertEqual(len(request["checkpoint_identity"]["sha256"]), 64)
-                self.assertEqual(checkpoints.resolve(root, path.name), path)
+                self.assertTrue(checkpoints.resolve(root, path.name).samefile(path))
                 path.write_bytes(b"changed model")
                 with self.assertRaises(ValueError):
                     checkpoints.bind(root, request)
