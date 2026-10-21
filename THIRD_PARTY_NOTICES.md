@@ -69,6 +69,10 @@ SenseNova runtimeは、固定commit`e6dfd45762eb46f805067fe079c14bcb643ccccd`か
 
 モデル重み・専用ランタイム・依存wheelはGitへ同梱せず、利用者の環境へ別途取得します。[導入と対応形式](docs/flux3-klein.md)を参照してください。
 
+## Gradioの依存条件調整
+
+[`vendor/gradio`](vendor/gradio/AIKIMI-PATCH.md)は、[Gradio 6.17.3の公式ホイール](https://pypi.org/project/gradio/6.17.3/)をSHA-256で検証し、Pillow 13向けの依存条件と配布版番号を変更するビルドです。Pythonコードと画面資産は公式版と同一です。[Apache-2.0のライセンス本文](vendor/gradio/LICENSE)、配布元と元のメタデータを同ディレクトリーに保持します。
+
 ## MOSS Image
 
 - モデル原作: [OpenMOSS-Team/MOSS-Image-SFT](https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT/tree/daf706d2e1c7a6369c17b6d1658671aee6db1ebe)、Apache-2.0。VAEは公式のFP32を使用します。

@@ -35,7 +35,7 @@ class GradioDependencyContractTests(unittest.TestCase):
         expected = {
             "diffusers": "0.38.0",
             "GitPython": "3.1.62",
-            "gradio": gradio_compat.SUPPORTED_GRADIO_VERSION,
+            "gradio": gradio_compat.GRADIO_DISTRIBUTION_VERSION,
             "gradio-client": "2.5.0",
             "fastapi": "0.141.1",
             "starlette": "1.6.0",
@@ -55,7 +55,9 @@ class GradioDependencyContractTests(unittest.TestCase):
             if not line or line.startswith("#"):
                 continue
             if line == "./vendor/accelerate":
-                continue  # Local patched package; Gradio remains an exact PyPI pin.
+                continue
+            if line == "./vendor/gradio":
+                line = f"gradio=={gradio_compat.GRADIO_DISTRIBUTION_VERSION}"
             if " #" in line:
                 line = line.split(" #", 1)[0].rstrip()
             requirement = Requirement(line)
@@ -63,7 +65,7 @@ class GradioDependencyContractTests(unittest.TestCase):
 
         self.assertEqual(
             str(requirements["gradio"].specifier),
-            f"=={gradio_compat.SUPPORTED_GRADIO_VERSION}",
+            f"=={gradio_compat.GRADIO_DISTRIBUTION_VERSION}",
         )
         self.assertEqual(str(requirements["gradio-client"].specifier), "==2.5.0")
         self.assertNotIn("gradio-rangeslider", requirements)

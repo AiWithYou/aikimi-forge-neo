@@ -284,6 +284,10 @@ def requirements_met(requirements_file):
 
             if line == "./vendor/accelerate":
                 line = "accelerate==1.15.0+aikimi.1"
+            elif line == "./vendor/gradio":
+                from modules.gradio_compat import GRADIO_DISTRIBUTION_VERSION
+
+                line = f"gradio=={GRADIO_DISTRIBUTION_VERSION}"
 
             try:
                 requirement = Requirement(line)

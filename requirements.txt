@@ -9,11 +9,10 @@ comfy-kitchen==0.2.33
 diffusers==0.38.0
 einops==0.8.2
 facexlib==0.3.0
-# Gradio 6.17.3 remains pinned because the frontend compatibility patch targets
-# its exact assets. It supports the huggingface-hub 1.5 line required by Transformers 5.
+# Preserve Gradio 6.17.3 code and assets while allowing the patched Pillow release.
 fastapi==0.141.1
 gguf==0.19.0
-gradio==6.17.3
+./vendor/gradio
 gradio-client==2.5.0
 httpx==0.28.1
 huggingface-hub==1.5.0

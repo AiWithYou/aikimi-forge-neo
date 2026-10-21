@@ -1,6 +1,7 @@
 """Small compatibility contracts for the audited Gradio runtime."""
 
 SUPPORTED_GRADIO_VERSION = "6.17.3"
+GRADIO_DISTRIBUTION_VERSION = "6.17.3+aikimi.1"
 
 
 def keep_hidden_component_mounted(visible):

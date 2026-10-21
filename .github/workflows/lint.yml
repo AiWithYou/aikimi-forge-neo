@@ -72,6 +72,8 @@ on:
       - "modules/aikimi_diagnostics.py"
       - "modules/aikimi_security/**"
       - "modules/gradio_compat.py"
+      - "vendor/gradio/**"
+      - "tools/tests/test_gradio_dependency_build.py"
       - "modules/extras_workflow.py"
       - "modules/grain*.py"
       - "scripts/postprocessing_grain_cleaner.py"
@@ -234,6 +236,8 @@ on:
       - "modules/aikimi_diagnostics.py"
       - "modules/aikimi_security/**"
       - "modules/gradio_compat.py"
+      - "vendor/gradio/**"
+      - "tools/tests/test_gradio_dependency_build.py"
       - "modules/extras_workflow.py"
       - "modules/grain*.py"
       - "scripts/postprocessing_grain_cleaner.py"
@@ -418,6 +422,8 @@ jobs:
             modules/aikimi_diagnostics.py
             modules/aikimi_security
             modules/gradio_compat.py
+            vendor/gradio/build_backend.py
+            tools/tests/test_gradio_dependency_build.py
             modules/extras_workflow.py
             modules/grain_cleaner.py
             modules/grain_selection.py

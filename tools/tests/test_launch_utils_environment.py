@@ -44,6 +44,10 @@ class RequirementsMetTests(unittest.TestCase):
         self.assertTrue(self._check("./vendor/accelerate\n", {"accelerate": "1.15.0+aikimi.1"}))
         self.assertFalse(self._check("./vendor/accelerate\n", {"accelerate": "1.15.0"}))
 
+    def test_gradio_requires_the_pillow_compatible_distribution(self):
+        self.assertTrue(self._check("./vendor/gradio\n", {"gradio": "6.17.3+aikimi.1"}))
+        self.assertFalse(self._check("./vendor/gradio\n", {"gradio": "6.17.3"}))
+
     def test_only_previous_managed_cuda_wheels_are_automatically_upgraded(self):
         with patch.dict(os.environ, {}, clear=True):
             for version, expected in (

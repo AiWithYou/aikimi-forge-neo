@@ -1,0 +1,9 @@
+{
+  "name": "gradio",
+  "upstream_version": "6.17.3",
+  "version": "6.17.3+aikimi.1",
+  "url": "https://files.pythonhosted.org/packages/28/c9/e179c9b3211b34e139e0998e835dd15fd2fcdd4a18cd99449e3c4600e260/gradio-6.17.3-py3-none-any.whl",
+  "size": 32329363,
+  "sha256": "7e52c65bfbb7bd75ac1c28cb38f93b01e5f6a2ff013224e6213533451bfee517",
+  "metadata_sha256": "a6e00b80a21b4211a20f93ff115893a5148ce054079c6eae753cd1da73765ca2"
+}
