@@ -9,16 +9,19 @@ import math
 import os
 import sys
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 from PIL import Image, ImageOps, PngImagePlugin
+
+from modules_forge import gpu_fault
 
 from . import checkpoints, core, lora, references
 
 
 class Cancelled(RuntimeError):
     """The job was stopped before publishing a complete artifact."""
+    public_error_code = "cancelled"
 
 
 def require_finite(value, stage):
@@ -231,6 +234,12 @@ class ComfyRuntime:
             finally:
                 options.args_parsing = previous_parsing
         self.last_metadata = {}
+        self.failed = False
+        self.policy = None
+        if not cpu:
+            from .safety import InferencePolicy
+
+            self.policy = InferencePolicy.install(self.torch, load("comfy.ops"))
         self.kitchen_version = importlib.metadata.version("comfy-kitchen")
 
     def load_clip(self, path, precision, *, require_vision=False):
@@ -452,6 +461,15 @@ class ComfyRuntime:
         }
 
     def generate(self, request, progress, check, *, images=()):
+        policy = getattr(self, "policy", None)
+        with policy.enforce() if policy is not None else nullcontext():
+            try:
+                return self._generate(request, progress, check, images=images)
+            finally:
+                if policy is not None:
+                    self.last_metadata["inference_policy"] = policy.snapshot()
+
+    def _generate(self, request, progress, check, *, images=()):
         self.last_metadata = {
             "generator_device": "cpu",
             "initial_noise_precision": "fp32",
@@ -608,14 +626,26 @@ class ComfyRuntime:
             check()
             lora.bind(self.root, request)
             return image
+        except BaseException as exc:
+            if gpu_fault.classify(exc):
+                self.failed = True
+            raise
         finally:
-            self.offload()
+            if not getattr(self, "failed", False):
+                self.offload()
 
     def offload(self):
-        self.management.unload_all_models()
-        if not self.cpu and self.torch.cuda.is_available():
-            self.torch.cuda.synchronize()
-        self.management.soft_empty_cache()
+        if getattr(self, "failed", False):
+            return
+        try:
+            self.management.unload_all_models()
+            if not self.cpu and self.torch.cuda.is_available():
+                self.torch.cuda.synchronize()
+            self.management.soft_empty_cache()
+        except BaseException as exc:
+            if gpu_fault.classify(exc):
+                self.failed = True
+            raise
 
     def close(self):
         self.offload()

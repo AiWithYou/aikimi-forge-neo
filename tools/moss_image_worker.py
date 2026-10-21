@@ -30,7 +30,13 @@ def resident_run(payload):
             _runner = Runner(root)
             _root = root
         return _runner.run(directory, request)
-    except BaseException:
+    except BaseException as exc:
+        from modules_forge import gpu_fault
+
+        if gpu_fault.classify(exc):
+            # Keep model references alive until the resident host writes the
+            # failure response and exits without running CUDA destructors.
+            raise
         try:
             if _runner is not None:
                 _runner.close()

@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v5.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v5.0.0)** · [変更履歴](CHANGELOG.md)
+**[v5.0.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v5.0.1)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,13 +10,15 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v5.0.0の主な変更
+## v5.0.1の主な変更
 
-- **[MOSSの高解像度構図調整](docs/moss-image.md#高解像度の構図調整)**：RoPEの横・縦スケールを指定できます。通常生成、Hires.fix、参照編集に対応し、生成条件へ設定を保存します。
-- **MOSSのINT8処理を更新**：SiTU活性化と量子化をまとめる処理を導入し、GPUメモリー解放の修正も含む専用ランタイムへ更新しました。
-- **[H3の軽量VAE](docs/minimax-h3-acceleration.md#lightvae)**：LightVAEを選択でき、H3のVAEオフロード処理も更新しました。既存モデルは保持して画質を比較できます。
+- **[MOSSの高解像度生成](docs/moss-image.md#高解像度の構図調整)**：SDPAとINT8活性化の計算方式を変更しました。S5の長辺2560pxの通常生成を確認しています。4KやHires.fixの完走は、この変更後には確認できていません。
+- **中断待ちを修正**：高解像度で中断の確認に時間がかかっても、待ち時間だけで計算中のワーカーを強制終了しなくなりました。
+- **[GPU異常後の停止](docs/troubleshooting.md#gpu異常後の停止)**：異常や未完了の処理を検出すると、新しい生成と自動GPU処理を停止します。再起動後も停止状態を保持し、状態確認と明示的な解除に対応しました。
 
-更新後はMOSSとH3のセットアップを再実行してください。取得済みの同じモデルは再利用します。[全変更](CHANGELOG.md#v500--2026-10-20)
+更新後はWebUIを再起動してください。v5.0.0より前から更新する場合は、MOSSとH3のセットアップも再実行してください。取得済みの同じモデルは再利用します。[全変更](CHANGELOG.md#v501--2026-10-21)
+
+[MOSSのRoPE構図調整](docs/moss-image.md#高解像度の構図調整)と[H3のLightVAE](docs/minimax-h3-acceleration.md#lightvae)も引き続き使用できます。
 
 ### 引き続き使えるv4.10の機能
 

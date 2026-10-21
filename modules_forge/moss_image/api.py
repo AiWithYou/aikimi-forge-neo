@@ -7,6 +7,8 @@ from pathlib import Path
 
 from starlette.requests import Request
 
+from modules_forge import gpu_fault
+
 from .references import decode_uploads
 from .service import SERVICE
 
@@ -74,8 +76,23 @@ def public_result(value):
         "sampling_passes",
         "upscaler",
         "rope",
+        "inference_policy",
     }
     result = {key: item for key, item in value.items() if key in allowed}
+    if "inference_policy" in result:
+        policy = result["inference_policy"]
+        expected = {
+            "sdpa_backends": ["efficient"], "situ_activation": "eager_fp32",
+            "kernel_identity_observed": False,
+        }
+        cleaned = {key: item for key, item in expected.items() if key in policy and policy[key] == item}
+        for key in ("situ_rows_per_chunk", "sdpa_calls_checked", "situ_eager_calls"):
+            if type(policy.get(key)) is int and policy[key] >= 0:
+                cleaned[key] = policy[key]
+        if isinstance(policy.get("attention_dtypes"), list):
+            cleaned["attention_dtypes"] = [name for name in policy["attention_dtypes"]
+                                           if name in {"float16", "bfloat16", "float32"}]
+        result["inference_policy"] = cleaned
     if "rope" in result:
         result["rope"] = {key: item for key, item in result["rope"].items() if key in {"scale_x", "scale_y"}}
     if "hires" in result:
@@ -105,6 +122,10 @@ def public_result(value):
             result[key] = [{name: item[name] for name in fields if name in item} for item in result[key]]
     if result.get("error"):
         result["error"] = "生成に失敗しました。Forge Neoのログを確認してください。"
+        messages = {"gpu_stopped": gpu_fault.MESSAGE,
+                    "unsupported_attention": "この設定では指定のattention計算方式を使用できません。"}
+        if value.get("error_code") in messages:
+            result.update(error_code=value["error_code"], error=messages[value["error_code"]])
     if value.get("status") == "complete":
         result["image"] = base64.b64encode(Path(value["image_path"]).read_bytes()).decode("ascii")
     return result
@@ -123,6 +144,8 @@ def register_api(app):
             if "images" in value:
                 value = {**value, "images": decode_uploads(value["images"])}
             return {"id": SERVICE.start(value), "status": "running"}
+        except gpu_fault.GPUFaultError as exc:
+            raise HTTPException(503, detail=gpu_fault.MESSAGE) from exc
         except ValueError as exc:
             raise HTTPException(422, detail=str(exc)) from exc
 

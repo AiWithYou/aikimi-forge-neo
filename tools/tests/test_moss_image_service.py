@@ -10,12 +10,23 @@ from unittest.mock import Mock, patch
 
 from PIL import Image, PngImagePlugin
 
+from modules_forge import gpu_fault
 from modules_forge.moss_image import lora
 from modules_forge.moss_image.core import MODEL_ID, MODEL_REVISION, MossImageError, validate_request
 from modules_forge.moss_image.service import Service
 
 
+def mock_lease():
+    lease = Mock()
+    lease.release.side_effect = lambda **kwargs: kwargs.get("before_unlock", lambda: None)()
+    return lease
+
+
 class ServiceTests(unittest.TestCase):
+    def setUp(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(patch.object(gpu_fault, "STATE", gpu_fault.FaultState(root / "fault.json")))
+
     def artifact(self, root, **changes):
         request = validate_request({"prompt": "a fox", "width": 512, "height": 512, "seed": 7})
         lora.bind(root, request)
@@ -40,7 +51,7 @@ class ServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = Service(root, outputs=root / "outputs")
-            lease = Mock()
+            lease = mock_lease()
             lease.acquire.return_value = True
             with (
                 patch("modules_forge.moss_image.service.model_ready", return_value=True),
@@ -64,7 +75,7 @@ class ServiceTests(unittest.TestCase):
             root = Path(temporary)
             adapter(root / "loras/style.safetensors")
             service = Service(root, outputs=root / "outputs")
-            lease = Mock()
+            lease = mock_lease()
             lease.acquire.return_value = True
             with (
                 patch("modules_forge.moss_image.service.model_ready", return_value=True) as ready,
@@ -140,7 +151,7 @@ class ServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = Service(root, outputs=root / "outputs")
-            lease = Mock()
+            lease = mock_lease()
             lease.acquire.return_value = True
             with (
                 patch("modules_forge.moss_image.service.model_ready", return_value=True),
@@ -191,8 +202,8 @@ class ServiceTests(unittest.TestCase):
             service = Service(root)
             service.worker = Mock()
             service.worker.result.side_effect = lambda: events.append("idle") or {"ok": True}
-            lease = Mock()
-            lease.release.side_effect = lambda: events.append("released")
+            lease = mock_lease()
+            lease.release.side_effect = lambda **kwargs: (events.append("released"), kwargs.get("before_unlock", lambda: None)())
             job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
             service.jobs["job"] = job
             with patch("modules_forge.gpu_ownership.release_forge_vram"), patch("modules_forge.gpu_residency.register"):
@@ -210,8 +221,8 @@ class ServiceTests(unittest.TestCase):
             service.worker = Mock()
             service.worker.start.side_effect = RuntimeError("spawn failed")
             service.worker.close.side_effect = lambda: events.append("stopped")
-            lease = Mock()
-            lease.release.side_effect = lambda: events.append("released")
+            lease = mock_lease()
+            lease.release.side_effect = lambda **kwargs: (events.append("released"), kwargs.get("before_unlock", lambda: None)())
             job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
             with patch("modules_forge.gpu_ownership.release_forge_vram"), patch("modules_forge.gpu_residency.register"):
                 service.execute(job, lease)
@@ -234,7 +245,7 @@ class ServiceTests(unittest.TestCase):
                         patch("modules_forge.gpu_ownership.release_forge_vram"),
                         patch("modules_forge.gpu_residency.register"),
                     ):
-                        service.execute(job, Mock())
+                        service.execute(job, mock_lease())
                     self.assertNotIn("H:/private", job["error"])
                     self.assertIn(str(failure), (root / "run.log").read_text(encoding="utf-8"))
                     if isinstance(failure, MossImageError):
@@ -253,8 +264,8 @@ class ServiceTests(unittest.TestCase):
                     raise RuntimeError("still stopping")
 
             service.worker.close.side_effect = stop
-            lease = Mock()
-            lease.release.side_effect = lambda: events.append("released")
+            lease = mock_lease()
+            lease.release.side_effect = lambda **kwargs: (events.append("released"), kwargs.get("before_unlock", lambda: None)())
             job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
             with (
                 patch("modules_forge.gpu_ownership.release_forge_vram"),
@@ -271,7 +282,7 @@ class ServiceTests(unittest.TestCase):
             (root / "cancel").touch()
             service = Service(root)
             service.worker = Mock()
-            lease = Mock()
+            lease = mock_lease()
             job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
             with patch("modules_forge.gpu_ownership.release_forge_vram"), patch("modules_forge.gpu_residency.register"):
                 service.execute(job, lease)
@@ -297,8 +308,8 @@ class ServiceTests(unittest.TestCase):
                 events.append("stopped")
 
             service.worker.close.side_effect = stop
-            lease = Mock()
-            lease.release.side_effect = lambda: events.append("released")
+            lease = mock_lease()
+            lease.release.side_effect = lambda **kwargs: (events.append("released"), kwargs.get("before_unlock", lambda: None)())
 
             def validate(_directory):
                 self.assertIn("中断", service.cancel("job"))
@@ -331,7 +342,7 @@ class ServiceTests(unittest.TestCase):
                 (root / ".output.png.tmp").touch()
 
             service.worker.close.side_effect = stop
-            lease = Mock()
+            lease = mock_lease()
             with patch("modules_forge.gpu_ownership.release_forge_vram"), patch("modules_forge.gpu_residency.register"):
                 service.execute(job, lease)
             self.assertEqual(job["status"], "error")
@@ -348,7 +359,7 @@ class ServiceTests(unittest.TestCase):
             service.worker = Mock()
             service.worker.result.return_value = {"ok": False, "error": "worker failed"}
             job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
-            lease = Mock()
+            lease = mock_lease()
             original = Path.unlink
 
             def locked(path, *args, **kwargs):
@@ -371,7 +382,7 @@ class ServiceTests(unittest.TestCase):
             service = Service(Path(temporary))
             service.worker = Mock()
             service.worker.start.side_effect = RuntimeError("spawn failed")
-            lease = Mock()
+            lease = mock_lease()
             job = {"id": "job", "directory": temporary, "status": "running", "error": ""}
             with (
                 patch("modules_forge.gpu_ownership.release_forge_vram"),

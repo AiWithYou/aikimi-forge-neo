@@ -14,6 +14,9 @@ from pathlib import Path
 
 from PIL import Image
 
+from modules_forge import gpu_fault
+from modules_forge.resident_worker import WorkerExited, record_event
+
 from . import checkpoints, lora, references
 from .core import (
     MODEL_ID,
@@ -54,13 +57,18 @@ class Service:
 
         self.root = Path(root)
         self.outputs = Path(outputs) if outputs is not None else ROOT / "outputs" / "moss-image"
-        self.worker = ResidentWorker("moss-image", ROOT / "cache" / "moss-image-worker")
+        self.worker = ResidentWorker("moss-image", ROOT / "cache" / "moss-image-worker", gpu_safety=True)
         self.jobs = {}
         self._guard = threading.RLock()
 
     def start(self, value):
         from modules_forge.gpu_ownership import GPUOwnership
 
+        gpu_fault.STATE.ensure_available()
+        try:
+            self.worker.ensure_alive()
+        except WorkerExited:
+            raise gpu_fault.GPUFaultError() from None
         request = validate_request(value)
         checkpoints.bind(self.root, request)
         lora.bind(self.root, request)
@@ -150,10 +158,14 @@ class Service:
             PYTHONDONTWRITEBYTECODE="1",
         )
         status = "error"
+        pending = False
         try:
             if (directory / "cancel").exists():
                 status = "cancelled"
                 return
+            self.worker.ensure_alive()
+            gpu_fault.STATE.begin(job["id"])
+            pending = True
             release_forge_vram()
             self.worker.start(
                 python_path(self.root),
@@ -163,21 +175,36 @@ class Service:
                 directory / "run.log",
             )
             gpu_residency.register("moss-image", self.worker.close, "moss-image")
+            cancel_observed = False
             while True:
-                if (directory / "cancel").exists():
-                    status = "cancelled"
-                    break
                 response = self.worker.result()
                 if response is not None:
                     if not response["ok"]:
+                        if response.get("gpu_fault"):
+                            gpu_fault.STATE.trip("gpu_execution", "moss-image")
+                        if response.get("error_code") == "cancelled" and (directory / "cancel").exists():
+                            record_event(directory / "run.log", "cancel_acknowledged", job_id=job["id"])
+                            status = "cancelled"
+                            break
+                        if response.get("error_code") == "unsupported_attention":
+                            job["error_code"] = "unsupported_attention"
                         raise RuntimeError(response.get("error", "MOSS Imageの生成に失敗しました。"))
                     self.validate_result(directory)
                     with self._guard:
                         status = "cancelled" if (directory / "cancel").exists() else "complete"
                         job["_finishing"] = True
                     break
+                if (directory / "cancel").exists():
+                    if not cancel_observed:
+                        cancel_observed = True
+                        record_event(directory / "run.log", "cancel_observed", job_id=job["id"])
+                        with self._guard:
+                            job["status"] = "stopping"
                 time.sleep(0.1)
         except Exception as exc:
+            reason = "worker_exit" if isinstance(exc, WorkerExited) else gpu_fault.classify(exc)
+            if reason:
+                gpu_fault.STATE.trip(reason, "moss-image")
             _log_error(directory, exc)
             job["error"] = (
                 str(exc)
@@ -187,30 +214,59 @@ class Service:
         finally:
             with self._guard:
                 job["_finishing"] = True
-            if status != "complete":
+
+            def stop_worker():
                 while True:
                     try:
                         self.worker.close()
                         break
                     except Exception as exc:
+                        gpu_fault.STATE.trip("worker_stop_unconfirmed", "moss-image")
                         _log_error(directory, exc)
                         with self._guard:
                             job.update(status="stopping", error="停止を確認中…")
                         time.sleep(0.5)
+
+            def remove_output():
                 for filename in ("output.png", ".output.png.tmp"):
                     try:
                         (directory / filename).unlink(missing_ok=True)
                     except OSError as exc:
                         _log_error(directory, exc)
+
+            if status != "complete" or gpu_fault.STATE.blocked():
+                stop_worker()
+                remove_output()
+
+            def complete_pending():
+                self.worker.ensure_alive()
+                gpu_fault.STATE.complete(job["id"])
+
+            try:
+                if pending:
+                    # Finish cleanup and the journal while FIFO ownership is held.
+                    lease.release(before_unlock=complete_pending)
+                else:
+                    lease.release()
+            except Exception as exc:
+                gpu_fault.STATE.trip(gpu_fault.classify(exc) or "cleanup_failed", "moss-image")
+                _log_error(directory, exc)
+                stop_worker()
+                remove_output()
+            if gpu_fault.STATE.blocked():
+                status = "error"
+                job.update(error=gpu_fault.MESSAGE, error_code="gpu_stopped")
+            if job.get("error_code") == "unsupported_attention":
+                job["error"] = "この設定では指定のattention計算方式を使用できません。"
             try:
                 if status != "complete":
-                    atomic_json(directory / "result.json", {"status": status, "error": job["error"]})
+                    record = {"status": status, "error": job["error"]}
+                    if job.get("error_code"):
+                        record["error_code"] = job["error_code"]
+                    atomic_json(directory / "result.json", record)
             finally:
-                try:
-                    lease.release()
-                finally:
-                    with self._guard:
-                        job["status"] = status
+                with self._guard:
+                    job["status"] = status
 
     def poll(self, identifier):
         with self._guard:
@@ -239,7 +295,10 @@ class Service:
         with self._guard:
             job = self.jobs.get(identifier)
             if job and job["status"] in {"running", "stopping"} and not job.get("_finishing"):
-                (Path(job["directory"]) / "cancel").touch()
+                directory = Path(job["directory"])
+                if not (directory / "cancel").exists():
+                    (directory / "cancel").touch()
+                    record_event(directory / "run.log", "cancel_requested", job_id=identifier)
                 return "中断処理中…"
         return "実行中の処理はありません。"
 

@@ -874,6 +874,10 @@ class Api:
             ram = {"free": ram_total - res.rss, "used": res.rss, "total": ram_total}
         except Exception as err:
             ram = {"error": f"{err}"}
+        from modules_forge import gpu_fault
+
+        if gpu_fault.STATE.blocked():
+            return models.MemoryResponse(ram=ram, cuda={"error": gpu_fault.MESSAGE})
         try:
             import torch
 

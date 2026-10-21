@@ -90,7 +90,7 @@ CFG 1では負のプロンプトと負条件の層スキップを使いません
 A single young woman with short black hair and a red scarf, half-body portrait, looking at the viewer with a gentle smile, soft daylight, refined Japanese anime illustration, clean line art, detailed blue eyes, warm gray background.
 ```
 
-RTX 3090（24GB）、RAM 64GB、Windows 11、ドライバー610.74、専用PyTorch 2.13.0+cu130で確認しました。この作例の生成処理は約81秒、観測したGPU全体のVRAMピークは12,171MiBでした。初回のファイル整合性確認は別途時間がかかります。解像度・文章の長さ・LoRA・ほかのアプリによって必要量は変わります。実GPUで確認した保存形式はINT8本体＋INT8テキストです。
+RTX 3090（24GB）、RAM 64GB、Windows 11、ドライバー610.74、専用PyTorch 2.13.0+cu130で確認しました。この作例の生成処理は約81秒、観測したGPU全体のVRAMピークは12,171MiBでした。測定は演算設定の変更前に行ったもので、この作例と同条件での現行設定の性能は未計測です。初回のファイル整合性確認は別途時間がかかります。解像度・文章の長さ・LoRA・ほかのアプリによって必要量は変わります。実GPUで確認した保存形式はINT8本体＋INT8テキストです。
 
 ## 高解像度の構図調整
 
@@ -98,7 +98,11 @@ RTX 3090（24GB）、RAM 64GB、Windows 11、ドライバー610.74、専用PyTor
 
 通常生成・再描画・参照編集で使用できます。Hires.fixでは各段階に同じ指定を使います。横・縦を別に調整でき、画像サイズやStepsは自動変更しません。APIでは`"rope": {"scale_x": 0.75, "scale_y": 0.75}`を指定し、省略時は両方1です。PNGと生成条件JSONには実際のスケールを記録します。
 
-専用ComfyUIとcomfy-kitchen 0.2.39を使用します。INT8 ConvRotではSiTU活性化と量子化の融合を利用します。LoRAや使用GPUによって実際の速度は変わります。更新時は使用する保存形式でセットアップを再実行してください。
+専用ComfyUIとcomfy-kitchen 0.2.39を使用します。GPUのSDPAはEFFICIENT_ATTENTIONに限定し、cuDNNとMATHへの切替を許可しません。QwenのGQAでは、共有されたKeyとValueのヘッドをQueryのヘッド数に合わせて複製して計算します。この処理には追加の一時メモリが必要です。対応しない設定ではエラーで停止します。SiTU活性化はFP32で行ごとに分割して計算し、量子化との融合を使いません。依存ライブラリのバージョンと指定解像度は維持します。演算順序の変更により、速度・一時メモリ量・画像の細部が変わる可能性があります。
+
+生成記録の`inference_policy`には設定した方式と呼出回数を保存します。これは実際のGPUカーネルを計測した記録ではありません。GPU異常後の停止と解除は[トラブルシューティング](troubleshooting.md#gpu異常後の停止)を参照してください。
+
+2026年10月21日、Windows 11、RTX 3090（24GB）、ドライバー617.42、専用PyTorch 2.13.0+cu130で、MOSS-Aikimi S5の通常生成5枚のPNG保存と画像を確認しました。本体・テキストはINT8 ConvRot、VAEはFP32、長辺2560px、36 Steps、CFG 3、RoPE横・縦1です。GPU電力上限は1枚目が220W、残り4枚が200Wでした。この条件は温度制御の推奨値や長時間の安定動作を保証するものではありません。3K・4K、Hires.fix、参照編集は、この変更後の完走確認ができていません。
 
 ## マージモデル
 

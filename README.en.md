@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v5.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v5.0.0)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v5.0.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v5.0.1)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,13 +10,15 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v5.0.0
+## What's new in v5.0.1
 
-- **[MOSS high-resolution composition controls](docs/moss-image.md#高解像度の構図調整)**: set horizontal and vertical RoPE scales for regular generation, Hires.fix, and reference editing. Settings are recorded with each image.
-- **Updated MOSS INT8 runtime**: fused SiTU activation and quantization, with GPU memory cleanup fixes in the pinned runtime.
-- **[H3 LightVAE](docs/minimax-h3-acceleration.md#lightvae)**: select a lightweight VAE and use the updated H3 VAE offloading implementation. Keep the original VAE to compare quality.
+- **[MOSS high-resolution generation](docs/moss-image.md#高解像度の構図調整)**: changed SDPA and INT8 activation computation. Regular S5 generation with a 2560px long edge has been checked. Completion of 4K and Hires.fix generation has not been verified with these changes.
+- **Cancellation handling**: waiting for a high-resolution step to acknowledge cancellation no longer triggers a timeout-based termination of the active worker.
+- **[Stops after GPU faults](docs/troubleshooting.md#gpu異常後の停止)**: GPU faults and unfinished operations block new generation and automatic GPU operations. The stop persists across restarts and provides status and explicit recovery commands.
 
-Rerun the MOSS and H3 setup after updating. Existing identical model files are reused. See [all changes](CHANGELOG.md#v500--2026-10-20).
+Restart the WebUI after updating. When updating from a version earlier than v5.0.0, rerun the MOSS and H3 setup as well. Existing identical model files are reused. See [all changes](CHANGELOG.md#v501--2026-10-21).
+
+[MOSS RoPE composition controls](docs/moss-image.md#高解像度の構図調整) and [H3 LightVAE](docs/minimax-h3-acceleration.md#lightvae) remain available.
 
 ### Existing v4.10 features
 

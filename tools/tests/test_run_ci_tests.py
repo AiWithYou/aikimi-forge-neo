@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -8,6 +9,22 @@ from tools import run_ci_tests
 
 
 class RunCiTestsTests(unittest.TestCase):
+    def test_cpu_context_isolates_fault_records_and_restores_real_state(self):
+        from modules_forge import gpu_fault
+
+        with tempfile.TemporaryDirectory() as directory:
+            original = gpu_fault.FaultState(Path(directory) / "original.json")
+            original.trip("gpu_execution", "test")
+            saved = original.path.read_bytes()
+            with mock.patch.object(gpu_fault, "STATE", original):
+                with run_ci_tests.isolated_h3_records():
+                    self.assertIsNot(gpu_fault.STATE, original)
+                    self.assertFalse(gpu_fault.STATE.blocked())
+                    gpu_fault.STATE.trip("injected_failure", "test")
+                self.assertIs(gpu_fault.STATE, original)
+                self.assertEqual(original.path.read_bytes(), saved)
+                self.assertTrue(original.blocked())
+
     def test_environment_forces_cpu_offline_and_disables_live_tests(self):
         environment = {
             "CUDA_VISIBLE_DEVICES": "0",

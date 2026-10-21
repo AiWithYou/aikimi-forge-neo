@@ -30,6 +30,10 @@ start = launch_utils.start
 def main():
     import os
 
+    from modules_forge import gpu_fault
+
+    gpu_fault.STATE.ensure_available()
+
     from modules.aikimi_security.auth import AuthenticationConfigError, validate_auth_configuration
     from modules.aikimi_security.paths import UnsafeAllowedPathError, build_gradio_allowed_paths
     from modules.aikimi_security.remote_access import RemoteAccessError, validate_remote_access

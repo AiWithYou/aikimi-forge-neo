@@ -3,7 +3,7 @@
 import gradio as gr
 
 from modules import script_callbacks
-from modules_forge import local_assets
+from modules_forge import gpu_fault, local_assets
 from modules_forge.moss_image import checkpoints, core
 from modules_forge.moss_image import lora as local_lora
 from modules_forge.moss_image.core import MODEL_ROOT
@@ -84,7 +84,7 @@ def start(
                     raise ValueError("編集用LoRAを通常のLoRA欄と重複して選択しないでください。")
                 request["loras"].append({"name": edit_lora, "strength": edit_strength})
         state["job"] = SERVICE.start(request)
-    except ValueError as exc:
+    except (ValueError, gpu_fault.GPUFaultError) as exc:
         raise gr.Error(str(exc)) from exc
     return (
         state,

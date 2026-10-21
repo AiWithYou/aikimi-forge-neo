@@ -8,6 +8,9 @@ INITIALIZED = False
 
 def initialize_forge():
     global INITIALIZED
+    from modules_forge import gpu_fault
+
+    gpu_fault.STATE.ensure_available()
     if INITIALIZED:
         return
 

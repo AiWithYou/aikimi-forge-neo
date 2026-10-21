@@ -7,6 +7,8 @@ import threading
 import time
 from contextlib import contextmanager
 
+from modules_forge import gpu_fault
+
 AUTO = "auto"
 KEEP = "keep"
 RELEASE = "release"
@@ -37,10 +39,18 @@ def engine_scope(engine):
 
 
 def release_resource(name):
+    gpu_fault.STATE.ensure_available()
     entry = _resources.get(name)
     if entry is not None:
-        entry[1]()  # 終了・退避の確認ができない限り、登録を消さない。
+        try:
+            entry[1]()  # 終了・退避の確認ができない限り、登録を消さない。
+        except BaseException as exc:
+            reason = gpu_fault.classify(exc)
+            if reason:
+                gpu_fault.STATE.trip(reason, "residency")
+            raise
         _resources.pop(name, None)
+        gpu_fault.STATE.ensure_available()
 
 
 def register(name, cleanup, engine):
@@ -50,6 +60,7 @@ def register(name, cleanup, engine):
 
 def begin(engine):
     global _active, _timer
+    gpu_fault.STATE.ensure_available()
     policy()
     if _timer is not None:
         _timer.cancel()
@@ -64,12 +75,20 @@ def begin(engine):
     _active = True
 
 
-def finish():
-    global _active, _idle_since, _timer
+def stop_after_fault():
+    """Forget CPU scheduling state without unloading models or touching CUDA."""
+    global _active, _timer
     if _timer is not None:
         _timer.cancel()
         _timer = None
     _active = False
+
+
+def finish():
+    global _active, _idle_since, _timer
+    stop_after_fault()
+    if gpu_fault.STATE.blocked():
+        return
     _idle_since = time.monotonic()
     if policy() == RELEASE:
         for name in list(_resources):
@@ -83,8 +102,14 @@ def finish():
 def expire_idle():
     from modules_forge.gpu_ownership import queue_lock
 
+    if gpu_fault.STATE.blocked():
+        return
     with engine_scope(None):
-        if not queue_lock.acquire(False):
+        try:
+            acquired = queue_lock.acquire(False)
+        except gpu_fault.GPUFaultError:
+            return
+        if not acquired:
             return
         try:
             if policy() == AUTO and not _active and _idle_since is not None:
@@ -100,8 +125,14 @@ def expire_idle():
 def release_idle():
     from modules_forge.gpu_ownership import queue_lock, release_forge_vram
 
+    if gpu_fault.STATE.blocked():
+        return gpu_fault.MESSAGE
     with engine_scope(None):
-        if not queue_lock.acquire(False):
+        try:
+            acquired = queue_lock.acquire(False)
+        except gpu_fault.GPUFaultError:
+            return gpu_fault.MESSAGE
+        if not acquired:
             return "生成中です。終了後に解放してください。"
         try:
             forge_registered = "forge" in _resources
@@ -117,8 +148,14 @@ def release_idle():
 def apply_policy():
     from modules_forge.gpu_ownership import queue_lock
 
+    if gpu_fault.STATE.blocked():
+        return
     with engine_scope(None):
-        if queue_lock.acquire(False):
+        try:
+            acquired = queue_lock.acquire(False)
+        except gpu_fault.GPUFaultError:
+            return
+        if acquired:
             try:
                 finish()
             finally:

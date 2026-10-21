@@ -124,19 +124,22 @@ def preload_modules(modules: Sequence[str]) -> None:
 
 @contextmanager
 def isolated_h3_records():
-    """CPUテストが利用者の実ジョブを照合・回収しないよう、記録先を隔離する。"""
-    from modules_forge import local_assets, minimax_h3_pending
+    """CPUテストが実ジョブやGPU停止状態を変更しないよう、記録先を隔離する。"""
+    from modules_forge import gpu_fault, local_assets, minimax_h3_pending
 
     with TemporaryDirectory(prefix="aikimi-ci-h3-") as directory:
         previous = minimax_h3_pending.DIRECTORY
+        previous_fault = gpu_fault.STATE
         previous_assets, previous_hashes = local_assets.LIBRARY, local_assets.HASH_CACHE
         minimax_h3_pending.DIRECTORY = Path(directory)
+        gpu_fault.STATE = gpu_fault.FaultState(Path(directory) / "gpu-fault.json")
         local_assets.LIBRARY = Path(directory) / "assets" / "library.json"
         local_assets.HASH_CACHE = Path(directory) / "assets" / "hashes.json"
         try:
             yield
         finally:
             minimax_h3_pending.DIRECTORY = previous
+            gpu_fault.STATE = previous_fault
             local_assets.LIBRARY, local_assets.HASH_CACHE = previous_assets, previous_hashes
 
 
