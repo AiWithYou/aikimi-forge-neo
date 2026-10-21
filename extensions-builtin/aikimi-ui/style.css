@@ -51,6 +51,7 @@ body:has(#aikimi-feature-nav:is(
     .aikimi-image-prompts, .aikimi-image-actions, .aikimi-image-settings, .aikimi-image-output { width: 100%; }
     .aikimi-image-actions { flex-direction: row; flex-wrap: wrap; }
     .aikimi-image-actions > button { flex: 1; width: auto; }
+    #moss-image-actions button { min-width: 96px !important; white-space: nowrap; }
 }
 
 #aikimi-feature-nav.aikimi-feature-nav {
