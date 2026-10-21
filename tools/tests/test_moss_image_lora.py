@@ -58,6 +58,61 @@ class LoraTests(unittest.TestCase):
     def lora(self):
         return importlib.import_module("modules_forge.moss_image.lora")
 
+    def test_generation_avoids_duplicate_hashing_and_still_detects_changed_lora(self):
+        from PIL import Image
+        from safetensors.torch import load_file
+
+        from modules_forge.moss_image import core
+        from modules_forge.moss_image.inference import ComfyRuntime
+
+        for changed_at in (None, "loading", "sampling"):
+            with self.subTest(changed_at=changed_at), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                path = adapter(root / "loras/style.safetensors")
+                request = core.validate_request({
+                    "prompt": "a fox", "width": 512, "height": 512,
+                    "loras": [{"name": path.name, "strength": 0.75}],
+                })
+                runtime = ComfyRuntime.__new__(ComfyRuntime)
+                runtime.root, runtime.torch, runtime.mapper = root, torch, mapper()
+                runtime.load_clip = Mock(return_value=object())
+                runtime.encode_text = Mock(return_value=([[torch.zeros(1, 4, 16), {}]], 4))
+                runtime.load_dit = Mock(return_value=Patcher())
+                runtime.load_vae = Mock(return_value=object())
+                runtime.decode = Mock(return_value=Image.new("RGB", (512, 512)))
+                runtime.offload = Mock()
+
+                def changed(path=path):
+                    stamp = path.stat()
+                    adapter(path, value=2.0)
+                    os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+
+                def read(*args, changed_at=changed_at, changed=changed, **kwargs):
+                    state = load_file(*args, **kwargs)
+                    if changed_at == "loading":
+                        changed()
+                    return state
+
+                def sample(*args, changed_at=changed_at, changed=changed, **kwargs):
+                    if changed_at == "sampling":
+                        changed()
+                    return torch.zeros(1, 128, 32, 32)
+
+                runtime.sample = Mock(side_effect=sample)
+                with (
+                    patch.object(core, "asset_paths", return_value={"dit": root, "text_encoder": root, "vae": root}),
+                    patch("safetensors.torch.load_file", side_effect=read),
+                    patch.object(self.lora(), "inspect", wraps=self.lora().inspect) as inspect,
+                ):
+                    if changed_at:
+                        with self.assertRaisesRegex(ValueError, "LoRAが変更"):
+                            runtime.generate(request, lambda *a: None, lambda: None)
+                    else:
+                        runtime.generate(request, lambda *a: None, lambda: None)
+                        self.assertEqual(inspect.call_count, 3)
+                        self.assertEqual(runtime.last_metadata["lora_applied_targets"], 1)
+                        self.assertEqual(runtime.sample.call_args.args[0].calls[0][1], 0.75)
+
     def test_inventory_nested_names_and_path_free_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

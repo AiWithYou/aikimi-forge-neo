@@ -569,7 +569,6 @@ class ComfyRuntime:
                     "dit_patcher_mode": "dynamic" if getattr(model, "is_dynamic", lambda: False)() else "standard",
                 }
             )
-            lora.bind(self.root, request)
             model, count = lora.apply(model, self.root, request, self.mapper, self.torch)
             self.last_metadata["lora_applied_targets"] = count
             if ref_latents:

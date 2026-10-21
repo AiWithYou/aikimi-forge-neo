@@ -109,6 +109,11 @@ def refresh_loras(names):
     return gr.update(choices=choices, value=[name for name in names or [] if name in choices])
 
 
+def refresh_edit_loras(name):
+    choices = local_lora.inventory(MODEL_ROOT)
+    return gr.update(choices=[("選択してください", ""), *choices], value=name if name in choices else "")
+
+
 def refresh_models(name):
     choices = checkpoints.inventory(MODEL_ROOT)
     if name not in {value for _, value in choices}:
@@ -172,6 +177,20 @@ def hires_controls(enabled, width, height, scale):
         return visibility, hires_preview(True, *dimensions, scale)
     except (gr.Error, TypeError, ValueError, OverflowError) as error:
         return visibility, str(error)
+
+
+def cfg_controls(cfg):
+    suffix = "（CFG 1では不使用）" if cfg == 1 else ""
+    return (
+        gr.update(label="ネガティブプロンプト" + suffix),
+        gr.update(label="負条件の22層をスキップ" + suffix, interactive=cfg != 1),
+    )
+
+
+def restore_job(state, saved):
+    if (state or {}).get("job") or not isinstance(saved, str) or not saved:
+        return (gr.skip(),) * 7
+    return poll({"job": saved})
 
 
 def poll(state):
@@ -319,7 +338,7 @@ def on_ui_tabs():
             with gr.Row():
                 width = gr.Number(value=1024, precision=0, minimum=512, maximum=4096, step=16, label="幅")
                 height = gr.Number(value=1024, precision=0, minimum=512, maximum=4096, step=16, label="高さ")
-            with gr.Group(elem_id="moss-image-hires-controls"):
+            with gr.Group(elem_id="moss-image-hires-controls") as hires_group:
                 hires_enabled = gr.Checkbox(
                     value=False, label="拡大して仕上げる（Hires.fix）", elem_id="moss-image-hires-enabled"
                 )
@@ -360,6 +379,8 @@ def on_ui_tabs():
             badges={"LoRA": loras},
         )
         state = gr.State({})
+        saved_job = gr.BrowserState(None)
+        saved_job.do_not_save_to_config = True
         timer = gr.Timer(0.5, active=False)
         run.click(
             start,
@@ -400,6 +421,24 @@ def on_ui_tabs():
         lora_refresh.click(refresh_loras, inputs=loras, outputs=loras, queue=False, api_visibility="private")
         model.change(select_model, inputs=model, outputs=precision, queue=False, api_visibility="private")
         model_refresh.click(refresh_models, inputs=model, outputs=model, queue=False, api_visibility="private")
+        workspace.tabs.children[0].select(
+            lambda: gr.update(visible=True), outputs=hires_group, queue=False, api_visibility="private",
+        )
+        workspace.tabs.children[1].select(
+            lambda: gr.update(visible="hidden"), outputs=hires_group, queue=False, api_visibility="private",
+        )
+        gr.on(
+            triggers=[blocks.load, cfg.change], fn=cfg_controls, inputs=cfg, outputs=[negative, skip_layer],
+            trigger_mode="always_last", queue=False, api_visibility="private",
+        )
+        state.change(
+            lambda current: (current or {}).get("job"), inputs=state, outputs=saved_job,
+            queue=False, api_visibility="private",
+        )
+        saved_job.change(
+            restore_job, inputs=[state, saved_job], outputs=[state, status, image, files, run, cancel, timer],
+            queue=False, api_visibility="private",
+        )
         gr.on(
             triggers=[blocks.load, hires_enabled.change, width.change, height.change, hires_scale.change],
             fn=hires_controls,
@@ -419,10 +458,7 @@ def on_ui_tabs():
         )
         match_size.click(reference_size, inputs=images, outputs=[width, height], queue=False, api_visibility="private")
         edit_refresh.click(
-            lambda name: gr.update(
-                choices=[("選択してください", ""), *local_lora.inventory(MODEL_ROOT)],
-                value=name,
-            ),
+            refresh_edit_loras,
             inputs=edit_lora,
             outputs=edit_lora,
             queue=False,

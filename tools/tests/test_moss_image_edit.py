@@ -73,6 +73,16 @@ class RequestTests(unittest.TestCase):
 
 
 class ReferenceTests(unittest.TestCase):
+    def test_small_upload_explains_minimum_dimensions(self):
+        from modules_forge.moss_image import references
+
+        for size in ((8, 32), (32, 8)):
+            with self.subTest(size=size):
+                stream = io.BytesIO()
+                Image.new("RGB", size).save(stream, format="PNG")
+                with self.assertRaisesRegex(core.MossImageError, "各辺16ピクセル以上"):
+                    references.decode_uploads([base64.b64encode(stream.getvalue()).decode()])
+
     def test_upload_decode_exif_alpha_snapshots_and_rejects_paths_or_urls(self):
         from modules_forge.moss_image import references
 

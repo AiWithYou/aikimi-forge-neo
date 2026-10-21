@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v5.0.1](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v5.0.1)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v5.0.2](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v5.0.2)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,7 +10,15 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v5.0.1
+## What's new in v5.0.2
+
+- **[MOSS controls](docs/moss-image.md)**: hide Hires.fix in img2img and mark the negative prompt and layer skip as unused at CFG 1. Existing values are retained.
+- **Reconnect during generation**: reloading the page in the same browser restores progress and cancellation controls. Jobs cannot be resumed after a server restart.
+- **LoRA and reference fixes**: clear deleted edit-LoRA selections on refresh, explain the minimum reference-image size, and remove a duplicate file check immediately before applying LoRAs.
+
+Restart the WebUI after updating. This update does not require downloading models again. [All changes (Japanese)](CHANGELOG.md#v502--2026-10-22)
+
+### Changes in v5.0.1
 
 - **[MOSS high-resolution generation](docs/moss-image.md#高解像度の構図調整)**: changed SDPA and INT8 activation computation. Regular S5 generation with a 2560px long edge has been checked. Completion of 4K and Hires.fix generation has not been verified with these changes.
 - **Cancellation handling**: waiting for a high-resolution step to acknowledge cancellation no longer triggers a timeout-based termination of the active worker.

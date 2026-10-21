@@ -54,6 +54,8 @@ def decode_uploads(values):
                 validate_inputs([image])
                 image.load()
                 images.append(ImageOps.exif_transpose(image).copy())
+        except MossImageError:
+            raise
         except (ValueError, UnidentifiedImageError, OSError, Image.DecompressionBombError, binascii.Error) as error:
             raise MossImageError("参照画像は40メガピクセル以内のbase64画像で送信してください。") from error
     return images

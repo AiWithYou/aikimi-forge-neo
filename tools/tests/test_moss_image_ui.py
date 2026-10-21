@@ -116,6 +116,51 @@ class UITests(unittest.TestCase):
         self.assertFalse(result[2]["interactive"])
         self.assertTrue(result[-1]["active"])
 
+    def test_relevant_controls_follow_mode_and_cfg_without_overwriting_values(self):
+        module = self.load_screen()
+        blocks = module.on_ui_tabs()[0][0]
+        self.addCleanup(blocks.close)
+        components = list(blocks.blocks.values())
+        hires = next(item for item in components if item.elem_id == "moss-image-hires-controls")
+        for mode, visible in (("img2img", "hidden"), ("txt2img", True)):
+            tab = next(item for item in components if item.elem_id == f"moss-image-{mode}")
+            mode_event = next(event for event in blocks.fns.values() if event.outputs == [hires] and (tab._id, "select") in event.targets)
+            self.assertEqual(mode_event.fn()["visible"], visible)
+        negative = next(item for item in components if getattr(item, "label", None) == "ネガティブプロンプト")
+        skip = next(item for item in components if item.elem_id == "moss-image-skip-layer")
+        cfg_event = next(event for event in blocks.fns.values() if event.outputs == [negative, skip])
+        for cfg in (0.9, 1, 1.1, 3):
+            with self.subTest(cfg=cfg):
+                updates = cfg_event.fn(cfg)
+                self.assertEqual("不使用" in updates[0]["label"], cfg == 1)
+                self.assertEqual(updates[1]["interactive"], cfg != 1)
+                self.assertTrue(all("value" not in update for update in updates))
+
+    def test_browser_restores_only_its_saved_job_and_resumes_polling(self):
+        module = self.load_screen()
+        blocks = module.on_ui_tabs()[0][0]
+        self.addCleanup(blocks.close)
+        saved = next(item for item in blocks.blocks.values() if isinstance(item, gr.BrowserState))
+        event = next(event for event in blocks.fns.values() if (saved._id, "change") in event.targets)
+        self.assertIs(event.fn, module.restore_job)
+        self.assertIsNone(saved.default_value)
+        server_state = event.inputs[0]
+        self.assertIsInstance(server_state, gr.State)
+        persist = next(event for event in blocks.fns.values() if event.outputs == [saved])
+        self.assertEqual(persist.fn({"job": "my-job", "prompt": "private text"}), "my-job")
+        self.assertIsNone(persist.fn({}))
+        with patch.object(module.SERVICE, "poll", return_value={"status": "running", "stage": "sampling"}) as poll:
+            result = event.fn({}, "my-job")
+            poll.assert_called_once_with("my-job")
+        self.assertEqual(result[0], {"job": "my-job"})
+        self.assertFalse(result[4]["interactive"])
+        self.assertTrue(result[5]["interactive"])
+        self.assertTrue(result[6]["active"])
+        with patch.object(module.SERVICE, "poll") as poll:
+            event.fn({}, None)
+            event.fn({"job": "new-job"}, "old-job")
+            poll.assert_not_called()
+
     def test_text_mode_excludes_retained_images_and_edit_lora(self):
         from PIL import Image
 
@@ -281,6 +326,20 @@ class UITests(unittest.TestCase):
         with patch.object(module.local_lora, "inventory", return_value=["second.safetensors"]):
             update = module.refresh_loras(["first.safetensors", "second.safetensors"])
         self.assertEqual(update["value"], ["second.safetensors"])
+
+    def test_edit_lora_refresh_preserves_only_available_selection(self):
+        module = self.load_screen()
+        blocks = module.on_ui_tabs()[0][0]
+        self.addCleanup(blocks.close)
+        refresh = next(item for item in blocks.blocks.values() if getattr(item, "value", None) == "編集用LoRA一覧を更新")
+        event = next(event for event in blocks.fns.values() if (refresh._id, "click") in event.targets)
+        with patch.object(module.local_lora, "inventory", return_value=["keep.safetensors"]):
+            for selection, expected in (("keep.safetensors", "keep.safetensors"), ("deleted.safetensors", ""), (None, "")):
+                with self.subTest(selection=selection):
+                    update = event.fn(selection)
+                    self.assertEqual(update["value"], expected)
+                    dropdown = gr.Dropdown(choices=update["choices"], value=update["value"])
+                    self.assertEqual(dropdown.preprocess(update["value"]), expected)
 
     def test_poll_returns_completed_files_and_unlocks_generation(self):
         module = self.load_screen()
