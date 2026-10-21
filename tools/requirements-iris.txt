@@ -6,7 +6,8 @@ transformers==5.10.4
 huggingface_hub==1.5.0
 safetensors==0.8.0
 omegaconf==2.3.1
-Pillow==12.3.0
+Pillow==13.0.0
+certifi==2026.10.19
 numpy==2.3.5
 matplotlib==3.11.0
 comfy-kitchen==0.2.33

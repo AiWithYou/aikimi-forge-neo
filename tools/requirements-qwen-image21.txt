@@ -4,7 +4,8 @@ transformers==5.17.0
 bitsandbytes==0.50.2
 comfy-kitchen==0.2.31
 ./vendor/accelerate
-Pillow==12.3.0
+Pillow==13.0.0
+certifi==2026.10.19
 safetensors==0.8.0
 gguf==0.19.0
 

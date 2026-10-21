@@ -15,8 +15,9 @@ Choose the model at the top of each Studio. FLUX 3 selects the official distille
 - **[MOSS high-resolution generation](docs/moss-image.md#高解像度の構図調整)**: changed SDPA and INT8 activation computation. Regular S5 generation with a 2560px long edge has been checked. Completion of 4K and Hires.fix generation has not been verified with these changes.
 - **Cancellation handling**: waiting for a high-resolution step to acknowledge cancellation no longer triggers a timeout-based termination of the active worker.
 - **[Stops after GPU faults](docs/troubleshooting.md#gpu異常後の停止)**: GPU faults and unfinished operations block new generation and automatic GPU operations. The stop persists across restarts and provides status and explicit recovery commands.
+- **Dependency security updates**: updated Pillow image processing and the certifi certificate bundle to fixed versions.
 
-Restart the WebUI after updating. When updating from a version earlier than v5.0.0, rerun the MOSS and H3 setup as well. Existing identical model files are reused. See [all changes](CHANGELOG.md#v501--2026-10-21).
+Rerun setup for the models you use, then restart the WebUI. Existing identical model files are reused. See [all changes](CHANGELOG.md#v501--2026-10-21).
 
 [MOSS RoPE composition controls](docs/moss-image.md#高解像度の構図調整) and [H3 LightVAE](docs/minimax-h3-acceleration.md#lightvae) remain available.
 

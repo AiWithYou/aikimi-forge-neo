@@ -73,7 +73,8 @@ SenseNova runtimeは、固定commit`e6dfd45762eb46f805067fe079c14bcb643ccccd`か
 
 - モデル原作: [OpenMOSS-Team/MOSS-Image-SFT](https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT/tree/daf706d2e1c7a6369c17b6d1658671aee6db1ebe)、Apache-2.0。VAEは公式のFP32を使用します。
 - INT8 ConvRot配布: [Abiray/MOSS-Image-SFT-INT8-convrot](https://huggingface.co/Abiray/MOSS-Image-SFT-INT8-convrot/tree/a4b94ff815a4e3853e630f0e965fbbf0a1912e31)。W4A8テキスト配布: [nif0/MOSS-Image-SFT-ComfyUI](https://huggingface.co/nif0/MOSS-Image-SFT-ComfyUI/tree/61af6917a6c23f513b0cb8167db6ca5b652263ca)。固定revisionとSHA-256を検証して別途取得し、重みはGitへ同梱しません。
-- 推論: [ComfyUI固定版](https://github.com/Comfy-Org/ComfyUI/tree/e087d8f6cb7c6cdb11b59dc7c9bf17c79f8d877d)、GPL-3.0。MOSS標準対応を専用環境で使用します。Comfy Kitchen 0.2.37とcomfy-aimdo 0.5.6のライセンス・NOTICEは上記FLUX 3と同じです。
+- 推論: [ComfyUI固定版](https://github.com/Comfy-Org/ComfyUI/tree/b9b290e43f1eb379946dfeb013faf9bbefa1a618)、GPL-3.0。MOSS標準対応を専用環境で使用します。Comfy Kitchen 0.2.39とcomfy-aimdo 0.5.6のライセンス・NOTICEは上記FLUX 3と同じです。
+- CPUテスト用の[`moss_sdpa_wrapper.json`](tools/tests/fixtures/moss_sdpa_wrapper.json)は、上記ComfyUIの`comfy/ops.py`からSDPAラッパーを抜き出したものです。配布元・固定revision・元コードのSHA-256を同ファイルに記載し、[GPL-3.0本文](modules_forge/packages/comfy/LICENSE)を適用します。
 
 [導入と使い方](docs/moss-image.md)を参照してください。
 

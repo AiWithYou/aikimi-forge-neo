@@ -1,6 +1,8 @@
 """Conservative inference policy contracts, exercised with CPU tensors only."""
 
 import ast
+import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,7 +66,12 @@ class InferencePolicyTests(unittest.TestCase):
     def test_real_comfy_wrapper_uses_only_efficient_for_small_and_large_calls(self):
         from torch.overrides import TorchFunctionMode
 
-        tree = ast.parse(Path("repositories/moss-image/ComfyUI/comfy/ops.py").read_text(encoding="utf-8"))
+        root = Path(__file__).resolve().parents[2]
+        fixture = json.loads((root / "tools/tests/fixtures/moss_sdpa_wrapper.json").read_text(encoding="utf-8"))
+        manifest = json.loads((root / "tools/moss_image_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(fixture["revision"], manifest["runtime"]["comfy_revision"])
+        self.assertEqual(hashlib.sha256(fixture["source"].encode("utf-8")).hexdigest(), fixture["source_sha256"])
+        tree = ast.parse(fixture["source"])
         node = next(
             n
             for n in ast.walk(tree)
@@ -78,7 +85,7 @@ class InferencePolicyTests(unittest.TestCase):
             "SDPA_BACKEND_PRIORITY": self.ops.SDPA_BACKEND_PRIORITY,
             "SDPA_CONTIGUOUS_KV_L2_SIZE": 0,
         }
-        exec(  # noqa: S102 -- Fixed local source under a CPU-only guard.
+        exec(  # noqa: S102 -- Fixed upstream fixture under a CPU-only guard.
             compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), "comfy-wrapper", "exec"),
             namespace,
         )

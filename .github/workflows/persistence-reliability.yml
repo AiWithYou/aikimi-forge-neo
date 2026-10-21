@@ -52,7 +52,7 @@ jobs:
           cache: pip
           cache-dependency-path: .github/workflows/persistence-reliability.yml
       - name: Install the minimal CPU test dependencies
-        run: python -m pip install --disable-pip-version-check numpy==2.3.5 Pillow==12.3.0 ruff==0.15.20
+        run: python -m pip install --disable-pip-version-check numpy==2.3.5 Pillow==13.0.0 ruff==0.15.20
       - name: Install the real encoder for Linux integration tests
         if: runner.os == 'Linux'
         shell: bash
