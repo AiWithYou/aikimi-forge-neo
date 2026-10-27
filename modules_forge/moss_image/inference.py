@@ -271,7 +271,7 @@ class ComfyRuntime:
             )
         return clip
 
-    def encode_text(self, clip, prompt, *, images=()):
+    def encode_text(self, clip, prompt, *, images=(), image_strength=1.0):
         # Use the native underlying tokenizer before any higher-level cap. This
         # is the pinned MOSS chat template, including its raw-chat escape hatch.
         if images and prompt.startswith("<|im_start|>"):
@@ -288,10 +288,12 @@ class ComfyRuntime:
         if not isinstance(rows, list) or not rows or any(not isinstance(row, list) for row in rows):
             raise RuntimeError("MOSS Image tokenizer returned invalid token rows")
         count = sum(len(row) for row in rows)
+        bias = []
         image_index = 0
         for row in rows:
             for index, token in enumerate(row):
                 if token[0] != 248056:
+                    bias.append(0.0)
                     continue
                 if image_index >= len(images):
                     raise core.MossImageError("画像プレースホルダーと参照画像の数が一致しません。")
@@ -303,6 +305,7 @@ class ComfyRuntime:
                     scale = math.sqrt(3136 / (height * width))
                     nh, nw = math.ceil(height * scale / 32) * 32, math.ceil(width * scale / 32) * 32
                 count += nh * nw // 1024 - 1
+                bias.extend([math.log(image_strength) if image_strength != 1 else 0.0] * (nh * nw // 1024))
                 image_index += 1
         if image_index != len(images):
             raise core.MossImageError("参照画像の入力トークンを生成できませんでした。")
@@ -319,6 +322,10 @@ class ComfyRuntime:
                 raise core.MossImageError("参照画像を含むプロンプトが4096トークンを超えています。短くしてください。")
             for value in metadata.values():
                 require_finite(value, "text features")
+            if images and image_strength != 1:
+                if tensor.shape[-2] != len(bias):
+                    raise RuntimeError("MOSS Image vision token count does not match text features")
+                metadata["context_attention_bias"] = self.torch.tensor([bias], dtype=self.torch.float32)
         return [
             [
                 tensor.cpu(),
@@ -498,7 +505,7 @@ class ComfyRuntime:
                         image.resize(references.fit_size(image.size, 384**2, snap=32), Image.Resampling.LANCZOS)
                         for image in images
                     ]
-                    if request["edit_method"] == "reference"
+                    if request["edit_method"] == "reference" and request.get("image_strength", 1) > 0
                     else []
                 )
                 vision = [
@@ -536,7 +543,7 @@ class ComfyRuntime:
             )
             progress("encoding_prompt")
             positive, count = (
-                self.encode_text(clip, request["prompt"], images=vision)
+                self.encode_text(clip, request["prompt"], images=vision, image_strength=request.get("image_strength", 1))
                 if vision
                 else self.encode_text(clip, request["prompt"])
             )
@@ -546,7 +553,7 @@ class ComfyRuntime:
             if request["cfg"] != 1:
                 check()
                 negative, count = (
-                    self.encode_text(clip, request["negative_prompt"], images=vision)
+                    self.encode_text(clip, request["negative_prompt"], images=vision, image_strength=request.get("image_strength", 1))
                     if vision
                     else self.encode_text(clip, request["negative_prompt"])
                 )

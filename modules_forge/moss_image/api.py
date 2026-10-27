@@ -68,6 +68,7 @@ def public_result(value):
         "edit_method",
         "denoise",
         "kv_cache",
+        "image_strength",
         "reference_sha256",
         "reference_sizes",
         "vision_sizes",

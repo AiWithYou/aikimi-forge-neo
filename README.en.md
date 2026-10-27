@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v5.0.3](https://github.com/AiWithYou/aikimi-forge-neo/tree/v5.0.3)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v5.0.4](https://github.com/AiWithYou/aikimi-forge-neo/tree/v5.0.4)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,7 +10,13 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v5.0.3
+## What's new in v5.0.4
+
+- **[MOSS reference attention](docs/moss-image.md#参照画像から編集)**: adjust how much the model attends to image-understanding features from reference images in edit-LoRA workflows. The default is 1; at 0, the edit LoRA still receives its reference latents.
+
+Restart the WebUI after updating. This update does not require downloading the model again. Reference editing requires a compatible edit LoRA. [All changes (Japanese)](CHANGELOG.md#v504--2026-10-27)
+
+### Changes in v5.0.3
 
 - **[MOSS reference editing](docs/moss-image.md#高解像度の構図調整)**: RoPE scaling adjusts the generated image while keeping reference-image positions at their original frequencies.
 

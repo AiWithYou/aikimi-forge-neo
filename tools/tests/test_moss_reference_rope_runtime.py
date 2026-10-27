@@ -66,6 +66,57 @@ def verify_rope():
                 raise AssertionError("RoPE calculation was not reached")
             assert build_pe.call_args.kwargs["reference_start"] == expected
 
+    bias = torch.tensor([[0.0, -0.7, -0.7, 0.0]])
+    mask = edit._attention_mask(bias, 3, 5, torch.float32, device)
+    assert mask.shape == (1, 1, 1, 12)
+    assert mask.stride(-2) % 8 == 0
+    assert torch.equal(mask[0, 0, 0, 3:7], bias[0])
+    assert torch.count_nonzero(mask[0, 0, 0, :3]) == 0
+    assert torch.count_nonzero(mask[0, 0, 0, 7:]) == 0
+
+    class Patcher:
+        def __init__(self):
+            self.base = SimpleNamespace(extra_conds=lambda **kwargs: {}, extra_conds_shapes=lambda **kwargs: {},
+                                        process_latent_in=lambda x: x)
+            self.model = self.base
+            self.dit = SimpleNamespace(latent_channels=128, forward=lambda *args, **kwargs: None)
+            self.patches = {}
+
+        def clone(self):
+            return self
+
+        def get_model_object(self, name):
+            return self.base if name == "" else self.dit
+
+        def add_object_patch(self, name, value):
+            self.patches[name] = value
+
+    patched = Patcher()
+    edit.MOSSImageOstrisEditModelPatch().patch(patched)
+    conditions = patched.patches["extra_conds"](context_attention_bias=bias, reference_latents=ref_latents)
+    assert torch.equal(conditions["context_attention_bias"].cond, bias)
+    assert len(conditions["ref_latents"].cond) == 2
+
+    # The text refiner must use the same operation when the attention bias is zero.
+    import comfy.model_management
+    from comfy.ldm.moss_image.model import TextEmbedder
+
+    previous_training = comfy.model_management.in_training
+    comfy.model_management.in_training = True
+    try:
+        torch.manual_seed(11)
+        tiny = SimpleNamespace(rope_axes_dim=[8, 8, 8, 8],
+                               text_embedder=TextEmbedder(32, 32, 64, 1, operations=torch.nn))
+        text = torch.randn(1, 4, 32)
+        pe = _pe(tiny, _text_ids(4, device), {})
+        original = edit._text_embedder(tiny, text, pe, {}, None)
+        neutral = edit._text_embedder(tiny, text, pe, {}, torch.zeros(1, 4))
+        weighted = edit._text_embedder(tiny, text, pe, {}, bias)
+        torch.testing.assert_close(original, neutral, rtol=1e-5, atol=1e-6)
+        assert not torch.allclose(neutral, weighted)
+    finally:
+        comfy.model_management.in_training = previous_training
+
 
 if __name__ == "__main__":
     if "--worker" in sys.argv:

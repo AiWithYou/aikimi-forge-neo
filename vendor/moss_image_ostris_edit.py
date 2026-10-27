@@ -43,7 +43,7 @@ import comfy.utils
 import node_helpers
 from comfy.ldm.flux.layers import timestep_embedding
 from comfy.ldm.modules.attention import optimized_attention
-from comfy.ldm.moss_image.model import modulated_rms_norm, rope_split_half
+from comfy.ldm.moss_image.model import modulated_rms_norm, rope_split_half, situ
 
 # ---------------------------------------------------------------------------
 # Text encode (VL images -> conditioning, refs -> reference_latents)
@@ -201,7 +201,7 @@ def _qkv(block, y):
     return block.proj["q"](y), block.proj["k"](y), block.proj["v"](y)
 
 
-def _attention(q, k, v, block, pe, transformer_options, kv_capture=None, kv_cache=None):
+def _attention(q, k, v, block, pe, transformer_options, kv_capture=None, kv_cache=None, mask=None):
     """comfy moss_image ``attention`` with optional K/V capture or cached-K/V
     injection, both post-RoPE. Cached keys are already RoPE'd at their own
     positions."""
@@ -217,22 +217,22 @@ def _attention(q, k, v, block, pe, transformer_options, kv_capture=None, kv_cach
         v = torch.cat((v, kv_cache[1].to(v.dtype)), dim=1)
     q, k, v = (t.transpose(1, 2) for t in (q, k, v))
     return optimized_attention(
-        q, k, v, heads, skip_reshape=True, transformer_options=transformer_options
+        q, k, v, heads, mask=mask, skip_reshape=True, transformer_options=transformer_options
     )
 
 
-def _block_kv_forward(block, x, mod, pe, transformer_options, kv_capture=None, kv_cache=None):
+def _block_kv_forward(block, x, mod, pe, transformer_options, kv_capture=None, kv_cache=None, mask=None):
     """Block forward (single-span modulation) with K/V capture / injection."""
     shift_a, scale_a, gate_a, shift_f, scale_f, gate_f = mod
     y = modulated_rms_norm(x, block.norm1, scale_a, shift_a)
     q, k, v = _qkv(block, y)
-    attn = _attention(q, k, v, block, pe, transformer_options, kv_capture, kv_cache)
+    attn = _attention(q, k, v, block, pe, transformer_options, kv_capture, kv_cache, mask)
     x = x + block.proj["o"](attn) * gate_a
     y = modulated_rms_norm(x, block.norm2, scale_f, shift_f)
     return x + comfy.ops.linear_input_act(block.proj["ffn_down"], block.proj["ffn_up_gate"](y), "situ") * gate_f
 
 
-def _block_ref_forward(block, x, mod, ref_mod, split, pe, transformer_options):
+def _block_ref_forward(block, x, mod, ref_mod, split, pe, transformer_options, mask=None):
     """Block forward with per-span modulation: tokens ``[:split]`` (noisy image
     + text) use the real-t modulation, tokens ``[split:]`` (clean reference
     tokens) the t=0 one. References attend everything (the non-kv_cache
@@ -254,9 +254,37 @@ def _block_ref_forward(block, x, mod, ref_mod, split, pe, transformer_options):
 
     y = norm_mod(block.norm1, x, scale_a, shift_a, rscale_a, rshift_a)
     q, k, v = _qkv(block, y)
-    x = x + gate(block.proj["o"](_attention(q, k, v, block, pe, transformer_options)), gate_a, rgate_a)
+    x = x + gate(block.proj["o"](_attention(q, k, v, block, pe, transformer_options, mask=mask)), gate_a, rgate_a)
     y = norm_mod(block.norm2, x, scale_f, shift_f, rscale_f, rshift_f)
     return x + gate(comfy.ops.linear_input_act(block.proj["ffn_down"], block.proj["ffn_up_gate"](y), "situ"), gate_f, rgate_f)
+
+
+def _attention_mask(bias, before, after, dtype, device):
+    if bias is None:
+        return None
+    bias = bias.to(device=device, dtype=dtype)
+    length = before + bias.shape[-1] + after
+    # Efficient SDPA requires aligned bias strides on CUDA, even for a broadcast mask.
+    padded = torch.zeros((bias.shape[0], 1, 1, (length + 7) // 8 * 8), dtype=dtype, device=device)
+    padded[:, 0, 0, before:before + bias.shape[-1]] = bias
+    return padded[..., :length]
+
+
+def _text_embedder(dit, context, pe, options, bias):
+    if bias is None:
+        return dit.text_embedder(context, pe, options)
+    embedder = dit.text_embedder
+    x = embedder.proj(context)
+    mask = _attention_mask(bias, 0, 0, x.dtype, x.device)
+    queue = comfy.model_prefetch.make_prefetch_queue(list(embedder.blocks), x.device, options)
+    for block in embedder.blocks:
+        comfy.model_prefetch.prefetch_queue_pop(queue, x.device, block, x.dtype)
+        q, k, v = block.qkv(block.norm1(x)).chunk(3, dim=-1)
+        x = x + block.proj(_attention(q, k, v, block, pe, options, mask=mask))
+        y = block.norm2(x)
+        x = x + block.ffn_down(situ(block.ffn_up(y), block.ffn_gate(y)))
+    comfy.model_prefetch.prefetch_queue_pop(queue, x.device, None)
+    return x
 
 
 def _run_blocks(dit, h, block_fn, vec, mod, pe, transformer_options):
@@ -298,7 +326,7 @@ def _finish(dit, h, vec, n_img, B, H, W):
     return out.transpose(1, 2).reshape(B, dit.latent_channels, H, W)
 
 
-def _forward_with_refs(dit, x, timestep, context, ref_latents, transformer_options):
+def _forward_with_refs(dit, x, timestep, context, ref_latents, transformer_options, context_attention_bias=None):
     """MOSS-Image forward with reference latents appended after the text at
     t=0 ("index_timestep_zero"). Mirrors comfy.ldm.moss_image.model.MOSSImage._forward
     with the ref packing / per-span modulation additions."""
@@ -315,12 +343,13 @@ def _forward_with_refs(dit, x, timestep, context, ref_latents, transformer_optio
     vec0 = _time_vec(dit, torch.zeros_like(timestep), dtype)
     mod, ref_mod = _modulation(dit, vec), _modulation(dit, vec0)
 
-    txt = dit.text_embedder(context, pe[:, n_img : n_img + text_len], transformer_options)
+    txt = _text_embedder(dit, context, pe[:, n_img : n_img + text_len], transformer_options, context_attention_bias)
     h = torch.cat((dit.video_embedder(x.flatten(2).transpose(1, 2)), txt, dit.video_embedder(reftok)), dim=1)
     split = n_img + text_len
+    mask = _attention_mask(context_attention_bias, n_img, reftok.shape[1], dtype, device)
 
     def block_fn(block, h, i):
-        return _block_ref_forward(block, h, mod, ref_mod, split, pe, transformer_options)
+        return _block_ref_forward(block, h, mod, ref_mod, split, pe, transformer_options, mask)
 
     h = _run_blocks(dit, h, block_fn, vec, mod, pe, transformer_options)
     return _finish(dit, h, vec, n_img, B, H, W)
@@ -361,7 +390,7 @@ def _precompute_ref_kv(dit, x, timestep, text_len, ref_latents, transformer_opti
     return ref_kv
 
 
-def _forward_with_cached_refs(dit, x, timestep, context, ref_kv, transformer_options):
+def _forward_with_cached_refs(dit, x, timestep, context, ref_kv, transformer_options, context_attention_bias=None):
     """Denoising pass with the reference tokens replaced by their cached K/V:
     the live sequence is just noisy image + text tokens, and every block's
     attention appends the cached ref K/V as extra keys."""
@@ -375,11 +404,13 @@ def _forward_with_cached_refs(dit, x, timestep, context, ref_kv, transformer_opt
     vec = _time_vec(dit, timestep, dtype)
     mod = _modulation(dit, vec)
 
-    txt = dit.text_embedder(context, pe[:, n_img:], transformer_options)
+    txt = _text_embedder(dit, context, pe[:, n_img:], transformer_options, context_attention_bias)
     h = torch.cat((dit.video_embedder(x.flatten(2).transpose(1, 2)), txt), dim=1)
+    ref_count = next(iter(ref_kv.values()))[0].shape[1] if ref_kv else 0
+    mask = _attention_mask(context_attention_bias, n_img, ref_count, dtype, device)
 
     def block_fn(block, h, i):
-        return _block_kv_forward(block, h, mod, pe, transformer_options, kv_cache=ref_kv.get(i))
+        return _block_kv_forward(block, h, mod, pe, transformer_options, kv_cache=ref_kv.get(i), mask=mask)
 
     h = _run_blocks(dit, h, block_fn, vec, mod, pe, transformer_options)
     return _finish(dit, h, vec, n_img, B, H, W)
@@ -444,6 +475,9 @@ class MOSSImageOstrisEditModelPatch:
 
         def extra_conds(**kwargs):
             out = orig_extra_conds(**kwargs)
+            bias = kwargs.get("context_attention_bias")
+            if bias is not None:
+                out["context_attention_bias"] = comfy.conds.CONDRegular(bias)
             ref_latents = kwargs.get("reference_latents", None)
             if ref_latents is not None:
                 out["ref_latents"] = comfy.conds.CONDList(
@@ -468,11 +502,11 @@ class MOSSImageOstrisEditModelPatch:
         # blocks so cond/uncond coexist.
         state = {"last_sigma": None, "caches": {}}
 
-        def forward(x, timestep, context, transformer_options={}, ref_latents=None, **kwargs):
+        def forward(x, timestep, context, transformer_options={}, ref_latents=None, context_attention_bias=None, **kwargs):
             if ref_latents is None or len(ref_latents) == 0:
                 return orig_forward(x, timestep, context, transformer_options=transformer_options, **kwargs)
             if not kv_cache:
-                return _forward_with_refs(dit, x, timestep, context, ref_latents, transformer_options)
+                return _forward_with_refs(dit, x, timestep, context, ref_latents, transformer_options, context_attention_bias)
 
             # New-run detection: sigmas only decrease within a run, and the
             # first call of a run sits at sample_sigmas[0] when available.
@@ -491,7 +525,7 @@ class MOSSImageOstrisEditModelPatch:
             if ref_kv is None:
                 ref_kv = _precompute_ref_kv(dit, x, timestep, text_len, ref_latents, transformer_options)
                 state["caches"][key] = ref_kv
-            return _forward_with_cached_refs(dit, x, timestep, context, ref_kv, transformer_options)
+            return _forward_with_cached_refs(dit, x, timestep, context, ref_kv, transformer_options, context_attention_bias)
 
         m.add_object_patch("extra_conds", extra_conds)
         m.add_object_patch("extra_conds_shapes", extra_conds_shapes)

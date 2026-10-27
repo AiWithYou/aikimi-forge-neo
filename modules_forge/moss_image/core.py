@@ -40,6 +40,7 @@ _KEYS = {
     "edit_method",
     "denoise",
     "kv_cache",
+    "image_strength",
     "hires",
     "rope",
 }
@@ -106,6 +107,9 @@ def validate_request(value, *, internal=False) -> dict:
     kv_cache = value.get("kv_cache", True)
     if type(kv_cache) is not bool:
         raise MossImageError("参照キャッシュはtrueまたはfalseで指定してください。")
+    image_strength = _number(value.get("image_strength", 1), "参照への注目度", 0, 4, inclusive=True)
+    if (mode != "img2img" or method != "reference") and image_strength != 1:
+        raise MossImageError("参照への注目度は編集LoRAで複数参照する場合に指定してください。")
     denoise = _number(
         value.get("denoise", 0.65 if mode == "img2img" and method == "redraw" else 1),
         "変更量", 0.01, 1, inclusive=True,
@@ -163,6 +167,7 @@ def validate_request(value, *, internal=False) -> dict:
         "edit_method": method,
         "denoise": denoise,
         "kv_cache": kv_cache,
+        "image_strength": image_strength,
     }
     if "hires" in value:
         if mode != "txt2img":

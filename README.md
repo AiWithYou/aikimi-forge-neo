@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v5.0.3](https://github.com/AiWithYou/aikimi-forge-neo/tree/v5.0.3)** · [変更履歴](CHANGELOG.md)
+**[v5.0.4](https://github.com/AiWithYou/aikimi-forge-neo/tree/v5.0.4)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,7 +10,13 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v5.0.3の主な変更
+## v5.0.4の主な変更
+
+- **[MOSSの参照への注目度](docs/moss-image.md#参照画像から編集)**：編集LoRAによる参照編集で、画像理解側が参照を重視する度合いを調整できます。1が標準で、0でも編集LoRAの参照は残ります。
+
+更新後はWebUIを再起動してください。この更新のためのモデル再取得は不要です。参照編集には対応する編集用LoRAが必要です。[全変更](CHANGELOG.md#v504--2026-10-27)
+
+### v5.0.3の変更
 
 - **[MOSSの参照編集](docs/moss-image.md#高解像度の構図調整)**：RoPEスケールを変えても参照画像の位置表現は標準のまま保ち、生成画像の構図を調整します。
 

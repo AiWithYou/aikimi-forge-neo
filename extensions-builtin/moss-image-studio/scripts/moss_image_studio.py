@@ -39,6 +39,7 @@ def start(
     hires_denoise=0.35,
     rope_x=1.0,
     rope_y=1.0,
+    image_strength=1.0,
 ):
     state = dict(state or {})
     if state.get("job"):
@@ -78,6 +79,7 @@ def start(
                 kv_cache=kv_cache,
             )
             if edit_method == "reference":
+                request["image_strength"] = image_strength
                 if not edit_lora or edit_strength <= 0:
                     raise ValueError("MOSSの編集用LoRAを選択し、強度を0より大きくしてください。")
                 if any(item["name"] == edit_lora for item in request["loras"]):
@@ -321,6 +323,11 @@ def on_ui_tabs():
             )
             denoise = gr.Slider(0.01, 1, value=0.65, step=0.01, label="変更量", elem_id="moss-image-denoise")
             with gr.Column(visible=False, elem_id="moss-image-edit-settings") as edit_settings:
+                image_strength = gr.Slider(
+                    0, 4, value=1, step=0.05, label="参照への注目度",
+                    info="画像理解側の参照の重み。1が標準。0でも編集LoRAの参照は残ります。",
+                    elem_id="moss-image-reference-attention",
+                )
                 edit_lora = gr.Dropdown(
                     [("選択してください", ""), *local_lora.inventory(MODEL_ROOT)],
                     value="",
@@ -413,6 +420,7 @@ def on_ui_tabs():
                 hires_denoise,
                 rope_x,
                 rope_y,
+                image_strength,
             ],
             outputs=[state, status, run, cancel, timer],
             api_visibility="private",

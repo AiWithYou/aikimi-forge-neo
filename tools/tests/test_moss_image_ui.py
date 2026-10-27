@@ -84,6 +84,9 @@ class UITests(unittest.TestCase):
         self.assertTrue(any(item.get("label") == "ネガティブプロンプト" for item in props))
         skip = next(item for item in props if item.get("elem_id") == "moss-image-skip-layer")
         self.assertTrue(skip["value"])
+        attention = next(item for item in props if item.get("elem_id") == "moss-image-reference-attention")
+        self.assertEqual((attention["value"], attention["minimum"], attention["maximum"]), (1, 0, 4))
+        self.assertIn("0でも", attention["info"])
         self.assertTrue(any(item.get("label") == "PNG・生成条件" for item in props))
         mode = next(item for item in components if item.elem_id == "moss-image-img2img")
         self.assertTrue(mode.interactive)
@@ -115,6 +118,15 @@ class UITests(unittest.TestCase):
         self.assertEqual(result[0], {"job": "job"})
         self.assertFalse(result[2]["interactive"])
         self.assertTrue(result[-1]["active"])
+
+    def test_reference_attention_is_sent_with_reference_edit(self):
+        module = self.load_screen()
+        with patch.object(module.SERVICE, "start", return_value="job") as start:
+            module.start({}, "edit", "", 512, 512, 24, 3, 5, 42, True,
+                         mode="img2img", images=["image"], edit_method="reference",
+                         edit_lora="edit.safetensors", image_strength=0.35)
+        self.assertEqual(start.call_args.args[0]["image_strength"], 0.35)
+        self.assertEqual(start.call_args.args[0]["loras"], [{"name": "edit.safetensors", "strength": 1.0}])
 
     def test_relevant_controls_follow_mode_and_cfg_without_overwriting_values(self):
         module = self.load_screen()
