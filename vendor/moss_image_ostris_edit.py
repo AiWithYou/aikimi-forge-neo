@@ -158,13 +158,19 @@ def _text_ids(text_len, device):
     return ids
 
 
-def _pe(dit, ids, transformer_options):
+def _pe(dit, ids, transformer_options, *, reference_start=None):
     options = transformer_options.get("rope_options", {})
     scales = (1, 1, options.get("scale_y", 1), options.get("scale_x", 1))
     pe = torch.cat([
         comfy.ldm.flux.math.rope(ids[None, ..., axis], dim, 10000 * scale ** (-dim / (dim - 2)))
         for axis, (dim, scale) in enumerate(zip(dit.rope_axes_dim, scales))
     ], dim=-3)
+    if reference_start is not None and scales[2:] != (1, 1):
+        # ComfyUI 0.43 keeps the reference grid at its trained frequencies.
+        pe[:, reference_start:] = torch.cat([
+            comfy.ldm.flux.math.rope(ids[None, reference_start:, axis], dim, 10000)
+            for axis, dim in enumerate(dit.rope_axes_dim)
+        ], dim=-3)
     return pe.unsqueeze(1).transpose(1, 2).contiguous()
 
 
@@ -303,7 +309,7 @@ def _forward_with_refs(dit, x, timestep, context, ref_latents, transformer_optio
 
     reftok, refids = _pack_refs(dit, ref_latents, B, text_len, device, dtype)
     ids = torch.cat((_image_ids(0, text_len, H, W, device), _text_ids(text_len, device), refids), dim=0)
-    pe = _pe(dit, ids, transformer_options)
+    pe = _pe(dit, ids, transformer_options, reference_start=n_img + text_len)
 
     vec = _time_vec(dit, timestep, dtype)
     vec0 = _time_vec(dit, torch.zeros_like(timestep), dtype)
@@ -338,7 +344,7 @@ def _precompute_ref_kv(dit, x, timestep, text_len, ref_latents, transformer_opti
     dtype, device = x.dtype, x.device
     transformer_options = transformer_options.copy()
     reftok, refids = _pack_refs(dit, ref_latents, B, text_len, device, dtype)
-    pe = _pe(dit, refids, transformer_options)
+    pe = _pe(dit, refids, transformer_options, reference_start=0)
     vec0 = _time_vec(dit, torch.zeros_like(timestep), dtype)
     mod0 = _modulation(dit, vec0)
     h = dit.video_embedder(reftok)

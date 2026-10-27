@@ -14,7 +14,7 @@ class ReleaseVersionTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
         readme_version = re.search(
-            r"^\*\*\[v(\d+\.\d+\.\d+)\]\(https://github\.com/AiWithYou/aikimi-forge-neo/releases/tag/v(\d+\.\d+\.\d+)\)\*\*",
+            r"^\*\*\[v(\d+\.\d+\.\d+)\]\(https://github\.com/AiWithYou/aikimi-forge-neo/tree/v(\d+\.\d+\.\d+)\)\*\*",
             readme,
             re.MULTILINE,
         )
@@ -29,7 +29,7 @@ class ReleaseVersionTests(unittest.TestCase):
         english = (ROOT / "README.en.md").read_text(encoding="utf-8")
         japanese = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn(
-            f"**[v{VERSION}](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v{VERSION})**", english
+            f"**[v{VERSION}](https://github.com/AiWithYou/aikimi-forge-neo/tree/v{VERSION})**", english
         )
         self.assertIn("[English](README.en.md)", japanese.split("\n\n", 2)[1])
         self.assertIn("[日本語](README.md)", english.split("\n\n", 2)[1])

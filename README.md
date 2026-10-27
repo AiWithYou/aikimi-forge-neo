@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v5.0.2](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v5.0.2)** · [変更履歴](CHANGELOG.md)
+**[v5.0.3](https://github.com/AiWithYou/aikimi-forge-neo/tree/v5.0.3)** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,7 +10,13 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v5.0.2の主な変更
+## v5.0.3の主な変更
+
+- **[MOSSの参照編集](docs/moss-image.md#高解像度の構図調整)**：RoPEスケールを変えても参照画像の位置表現は標準のまま保ち、生成画像の構図を調整します。
+
+更新後はWebUIを再起動してください。モデルの再取得は不要です。[全変更](CHANGELOG.md#v503--2026-10-27)
+
+### v5.0.2の変更
 
 - **[MOSSの操作画面](docs/moss-image.md)**：img2imgでは使わないHires.fixを非表示にし、CFG 1では負プロンプトと層スキップが不使用であることを表示します。入力済みの値は保持します。
 - **生成中の再接続**：同じブラウザーでページを再読み込みしても、進捗表示と中断操作を復元します。サーバー再起動後のジョブ再開には対応しません。
