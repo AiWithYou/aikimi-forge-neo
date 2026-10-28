@@ -34,7 +34,7 @@ def install_environment(root):
         venv.EnvBuilder(with_pip=True).create(directory)
     uv = shutil.which("uv")
     prefix = [uv, "pip", "install", "--python", python] if uv else [python, "-m", "pip", "install"]
-    execute([*prefix, "pip==26.2.1", "setuptools==83.0.0"])
+    execute([*prefix, "pip==26.2.1", "setuptools==84.1.0"])
     execute([*prefix, "torch==2.13.0", "torchvision==0.28.0", "--index-url", "https://download.pytorch.org/whl/cu130"])
     execute([*prefix, "-r", ROOT / "tools/requirements-clef.txt"])
     execute([python, "-m", "pip", "check"])

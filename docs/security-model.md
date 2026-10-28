@@ -129,6 +129,12 @@ redactionは最後の防御です。利用者は、共有前に[SECURITY.md](../
 
 CodeQLはGitHub標準の解析を使用します。追加の拡張セキュリティ解析と品質解析は有効にしません。Ruffによる問題の検出は維持し、formatの一致はCIの成功条件から外します。認証、画像取得の接続先検証、証明書検証、ファイル公開範囲、依存関係監査は継続します。
 
+## 2026年10月28日の依存関係修正
+
+本体のGitPythonを3.2.1、本体とSenseNova・Qwen・Iris・Clef・MOSS Image・FLUX 3・H3の専用環境のsetuptoolsを84.1.0に更新します。MOSS ImageとFLUX 3の固定環境はfilelockも修正版に更新し、依存関係をハッシュ付きlockとOSV監査で確認します。
+
+既存の専用環境は対象モデルのセットアップを再実行して更新します。MOSS Image・FLUX 3・H3はlockが変わるため、再セットアップ前は既存の専用環境の検証が通りません。
+
 ## 2026年9月24日の依存関係修正
 
 本体・SenseNova・QwenのCUDA環境をPyTorch 2.13.0、torchvision 0.28.0へ更新し、setuptools 83.0.0と両立させました。SenseNovaはTransformers 5.10.4へ移行し、専用の互換処理でRoPE設定、入力ID、明示的なキャッシュ位置を保持します。Transformers本体のAPIは変更しません。

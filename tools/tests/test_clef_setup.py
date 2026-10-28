@@ -34,10 +34,10 @@ def test_environment_updates_security_pins_and_resolves_vendor_from_repo_root(tm
     with chdir(tmp_path):
         assert setup.install_environment(root) == python
     assert all(kwargs["cwd"] == setup.ROOT for _, kwargs in calls)
-    assert {"pip==26.2.1", "setuptools==83.0.0"} <= set(calls[0][0])
+    assert {"pip==26.2.1", "setuptools==84.1.0"} <= set(calls[0][0])
     requirements = (setup.ROOT / "tools/requirements-clef.txt").read_text(encoding="utf-8")
     assert "./vendor/accelerate" in requirements and "accelerate==1.15.0\n" not in requirements
-    assert "pip==26.2.1" in requirements and "setuptools==83.0.0" in requirements
+    assert "pip==26.2.1" in requirements and "setuptools==84.1.0" in requirements
     assert "transformers==5.10.2" in requirements
 
 

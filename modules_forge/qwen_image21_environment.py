@@ -15,7 +15,7 @@ VERSIONS = {
     "bitsandbytes": "0.50.2",
     "comfy-kitchen": "0.2.31",
     "accelerate": "1.15.0+aikimi.1",
-    "setuptools": "83.0.0",
+    "setuptools": "84.1.0",
     "pip": "26.2.1",
     "Pillow": "12.3.0",
     "safetensors": "0.8.0",

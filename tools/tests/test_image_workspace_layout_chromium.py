@@ -84,11 +84,14 @@ class ImageWorkspaceLayoutChromiumTests(unittest.TestCase):
                     "[...document.querySelectorAll('[id^=moss-image]')].map(e=>({id:e.id,width:e.getBoundingClientRect().width,display:getComputedStyle(e).display}))"
                 ),
             )
+            # The frontend may briefly expose the child before its async visibility update.
+            page.evaluate("(() => {const e=document.querySelector('#moss-image-hires-settings'); e.classList.remove('hidden'); e.style.display='block';})()")
             self.assertEqual(
                 page.evaluate("document.querySelector('#moss-image-hires-settings').getBoundingClientRect().height"),
                 0,
                 "Hires settings must stay collapsed until enabled",
             )
+            page.evaluate("document.querySelector('#moss-image-hires-settings').style.removeProperty('display')")
             page.evaluate("document.querySelector('#moss-image-hires-enabled input').click()")
             self.assertTrue(page.wait_for("#moss-image-hires-settings", "element.getBoundingClientRect().height > 0"))
             page.evaluate("document.querySelector('#moss-image-img2img-button').click()")

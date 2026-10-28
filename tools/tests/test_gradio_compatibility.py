@@ -34,7 +34,7 @@ class GradioDependencyContractTests(unittest.TestCase):
     def test_runtime_matches_the_audited_direct_dependency_set(self):
         expected = {
             "diffusers": "0.38.0",
-            "GitPython": "3.1.62",
+            "GitPython": "3.2.1",
             "gradio": gradio_compat.GRADIO_DISTRIBUTION_VERSION,
             "gradio-client": "2.5.0",
             "fastapi": "0.141.1",

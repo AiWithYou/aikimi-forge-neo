@@ -98,7 +98,7 @@ distributions over the supplied alternatives, not calibrated accuracy estimates.
 Use Forge Neo's Clef setup and GUI, or this repository's standalone CLI:
 
 ```powershell
-python -m pip install pip==26.2.1 setuptools==83.0.0
+python -m pip install pip==26.2.1 setuptools==84.1.0
 python -m pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cu130
 python -m pip install -r requirements.txt
 python inference.py --profile {example} --image example.png

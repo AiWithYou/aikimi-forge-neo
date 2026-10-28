@@ -1,4 +1,4 @@
-GitPython==3.1.62
+GitPython==3.2.1
 Pillow==13.0.0
 certifi==2026.10.19
 ./vendor/accelerate
@@ -37,7 +37,7 @@ rich==14.3.4
 safetensors==0.8.0
 scikit-image==0.25.2
 scipy==1.18.0
-setuptools==83.0.0
+setuptools==84.1.0
 spandrel-extra-arches==0.2.0
 spandrel==0.4.2
 starlette==1.6.0
