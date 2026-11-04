@@ -6,10 +6,10 @@
   "uv": {
     "artifact_id": "h3-uv",
     "relative_path": "bootstrap/uv.whl",
-    "url": "https://files.pythonhosted.org/packages/a6/b7/aebd3504d559315be6137ebfe1f6d2258e8e2f48e528d7cc799aea3441ef/uv-0.12.12-py3-none-win_amd64.whl",
-    "size": 17654279,
-    "sha256": "4a5acd0c6087970bdf210eeb1203835117f6fb8b84828604205de510f68aa6a7",
-    "license_url": "https://github.com/astral-sh/uv/blob/0.12.12/LICENSE-MIT"
+    "url": "https://files.pythonhosted.org/packages/2f/b9/b526eab6c72eacc705a58378f6850fde046b28c86fed01bd42da61367c6b/uv-0.13.4-py3-none-win_amd64.whl",
+    "size": 15331833,
+    "sha256": "b2ff80397273fff0e02c20eacae6882834c811827d6fc08f658db156fe754386",
+    "license_url": "https://github.com/astral-sh/uv/blob/0.13.4/LICENSE-MIT"
   },
   "model_repository": "Comfy-Org/MiniMax-H3",
   "model_revision": "a98869194787969724c7425d95d0ed73ce9202af",
