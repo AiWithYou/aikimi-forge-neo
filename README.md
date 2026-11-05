@@ -6,7 +6,7 @@
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
-**画像の生成・編集、音声付き動画、作曲、画像や文章の評価を、ひとつのWebUIから使えるWindows向けのForge Neo派生版です。** モデルの導入、高解像度処理、画像の仕上げも支援します。
+**画像の生成・編集、音声付き動画の作成、作曲、画像や文章の評価をひとつのWebUIで扱える、Windows向けのForge Neo派生版です。** モデルの導入や高解像度化、画像の仕上げ機能も備えています。
 
 同じ系列を追加学習したモデル本体（Full FT）も選べます。画像生成ではForgeの共通画面、P-H3 Image、MOSS Image、Qwen Image 2.1、Iris、FLUX 3に対応しています。H3動画、Clef、Irodori TTS、YuE2でも互換の本体を選べます。LoRAはモデル本体に重ねて使う追加データです。通常版・INT8・W4A8など、選べる保存形式や必要な共通部品は系列ごとに異なります。[モデル・LoRAの配置と対応形式](docs/local-models.md)
 
@@ -17,7 +17,7 @@
 - **動画・音声を作る**：MiniMax H3で音声付き動画、YuE2で音楽、Irodori TTSで日本語音声を生成できます。
 - **画像を整理する**：Clefで画像や文章の評価・仕分けを行えます。
 
-P-H3の初回準備はWebUIの **H3 Image → P-H3 Image → 準備を開く → 環境とモデルを準備** から実行します。標準のモデル4ファイルは合計約29.8 GBです。モデルと生成物には地域制限があるため、SNSへの公開前にも利用条件を確認してください。[使い方と利用条件](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)
+P-H3の初回セットアップは、WebUIの **H3 Image → P-H3 Image → 準備を開く → 環境とモデルを準備** から行います。標準モデル4ファイルの合計サイズは約29.8 GBです。モデルおよび生成物には地域制限が適用されるため、SNSへ公開する前に利用条件を確認してください。[使い方と利用条件](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)
 
 SenseNova U1.5、Nanosaur2、Ming Image Designの画面とセットアップは本版から対象外です。
 
@@ -198,7 +198,7 @@ git clone https://github.com/DominikDoom/a1111-sd-webui-tagcomplete.git extensio
 
 ## 更新方法
 
-WebUIを終了し、本体フォルダーでPowerShellを開いて次を実行します。
+WebUIを終了し、本体フォルダーでPowerShellを開いて次のコマンドを実行します。
 
 ```powershell
 git switch neo
