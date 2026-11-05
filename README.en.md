@@ -2,13 +2,13 @@
 
 English · [日本語](README.md)
 
-**v6.0.0 (in development)** · [Changelog (Japanese)](CHANGELOG.md)
+**[v6.0.0](https://github.com/AiWithYou/aikimi-forge-neo/tree/v6.0.0)** · [Release](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v6.0.0) · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
 **A Windows-focused Forge Neo fork for image generation and editing, video with audio, music composition, and image or text evaluation in one WebUI.** It also provides model setup, high-resolution workflows, and image finishing tools.
 
-Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
+You can select a compatible full fine-tuned model in the shared Forge workspace and the P-H3 Image, MOSS Image, Qwen Image 2.1, Iris and FLUX 3 Studios. H3 video, Clef, Irodori TTS and YuE2 also accept compatible models. A LoRA is separate data applied on top of a base model. Available formats, such as standard weights, INT8 and W4A8, and the required shared components depend on the model family. See [model and LoRA layout and supported formats (Japanese)](docs/local-models.md).
 
 ## What you can do
 
@@ -17,7 +17,7 @@ Choose the model at the top of each Studio. FLUX 3 selects the official distille
 - **Create video and audio:** generate video with sound using MiniMax H3, music with YuE2, and Japanese speech with Irodori TTS.
 - **Organize images:** use Clef to evaluate and sort images or text.
 
-To prepare P-H3, open **H3 Image → P-H3 Image → 準備を開く**, then select **環境とモデルを準備** in the WebUI. Its four standard model files total approximately 29.8 GB. See the [guide and license conditions](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md).
+To prepare P-H3, open **H3 Image → P-H3 Image → 準備を開く**, then select **環境とモデルを準備** in the WebUI. Its four standard model files total approximately 29.8 GB. The model and its outputs are subject to territorial restrictions; review the terms before publishing on social media. See the [guide and license conditions](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md).
 
 SenseNova U1.5, Nanosaur2, and Ming Image Design are no longer included in the interface or setup.
 

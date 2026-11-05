@@ -28,6 +28,9 @@ def test_profiles_preserve_normal_model_and_flash_identity():
     assert PROFILES["clef-24gb"]["precision"] == PROFILES["clef-16gb"]["precision"] == "nf4"
     assert PROFILES["clef-16gb"]["cpu_embeddings"]
     assert not PROFILES["clef-24gb"]["cpu_embeddings"]
+    assert PROFILES["clef-bf16"]["model"] == "clef"
+    assert PROFILES["clef-bf16"]["precision"] == "bf16"
+    assert PROFILES["clef-bf16"]["min_vram_gib"] > 24
 
 
 def test_schema_round_trip_and_reject_duplicate_json_ids():

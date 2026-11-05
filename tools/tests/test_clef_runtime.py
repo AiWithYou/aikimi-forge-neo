@@ -86,9 +86,11 @@ def test_requested_pixel_budget_reaches_real_image_preprocessing():
 
 
 def test_conditional_checkpoint_loads_base_without_losing_backbone(tmp_path):
+    import json
+
     from transformers import Qwen3_5Config, Qwen3_5ForConditionalGeneration, Qwen3_5Model
 
-    from modules_forge.clef.runtime import stream_weights
+    from modules_forge.clef.runtime import safe_pretrained_options, stream_weights
 
     config = Qwen3_5Config(
         text_config={
@@ -113,8 +115,15 @@ def test_conditional_checkpoint_loads_base_without_losing_backbone(tmp_path):
     )
     original = Qwen3_5ForConditionalGeneration(config)
     original.save_pretrained(tmp_path)
+    marker = tmp_path / "dynamic-code-ran"
+    (tmp_path / "evil.py").write_text(f"open({str(marker)!r}, 'w').write('bad')", encoding="utf-8")
+    config_path = tmp_path / "config.json"
+    data = json.loads(config_path.read_text(encoding="utf-8"))
+    data["auto_map"] = {"AutoModel": "evil.Untrusted"}
+    config_path.write_text(json.dumps(data), encoding="utf-8")
     with stream_weights():
-        base, info = Qwen3_5Model.from_pretrained(tmp_path, output_loading_info=True)
+        base, info = Qwen3_5Model.from_pretrained(tmp_path, output_loading_info=True, **safe_pretrained_options()[0])
+    assert not marker.exists()
     assert not info["missing_keys"]
     assert set(info["unexpected_keys"]) == {"lm_head.weight"}
     assert torch.equal(base.language_model.embed_tokens.weight, original.model.language_model.embed_tokens.weight)
@@ -172,3 +181,124 @@ def test_source_tensor_is_read_once_with_pread_and_survives_file_removal(tmp_pat
     assert backends == ["pread"]
     path.unlink()
     assert torch.equal(weight, expected)
+
+
+@pytest.mark.parametrize("canonical", ["language_model.embed_tokens.weight", "visual.patch_embed.proj.weight"])
+@pytest.mark.parametrize("indexed_prefix", ["", "model."])
+@pytest.mark.parametrize("requested_prefix", ["", "model."])
+def test_source_tensor_resolves_known_prefix_uniquely(tmp_path, canonical, indexed_prefix, requested_prefix):
+    import json
+
+    from safetensors.torch import save_file
+
+    from modules_forge.clef.runtime import tensor_from_source
+
+    name = indexed_prefix + canonical
+    expected = torch.arange(24, dtype=torch.bfloat16).reshape(6, 4)
+    save_file({name: expected}, tmp_path / "weights.safetensors")
+    (tmp_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {name: "weights.safetensors"}}), encoding="utf-8"
+    )
+    assert torch.equal(tensor_from_source(tmp_path, requested_prefix + canonical), expected)
+
+
+@pytest.mark.parametrize("same_shard", [True, False])
+def test_source_tensor_rejects_duplicate_prefix_aliases_before_open(tmp_path, monkeypatch, same_shard):
+    import json
+
+    import safetensors
+
+    from modules_forge.clef.runtime import tensor_from_source
+
+    canonical = "language_model.embed_tokens.weight"
+    (tmp_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {canonical: "one.safetensors", "model." + canonical:
+                                   "one.safetensors" if same_shard else "two.safetensors"}}), encoding="utf-8"
+    )
+    monkeypatch.setattr(safetensors, "safe_open", lambda *_args, **_kwargs: pytest.fail("ambiguous shard opened"))
+    with pytest.raises(ValueError, match="重複"):
+        tensor_from_source(tmp_path, canonical)
+
+
+def test_source_tensor_does_not_resolve_unknown_prefix(tmp_path):
+    import json
+
+    from modules_forge.clef.runtime import tensor_from_source
+
+    (tmp_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"wrapper.lm_head.weight": "weights.safetensors"}}), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="テンソル"):
+        tensor_from_source(tmp_path, "lm_head.weight")
+
+
+def test_source_tensor_rejects_prefixed_alias_with_unsafe_shard_path(tmp_path):
+    import json
+
+    from modules_forge.clef.runtime import tensor_from_source
+
+    (tmp_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"model.language_model.embed_tokens.weight": "../outside.safetensors"}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="シャード"):
+        tensor_from_source(tmp_path, "language_model.embed_tokens.weight")
+
+
+def test_source_tensor_rejects_shard_outside_model_directory(tmp_path):
+    import json
+
+    from safetensors.torch import save_file
+
+    from modules_forge.clef.runtime import tensor_from_source
+
+    source = tmp_path / "model"
+    source.mkdir()
+    save_file({"lm_head.weight": torch.zeros(2, 2)}, tmp_path / "outside.safetensors")
+    (source / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"lm_head.weight": "../outside.safetensors"}}), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="シャード"):
+        tensor_from_source(source, "lm_head.weight")
+
+
+def test_source_tensor_rejects_linked_shard(tmp_path, monkeypatch):
+    import json
+    import stat
+    from pathlib import Path
+
+    from safetensors.torch import save_file
+
+    from modules_forge.clef.runtime import tensor_from_source
+
+    shard = tmp_path / "shard.safetensors"
+    save_file({"lm_head.weight": torch.zeros(2, 2)}, shard)
+    (tmp_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"lm_head.weight": "shard.safetensors"}}), encoding="utf-8"
+    )
+    original = Path.lstat
+    monkeypatch.setattr(
+        Path, "lstat", lambda path: SimpleNamespace(st_mode=stat.S_IFLNK) if path == shard else original(path)
+    )
+    with pytest.raises(ValueError, match="シャード"):
+        tensor_from_source(tmp_path, "lm_head.weight")
+
+
+def test_source_tensor_rejects_linked_shard_index(tmp_path, monkeypatch):
+    import json
+    import stat
+    from pathlib import Path
+
+    from safetensors.torch import save_file
+
+    from modules_forge.clef.runtime import tensor_from_source
+
+    save_file({"lm_head.weight": torch.zeros(2, 2)}, tmp_path / "shard.safetensors")
+    index = tmp_path / "model.safetensors.index.json"
+    index.write_text(json.dumps({"weight_map": {"lm_head.weight": "shard.safetensors"}}), encoding="utf-8")
+    original = Path.lstat
+    monkeypatch.setattr(
+        Path, "lstat", lambda path: SimpleNamespace(st_mode=stat.S_IFLNK) if path == index else original(path)
+    )
+    with pytest.raises(ValueError, match="シャード"):
+        tensor_from_source(tmp_path, "lm_head.weight")

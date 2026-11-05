@@ -62,6 +62,20 @@ class ModelCatalogTests(unittest.TestCase):
         self.assertEqual(adapter.read_bytes(), b"existing adapter")
         self.assertFalse((self.root / "model").exists())
 
+    def test_startup_prepares_irodori_v4_folder_without_touching_models(self):
+        official = self.touch("models/Irodori-TTS/v4-Large/model.safetensors")
+        official.write_bytes(b"official model")
+        folder = self.root / "models/Irodori-TTS/v4-Large/checkpoints"
+        with patch.object(model_catalog, "ROOT", self.root):
+            model_catalog.prepare_directories()
+            self.assertTrue(folder.is_dir())
+            custom = folder / "voice.safetensors"
+            custom.write_bytes(b"custom model")
+            model_catalog.prepare_directories()
+        self.assertEqual(official.read_bytes(), b"official model")
+        self.assertEqual(custom.read_bytes(), b"custom model")
+        self.assertFalse((self.root / "models/Irodori-TTS/checkpoints").exists())
+
     def test_folder_bundle_hides_internal_shards_and_shared_parts(self):
         bundle = self.touch("models/Full/model_index.json").parent
         self.touch("models/Full/transformer/diffusion_pytorch_model-00001.safetensors")

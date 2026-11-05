@@ -1,6 +1,6 @@
 # MiniMax H3: optional acceleration
 
-Baseline controls verified against upstream sources on 2026-09-06; the optional [W4A8 model path](w4a8.md) was added and checked on 2026-09-21. These controls are in **H3 Studio > 高速化**. They do not change the resolution presets or silently enable other optimizations.
+Acceleration controls are in **H3 Studio > 高速化**. The **FL2VA本体** and **Ref2VA本体** selectors at the top of the Studio take precedence for their respective modes. When a slot is set to the standard model, the diffusion model option under 高速化 selects its standard, W4A8 or Fused Turbo weights. These choices do not silently change the resolution or other optimizations.
 
 ## Acceleration and conditioning reuse
 
@@ -11,12 +11,14 @@ Baseline controls verified against upstream sources on 2026-09-06; the optional 
 | Video VAE | FP16 | INT8 ConvRot, LightVAE Lite INT8/FP32, LynnReal Light VAE | Quantization and pruning can change pixels. LightVAE uses standard decoding. |
 | Video decoding | VAEDecode | MiniMax H3 Fast VAE Decode | Batched spatial tiles use more VRAM and can be slower. |
 | Attention | Comfy Kitchen dense | Sol-Attn or SLA via official BlockSparseAttention | Approximate attention can change motion, detail and audio. |
-| CLIP conditioning | Native encoder on each execution | CLIPCached auto / refresh | Stores conditioning and reference metadata on disk; repeated inputs can avoid the encoder. Incompatible with NegPiP. |
+| CLIP conditioning | Native encoder on each execution | CLIPCached auto / refresh | Stores conditioning and reference metadata on disk; repeated inputs can avoid the encoder. NegPiP uses its own cache integration. |
 | Comfy Compiler | Off | — | Disabled in the shared H3 runtime, including ControlNet and NegPiP. Initialization time and VRAM use can change. |
 
 See the [CLIPCached integration guide](minimax-h3-clipcache.md) for the pinned installer, cache modes, storage and validation. The managed runtime only permits its selected node pack. The default graph remains unchanged when the cache is off.
 
-Changing the model dropdown does **not** change Steps. The **Turbo + 4 Steps** and **Turbo + 8 Steps** buttons explicitly select the fused model, the named step count and `simple`. They retain the chosen VAE, attention and CLIP cache. The sampler remains `res_multistep` with `BasicGuider` (no CFG); the model's default video/audio shifts remain 12/3. The standard reset button restores all acceleration controls, including CLIP cache and NegPiP, to their defaults with 20 Steps and `simple`, without overwriting the prompt, aspect, resolution or duration.
+Changing **1. 標準本体の種類** does **not** change Steps. With the active slot set to the standard model, the **Turbo + 4 Steps** and **Turbo + 8 Steps** buttons select the fused model, the named step count and `simple`. With an additional checkpoint selected in the active slot, the buttons set Steps and scheduler without replacing that checkpoint. They retain the chosen VAE, attention and CLIP cache. The sampler remains `res_multistep` with `BasicGuider` (no CFG); the model's default video/audio shifts remain 12/3. The standard reset button restores acceleration settings, 20 Steps and `simple`, while preserving both separately selected checkpoints, prompt, aspect, resolution and duration.
+
+Choose the checkpoint's FL2VA or Ref2VA use explicitly and consult its model card before applying a Turbo recipe. Its storage format is detected from tensor structure, independently of Turbo recommendations; a filename cannot establish that Turbo was baked in.
 
 Sparse attention uses the official DynamicCombo API, applies after Kitchen attention, keeps `extra_tokens=256`, `min_tokens=12288`, and protects conditioning/audio rows with `exact_kv_and_rows`. The default first 20% of the schedule and short sequences stay dense. The node's verbose log indicates why a run stays dense. Sol-Attn exposes tau; SLA exposes the exact-key-block keep percentage. VSA is deliberately not offered: it requires appropriate trained weights, which are not these defaults.
 
@@ -36,7 +38,7 @@ Place `minimax_h3_video_vae_int8_convrot.safetensors` in `ComfyUI/models/vae/`. 
 
 Source and model recipe: [model card at e6df1685](https://huggingface.co/MATLOWAI/minimax-h3-fused-turbo-int8-convrot/blob/e6df16857722fdd9b79f6ed6b63251119202a91f/README.md).
 
-Place `minimax_h3_fused_refdelta_r1024_turbo8_mystic07_int8_convrot.safetensors` in `ComfyUI/models/diffusion_models/`. The source repository stores it under `diffusion_models/`. Select **MATLOWAI Fused Turbo** and explicitly apply 4 or 8 Steps. Its baked-in LoRAs are not added again at runtime. The same fused checkpoint is selected for the image/text and reference workflows; unused official FL2VA/Ref2VA files are not required by this choice.
+Place `minimax_h3_fused_refdelta_r1024_turbo8_mystic07_int8_convrot.safetensors` in the selected H3 model folder's `diffusion_models/` directory. The source repository stores it under `diffusion_models/`. In the video Studio, leave the active slot on the standard model, select **MATLOWAI Fused Turbo** under **1. 標準本体の種類**, and explicitly apply 4 or 8 Steps. This standard selection uses the same fused checkpoint for text/keyframe and reference workflows; unused official FL2VA/Ref2VA files are not required. Alternatively, place a compatible checkpoint in `models/MiniMax-H3/checkpoints/` and select it explicitly in the applicable FL2VA and/or Ref2VA slot. The experimental H3 Image tab uses these explicit slots. Its baked-in LoRAs are not added again at runtime.
 
 This is a third-party derivative, not a new official MiniMax base release. Its baked-in style/acceleration weights cannot be turned off individually. Switching back to the standard model selects the original mode-specific weight files.
 
@@ -52,7 +54,7 @@ The inspected `fast_vae_decode.py` Git blob is `a3f5fb9cded5c30eacdbf9b6f890dadc
 
 ### Sparse Attention
 
-Update ComfyUI to include [e308cc73 / PR #16072](https://github.com/Comfy-Org/ComfyUI/commit/e308cc73b466584b0c17be695e5de1a17438bb40), update that runtime's requirements, then restart it. That revision pins `comfy-kitchen==0.2.33`. The bridge requires at least 0.2.33 when sparse attention is selected and verifies the actual node input schema and core ancestry before submitting.
+Prepare or update Neo's managed H3 environment from the H3 Studio, then restart it if required. The fixed ComfyUI revision and dependencies are recorded in the [runtime manifest](../tools/minimax_h3_runtime_manifest.json) and [dependency lock](../tools/requirements-minimax-h3.lock). Sparse attention requires at least Comfy Kitchen 0.2.33; the bridge also verifies the node input schema and core ancestry before submitting.
 
 It does not remove the original core gate for standard runs or silently turn off a requested optimization. Missing models, nodes, incompatible schemas, old Kitchen versions and mismatched custom-node permissions produce actionable errors before generation.
 

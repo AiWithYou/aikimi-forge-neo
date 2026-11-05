@@ -26,6 +26,62 @@ H3_LINT_TARGETS = (
 
 
 class CiWorkflowBoundaryTests(unittest.TestCase):
+    def test_yue2_checkpoint_validator_runs_in_windows_cpu_suite(self):
+        workflow = self.workflow("windows-smoke.yml")
+        self.assertIn("--module tools.tests.test_yue2_checkpoint_validation", workflow)
+        for event in ("pull_request", "push"):
+            patterns = self.event_paths(workflow, event)
+            self.assertTrue(any(PurePosixPath("tools/tests/test_yue2_checkpoint_validation.py").full_match(pattern)
+                                for pattern in patterns))
+
+    def test_checkpoint_and_bootstrap_pytest_contracts_run_offline_on_both_platforms(self):
+        paths = (
+            "tools/tests/test_h3_checkpoint_modes.py",
+            "tools/tests/test_qwen_single_file_quantization.py",
+            "tools/tests/test_uv_bootstrap_upgrade.py",
+        )
+        marker = "      - name: Run local checkpoint and uv bootstrap CPU contracts\n"
+        for workflow_name in ("unit-tests.yml", "windows-smoke.yml"):
+            workflow = self.workflow(workflow_name)
+            with self.subTest(workflow=workflow_name):
+                self.assertIn(marker, workflow)
+                step = workflow.split(marker, 1)[1].split("\n      - name:", 1)[0]
+                self.assertIn("python tools/run_ci_tests.py --pytest", step)
+                for path in paths:
+                    self.assertIn(path, step)
+                if workflow_name == "windows-smoke.yml":
+                    self.assertIn(
+                        "if: ${{ !cancelled() && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}",
+                        step,
+                    )
+            for event in ("pull_request", "push"):
+                patterns = self.event_paths(workflow, event)
+                for path in (*paths, "tools/uv_bootstrap.py"):
+                    with self.subTest(workflow=workflow_name, event=event, path=path):
+                        self.assertTrue(any(PurePosixPath(path).full_match(pattern) for pattern in patterns))
+
+    def test_checkpoint_and_bootstrap_changes_trigger_and_run_ruff(self):
+        lint = self.workflow("lint.yml")
+        paths = (
+            "tools/uv_bootstrap.py",
+            "tools/tests/test_h3_checkpoint_modes.py",
+            "tools/tests/test_qwen_single_file_quantization.py",
+            "tools/tests/test_uv_bootstrap_upgrade.py",
+        )
+        for event in ("pull_request", "push"):
+            patterns = self.event_paths(lint, event)
+            for path in paths:
+                with self.subTest(event=event, path=path):
+                    self.assertTrue(any(PurePosixPath(path).full_match(pattern) for pattern in patterns))
+        step = lint.split("      - name: Lint the new security and setup surface\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        files = step.split("          files=(\n", 1)[1].split("\n          )", 1)[0].splitlines()
+        patterns = [line.strip() for line in files]
+        for path in paths:
+            with self.subTest(ruff=path):
+                self.assertTrue(any(PurePosixPath(path).full_match(pattern) for pattern in patterns))
+
     def test_windows_job_uses_utf8_for_python_and_child_processes(self):
         windows = self.workflow("windows-smoke.yml")
         job = windows.split("  python-313-windows:\n", 1)[1]
@@ -208,6 +264,9 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
 
     def test_orbit_installation_and_ui_are_checked_in_ci(self):
         lint = self.workflow("lint.yml")
+        node = "extensions-builtin/minimax-h3-studio/comfyui_nodes/Aikimi-MiniMax-H3-Orbit-v2"
+        self.assertEqual(lint.count(f'"{node}/**"'), 2)
+        self.assertIn(f"            {node}\n", lint)
         for path in (
             "modules_forge/minimax_h3_orbit_assets.py",
             "tools/prepare_minimax_h3_orbit.py",

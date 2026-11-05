@@ -20,3 +20,10 @@
 #flux3-layout-disclosure { padding: 0; background-color: transparent; }
 #flux3-layout-disclosure summary { padding: 10px 12px; cursor: pointer; font-size: 13px; }
 @media (max-width: 700px) { .flux3-layout-body { grid-template-columns: minmax(0, 1fr); gap: 14px; } .flux3-layout-toolbar { align-items: start; flex-direction: column; gap: 8px; } }
+
+@media (max-width: 760px) {
+  #flux3-model { flex-direction: column; align-items: stretch; }
+  #flux3-model > .row { width: 100%; min-width: 0 !important; flex: 0 0 auto; }
+  #flux3-model > .row > .form { min-width: 0 !important; flex: 1 1 auto; flex-direction: column; }
+  #flux3-model > .row > .form > .block { width: 100%; min-width: 0 !important; }
+}

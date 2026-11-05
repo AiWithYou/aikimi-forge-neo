@@ -589,18 +589,57 @@ class NegPiPUITests(unittest.TestCase):
 
     def test_video_controls_match_runtime_option_arity(self):
         from modules_forge.minimax_h3_acceleration_ui import create_acceleration_controls
+        from tools.tests.test_h3_acceleration_ui import load_ui
 
         with gr.Blocks(analytics_enabled=False):
             duration = gr.Slider(5, 15, value=5, step=1)
             controls, buttons = create_acceleration_controls(duration)
-        # The always-visible checkpoint selector lives outside the optional panel.
-        selected_checkpoint = ""
-        values = [c.value for c in controls] + [selected_checkpoint]
+        # Both always-visible checkpoint selectors live outside the optional panel.
+        values = [c.value for c in controls] + ["", ""]
         self.assertEqual(len(values), len(H3Acceleration().values()))
         self.assertEqual(len(buttons), 3)
         self.assertEqual(H3Acceleration.from_values(values), H3Acceleration())
-        values[-1] = str(ROOT / "models" / "missing_fl2va.safetensors")
-        self.assertEqual(H3Acceleration.from_values(values).checkpoint, values[-1])
+        chosen = H3NegPiP(enabled=True, value_strength=2.25, block_start=2, block_end=12,
+                           block_stride=2, protect_text_rows=True)
+        fl2va = str(ROOT / "models" / "chosen_fl2va.safetensors")
+        ref2va = str(ROOT / "models" / "chosen_ref2va.safetensors")
+
+        with tempfile.TemporaryDirectory() as directory:
+            ui = load_ui(directory)
+            blocks = ui._build_ui()[0][0]
+            self.addCleanup(blocks.close)
+            callbacks = {entry.fn.__name__: entry for entry in blocks.fns.values()
+                         if entry.fn is not None and hasattr(entry.fn, "__name__")}
+            generation_controls = callbacks["_generate_ui"].inputs[-len(values):]
+            self.assertEqual([item.label for item in generation_controls[:-2]], [item.label for item in controls])
+            self.assertEqual([item.label for item in generation_controls[-2:]], ["FL2VA本体", "Ref2VA本体"])
+            self.assertEqual(generation_controls[8].elem_id, "h3-negpip-enabled")
+            values = [item.value for item in generation_controls]
+            values[8:8 + len(chosen.values())] = chosen.values()
+            values[-2:] = [fl2va, ref2va]
+            for callback in ("_connect_runtime_updates", "_restart_runtime_updates", "_rescan_runtime_updates"):
+                self.assertEqual(callbacks[callback].inputs[-len(values) - 1:-1], generation_controls)
+
+            for mode, selected, role in (("text", fl2va, "FL2VA"), ("references", ref2va, "Ref2VA")):
+                with self.subTest(mode=mode):
+                    args = [mode, "<Picture 1>", None, None, ["photo.png"], None, None,
+                            "16:9", "preview", 5, 20, 1, "simple", "match", "off", None, 1.0]
+                    request = ui._request_from_ui(*args, *values)
+                    runtime = ui._runtime_acceleration((*values, mode))
+                    for option in (request.acceleration, runtime):
+                        self.assertEqual(option.negpip, chosen)
+                        self.assertEqual((option.checkpoint, option.checkpoint_mode), (selected, role))
+                    generation_values = [item.value for item in callbacks["_generate_ui"].inputs]
+                    generation_values[6:23] = args
+                    generation_values[-len(values):] = values
+                    with (
+                        mock.patch.object(ui, "validate_request"),
+                        mock.patch.object(ui, "_initial_runtime", return_value=directory),
+                        mock.patch.object(ui, "resolve_runtime_root", return_value=Path(directory)),
+                        mock.patch.object(ui, "run_generation", return_value=iter(())) as run,
+                    ):
+                        list(callbacks["_generate_ui"].fn(*generation_values))
+                    self.assertEqual(run.call_args.args[0].acceleration, request.acceleration)
 
     def test_image_ui_binds_negpip_to_generation_and_runtime_controls(self):
         package = ModuleType("modules")
@@ -622,17 +661,47 @@ class NegPiPUITests(unittest.TestCase):
         generate_inputs = functions["_generate"].inputs
         runtime_inputs = functions["_runtime_action"].inputs
         restart_inputs = functions["_restart"].inputs
-        self.assertEqual(len(generate_inputs), 3 + 10 + len(H3NegPiP().values()) + 1)
-        self.assertEqual(runtime_inputs[-len(H3NegPiP().values()) - 1:], generate_inputs[-len(H3NegPiP().values()) - 1:])
+        self.addCleanup(blocks.close)
+        self.assertEqual(len(generate_inputs), 3 + 10 + len(H3NegPiP().values()) + 2)
+        self.assertEqual(runtime_inputs[3:-1], generate_inputs[13:])
+        self.assertIs(runtime_inputs[-1], generate_inputs[3])
         self.assertEqual(restart_inputs, runtime_inputs)
-        self.assertEqual(generate_inputs[-1].label, "チェックポイント")
-        selected_checkpoint = str(ROOT / "models" / "missing_fl2va.safetensors")
-        request = module._request(
-            "text", "apple", None, 768, 768, 20, "-1", "simple", 0, False, *H3NegPiP(enabled=True).values(), selected_checkpoint
-        )
-        self.assertTrue(request.negpip.enabled)
-        self.assertEqual(request.checkpoint, selected_checkpoint)
-        self.assertEqual(request.runtime_acceleration.checkpoint, selected_checkpoint)
+        self.assertEqual([component.label for component in generate_inputs[-2:]], ["FL2VA本体", "Ref2VA本体"])
+        self.assertEqual(generate_inputs[13].elem_id, "h3-image-negpip-enabled")
+        chosen = H3NegPiP(enabled=True, value_strength=2.25, block_start=2, block_end=12,
+                           block_stride=2, protect_text_rows=True)
+        fl2va = str(ROOT / "models" / "chosen_fl2va.safetensors")
+        ref2va = str(ROOT / "models" / "chosen_ref2va.safetensors")
+        for mode, selected, role in (("text", fl2va, "FL2VA"), ("references", ref2va, "Ref2VA")):
+            with self.subTest(mode=mode):
+                values = [component.value for component in generate_inputs]
+                values[3:13] = [mode, "apple", ["photo.png"], 768, 768, 20, "1", "simple", 0, False]
+                values[13:] = [*chosen.values(), fl2va, ref2va]
+                with (
+                    mock.patch.object(module, "_initial_runtime", return_value=str(ROOT)),
+                    mock.patch.object(module.images, "run_image_generation", return_value=iter(())) as run,
+                ):
+                    list(functions["_generate"].fn(*values))
+                request = run.call_args.args[0]
+                self.assertEqual(request.negpip, chosen)
+                self.assertEqual((request.checkpoint, request.runtime_acceleration.checkpoint_mode), (selected, role))
+                self.assertEqual(request.runtime_acceleration.negpip, chosen)
+
+                runtime_values = [*values[:3], *values[13:], mode]
+                with (
+                    mock.patch.object(module, "_initial_runtime", return_value=str(ROOT)),
+                    mock.patch.object(bridge, "resolve_runtime_root", return_value=ROOT),
+                    mock.patch.object(bridge, "ensure_ready", return_value=SimpleNamespace(comfy_version="test", gpu_name="test")) as connect,
+                    mock.patch.object(bridge, "restart_runtime", return_value=SimpleNamespace(comfy_version="test", gpu_name="test")) as restart,
+                    mock.patch.object(bridge, "ComfyH3Client"),
+                    mock.patch.object(module.images, "check_image_nodes"),
+                ):
+                    functions["_runtime_action"].fn(*runtime_values)
+                    functions["_restart"].fn(*runtime_values)
+                for action in (connect, restart):
+                    option = action.call_args.kwargs["acceleration"]
+                    self.assertEqual(option.negpip, chosen)
+                    self.assertEqual((option.checkpoint, option.checkpoint_mode), (selected, role))
 
 
 if __name__ == "__main__":

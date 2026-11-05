@@ -165,8 +165,9 @@ def record(request):
     return {**identity, "strength": strength, "applied_targets": identity["targets"] if strength else 0}
 
 
-def validate_tensors(state, key_map, model_state, torch):
+def validate_tensors(state, key_map, model_state, torch, *, model=None):
     groups = pairs(state)
+    ranges = []
     for key, value in state.items():
         if (
             not torch.is_tensor(value)
@@ -180,12 +181,31 @@ def validate_tensors(state, key_map, model_state, torch):
         key, narrow = target if isinstance(target, tuple) else (target, None)
         if key not in model_state:
             raise Flux3Error(f"LoRAの対象がモデルにありません: {prefix}")
-        shape = list(model_state[key].shape)
+        weight = model_state[key]
+        logical_shape = getattr(getattr(weight, "_params", None), "orig_shape", None)
+        if logical_shape is None and model is not None and hasattr(model, "get_submodule"):
+            try:
+                module = model.get_submodule(key.rsplit(".", 1)[0])
+            except (AttributeError, KeyError):
+                module = None
+            if module is not None:
+                output = getattr(module, "out_features", None)
+                inputs = getattr(module, "in_features", None)
+                if type(output) is int and type(inputs) is int:
+                    logical_shape = (output, inputs)
+        layer = key.removesuffix(".weight")
+        if logical_shape is None and layer + ".comfy_quant" in model_state:
+            raise Flux3Error("量子化モデルの元の寸法を確認できません。")
+        shape = list(logical_shape if logical_shape is not None else weight.shape)
+        if len(shape) != 2:
+            raise Flux3Error("LoRAは線形レイヤーを対象にしてください。")
+        start, end = 0, shape[0]
         if narrow is not None:
             dimension, offset, length = narrow
             if dimension != 0 or offset < 0 or length <= 0 or offset + length > shape[0]:
                 raise Flux3Error(f"LoRAの融合レイヤー範囲が不正です: {prefix}")
             shape[dimension] = length
+            start, end = offset, offset + length
         if (
             down.ndim != 2
             or up.ndim != 2
@@ -194,6 +214,19 @@ def validate_tensors(state, key_map, model_state, torch):
             or shape != [up.shape[0], down.shape[1]]
         ):
             raise Flux3Error(f"LoRAとモデルの形状・rankが一致しません: {prefix}")
+        if layer + ".weight_s_rel" in model_state and layer + ".weight_s_channel" in model_state:
+            codebook = model_state.get(layer + ".weight_codebook")
+            if codebook is not None and (
+                not torch.is_tensor(codebook)
+                or codebook.ndim != 1
+                or codebook.numel() != 16
+                or not bool(torch.isfinite(codebook).all())
+                or not bool((codebook[1:] >= codebook[:-1]).all())
+            ):
+                raise Flux3Error(f"LoRA適用先のW4A8コードブックの順序または形式が不正です: {prefix}")
+        if any(key == other and max(start, left) < min(end, right) for other, left, right in ranges):
+            raise Flux3Error("LoRAの対象レイヤーの範囲が重複しています。")
+        ranges.append((key, start, end))
         if "alpha" in pair:
             alpha = state[pair["alpha"]]
             if alpha.numel() != 1 or not math.isfinite(float(alpha.item())) or float(alpha.item()) <= 0:

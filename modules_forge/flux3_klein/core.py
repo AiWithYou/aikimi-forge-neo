@@ -24,6 +24,7 @@ MANIFEST = ROOT / "tools/flux3_klein_manifest.json"
 _KEYS = {
     "model",
     "precision",
+    "checkpoint",
     "prompt",
     "images",
     "boxes",
@@ -112,8 +113,8 @@ def validate_request(value) -> dict:
     model, precision = value.get("model", "distilled"), value.get("precision", "int8")
     if not isinstance(model, str) or model not in {"distilled", "base"}:
         raise Flux3Error("モデルはdistilledまたはbaseを指定してください。")
-    if not isinstance(precision, str) or precision not in {"int8", "bf16", "nvfp4"}:
-        raise Flux3Error("保存形式はint8・bf16・nvfp4を指定してください。")
+    if not isinstance(precision, str) or precision not in {"int8", "bf16", "nvfp4", "w4a8"}:
+        raise Flux3Error("保存形式はint8・bf16・nvfp4・w4a8を指定してください。")
     prompt = value.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 12000:
         raise Flux3Error("プロンプトは1〜12000文字で入力してください。")
@@ -142,17 +143,24 @@ def validate_request(value) -> dict:
     pup = value.get("pup", False)
     if type(pup) is not bool:
         raise Flux3Error("PUPはtrueまたはfalseで指定してください。")
+    from .checkpoints import validate_name as validate_checkpoint_name
     from .lora import validate_name
 
     lora = value.get("lora") or None
     if value.get("lora") not in (None, ""):
         lora = validate_name(value["lora"])
+    checkpoint = value.get("checkpoint") or None
+    if value.get("checkpoint") not in (None, ""):
+        checkpoint = validate_checkpoint_name(value["checkpoint"])
+    if precision == "w4a8" and not checkpoint:
+        raise Flux3Error("W4A8は独自本体を選択してください。")
     strength = value.get("lora_strength", 1.0)
     if type(strength) not in (int, float) or not 0 <= strength <= 2:
         raise Flux3Error("LoRA強度は0〜2の有限の数値で指定してください。")
     return {
         "model": model,
         "precision": precision,
+        "checkpoint": checkpoint,
         "prompt": prompt,
         "images": list(images),
         "boxes": _boxes(value.get("boxes", []), len(images)),
@@ -208,24 +216,32 @@ def model_specs(request: dict) -> dict[str, dict]:
         not isinstance(model, str)
         or model not in {"distilled", "base"}
         or not isinstance(precision, str)
-        or precision not in {"int8", "bf16", "nvfp4"}
+        or precision not in {"int8", "bf16", "nvfp4", "w4a8"}
     ):
         raise Flux3Error("モデルまたは保存形式の指定が不正です。")
+    if precision == "w4a8" and not request.get("checkpoint"):
+        raise Flux3Error("W4A8は独自本体を選択してください。")
     suffix = "int8_convrot" if precision == "int8" else precision
     variant = "_sd" if model == "distilled" else ""
     names = {
-        "dit": f"diffusion_models/flux3_image_klein{variant}_{suffix}.safetensors",
         "text_encoder": f"text_encoders/qwen3vl_4b_{'bf16' if precision == 'bf16' else 'int8_convrot'}.safetensors",
         "vae": "vae/flux2-vae.safetensors",
         "pup": "text_encoders/qwen3.5_9b_flux3_prompt_upsampler_int8_convrot.safetensors",
         "pup_prompts": "text_encoders/system_prompts.json",
     }
+    if precision != "w4a8":
+        names["dit"] = f"diffusion_models/flux3_image_klein{variant}_{suffix}.safetensors"
     files = manifest()["files"]
     return {name: dict(files[path], path=path) for name, path in names.items()}
 
 
 def model_paths(root: Path, request: dict) -> dict[str, Path]:
-    return {name: Path(root) / spec["path"] for name, spec in model_specs(request).items()}
+    paths = {name: Path(root) / spec["path"] for name, spec in model_specs(request).items()}
+    if request.get("checkpoint"):
+        from .checkpoints import resolve
+
+        paths["dit"] = resolve(root, request["checkpoint"])
+    return paths
 
 
 @lru_cache(maxsize=64)
@@ -250,12 +266,26 @@ def asset_ready(root: Path, spec: dict) -> bool:
         return False
 
 
-def model_ready(root: Path, request: dict) -> bool:
-    return runtime_ready(root) and all(
+def components_ready(root: Path, request: dict) -> bool:
+    return all(
         asset_ready(root, spec)
         for name, spec in model_specs(request).items()
-        if request.get("pup", False) or name not in {"pup", "pup_prompts"}
+        if name != "dit" and (request.get("pup", False) or name not in {"pup", "pup_prompts"})
     )
+
+
+def model_ready(root: Path, request: dict) -> bool:
+    if not runtime_ready(root) or not components_ready(root, request):
+        return False
+    if request.get("checkpoint"):
+        from .checkpoints import bind
+
+        try:
+            bind(root, request)
+            return True
+        except (OSError, ValueError):
+            return False
+    return asset_ready(root, model_specs(request)["dit"])
 
 
 def runtime_fingerprint() -> str:

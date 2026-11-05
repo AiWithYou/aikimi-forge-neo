@@ -18,6 +18,7 @@ from modules_forge.moss_image.inference import (
     finite_vae_decode,
     import_arguments,
     read_hf_weights,
+    require_finite,
     verify_module_origin,
 )
 
@@ -37,6 +38,17 @@ class FakeRuntime:
 
 
 class MossImageInferenceTests(unittest.TestCase):
+    def test_w4a8_float8_scales_are_checked_for_finite_values_on_cpu(self):
+        import torch
+
+        for value, valid in ((1.0, True), (float("nan"), False)):
+            scale = torch.tensor([value], dtype=torch.float8_e4m3fn)
+            if valid:
+                require_finite(scale, "weight_s_rel")
+            else:
+                with self.assertRaisesRegex(RuntimeError, "non-finite"):
+                    require_finite(scale, "weight_s_rel")
+
     def test_png_retains_requested_precisions_loras_and_measured_conditions(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp) / "job"

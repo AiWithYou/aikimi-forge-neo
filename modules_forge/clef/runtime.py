@@ -3,16 +3,44 @@
 from __future__ import annotations
 
 import gc
+import hashlib
 import importlib.util
 import json
+import stat
 import sys
 from contextlib import contextmanager
 from functools import partial
+from pathlib import Path, PurePosixPath
 
 import torch
 
 from .bundle import bundle_manifest, read_bundle
 from .core import PREPROCESSING_VERSION, PROFILES, read_source
+
+TRUSTED_JOINT_SHA256 = "0e304cf7c6500e8bb59bef7e2afd2c6373f82596dfb3b57d1aa93c175e2dc3a3"
+
+
+def load_trusted_official(_selected=None):
+    """Execute only the bundled official source after checking its exact bytes."""
+    path = Path(__file__).with_name("official_joint_schema_model.py.txt")
+    content = path.read_bytes()
+    if hashlib.sha256(content).hexdigest() != TRUSTED_JOINT_SHA256:
+        raise RuntimeError("Clef公式実装の検証に失敗しました。")
+    name = "clef_trusted_joint_schema"
+    spec = importlib.util.spec_from_loader(name, loader=None)
+    module = importlib.util.module_from_spec(spec)
+    module.__file__ = str(path)
+    sys.modules[name] = module
+    try:
+        exec(compile(content, str(path), "exec"), module.__dict__)  # noqa: S102 -- Exact, pinned upstream source.
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
+    return module
+
+
+def safe_pretrained_options():
+    return {"trust_remote_code": False, "use_safetensors": True}, {"trust_remote_code": False}
 
 
 class LexicalRows:
@@ -102,9 +130,44 @@ def encode_complete(official, processor, record, max_length):
 def tensor_from_source(source, key):
     from safetensors import safe_open
 
-    index = json.loads((source / "model.safetensors.index.json").read_text())
-    with safe_open(source / index["weight_map"][key], framework="pt", device="cpu", backend="pread") as stream:
-        return stream.get_tensor(key)
+    source = Path(source).resolve()
+    index_path = source / "model.safetensors.index.json"
+    index_info = index_path.lstat()
+    if stat.S_ISLNK(index_info.st_mode) or getattr(index_info, "st_reparse_tag", 0) & 0x20000000:
+        raise ValueError("シャード索引へのリンクは使用できません。")
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    weight_map = index["weight_map"]
+    if not isinstance(weight_map, dict):
+        raise ValueError("シャード索引のテンソル一覧が不正です。")
+    canonical = key[6:] if key.startswith(("model.language_model.", "model.visual.")) else key
+    aliases = (canonical, "model." + canonical) if canonical.startswith(("language_model.", "visual.")) else (key,)
+    matches = [candidate for candidate in aliases if candidate in weight_map]
+    if len(matches) > 1:
+        raise ValueError("シャード索引に重複するテンソル名があります。")
+    if not matches:
+        raise ValueError("シャード索引に必要なテンソルがありません。")
+    resolved_key = matches[0]
+    name = weight_map[resolved_key]
+    if (
+        not isinstance(name, str)
+        or not name.endswith(".safetensors")
+        or "\\" in name
+        or ":" in name
+        or name.startswith("/")
+        or PurePosixPath(name).is_absolute()
+        or any(not part or part in {".", ".."} for part in name.split("/"))
+    ):
+        raise ValueError("シャード索引のパスが不正です。")
+    shard = source
+    for part in name.split("/"):
+        shard = shard / part
+        info = shard.lstat()
+        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_reparse_tag", 0) & 0x20000000:
+            raise ValueError("シャードへのリンクや接合点は使用できません。")
+    if not shard.resolve().is_relative_to(source) or not shard.is_file():
+        raise ValueError("シャードがモデルフォルダー外、または存在しません。")
+    with safe_open(shard, framework="pt", device="cpu", backend="pread") as stream:
+        return stream.get_tensor(resolved_key)
 
 
 @contextmanager
@@ -123,10 +186,10 @@ def stream_weights():
 
 class Runner:
     @classmethod
-    def from_directory(cls, directory, profile):
-        return cls(None, profile, directory=directory)
+    def from_directory(cls, directory, profile, *, custom=False):
+        return cls(None, profile, directory=directory, custom=custom)
 
-    def __init__(self, root, profile, *, directory=None):
+    def __init__(self, root, profile, *, directory=None, custom=False):
         from safetensors.torch import load_file
         from transformers import AutoProcessor, BitsAndBytesConfig, Qwen3_5Model
 
@@ -138,19 +201,19 @@ class Runner:
             raise RuntimeError(
                 f"{self.settings['label']}のGPUメモリが不足しています。16GB設定またはFlashを選んでください。"
             )
-        if directory is None:
+        if custom:
+            from .local_source import checkpoint_manifest
+
+            source, _ = checkpoint_manifest(root, profile, str(directory))
+        elif directory is None:
             source, _ = bundle_manifest(root, profile)
         elif self.settings["precision"] == "bf16":
             source, _ = read_source(directory, self.settings["model"])
         else:
             source, _ = read_bundle(directory, profile)
-        spec = importlib.util.spec_from_file_location(
-            "clef_release_" + self.settings["model"].replace("-", "_"), source / "joint_schema_model.py"
-        )
-        self.official = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = self.official
-        spec.loader.exec_module(self.official)
+        self.official = load_trusted_official()
         options = load_options(profile)
+        model_safety, processor_safety = safe_pretrained_options()
         saved = source if self.settings["precision"] != "bf16" else None
         if "quantization" in options:
             options["quantization_config"] = BitsAndBytesConfig(**options.pop("quantization"))
@@ -162,6 +225,7 @@ class Runner:
                 local_files_only=True,
                 attn_implementation="sdpa",
                 output_loading_info=True,
+                **model_safety,
                 **options,
             )
         expected_extra = {"lm_head.weight"}
@@ -180,7 +244,7 @@ class Runner:
         self.head = self.official.JointSchemaHead(**json.loads((source / "joint_head_config.json").read_text()))
         self.head.load_state_dict(load_file(source / "joint_head.safetensors", backend="pread"), strict=True)
         self.head = self.head.to(device="cuda:0", dtype=torch.bfloat16).eval()
-        self.processor = AutoProcessor.from_pretrained(source, local_files_only=True)
+        self.processor = AutoProcessor.from_pretrained(source, local_files_only=True, **processor_safety)
         self.source = source
         self.root, self.saved = root, saved
 

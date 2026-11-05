@@ -285,10 +285,12 @@ class CheckpointSnapshots(unittest.TestCase):
                         "runtime_manifest",
                         return_value={"model": str(selected), "vae": "shared", "python": "dedicated-python"},
                     ) as manifest,
+                    patch.object(service, "validate_custom_checkpoint") as validate,
                     patch.object(service.threading, "Thread"),
                 ):
                     identifier = studio.start(request, "owner")
                 manifest.assert_called_once_with(studio.runtime, "official", str(selected))
+                validate.assert_called_once_with(studio.runtime, manifest.return_value, str(selected))
                 request = replace(request, checkpoint="")
                 job = studio._jobs[identifier]
                 with (

@@ -56,10 +56,13 @@ def child_environment(*, offline):
     return environment
 
 
-def ready(root=RUNTIME, models=MODELS):
+def ready(root=RUNTIME, models=MODELS, *, checkpoint="official"):
     try:
+        from .checkpoints import resolve
+
         manifest = json.loads((Path(root) / "runtime.json").read_text(encoding="utf-8"))
         records = {x["file"]: x for x in json.loads((Path(root) / "model-files.json").read_text(encoding="utf-8"))}
+        required = REQUIRED_FILES if checkpoint == "official" else REQUIRED_FILES[1:]
         return (
             python_path(root).is_file()
             and manifest.get("code_revision") == CODE_REVISION
@@ -71,8 +74,9 @@ def ready(root=RUNTIME, models=MODELS):
                 and records[x]["size"] > 0
                 and (Path(models) / x).stat().st_size == records[x]["size"]
                 and (Path(models) / x).stat().st_mtime_ns == records[x]["mtime_ns"]
-                for x in REQUIRED_FILES
+                for x in required
             )
+            and (checkpoint == "official" or resolve(models, checkpoint).is_file())
         )
     except (OSError, ValueError, TypeError, KeyError):
         return False
@@ -89,6 +93,8 @@ def _number(value, name, low, high, integer=False):
 
 
 def validate_request(value):
+    from .checkpoints import validate_name
+
     text = str(value.get("text", "")).strip()
     caption = str(value.get("caption", "") or "").strip()
     if not text or len(text) > 2000:
@@ -106,6 +112,7 @@ def validate_request(value):
         "text": text,
         "caption": caption or None,
         "precision": precision,
+        "checkpoint": validate_name(value.get("checkpoint", "official")),
         "seed": secrets.randbelow(2**32) if seed == -1 else seed,
         "seconds": seconds or None,
         "duration_scale": _number(value.get("duration_scale", 1), "長さ倍率", 0.5, 2),
@@ -165,6 +172,7 @@ def verify_result(directory):
     try:
         request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
         result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
+        identity = request.get("checkpoint_identity")
         with wave.open(str(directory / "audio.wav"), "rb") as stream:
             frames, rate = stream.getnframes(), stream.getframerate()
             channels, width = stream.getnchannels(), stream.getsampwidth()
@@ -183,7 +191,10 @@ def verify_result(directory):
             or result.get("seconds") != frames / rate
             or result.get("seed") != request["seed"]
             or result.get("job_id") != directory.name
-            or result.get("model_revision") != MODEL_REVISION
+            or not isinstance(identity, dict)
+            or identity.get("name") != request.get("checkpoint", "official")
+            or result.get("checkpoint_identity") != identity
+            or result.get("model_revision") != (MODEL_REVISION if identity.get("name") == "official" else None)
             or result.get("code_revision") != CODE_REVISION
             or not isinstance(result.get("watermarked"), bool)
         ):

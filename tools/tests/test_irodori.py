@@ -85,10 +85,30 @@ class RequestTests(unittest.TestCase):
 
 
 class ResultTests(unittest.TestCase):
+    def test_custom_checkpoint_records_identity_without_claiming_official_revision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            request = validate_request({"text": "テスト", "seed": 7, "checkpoint": "Voice.safetensors"})
+            request["checkpoint_identity"] = {"name": "Voice.safetensors", "sha256": "a" * 64,
+                                              "format": "int8_weight_only", "size": 10}
+            atomic_json(root / "request.json", request)
+            wav(root / "audio.wav")
+            result = {"job_id": root.name, "sample_rate": 48000, "samples": 4800, "seconds": 0.1,
+                      "seed": 7, "code_revision": CODE_REVISION, "watermarked": False,
+                      "checkpoint_identity": request["checkpoint_identity"], "model_revision": None}
+            atomic_json(root / "result.json", result)
+            self.assertEqual(verify_result(root)["checkpoint_identity"], request["checkpoint_identity"])
+            result["model_revision"] = MODEL_REVISION
+            atomic_json(root / "result.json", result)
+            with self.assertRaises(IrodoriError):
+                verify_result(root)
+
     def test_success_requires_wav_and_matching_result_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             request = validate_request({"text": "テスト", "seed": 7})
+            request["checkpoint_identity"] = {"name": "official", "sha256": "b" * 64,
+                                              "format": "float", "size": 10, "model_revision": MODEL_REVISION}
             atomic_json(root / "request.json", request)
             with self.assertRaises(IrodoriError):
                 verify_result(root)
@@ -101,6 +121,7 @@ class ResultTests(unittest.TestCase):
                     "samples": 4800,
                     "seconds": 0.1,
                     "seed": 7,
+                    "checkpoint_identity": request["checkpoint_identity"],
                     "model_revision": MODEL_REVISION,
                     "code_revision": CODE_REVISION,
                     "watermarked": False,
@@ -124,6 +145,19 @@ class ResultTests(unittest.TestCase):
 
 
 class ServiceTests(unittest.TestCase):
+    def test_start_preserves_identity_fixed_at_ui_selection(self):
+        from modules_forge.irodori.service import Service
+
+        identity = {"name": "Voice.safetensors", "sha256": "a" * 64, "format": "float", "size": 10}
+        service = Service()
+        with (
+            patch("modules_forge.irodori.service.ready", return_value=True),
+            patch("modules_forge.irodori.service.checkpoints.bind", side_effect=ValueError("stop")) as bind,
+            self.assertRaisesRegex(ValueError, "stop"),
+        ):
+            service.start({"text": "文", "checkpoint": "Voice.safetensors", "checkpoint_identity": identity}, [], "owner")
+        self.assertEqual(bind.call_args.args[1]["checkpoint_identity"], identity)
+
     def test_progress_file_cannot_override_server_state(self):
         from modules_forge.irodori.service import Service
 

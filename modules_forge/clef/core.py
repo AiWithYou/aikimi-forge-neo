@@ -51,6 +51,13 @@ PROFILES = {
         "cpu_embeddings": False,
         "min_vram_gib": 20,
     },
+    "clef-bf16": {
+        "label": "Clef BF16 · 大容量GPU",
+        "model": "clef",
+        "precision": "bf16",
+        "cpu_embeddings": False,
+        "min_vram_gib": 56,
+    },
 }
 TEMPLATES = {
     "顔・手の見直し（参考）": {

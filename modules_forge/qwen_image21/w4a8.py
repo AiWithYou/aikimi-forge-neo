@@ -14,6 +14,8 @@ from pathlib import Path
 import torch
 from torch import nn
 
+from .quantized_cache import W4A8_SETTINGS
+
 KITCHEN_VERSION = "0.2.31"
 LAYOUT = "AsymW4A8Int8Layout"
 
@@ -68,11 +70,11 @@ def _pack_weight(weight, device):
         return QuantizedTensor.from_float(
             weight.detach().to(device=device),
             LAYOUT,
-            group_size=16,
-            convrot_groupsize=256,
-            symmetric=True,
-            codebook=True,
-            scale_dtype=torch.float8_e4m3fn,
+            group_size=W4A8_SETTINGS["group_size"],
+            convrot_groupsize=W4A8_SETTINGS["convrot_groupsize"],
+            symmetric=W4A8_SETTINGS["symmetric"],
+            codebook=W4A8_SETTINGS["codebook"],
+            scale_dtype=getattr(torch, W4A8_SETTINGS["scale_dtype"]),
         ).to("cpu")
 
 

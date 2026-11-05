@@ -241,7 +241,7 @@ def _mode_settings_summary(mode, aspect, quality, duration, steps, scheduler, re
 def _mode_chrome(mode, aspect, quality, duration, steps, scheduler, ref_image_size, strength, installing, busy, control_mode, *acceleration_values, orbit_photo=None, runtime_value=""):
     orbit = mode == MODE_ORBIT
     try:
-        acceleration = H3Acceleration.from_values(acceleration_values)
+        acceleration = H3Acceleration.from_values(acceleration_values, mode=mode)
         acceleration_error = ""
     except (TypeError, ValueError, OverflowError) as exc:
         acceleration = H3Acceleration()
@@ -271,7 +271,7 @@ def _custom_settings_for_mode(mode, aspect, quality, duration, steps, seed, sche
     if mode != MODE_ORBIT:
         return _custom_settings_updates(aspect, quality, duration, steps, seed, scheduler, ref_image_size, validation)
     try:
-        acceleration = H3Acceleration.from_values(acceleration_values)
+        acceleration = H3Acceleration.from_values(acceleration_values, mode=mode)
     except (TypeError, ValueError, OverflowError):
         acceleration = H3Acceleration()
     summary = _mode_settings_summary(mode, aspect, quality, duration, steps, scheduler, ref_image_size, strength, acceleration, control_mode)
@@ -703,8 +703,13 @@ def _prompt_music_updates(prompt: str, current_validation: str):
     return _prompt_action_updates(prompt, "music", current_validation)
 
 
+def _runtime_acceleration(values):
+    mode = values[-1] if values and values[-1] in {MODE_TEXT, MODE_KEYFRAMES, MODE_REFERENCES, MODE_ORBIT} else None
+    return H3Acceleration.from_values(values[:-1] if mode else values, mode=mode or MODE_TEXT)
+
+
 def _connect_runtime(runtime_value: str, server_url: str, runtime_profile: str, *acceleration_values) -> str:
-    acceleration = H3Acceleration.from_values(acceleration_values)
+    acceleration = _runtime_acceleration(acceleration_values)
     try:
         root = resolve_runtime_root(_initial_runtime())
         readiness = ensure_ready(
@@ -720,7 +725,7 @@ def _connect_runtime(runtime_value: str, server_url: str, runtime_profile: str, 
 
 
 def _restart_runtime(runtime_value: str, server_url: str, runtime_profile: str, *acceleration_values) -> str:
-    acceleration = H3Acceleration.from_values(acceleration_values)
+    acceleration = _runtime_acceleration(acceleration_values)
     try:
         root = resolve_runtime_root(_initial_runtime())
         readiness = restart_runtime(
@@ -736,7 +741,7 @@ def _restart_runtime(runtime_value: str, server_url: str, runtime_profile: str, 
 
 
 def _rescan_runtime(runtime_value: str, server_url: str, runtime_profile: str, *acceleration_values) -> str:
-    acceleration = H3Acceleration.from_values(acceleration_values)
+    acceleration = _runtime_acceleration(acceleration_values)
     try:
         root = resolve_runtime_root(_initial_runtime())
         return readiness_html(inspect_readiness(root, server_url, acceleration=acceleration), runtime_profile)
@@ -918,6 +923,8 @@ def _history_settings_updates(request, include_acceleration=False):
         message += "周回する写真を再指定してください。"
     if restored_request.control.enabled:
         message += "Fun ControlNetの制御動画も追加してください。"
+    acceleration_updates = [gr.update(value=value) for value in request.acceleration.values()]
+    acceleration_updates[-2 if request.mode == MODE_REFERENCES else -1] = gr.update()
     return (
         gr.update(value=restored_request.mode),
         gr.update(value=restored_request.prompt),
@@ -942,7 +949,7 @@ def _history_settings_updates(request, include_acceleration=False):
         gr.update(value=_preset_state_html(preset)),
         "",
         progress_html("idle", message, 0.0),
-        *([gr.update(value=value) for value in request.acceleration.values()] if include_acceleration else []),
+        *(acceleration_updates if include_acceleration else []),
         *([gr.update(value=request.control.mode), gr.update(value=None), gr.update(value=request.control.strength)] if include_acceleration else []),
     )
 
@@ -1020,7 +1027,7 @@ def _request_from_ui(
         seed=seed_value,
         scheduler=str(scheduler),
         ref_image_size=str(ref_image_size),
-        acceleration=H3Acceleration.from_values(acceleration_values),
+        acceleration=H3Acceleration.from_values(acceleration_values, mode=mode),
         control=H3FunControl(str(control_mode), float(control_strength)),
         control_video=os.fspath(control_video) if control_video else None,
         orbit_strength=float(orbit_strength),
@@ -1318,22 +1325,9 @@ def _restore_history_with_acceleration(selected: str, runtime_value: str):
     return _restore_history_settings(selected, runtime_value, include_acceleration=True)
 
 
-def _checkpoint_acceleration_updates(checkpoint):
-    from modules_forge.studio_checkpoints import h3_variant
-    variant = h3_variant(checkpoint) if checkpoint else None
-    turbo_allowed = not checkpoint or variant == "fused_turbo"
-    return (
-        gr.update(value=variant, interactive=False) if checkpoint else gr.update(interactive=True),
-        gr.update(interactive=turbo_allowed), gr.update(interactive=turbo_allowed),
-    )
-
-
-def _initial_ui_with_acceleration(runtime_value, server_url, runtime_profile, aspect, checkpoint=""):
+def _initial_ui_with_acceleration(runtime_value, server_url, runtime_profile, aspect, checkpoint="", checkpoint_ref=""):
     # Do not permit a Turbo preset before initial readiness can overwrite Steps.
     controls = [gr.update(interactive=True) for _ in range(len(H3Acceleration().values()) + 6)]
-    variant, turbo_four, turbo_eight = _checkpoint_acceleration_updates(checkpoint)
-    controls[0] = variant
-    controls[len(H3Acceleration().values()):len(H3Acceleration().values()) + 2] = [turbo_four, turbo_eight]
     return (*_initial_ui_updates(runtime_value, server_url, runtime_profile, aspect), *controls)
 
 
@@ -1350,28 +1344,25 @@ def _acceleration_pending(*values):
 
 
 def _turbo_preset_updates(steps, aspect, quality, duration, ref_image_size, checkpoint=""):
-    from modules_forge.studio_checkpoints import h3_variant
-    if checkpoint and h3_variant(checkpoint) != "fused_turbo":
-        raise ValueError("選択した本体はTurbo構成ではありません。")
     # Only the explicit button changes Steps; it leaves VAE / Sparse choices alone.
     return (
-        "fused_turbo", steps, "simple",
+        gr.update() if checkpoint else "fused_turbo", steps, "simple",
         settings_summary_html(aspect, quality, duration, steps, "simple", ref_image_size),
         _preset_state_html("custom"),
     )
 
 
-def _turbo_four_updates(aspect, quality, duration, ref_image_size, checkpoint=""):
-    return _turbo_preset_updates(4, aspect, quality, duration, ref_image_size, checkpoint)
+def _turbo_four_updates(aspect, quality, duration, ref_image_size, checkpoint="", checkpoint_ref="", mode="text"):
+    return _turbo_preset_updates(4, aspect, quality, duration, ref_image_size, checkpoint_ref if mode == MODE_REFERENCES else checkpoint)
 
 
-def _turbo_eight_updates(aspect, quality, duration, ref_image_size, checkpoint=""):
-    return _turbo_preset_updates(8, aspect, quality, duration, ref_image_size, checkpoint)
+def _turbo_eight_updates(aspect, quality, duration, ref_image_size, checkpoint="", checkpoint_ref="", mode="text"):
+    return _turbo_preset_updates(8, aspect, quality, duration, ref_image_size, checkpoint_ref if mode == MODE_REFERENCES else checkpoint)
 
 
-def _reset_acceleration_updates(aspect, quality, duration, ref_image_size, checkpoint=""):
+def _reset_acceleration_updates(aspect, quality, duration, ref_image_size, checkpoint="", checkpoint_ref=""):
     return (
-        *H3Acceleration(checkpoint=checkpoint or "").values(), 20, "simple",
+        *H3Acceleration().values()[:-2], checkpoint or "", checkpoint_ref or "", 20, "simple",
         settings_summary_html(aspect, quality, duration, 20, "simple", ref_image_size),
         _preset_state_html("custom"),
     )
@@ -1411,7 +1402,8 @@ def _build_ui():
             )
             from modules_forge.studio_checkpoint_ui import create
             from modules_forge.studio_checkpoints import h3_compatible
-            checkpoint, _ = create("h3", "MiniMax-H3", (), h3_compatible, gradio=gr, details="本体のファイル名にFL2VA / Ref2VAを含めるか、h3_roleメタデータを指定します。共有VAE・テキストエンコーダーは既存フォルダーを使います。")
+            checkpoint, _ = create("h3_fl2va", "MiniMax-H3", (), h3_compatible, gradio=gr, label="FL2VA本体", details="配布元の説明を確認し、用途ごとに本体を指定してください。両用途に対応する本体は両方で選べます。")
+            checkpoint_ref, _ = create("h3_ref2va", "MiniMax-H3", (), h3_compatible, gradio=gr, label="Ref2VA本体")
 
             with gr.Row(elem_classes=["h3-main-grid"]):
                 with gr.Column(scale=6, min_width=420, elem_classes=["h3-compose"]):
@@ -1617,11 +1609,7 @@ def _build_ui():
                         acceleration_controls, acceleration_buttons = create_acceleration_controls(duration)
                         from modules_forge.model_catalog import configure_component
                         configure_component(acceleration_controls[0])
-                        acceleration_controls.append(checkpoint)
-                        from modules_forge.studio_checkpoints import h3_variant
-                        if checkpoint.value:
-                            acceleration_controls[0].value = h3_variant(checkpoint.value)
-                        checkpoint.change(_checkpoint_acceleration_updates, inputs=checkpoint, outputs=[acceleration_controls[0], *acceleration_buttons[:2]], queue=False, show_progress="hidden")
+                        acceleration_controls.extend([checkpoint, checkpoint_ref])
                         with gr.Accordion("Fun ControlNet · Union 1 / 2.0", open=False, elem_id="h3-fun-control"):
                             control_mode = gr.Dropdown(
                                 choices=CONTROL_CHOICES,
@@ -1850,7 +1838,7 @@ def _build_ui():
 
         initialization_event = initialize_trigger.click(
             fn=_initial_ui_with_acceleration,
-            inputs=[runtime_path, server_url, runtime_profile, aspect, checkpoint],
+            inputs=[runtime_path, server_url, runtime_profile, aspect, checkpoint, checkpoint_ref],
             outputs=[
                 runtime_status,
                 runtime_profile,
@@ -1894,9 +1882,9 @@ def _build_ui():
         slot_outputs = [mode_slots, aspect, quality, duration, steps, scheduler, orbit_strength, width, height, orbit_duration]
         chrome_inputs = [mode, *summary_inputs, orbit_strength, orbit_installing, generation_busy, control_mode, orbit_duration, orbit_photo, runtime_path, *acceleration_controls]
         chrome_outputs = [keyframe_group, reference_group, mode_help, ref_image_size, settings_summary, orbit_group, normal_presets, orbit_reset, prompt_template_button, prompt, generate_button, generation_gate, output_note, duration, orbit_duration]
-        acceleration_controls[-8].change(
+        acceleration_controls[-9].change(
             lambda enabled, current_mode: (gr.update(visible=not enabled or current_mode == MODE_ORBIT), gr.update(label="各区間の終了構図" if enabled else "終了フレーム")),
-            inputs=[acceleration_controls[-8], mode], outputs=[settings_summary, last_frame], queue=False, show_progress="hidden",
+            inputs=[acceleration_controls[-9], mode], outputs=[settings_summary, last_frame], queue=False, show_progress="hidden",
         )
         # input fires only for a human mode switch. Programmatic history restores
         # write the target slot directly and cannot trigger a stale slot swap.
@@ -2015,14 +2003,14 @@ def _build_ui():
             concurrency_id="h3-runtime-control", api_visibility="private",
         ).then(
             fn=_rescan_runtime,
-            inputs=[runtime_path, server_url, runtime_profile, *acceleration_controls],
+            inputs=[runtime_path, server_url, runtime_profile, *acceleration_controls, mode],
             outputs=[runtime_status], show_progress="hidden",
             concurrency_id="h3-runtime-control",
         )
 
         connect_button.click(
             fn=_connect_runtime_updates,
-            inputs=[runtime_path, server_url, runtime_profile, *acceleration_controls],
+            inputs=[runtime_path, server_url, runtime_profile, *acceleration_controls, mode],
             outputs=[runtime_status, connect_button, restart_button, rescan_button, runtime_profile],
             show_progress="hidden",
             trigger_mode="once",
@@ -2031,7 +2019,7 @@ def _build_ui():
         )
         restart_button.click(
             fn=_restart_runtime_updates,
-            inputs=[runtime_path, server_url, runtime_profile, *acceleration_controls],
+            inputs=[runtime_path, server_url, runtime_profile, *acceleration_controls, mode],
             outputs=[runtime_status, connect_button, restart_button, rescan_button, runtime_profile],
             show_progress="hidden",
             trigger_mode="once",
@@ -2040,7 +2028,7 @@ def _build_ui():
         )
         rescan_button.click(
             fn=_rescan_runtime_updates,
-            inputs=[runtime_path, server_url, runtime_profile, *acceleration_controls],
+            inputs=[runtime_path, server_url, runtime_profile, *acceleration_controls, mode],
             outputs=[runtime_status, connect_button, restart_button, rescan_button, runtime_profile],
             show_progress="hidden",
             trigger_mode="once",
@@ -2112,9 +2100,9 @@ def _build_ui():
         turbo_inputs = [aspect, quality, duration, ref_image_size]
         turbo_outputs = [acceleration_controls[0], steps, scheduler, settings_summary, preset_state]
         for button, callback in zip(acceleration_buttons[:2], [_turbo_four_updates, _turbo_eight_updates], strict=True):
-            button.click(callback, inputs=[*turbo_inputs, checkpoint], outputs=turbo_outputs, queue=False, show_progress="hidden")
+            button.click(callback, inputs=[*turbo_inputs, checkpoint, checkpoint_ref, mode], outputs=turbo_outputs, queue=False, show_progress="hidden")
         acceleration_buttons[2].click(
-            _reset_acceleration_updates, inputs=[*turbo_inputs, checkpoint],
+            _reset_acceleration_updates, inputs=[*turbo_inputs, checkpoint, checkpoint_ref],
             outputs=[*acceleration_controls, steps, scheduler, settings_summary, preset_state],
             queue=False, show_progress="hidden",
         )

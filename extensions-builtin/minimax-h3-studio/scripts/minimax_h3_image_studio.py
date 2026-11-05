@@ -49,7 +49,9 @@ def _reference_tags(files):
     return f"アップロード順: {tags}" if tags else "参照画像を追加してください。"
 
 
-def _checkpoint_values(values):
+def _checkpoint_values(values, mode="text"):
+    if len(values) == len(H3NegPiP().values()) + 2:
+        return values[:-2], (values[-1] if mode == "references" else values[-2]) or ""
     if len(values) == len(H3NegPiP().values()) + 1:
         return values[:-1], values[-1] or ""
     return values, ""
@@ -58,7 +60,10 @@ def _checkpoint_values(values):
 def _runtime_action(runtime, url, profile, *negpip_values, restart=False):
     bridge = images._bridge()
     try:
-        negpip_values, checkpoint = _checkpoint_values(negpip_values)
+        mode = negpip_values[-1] if negpip_values and negpip_values[-1] in {"text", "references"} else "text"
+        if negpip_values and negpip_values[-1] == mode:
+            negpip_values = negpip_values[:-1]
+        negpip_values, checkpoint = _checkpoint_values(negpip_values, mode)
         root = bridge.resolve_runtime_root(_initial_runtime())
         with bridge._RUNTIME_LIFECYCLE_LOCK:
             action = bridge.restart_runtime if restart else bridge.ensure_ready
@@ -67,7 +72,8 @@ def _runtime_action(runtime, url, profile, *negpip_values, restart=False):
                 url,
                 LOG_DIRECTORY,
                 runtime_profile=profile,
-                acceleration=H3Acceleration(negpip=H3NegPiP.from_values(negpip_values), checkpoint=checkpoint),
+                acceleration=H3Acceleration(negpip=H3NegPiP.from_values(negpip_values), checkpoint=checkpoint,
+                                            checkpoint_mode="Ref2VA" if mode == "references" else "FL2VA"),
             )
             client = bridge.ComfyH3Client(url)
             try:
@@ -88,7 +94,7 @@ def _restart(runtime, url, profile, *negpip_values):
 
 
 def _request(mode, prompt, references, width, height, steps, seed, scheduler, frame, candidates, *negpip_values):
-    negpip_values, checkpoint = _checkpoint_values(negpip_values)
+    negpip_values, checkpoint = _checkpoint_values(negpip_values, mode)
     return images.H3ImageRequest(
         mode=mode,
         prompt=prompt or "",
@@ -223,12 +229,16 @@ def on_ui_tabs():
                 from modules_forge.studio_checkpoints import h3_compatible
 
                 checkpoint, checkpoint_refresh = create(
-                    "h3",
+                    "h3_fl2va",
                     "MiniMax-H3",
                     (),
                     h3_compatible,
                     gradio=gr,
-                    details="FL2VAはテキスト生成、Ref2VAは参照編集用です。役割はファイル名またはh3_roleメタデータで指定します。",
+                    label="FL2VA本体",
+                    details="配布元の説明を確認して用途ごとに選択してください。両用途対応の本体は両方で選べます。",
+                )
+                checkpoint_ref, checkpoint_ref_refresh = create(
+                    "h3_ref2va", "MiniMax-H3", (), h3_compatible, gradio=gr, label="Ref2VA本体",
                 )
                 with gr.Accordion("実行環境とモデル", open=False):
                     runtime = gr.Textbox(value=_initial_runtime(), visible=False, interactive=False)
@@ -333,7 +343,7 @@ def on_ui_tabs():
                     legacy_tab,
                     "h3-image-common",
                     editable=True,
-                    models=[checkpoint_refresh.parent],
+                    models=[checkpoint_refresh.parent, checkpoint_ref_refresh.parent],
                     prompts=[prompt],
                     actions=[generate, cancel, status],
                     settings=[steps, preset, swap_size.parent, seed],
@@ -379,7 +389,7 @@ def on_ui_tabs():
                 for button, callback in ((connect, _runtime_action), (restart, _restart)):
                     button.click(
                         callback,
-                        inputs=[runtime, url, profile, *negpip_controls, checkpoint],
+                        inputs=[runtime, url, profile, *negpip_controls, checkpoint, checkpoint_ref, mode],
                         outputs=runtime_status,
                         concurrency_limit=1,
                         concurrency_id="h3-runtime-control",
@@ -404,6 +414,7 @@ def on_ui_tabs():
                         candidates,
                         *negpip_controls,
                         checkpoint,
+                        checkpoint_ref,
                     ],
                     outputs=[status, result, gallery, files, metadata, job, generate, cancel],
                     concurrency_limit=1,

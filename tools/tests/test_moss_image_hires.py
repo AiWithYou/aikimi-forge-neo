@@ -138,6 +138,7 @@ class HiresContractTests(unittest.TestCase):
                 hires_scale=1.5,
                 hires_steps=12,
                 hires_denoise=0.25,
+                checkpoint_ready=True,
             )
         value = start.call_args.args[0]
         self.assertEqual((value["width"], value["height"]), (1536, 1152))
@@ -158,6 +159,7 @@ class HiresContractTests(unittest.TestCase):
                 mode="img2img",
                 images=[Image.new("RGB", (512, 512))],
                 hires_enabled=True,
+                checkpoint_ready=True,
             )
         self.assertNotIn("hires", start.call_args.args[0], "hidden txt2img controls must not affect img2img")
 

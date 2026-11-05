@@ -40,10 +40,14 @@ def start(
     rope_x=1.0,
     rope_y=1.0,
     image_strength=1.0,
+    checkpoint_identity=None,
+    checkpoint_ready=False,
 ):
     state = dict(state or {})
     if state.get("job"):
         raise gr.Error("生成中です。完了または中断を待ってください。")
+    if checkpoint_ready is not True:
+        raise gr.Error("モデルの確認が完了していません。確認後に実行してください。")
     try:
         request = dict(
             prompt=prompt,
@@ -85,7 +89,14 @@ def start(
                 if any(item["name"] == edit_lora for item in request["loras"]):
                     raise ValueError("編集用LoRAを通常のLoRA欄と重複して選択しないでください。")
                 request["loras"].append({"name": edit_lora, "strength": edit_strength})
-        state["job"] = SERVICE.start(request)
+        if checkpoint != "official":
+            if not isinstance(checkpoint_identity, dict) or checkpoint_identity.get("name") != checkpoint:
+                raise ValueError("モデルの選択・確認が完了していません。選び直してください。")
+            state["job"] = SERVICE.start(request, checkpoint_identity=checkpoint_identity)
+        else:
+            if checkpoint_identity is not None:
+                raise ValueError("モデルの選択・確認が完了していません。選び直してください。")
+            state["job"] = SERVICE.start(request)
     except (ValueError, gpu_fault.GPUFaultError) as exc:
         raise gr.Error(str(exc)) from exc
     return (
@@ -116,22 +127,78 @@ def refresh_edit_loras(name):
     return gr.update(choices=[("選択してください", ""), *choices], value=name if name in choices else "")
 
 
-def refresh_models(name):
+def model_choices(current="official"):
     choices = checkpoints.inventory(MODEL_ROOT)
-    if name not in {value for _, value in choices}:
-        raise gr.Error("選択したモデルが見つからないか、形式を確認できません。モデルを選び直してください。")
-    return gr.update(choices=choices, value=name)
+    if current and current not in {value for _, value in choices}:
+        choices.append((f"{current}（見つからないか形式が不正です）", current))
+    return choices
 
 
-def select_model(name):
+def refresh_models(name):
+    return gr.update(choices=model_choices(name or "official"), value=name or "official")
+
+
+def select_model(name, current_precision):
     if name == "official":
-        return gr.update(interactive=True)
+        return gr.update(
+            choices=[("INT8 ConvRot", "int8"), ("BF16", "bf16")],
+            value="int8" if current_precision == "w4a8" else current_precision,
+            interactive=True,
+        )
     try:
         path = checkpoints.resolve(MODEL_ROOT, name)
-        precision = checkpoints.header_precision(checkpoints.local_assets.read_header(path))
+        precision = checkpoints.precision(path)
     except ValueError as error:
         raise gr.Error(str(error)) from error
-    return gr.update(value=precision, interactive=False)
+    return gr.update(
+        choices=[("INT8 ConvRot", "int8"), ("W4A8", "w4a8"), ("BF16", "bf16")],
+        value=precision, interactive=False,
+    )
+
+
+def bind_model_selection(name, current_precision):
+    if name == "official":
+        local_assets.save_selection("moss_image", {"checkpoint": "official"})
+        return None, select_model(name, current_precision), "", True
+    try:
+        identity = checkpoints.inspect(MODEL_ROOT, name)
+        local_assets.save_selection("moss_image", {"checkpoint": name, "identity": identity})
+        precision = gr.update(
+            choices=[("INT8 ConvRot", "int8"), ("W4A8", "w4a8"), ("BF16", "bf16")],
+            value=identity["precision"], interactive=False,
+        )
+        return identity, precision, "モデルを確認しました。", True
+    except (OSError, ValueError) as error:
+        raise gr.Error(str(error)) from error
+
+
+def restore_model(_current, current_precision):
+    saved = local_assets.selection("moss_image")
+    selected = saved.get("checkpoint") or "official"
+    if not isinstance(selected, str):
+        return gr.update(interactive=True), None, gr.skip(), "モデルを選び直してください。", False
+    choice = gr.update(choices=model_choices(selected), value=selected, interactive=True)
+    if selected == "official":
+        return choice, None, select_model(selected, current_precision), "", True
+    try:
+        expected = saved.get("identity")
+        if not isinstance(expected, dict) or expected.get("name") != selected:
+            raise ValueError("missing identity")
+        actual = checkpoints.inspect(MODEL_ROOT, selected)
+        if actual != expected:
+            raise ValueError("changed identity")
+    except (OSError, ValueError, TypeError, KeyError):
+        return choice, None, gr.skip(), (
+            "選択したモデルが見つからないか変更されました。別のモデルを選んでから、目的のモデルを選び直してください。"
+        ), False
+    return choice, actual, gr.update(
+        choices=[("INT8 ConvRot", "int8"), ("W4A8", "w4a8"), ("BF16", "bf16")],
+        value=actual["precision"], interactive=False,
+    ), "モデルを確認しました。", True
+
+
+def generation_ready(state, checkpoint_ready):
+    return gr.update(interactive=checkpoint_ready is True and not bool((state or {}).get("job")))
 
 
 def edit_controls(method):
@@ -189,13 +256,13 @@ def cfg_controls(cfg):
     )
 
 
-def restore_job(state, saved):
+def restore_job(state, saved, checkpoint_ready=True):
     if (state or {}).get("job") or not isinstance(saved, str) or not saved:
         return (gr.skip(),) * 7
-    return poll({"job": saved})
+    return poll({"job": saved}, checkpoint_ready)
 
 
-def poll(state):
+def poll(state, checkpoint_ready=True):
     state = dict(state or {})
     identifier = state.get("job")
     if not identifier:
@@ -243,7 +310,7 @@ def poll(state):
         message,
         image,
         files,
-        gr.update(interactive=terminal),
+        gr.update(interactive=terminal and checkpoint_ready is True),
         gr.update(interactive=not terminal),
         gr.update(active=not terminal),
     )
@@ -252,13 +319,16 @@ def poll(state):
 def on_ui_tabs():
     from modules_forge.image_workspace import ImageWorkspace
 
+    initial = local_assets.selection("moss_image").get("checkpoint", "official")
+    if not isinstance(initial, str) or not initial:
+        initial = "official"
     with gr.Blocks(analytics_enabled=False) as blocks:
         with gr.Row() as model_controls:
             model = gr.Dropdown(
-                checkpoints.inventory(MODEL_ROOT),
-                value="official",
+                model_choices(initial),
+                value=initial,
                 label="モデル",
-                interactive=True,
+                interactive=False,
                 elem_id="moss-image-model-name",
             )
             model_refresh = gr.Button("モデル一覧を更新", size="sm", scale=0)
@@ -339,7 +409,7 @@ def on_ui_tabs():
                 kv_cache = gr.Checkbox(value=True, label="参照キャッシュ", elem_id="moss-image-kv-cache")
             for component in (images, method, edit_lora):
                 component.do_not_save_to_config = True
-        run = gr.Button("生成", variant="primary")
+        run = gr.Button("生成", variant="primary", interactive=False)
         cancel = gr.Button("中断", interactive=False)
         with gr.Column() as settings:
             with gr.Row():
@@ -386,6 +456,8 @@ def on_ui_tabs():
             badges={"LoRA": loras},
         )
         state = gr.State({})
+        checkpoint_identity = gr.State(None)
+        checkpoint_ready = gr.State(False)
         saved_job = gr.BrowserState(None)
         saved_job.do_not_save_to_config = True
         timer = gr.Timer(0.5, active=False)
@@ -421,14 +493,25 @@ def on_ui_tabs():
                 rope_x,
                 rope_y,
                 image_strength,
+                checkpoint_identity,
+                checkpoint_ready,
             ],
             outputs=[state, status, run, cancel, timer],
             api_visibility="private",
         )
         loras.change(select_loras, inputs=[loras, lora_rows], outputs=lora_rows, queue=False, api_visibility="private")
         lora_refresh.click(refresh_loras, inputs=loras, outputs=loras, queue=False, api_visibility="private")
-        model.change(select_model, inputs=model, outputs=precision, queue=False, api_visibility="private")
-        model_refresh.click(refresh_models, inputs=model, outputs=model, queue=False, api_visibility="private")
+        model.input(
+            bind_model_selection, inputs=[model, precision], outputs=[checkpoint_identity, precision, status, checkpoint_ready],
+            concurrency_id="moss-model-selection", api_visibility="private",
+        )
+        model_refresh.click(
+            refresh_models, inputs=model, outputs=model, concurrency_id="moss-model-selection", api_visibility="private"
+        )
+        blocks.load(
+            restore_model, inputs=[model, precision], outputs=[model, checkpoint_identity, precision, status, checkpoint_ready],
+            concurrency_id="moss-model-selection", api_visibility="private",
+        )
         workspace.tabs.children[0].select(
             lambda: gr.update(visible=True), outputs=hires_group, queue=False, api_visibility="private",
         )
@@ -444,7 +527,7 @@ def on_ui_tabs():
             queue=False, api_visibility="private",
         )
         saved_job.change(
-            restore_job, inputs=[state, saved_job], outputs=[state, status, image, files, run, cancel, timer],
+            restore_job, inputs=[state, saved_job, checkpoint_ready], outputs=[state, status, image, files, run, cancel, timer],
             queue=False, api_visibility="private",
         )
         gr.on(
@@ -481,10 +564,13 @@ def on_ui_tabs():
         )
         timer.tick(
             poll,
-            inputs=state,
+            inputs=[state, checkpoint_ready],
             outputs=[state, status, image, files, run, cancel, timer],
             queue=False,
             api_visibility="private",
+        )
+        checkpoint_ready.change(
+            generation_ready, inputs=[state, checkpoint_ready], outputs=run, queue=False, api_visibility="private"
         )
     return [(blocks, "MOSS Image", "moss_image_studio")]
 

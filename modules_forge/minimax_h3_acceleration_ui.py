@@ -71,8 +71,8 @@ def create_acceleration_controls(duration):
         gr.Markdown("生成・デコードの高速化とCLIP条件の再利用を選べます。まず1つずつ同じSeedで比較してください。標準設定は自動変更しません。")
         model = gr.Dropdown(
             choices=[("標準 · モード別公式INT8モデル", "base"), ("W4A8 · メモリ節約", "w4a8"), ("MATLOWAI Fused Turbo · 派生モデル", "fused_turbo")],
-            value=defaults.model_variant, label="1. 生成モデル", interactive=False,
-            info="W4A8は専用ダウンロードBATで導入できます。既存モデルはそのまま選べます。", elem_id="h3-model-variant",
+            value=defaults.model_variant, label="1. 標準本体の種類", interactive=False,
+            info="用途別に追加本体を選んだ場合はそちらが優先されます。W4A8標準本体は専用BATで導入できます。", elem_id="h3-model-variant",
         )
         with gr.Row():
             turbo4 = gr.Button("Turbo + 4 Stepsを適用", interactive=False, elem_id="h3-turbo-4")

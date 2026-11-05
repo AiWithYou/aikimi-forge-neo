@@ -166,7 +166,7 @@ def record(request):
     ]
 
 
-def validate_tensors(state, key_map, model_state, torch):
+def validate_tensors(state, key_map, model_state, torch, *, model=None):
     groups = pairs(state)
     targets, ranges = set(), []
     for key, value in state.items():
@@ -181,7 +181,21 @@ def validate_tensors(state, key_map, model_state, torch):
         key, narrow = target if isinstance(target, tuple) else (target, None)
         if key not in model_state:
             raise MossImageError(f"LoRAの対象がMOSSモデルにありません: {prefix}")
-        shape = list(model_state[key].shape)
+        weight = model_state[key]
+        logical_shape = getattr(getattr(weight, "_params", None), "orig_shape", None)
+        if logical_shape is None and model is not None and hasattr(model, "get_submodule"):
+            try:
+                module = model.get_submodule(key.rsplit(".", 1)[0])
+            except (AttributeError, KeyError):
+                module = None
+            if module is not None:
+                out_features = getattr(module, "out_features", None)
+                in_features = getattr(module, "in_features", None)
+                if type(out_features) is int and type(in_features) is int:
+                    logical_shape = (out_features, in_features)
+        if logical_shape is None and key.removesuffix(".weight") + ".comfy_quant" in model_state:
+            raise MossImageError("量子化モデルの元の寸法を確認できません。")
+        shape = list(logical_shape if logical_shape is not None else weight.shape)
         if len(shape) != 2:
             raise MossImageError("LoRAはMOSSモデルの線形レイヤーを対象にしてください。")
         start, end = 0, shape[0]
@@ -200,6 +214,16 @@ def validate_tensors(state, key_map, model_state, torch):
             or shape != [up.shape[0], down.shape[1]]
         ):
             raise MossImageError(f"LoRAとMOSSモデルの形状・rankが一致しません: {prefix}")
+        layer = key.removesuffix(".weight")
+        if layer + ".weight_s_rel" in model_state and layer + ".weight_s_channel" in model_state:
+            codebook = model_state.get(layer + ".weight_codebook")
+            if codebook is not None and (
+                not torch.is_tensor(codebook)
+                or codebook.ndim != 1
+                or codebook.numel() != 16
+                or not bool((codebook[1:] >= codebook[:-1]).all())
+            ):
+                raise MossImageError(f"LoRA適用先のW4A8コードブックの順序または形式が不正です: {prefix}")
         if "alpha" in pair:
             alpha = state[pair["alpha"]]
             if alpha.numel() != 1 or not math.isfinite(float(alpha.item())):
@@ -246,7 +270,7 @@ def apply(model, root, request, mapper, torch):
             state = load_file(str(resolve(root, item["name"])), device="cpu")
         except (OSError, SafetensorError) as error:
             raise MossImageError("LoRAのsafetensorsを読み取れません。") from error
-        targets = validate_tensors(state, key_map, model_state, torch)
+        targets = validate_tensors(state, key_map, model_state, torch, model=model.model)
         selected = {prefix: key_map[prefix] for prefix in pairs(state)}
         patches = mapper.load_lora(state, selected)
         if set(patches) != targets:

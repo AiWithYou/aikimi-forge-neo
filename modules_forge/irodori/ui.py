@@ -4,12 +4,14 @@ import gradio as gr
 
 from modules.aikimi_status import studio_status_html
 
+from . import checkpoints
 from .core import IrodoriError, ready
 from .service import SERVICE
 
 FIELDS = (
     "text",
     "caption",
+    "checkpoint",
     "precision",
     "steps",
     "cfg_text",
@@ -29,6 +31,8 @@ def owner(request):
 def submit(
     text,
     caption,
+    checkpoint,
+    selection,
     precision,
     steps,
     cfg_text,
@@ -40,12 +44,65 @@ def submit(
     references,
     request: gr.Request,
 ):
-    values = (text, caption, precision, steps, cfg_text, cfg_caption, cfg_speaker, seed, seconds, duration_scale)
+    values = (text, caption, checkpoint, precision, steps, cfg_text, cfg_caption, cfg_speaker, seed, seconds, duration_scale)
     try:
-        identifier = SERVICE.start(dict(zip(FIELDS, values, strict=True)), references, owner(request))
+        if not checkpoint or not isinstance(selection, dict) or selection.get("name") != checkpoint:
+            raise IrodoriError("モデルを一覧から選び直し、確認が終わってから生成してください。")
+        value = dict(zip(FIELDS, values, strict=True))
+        value["checkpoint_identity"] = selection
+        identifier = SERVICE.start(value, references, owner(request))
         return identifier, "生成中…", assistant_state(identifier, {"status": "running", "error": ""})
     except (IrodoriError, OSError) as exc:
         raise gr.Error(str(exc)) from exc
+
+
+def refresh_models(current, selection=None):
+    options = checkpoints.inventory()
+    valid = current in {value for _, value in options}
+    if valid and selection is not None:
+        try:
+            checkpoints.bind(checkpoints.MODELS, {
+                "checkpoint": current, "precision": "bf16", "checkpoint_identity": selection,
+            })
+        except (OSError, ValueError, TypeError, KeyError):
+            valid = False
+    notice = "選択した本体が変更または削除されました。モデルを選び直してください。"
+    return gr.update(choices=options, value=current if valid else None), gr.update(
+        value=notice, visible=bool(current and not valid),
+    )
+
+
+def select_model(name):
+    if not name:
+        return gr.update(interactive=True), None, gr.update(visible=False)
+    try:
+        identity = checkpoints.bind(checkpoints.MODELS, {"checkpoint": name, "precision": "bf16"})
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise gr.Error(str(exc)) from exc
+    update = gr.update(value="bf16", interactive=False) if identity["format"] != "float" else gr.update(interactive=True)
+    return update, identity, gr.update(visible=False)
+
+
+def restore_model(saved, current):
+    if saved is None:
+        return gr.skip(), gr.skip(), gr.skip()
+    options = checkpoints.inventory()
+    name = saved.get("name") if isinstance(saved, dict) else None
+    if current and current != name:
+        return gr.skip(), gr.skip(), gr.skip()
+    try:
+        if not name or name not in {value for _, value in options}:
+            raise IrodoriError("選択した本体が見つかりません。")
+        identity = checkpoints.bind(checkpoints.MODELS, {
+            "checkpoint": name, "precision": "bf16", "checkpoint_identity": saved,
+        })
+    except (OSError, ValueError, TypeError, KeyError):
+        return (
+            gr.update(choices=options, value=None), gr.update(interactive=True),
+            gr.update(value="前回選択した本体が変更または削除されました。モデルを選び直してください。", visible=True),
+        )
+    precision = gr.update(value="bf16", interactive=False) if identity["format"] != "float" else gr.update(interactive=True)
+    return gr.update(choices=options, value=name), precision, gr.update(visible=False)
 
 
 def choices(request):
@@ -124,12 +181,32 @@ def history(identifier, request: gr.Request):
 def build_ui():
     with gr.Blocks(analytics_enabled=False, elem_id="aikimi-irodori") as tab:
         gr.Markdown("日本語の文章から音声を生成します。声の説明や、使用許可のある参照音声を追加できます。")
-        if not ready():
+        model_options = checkpoints.inventory()
+        official_ready = ready()
+        if not official_ready and not any(ready(checkpoint=value) for _, value in model_options if value != "official"):
             gr.Markdown("初回は **`aikimi-irodori-setup.bat`** を実行してからForge Neoを再起動してください。")
         identifier = gr.State("")
+        # This stable key stores only a model name/hash; the server revalidates both on every use.
+        selection = gr.BrowserState(
+            None, storage_key="irodori-checkpoint-v1", secret="irodori-checkpoint-v1"  # noqa: S106
+        )
         assistant = gr.HTML(visible="hidden", elem_id="irodori-assistant-state")
         with gr.Row():
             with gr.Column():
+                with gr.Row():
+                    checkpoint = gr.Dropdown(
+                        label="モデル", choices=model_options, value=None, interactive=True,
+                        elem_id="irodori-checkpoint",
+                    )
+                    refresh = gr.Button("一覧を更新", size="sm", scale=0)
+                checkpoint.do_not_save_to_config = True
+                model_notice = gr.Markdown(visible=False)
+                gr.Markdown(
+                    "初めて使う場合は、公式または独自本体を選んでください。"
+                    "独自本体は `models/Irodori-TTS/v4-Large/checkpoints/` 直下に置きます。"
+                    "公式v4-Largeのtokenizerとcodecに対応する本体を選んでください。"
+                    "初回選択時は内容の確認に時間がかかります。"
+                )
                 text = gr.Textbox(
                     label="読み上げ文",
                     lines=6,
@@ -168,13 +245,15 @@ def build_ui():
                     generate = gr.Button("生成", variant="primary", elem_id="irodori-generate")
                     stop = gr.Button("中断", elem_id="irodori-cancel")
             with gr.Column():
-                status = gr.Textbox(label="状態", value="読み上げ文を入力してください。", interactive=False)
+                status = gr.Textbox(label="状態", value="モデルを選び、読み上げ文を入力してください。", interactive=False)
                 audio = gr.Audio(label="生成音声", type="filepath", interactive=False, elem_id="irodori-audio")
                 files = gr.File(label="音声と生成条件", file_count="multiple", interactive=False)
                 previous = gr.Dropdown(label="このセッションの履歴", choices=[], value=None)
         inputs = [
             text,
             caption,
+            checkpoint,
+            selection,
             precision,
             steps,
             cfg_text,
@@ -193,6 +272,13 @@ def build_ui():
             concurrency_id="irodori-events",
             **PRIVATE,
         )
+        refresh.click(refresh_models, [checkpoint, selection], [checkpoint, model_notice], **PRIVATE)
+        checkpoint.input(select_model, [checkpoint], [precision, selection, model_notice],
+                         concurrency_limit=1, concurrency_id="irodori-model-selection", **PRIVATE)
+        selection.change(restore_model, [selection, checkpoint], [checkpoint, precision, model_notice],
+                         concurrency_limit=1, concurrency_id="irodori-model-selection", **PRIVATE)
+        tab.load(restore_model, [selection, checkpoint], [checkpoint, precision, model_notice],
+                 concurrency_limit=1, concurrency_id="irodori-model-selection", **PRIVATE)
         stop.click(cancel, [identifier], [status], queue=False, **PRIVATE)
         timer = gr.Timer(0.75)
         timer.tick(

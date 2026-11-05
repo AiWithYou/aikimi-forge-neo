@@ -11,11 +11,12 @@ from modules_forge.model_catalog import checkpoint_roots, choice_labels, discove
 from .bundle import SUPPORT_FILES, bundle_directory, read_bundle
 from .core import PROFILES, RUNTIME, ClefError, canonical_hash, read_source
 
-OFFICIAL = ("flash-int8", "clef-24gb", "flash-bf16")
+OFFICIAL = ("flash-int8", "clef-24gb", "flash-bf16", "clef-bf16")
 OFFICIAL_LABELS = {
     "flash-int8": "公式 · Clef Flash · INT8",
     "clef-24gb": "公式 · Clef · NF4",
     "flash-bf16": "公式 · Clef Flash · BF16",
+    "clef-bf16": "公式 · Clef · BF16",
 }
 DEFAULT_CHECKPOINT = "official:flash-int8"
 
@@ -38,6 +39,9 @@ def checkpoint_manifest(root, profile, checkpoint="", *, verify_hashes=False, ve
             directory = local_assets.local_path(checkpoint, directory=True)
         except ValueError as exc:
             raise ClefError(str(exc)) from exc
+        from .custom_source import custom_manifest
+
+        return custom_manifest(directory, profile)
     reader = read_source if settings["precision"] == "bf16" else read_bundle
     argument = settings["model"] if settings["precision"] == "bf16" else profile
     try:
@@ -62,7 +66,7 @@ def checkpoint_manifest(root, profile, checkpoint="", *, verify_hashes=False, ve
                 or not set(index.values()) <= names
             ):
                 raise ClefError("Clef BF16 の語彙・本体の構成が一致しません。")
-        return directory, manifest
+        return directory, {**manifest, "source": "official"}
     except ClefError:
         raise
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
@@ -107,14 +111,16 @@ def checkpoint_identity(root, profile, checkpoint=""):
     records = [
         {**local_assets.file_identity(directory / item["path"]), "path": item["path"]} for item in manifest["files"]
     ]
-    manifest_name = "release.json" if PROFILES[profile]["precision"] == "bf16" else "complete.json"
-    records.append({**local_assets.file_identity(directory / manifest_name), "path": manifest_name})
+    if manifest.get("source") == "official":
+        manifest_name = "release.json" if PROFILES[profile]["precision"] == "bf16" else "complete.json"
+        records.append({**local_assets.file_identity(directory / manifest_name), "path": manifest_name})
     records.sort(key=lambda item: item["path"])
     return {
         "path": str(directory.resolve()),
         "sha256": canonical_hash(records),
-        "repo": manifest["repo"],
-        "revision": manifest["revision"],
+        "source": manifest.get("source", "official"),
+        "repo": manifest.get("repo"),
+        "revision": manifest.get("revision"),
         "precision": PROFILES[profile]["precision"],
         "files": records,
     }

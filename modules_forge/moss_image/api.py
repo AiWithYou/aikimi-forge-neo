@@ -107,7 +107,7 @@ def public_result(value):
             if "rope" in stage:
                 stage["rope"] = {key: item for key, item in stage["rope"].items() if key in {"scale_x", "scale_y"}}
     if "weight_sources" in result:
-        source_fields = {"repo_id", "revision", "filename", "sha256", "precision"}
+        source_fields = {"repo_id", "revision", "filename", "name", "sha256", "precision"}
         result["weight_sources"] = {
             name: {key: item[key] for key in source_fields if key in item}
             for name, item in result["weight_sources"].items()

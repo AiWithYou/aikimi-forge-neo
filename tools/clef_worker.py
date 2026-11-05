@@ -83,9 +83,12 @@ def resident_run(payload):
         _KEY = None
         begin = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
-        runner = Runner.from_directory(Path(selected["path"]), request["profile"])
+        if selected.get("source") == "custom":
+            runner = Runner.from_directory(Path(selected["path"]), request["profile"], custom=True)
+        else:
+            runner = Runner.from_directory(Path(selected["path"]), request["profile"])
         try:
-            current = checkpoint_identity(Path(payload["root"]), request["profile"], selected["path"])
+            current = checkpoint_identity(Path(payload["root"]), request["profile"], request.get("checkpoint", ""))
             if json.dumps(current, sort_keys=True) != snapshot:
                 raise RuntimeError(
                     "選択したチェックポイントが読み込み中に変更されました。新しい判定を開始してください。"

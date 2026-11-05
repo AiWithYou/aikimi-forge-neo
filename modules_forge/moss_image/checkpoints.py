@@ -1,5 +1,7 @@
 """Managed single-file MOSS checkpoints with exact shapes and bound identities."""
 
+import json
+import struct
 from pathlib import Path
 
 from modules_forge import local_assets
@@ -57,11 +59,22 @@ def expected_shapes():
 def header_precision(header):
     expected = expected_shapes()
     quantized = header.get("layers.0.proj.q.weight", {}).get("dtype") == "I8"
+    first_shape = header.get("layers.0.proj.q.weight", {}).get("shape")
+    first_expected = expected.get("layers.0.proj.q.weight")
+    w4a8 = bool(quantized and first_expected and first_shape == [first_expected[0], first_expected[1] // 2])
     shapes = dict(expected)
     if quantized:
         for key in QUANTIZED_KEYS:
             prefix = key.removesuffix(".weight")
-            shapes[prefix + ".weight_scale"] = (expected[key][0], 1)
+            if w4a8:
+                rows, columns = expected[key]
+                shapes[key] = (rows, columns // 2)
+                shapes[prefix + ".weight_s_rel"] = (rows, columns // 16)
+                shapes[prefix + ".weight_s_channel"] = (rows,)
+                if prefix + ".weight_codebook" in header:
+                    shapes[prefix + ".weight_codebook"] = (16,)
+            else:
+                shapes[prefix + ".weight_scale"] = (expected[key][0], 1)
             shapes[prefix + ".comfy_quant"] = None
     if set(header) - {"__metadata__"} != set(shapes):
         raise MossImageError("MOSS Imageの全対象が揃った本体を指定してください。")
@@ -78,11 +91,47 @@ def header_precision(header):
             allowed = {"U8"}
         elif key in QUANTIZED_KEYS:
             allowed = {"I8"} if quantized else {"BF16"}
-        elif key.endswith(".weight_scale"):
+        elif key.endswith(".weight_s_rel"):
+            allowed = {"F8_E4M3", "F32"}
+        elif key.endswith((".weight_scale", ".weight_s_channel", ".weight_codebook")):
             allowed = {"F32"}
         if not valid or dtype not in allowed:
             raise MossImageError(f"MOSS Image本体の形状または保存形式が一致しません: {key}")
-    return "int8" if quantized else "bf16"
+    return "w4a8" if w4a8 else "int8" if quantized else "bf16"
+
+
+def precision(path):
+    """Check every W4A8 descriptor as well as the architecture header."""
+    header = local_assets.read_header(path)
+    result = header_precision(header)
+    if result != "w4a8":
+        return result
+    if "_quantization_metadata" in header.get("__metadata__", {}):
+        raise MossImageError("旧形式とW4A8の量子化設定を同時に指定できません。")
+    with Path(path).open("rb") as stream:
+        data_start = 8 + struct.unpack("<Q", stream.read(8))[0]
+        for key in QUANTIZED_KEYS:
+            descriptor = header[key.removesuffix(".weight") + ".comfy_quant"]
+            start, end = descriptor["data_offsets"]
+            if end - start != descriptor["shape"][0]:
+                raise MossImageError("W4A8の量子化設定のサイズが不正です。")
+            stream.seek(data_start + start)
+            try:
+                config = json.loads(stream.read(end - start))
+            except (ValueError, UnicodeError) as error:
+                raise MossImageError("W4A8の量子化設定を読み取れません。") from error
+            if (
+                not isinstance(config, dict)
+                or set(config) - {"format", "group_size", "convrot_groupsize", "convrot"}
+                or config.get("format") != "asym_w4a8_int8"
+                or type(config.get("group_size", 16)) is not int
+                or config.get("group_size", 16) != 16
+                or type(config.get("convrot_groupsize", 256)) is not int
+                or config.get("convrot_groupsize", 256) != 256
+                or ("convrot" in config and config["convrot"] is not True)
+            ):
+                raise MossImageError("MOSS Imageで未対応のW4A8量子化設定です。")
+    return result
 
 
 def validate_name(name):
@@ -112,11 +161,11 @@ def resolve(root, name):
 def inspect(root, name):
     path = resolve(root, name)
     before = local_assets.file_version(path)
-    precision = header_precision(local_assets.read_header(path))
-    digest = local_assets._digest(str(path), *before)
+    model_precision = precision(path)
+    digest = local_assets.file_identity(path)["sha256"]
     if before != local_assets.file_version(path):
         raise MossImageError("確認中にモデルが変更されました。再実行してください。")
-    return {"name": name, "precision": precision, "sha256": digest, "size": before[0], "mtime_ns": before[1]}
+    return {"name": name, "precision": model_precision, "sha256": digest, "size": before[0], "mtime_ns": before[1]}
 
 
 def bind(root, request):
@@ -138,8 +187,8 @@ def inventory(root):
     for path in sorted(directory.rglob("*.safetensors"), key=lambda item: str(item).casefold()):
         name = path.relative_to(directory).as_posix()
         try:
-            precision = header_precision(local_assets.read_header(resolve(root, name)))
+            model_precision = precision(resolve(root, name))
         except (OSError, ValueError, TypeError, KeyError):
             continue
-        choices.append((f"{name.removesuffix('.safetensors')} · {precision.upper()}", name))
+        choices.append((f"{name.removesuffix('.safetensors')} · {model_precision.upper()}", name))
     return choices

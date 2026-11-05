@@ -11,6 +11,10 @@ from modules_forge.flux3_klein import core
 
 
 class Flux3RequestTests(unittest.TestCase):
+    def test_custom_full_ft_is_a_managed_checkpoint_request(self):
+        request = core.validate_request({"prompt": "cat", "checkpoint": "my-ft.safetensors", "precision": "bf16"})
+        self.assertEqual(request["checkpoint"], "my-ft.safetensors")
+
     def request(self, **values):
         return core.validate_request({"prompt": " a red balloon ", **values})
 

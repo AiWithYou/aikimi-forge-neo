@@ -315,8 +315,11 @@ def test_real_gradio_layout_and_callback_contract(monkeypatch, tmp_path):
     assert ui.make_request(ui.values_for(request(seed=2**63 - 1))).seed == 2**63 - 1
     assert ui.use_score("K:C\nCDEF", "off")[1] == "full"
     from gradio.helpers import special_args
-    args, *_ = special_args(ui.run, [*ui.values_for(request()), False], request=gr.Request(session_hash="s"))
-    assert len(args) == len(ui.FIELDS) + 2
+    confirmed = {"checkpoint": "", "engine": "official"}
+    args, *_ = special_args(ui.run, [*ui.values_for(request()), False, confirmed], request=gr.Request(session_hash="s"))
+    assert args[-3] is False
+    assert args[-2] == confirmed
+    assert len(args) == len(ui.FIELDS) + 3
     assert isinstance(args[-1], gr.Request)
     values = ui.values_for(request())
     values[ui.FIELDS.index("title")] = None

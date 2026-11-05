@@ -46,6 +46,25 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(result, {"status": "running", "id": "abc", "stage": "text"})
 
+    def test_custom_checkpoint_is_submitted_and_public_provenance_is_returned(self):
+        app = FastAPI()
+        register_api(app)
+        options = SimpleNamespace(cmd_opts=SimpleNamespace(api_auth=None, api_auth_path=None))
+        provenance = {"source": "custom", "name": "sub/ft.safetensors", "size": 12, "sha256": "a" * 64}
+        with (
+            patch.dict(sys.modules, {"modules.shared_cmd_options": options}),
+            patch("modules_forge.flux3_klein.api.SERVICE.start", return_value="job") as start,
+            patch(
+                "modules_forge.flux3_klein.api.SERVICE.poll",
+                return_value={"status": "running", "checkpoint": provenance},
+            ),
+            TestClient(app) as client,
+        ):
+            response = client.post("/sdapi/v1/flux3/jobs", json={"prompt": "fox", "checkpoint": "sub/ft.safetensors"})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(start.call_args.args[0]["checkpoint"], "sub/ft.safetensors")
+            self.assertEqual(client.get("/sdapi/v1/flux3/jobs/job").json()["checkpoint"], provenance)
+
     def test_oversized_numeric_inputs_are_validation_errors(self):
         app = FastAPI()
         register_api(app)

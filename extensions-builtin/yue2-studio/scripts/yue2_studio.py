@@ -9,6 +9,7 @@ import gradio as gr
 
 from modules import script_callbacks
 from modules.paths import data_path, script_path
+from modules_forge import local_assets, model_catalog
 from modules_forge.yue2_studio.core import (
     Request,
     YuE2Error,
@@ -45,40 +46,90 @@ def make_request(values):
     return Request.from_dict(data)
 
 
+def checkpoint_choices(engine, selected=None):
+    from modules_forge.studio_checkpoint_ui import inventory
+
+    return inventory("YuE2", (), lambda path: model_directory_compatible(path, engine),
+                     current=selected or "", folders=True)
+
+
+def checkpoint_confirmation(selected, engine):
+    if not isinstance(selected, str) or engine not in {"official", "cpp"}:
+        raise YuE2Error("モデルとエンジンを選び直してください。")
+    if selected and not model_directory_compatible(local_assets.local_path(selected, directory=True), engine):
+        raise YuE2Error("選択したエンジンに対応するYuE2モデル一式を選んでください。")
+    return {"checkpoint": selected, "engine": engine}
+
+
+def confirm_checkpoint(selected, engine):
+    try:
+        confirmed = checkpoint_confirmation(selected, engine)
+        local_assets.save_selection("yue2", {"checkpoint": selected})
+        return confirmed, ""
+    except (OSError, ValueError, TypeError) as exc:
+        return None, f"モデルを確認できません: {exc}"
+
+
+def restore_checkpoint(engine):
+    selected = local_assets.selection("yue2").get("checkpoint", "")
+    if not isinstance(selected, str) or "\x00" in selected or "://" in selected:
+        selected = None
+    try:
+        confirmed = checkpoint_confirmation(selected, engine)
+        message = ""
+    except (OSError, ValueError, TypeError) as exc:
+        confirmed, message = None, f"保存したモデルを確認できません: {exc}"
+    return (gr.update(choices=checkpoint_choices(engine, selected), value=selected, interactive=True),
+            confirmed, message, *(gr.update(interactive=True) for _ in range(4)))
+
+
+def selection_matches(confirmed, selected, engine):
+    return isinstance(selected, str) and confirmed == {"checkpoint": selected, "engine": engine}
+
+
+def generation_controls(confirmed, selected, engine, busy):
+    ready = busy is False and selection_matches(confirmed, selected, engine)
+    return gr.update(interactive=ready), gr.update(interactive=ready)
+
+
 def run(title, style, lyrics, abc, cot, engine, seed, candidates, steps, max_tokens,
-        memory_gib, offload, fp8, gguf, checkpoint, plan_only, request: gr.Request):
+        memory_gib, offload, fp8, gguf, checkpoint, plan_only, confirmed, request: gr.Request):
     values = [title, style, lyrics, abc, cot, engine, seed, candidates, steps, max_tokens,
               memory_gib, offload, fp8, gguf, checkpoint]
-    return start(values, plan_only, request)
+    return start(values, plan_only, request, confirmed)
 
 
-def start(values, plan_only, request):
+def start(values, plan_only, request, confirmed=None):
     try:
+        if not selection_matches(confirmed, values[FIELDS.index("checkpoint")], values[FIELDS.index("engine")]):
+            raise YuE2Error("モデルの選択・確認が完了していません。")
         identifier = STUDIO.start(make_request(values), owner(request), plan_only)
-        return identifier, "開始しました。", gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True), gr.update(active=True)
+        return identifier, "開始しました。", gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True), gr.update(active=True), True
     except Exception as exc:
-        return gr.update(), str(exc), gr.update(), gr.update(), gr.update(), gr.update()
+        return gr.update(), str(exc), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
 
-def poll(identifier, request: gr.Request):
+def poll(identifier, confirmed, selected, engine, request: gr.Request):
     try:
         if not identifier:
-            return [gr.update()] * 7
+            return [gr.update()] * 8
         state = STUDIO.status(identifier, owner(request))
         text = f"{state['message']}  経過 {state['elapsed']:.0f} 秒"
         done = state["done"]
         choices = STUDIO.history() if done else None
         latest = next((key for _, key in (choices or []) if key.startswith(f"{identifier}/")), None)
-        return (text, gr.update(interactive=done), gr.update(interactive=done), gr.update(interactive=not done),
+        can_start = done and selection_matches(confirmed, selected, engine)
+        return (text, gr.update(interactive=can_start), gr.update(interactive=can_start), gr.update(interactive=not done),
                 gr.update(active=not done),
                 gr.update(choices=choices, value=latest) if done else gr.update(),
-                gr.update(choices=choices, value=None) if done else gr.update())
+                gr.update(choices=choices, value=None) if done else gr.update(), not done)
     except JobNotFound as exc:
         # Another session can start a job before this browser sees its completion.
-        return (str(exc), gr.update(interactive=True), gr.update(interactive=True),
-                gr.update(interactive=False), gr.update(active=False), gr.update(), gr.update())
+        can_start = selection_matches(confirmed, selected, engine)
+        return (str(exc), gr.update(interactive=can_start), gr.update(interactive=can_start),
+                gr.update(interactive=False), gr.update(active=False), gr.update(), gr.update(), False)
     except Exception as exc:
-        return str(exc), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        return str(exc), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
 
 def cancel(identifier, request: gr.Request):
@@ -177,8 +228,12 @@ def check_runtime():
 def on_ui_tabs():
     with gr.Blocks(analytics_enabled=False, elem_id="aikimi-yue2") as tab:
         gr.Markdown("## YuE2 Music\n歌詞から作曲。楽譜を編集して、別のアレンジへ。")
-        from modules_forge.studio_checkpoint_ui import create
-        checkpoint, _ = create("yue2", "YuE2", (), lambda path: model_directory_compatible(path, "official") or model_directory_compatible(path, "cpp"), gradio=gr, folders=True)
+        with gr.Row():
+            checkpoint = model_catalog.configure_component(
+                gr.Dropdown(choices=[], value=None, label="チェックポイント", scale=5, interactive=False)
+            )
+            checkpoint_refresh = gr.Button("一覧を更新", scale=0, min_width=128, interactive=False)
+        model_notice = gr.Markdown("モデルの選択を確認中です。")
         with gr.Accordion("実行環境・利用条件", open=False):
             gr.Markdown(
                 "初回のみリポジトリ直下の **`aikimi-yue2-setup.bat`** を実行します。"
@@ -201,7 +256,7 @@ def on_ui_tabs():
                     abc = gr.Textbox(label="ABC楽譜（空欄なら新しく作曲）", lines=8)
                     score_file = gr.File(label="ABCを読み込む", file_types=[".abc", ".txt"], type="filepath")
                 with gr.Accordion("生成設定", open=False):
-                    engine = gr.Radio([("公式Python", "official"), ("audio.cpp · GGUF", "cpp")], value="official", label="エンジン")
+                    engine = gr.Radio([("公式Python", "official"), ("audio.cpp · GGUF", "cpp")], value="official", label="エンジン", interactive=False)
                     cot = gr.Radio([("メロディ＋コード", "full"), ("メロディ（伴奏は自由）", "melody"), ("楽譜なし", "off")], value="full", label="作曲方式")
                     with gr.Row():
                         seed = gr.Textbox(value="-1", label="Seed（-1: ランダム）")
@@ -215,8 +270,8 @@ def on_ui_tabs():
                         fp8 = gr.Checkbox(value=False, label="実験: FP8 AR（Compute Capability 8.9以上のみ）")
                     gguf = gr.Dropdown([("Q8_0", "q8_0"), ("Q4_0", "q4_0"), ("BF16", "bf16")], value="q8_0", label="導入済みGGUF形式", visible=False)
                 with gr.Row():
-                    generate = gr.Button("曲を生成", variant="primary")
-                    plan = gr.Button("楽譜だけ作る")
+                    generate = gr.Button("曲を生成", variant="primary", interactive=False)
+                    plan = gr.Button("楽譜だけ作る", interactive=False)
                     stop = gr.Button("停止", interactive=False)
                 status = gr.Textbox(value="未実行", label="進行状況", interactive=False, lines=2)
                 assistant = gr.HTML(visible="hidden", elem_id="yue2-assistant-state")
@@ -231,41 +286,58 @@ def on_ui_tabs():
                 with gr.Accordion("この候補の楽譜", open=False):
                     score_result = gr.Textbox(label="生成されたABC", lines=8, interactive=False)
                     edit = gr.Button("この楽譜を編集に使う", size="sm")
-                restore_button = gr.Button("この候補の入力・Seedを復元", size="sm")
+                restore_button = gr.Button("この候補の入力・Seedを復元", size="sm", interactive=False)
                 files = gr.File(label="音声・楽譜・生成条件", file_count="multiple", interactive=False)
                 with gr.Accordion("プロジェクトを読み込む", open=False):
-                    project_file = gr.File(label="project.json", file_types=[".json"], type="filepath")
+                    project_file = gr.File(label="project.json", file_types=[".json"], type="filepath", interactive=False)
                 gr.Markdown("保存先: `outputs/yue2/`。再生成は別の履歴になり、元データを上書きしません。")
         controls = dict(title=title, style=style, lyrics=lyrics, abc=abc, cot=cot, engine=engine,
                         seed=seed, candidates=candidates, steps=steps, max_tokens=max_tokens,
                         memory_gib=memory_gib, offload=offload, fp8=fp8, gguf=gguf, checkpoint=checkpoint)
         ordered = [controls[name] for name in FIELDS]
         job = gr.State("")
+        confirmed = gr.State(None)
+        busy = gr.State(False)
         timer = gr.Timer(1, active=False)
         normal_mode, plan_mode = gr.State(False), gr.State(True)
-        output_controls = [job, status, generate, plan, stop, timer]
+        output_controls = [job, status, generate, plan, stop, timer, busy]
         for button, mode in ((generate, normal_mode), (plan, plan_mode)):
-            button.click(run, inputs=[*ordered, mode], outputs=output_controls,
+            button.click(run, inputs=[*ordered, mode, confirmed], outputs=output_controls,
                          concurrency_limit=1, concurrency_id="aikimi-yue2-submit", trigger_mode="once", **PRIVATE)
         job.change(assistant_status, inputs=job, outputs=assistant, **PRIVATE)
-        timer.tick(poll, inputs=job, outputs=[status, generate, plan, stop, timer, history, comparison], **PRIVATE).then(
+        timer.tick(poll, inputs=[job, confirmed, checkpoint, engine], outputs=[status, generate, plan, stop, timer, history, comparison, busy], **PRIVATE).then(
             assistant_status, inputs=job, outputs=assistant, **PRIVATE,
         )
         stop.click(cancel, inputs=job, outputs=status, queue=False, **PRIVATE)
         history.change(load_result, inputs=history, outputs=[audio, score_result, files, warning], **PRIVATE)
         comparison.change(lambda key: load_result(key)[0], inputs=comparison, outputs=audio_b, **PRIVATE)
         refresh.click(refresh_history, outputs=[history, comparison], **PRIVATE)
-        restore_button.click(restore, inputs=history, outputs=ordered, **PRIVATE)
-        project_file.change(restore_file, inputs=project_file, outputs=ordered, **PRIVATE)
+
+        def refresh_checkpoint_engine(mode, selected):
+            return gr.update(choices=checkpoint_choices(mode, selected), value=selected)
+
+        model_event = {"concurrency_limit": 1, "concurrency_id": "yue2-model-selection", **PRIVATE}
+        restore_button.click(restore, inputs=history, outputs=ordered, **PRIVATE).success(
+            refresh_checkpoint_engine, inputs=[engine, checkpoint], outputs=checkpoint, queue=False, **PRIVATE).success(
+            confirm_checkpoint, inputs=[checkpoint, engine], outputs=[confirmed, model_notice], **model_event)
+        project_file.change(restore_file, inputs=project_file, outputs=ordered, **PRIVATE).success(
+            refresh_checkpoint_engine, inputs=[engine, checkpoint], outputs=checkpoint, queue=False, **PRIVATE).success(
+            confirm_checkpoint, inputs=[checkpoint, engine], outputs=[confirmed, model_notice], **model_event)
         score_file.change(lambda path: read_score(Path(path)) if path else gr.update(), inputs=score_file, outputs=abc, **PRIVATE)
         edit.click(use_score, inputs=[score_result, cot], outputs=[abc, cot], **PRIVATE)
         engine.change(lambda mode: (gr.update(visible=mode == "official"), gr.update(visible=mode == "cpp"), False if mode == "cpp" else gr.update()),
                       inputs=engine, outputs=[native_controls, gguf, fp8], **PRIVATE)
         check.click(check_runtime, outputs=environment, **PRIVATE)
-        def refresh_checkpoint_engine(mode, selected):
-            from modules_forge.studio_checkpoint_ui import inventory
-            return gr.update(choices=inventory("YuE2", (), lambda path: model_directory_compatible(path, mode), current=selected or "", folders=True), value=selected or "")
-        engine.change(refresh_checkpoint_engine, inputs=[engine, checkpoint], outputs=checkpoint, queue=False, **PRIVATE)
+        engine.input(refresh_checkpoint_engine, inputs=[engine, checkpoint], outputs=checkpoint, queue=False, **PRIVATE).success(
+            confirm_checkpoint, inputs=[checkpoint, engine], outputs=[confirmed, model_notice], **model_event)
+        checkpoint_refresh.click(refresh_checkpoint_engine, inputs=[engine, checkpoint], outputs=checkpoint, queue=False, **PRIVATE).success(
+            confirm_checkpoint, inputs=[checkpoint, engine], outputs=[confirmed, model_notice], **model_event)
+        checkpoint.input(confirm_checkpoint, inputs=[checkpoint, engine], outputs=[confirmed, model_notice], **model_event)
+        tab.load(restore_checkpoint, inputs=engine,
+                 outputs=[checkpoint, confirmed, model_notice, engine, checkpoint_refresh, restore_button, project_file],
+                 **model_event)
+        gr.on(triggers=[confirmed.change, checkpoint.change, engine.change, busy.change], fn=generation_controls,
+              inputs=[confirmed, checkpoint, engine, busy], outputs=[generate, plan], queue=False, **PRIVATE)
     return [(tab, "YuE2 Music", "aikimi_yue2_studio")]
 
 

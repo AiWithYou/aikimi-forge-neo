@@ -26,8 +26,8 @@ REVISION = "5ddbc2dbbe95edbbdaf5017c3e934b1d01791697"
 MODEL_BYTES = 155_111_424
 MODEL_SHA256 = "14f13e3effaf3e729fdc0c97680344aa63f473be0c55963f963d718b3db2a4d4"
 MODEL_URL = f"https://huggingface.co/pablodawson/MiniMax-H3-360-Orbit-LoRA/resolve/{REVISION}/{MODEL_NAME}"
-PACK = "Aikimi-MiniMax-H3-Orbit"
-NODE = "MiniMaxH3OrbitLora"
+PACK = "Aikimi-MiniMax-H3-Orbit-v2"
+NODE = "MiniMaxH3OrbitLoraV2"
 BUNDLE = REPO_ROOT / "extensions-builtin/minimax-h3-studio/comfyui_nodes" / PACK
 
 

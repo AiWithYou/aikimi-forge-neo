@@ -1374,6 +1374,53 @@ class WorkerLoaderTests(unittest.TestCase):
         )
         self.assertEqual(Path(calls[1].args[0]).resolve(), (self.job / "text_encoder").resolve())
 
+    def test_local_single_float_int8_uses_staged_folder_but_identity_uses_original(self):
+        from contextlib import nullcontext
+
+        source = self.job / "custom.safetensors"
+        source.write_bytes(b"source")
+        staged = self.job / "transformer"
+        staged.mkdir()
+        request = {"precision": "int8", "memory_mode": "offload", "local_model": str(source),
+                   "local_source": {"transformer": str(source), "format": "float", "identity": {"sha256": "source"}}}
+        with (mock.patch("modules_forge.qwen_image21.single_file.source_guard", return_value=(lambda: None, lambda: None)),
+              mock.patch("modules_forge.qwen_image21.single_file._plan"),
+              mock.patch("modules_forge.qwen_image21.single_file.staged_transformer", return_value=nullcontext(staged)) as convert,
+              mock.patch("modules_forge.qwen_image21.quantized_cache.component_identity",
+                         side_effect=lambda _p, n, p, **_k: {"component": n, "precision": p}) as identities):
+            worker._load_runtime(self.job, request, self.job)
+        convert.assert_called_once()
+        self.assertEqual(Path(self.events[0][2]), staged)
+        self.assertEqual(identities.call_args_list[0].kwargs["source_path"], source)
+        self.assertIn("source_transform", identities.call_args_list[0].kwargs)
+
+    def test_local_single_float_w4a8_uses_staged_folder_but_identity_uses_original(self):
+        from contextlib import nullcontext
+
+        source = self.job / "custom.safetensors"
+        source.write_bytes(b"source")
+        staged = self.job / "transformer"
+        staged.mkdir()
+        request = {"precision": "w4a8", "memory_mode": "offload", "local_model": str(source),
+                   "local_source": {"transformer": str(source), "format": "float", "identity": {"sha256": "source"}}}
+        converter = types.SimpleNamespace(validate_dependency=mock.Mock(),
+            load_model=mock.Mock(side_effect=lambda _folder, name, _factory, **_k: (self.Component(name), {"layers": 2})),
+            load_saved_model=mock.Mock(), save_model=mock.Mock())
+        with (patched_modules({"modules_forge.qwen_image21.w4a8": converter}),
+              mock.patch.object(self.Component, "from_config", create=True),
+              mock.patch.object(self.Component, "config_class", create=True,
+                                new=types.SimpleNamespace(from_pretrained=lambda *_a, **_k: {})),
+              mock.patch("modules_forge.qwen_image21.single_file.source_guard", return_value=(lambda: None, lambda: None)),
+              mock.patch("modules_forge.qwen_image21.single_file._plan"),
+              mock.patch("modules_forge.qwen_image21.single_file.staged_transformer", return_value=nullcontext(staged)) as convert,
+              mock.patch("modules_forge.qwen_image21.quantized_cache.component_identity",
+                         side_effect=lambda _p, n, p, **_k: {"component": n, "precision": p}) as identities):
+            worker._load_runtime(self.job, request, self.job)
+        convert.assert_called_once()
+        self.assertEqual(converter.load_model.call_args_list[0].args[0], staged)
+        self.assertEqual(identities.call_args_list[0].kwargs["source_path"], source)
+        self.assertIn("source_transform", identities.call_args_list[0].kwargs)
+
     def test_turbo_q4_loads_gguf_transformer_and_int8_encoder(self):
         gguf = object()
         with (

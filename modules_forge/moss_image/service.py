@@ -61,7 +61,7 @@ class Service:
         self.jobs = {}
         self._guard = threading.RLock()
 
-    def start(self, value):
+    def start(self, value, *, checkpoint_identity=None):
         from modules_forge.gpu_ownership import GPUOwnership
 
         gpu_fault.STATE.ensure_available()
@@ -70,6 +70,10 @@ class Service:
         except WorkerExited:
             raise gpu_fault.GPUFaultError() from None
         request = validate_request(value)
+        if checkpoint_identity is not None:
+            if request.get("checkpoint", "official") == "official":
+                raise MossImageError("選択したモデルの識別情報が一致しません。選び直してください。")
+            request["checkpoint_identity"] = checkpoint_identity
         checkpoints.bind(self.root, request)
         lora.bind(self.root, request)
         outputs = _managed_path(self.outputs)

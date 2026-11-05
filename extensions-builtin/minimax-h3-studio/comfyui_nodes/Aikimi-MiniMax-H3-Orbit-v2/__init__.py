@@ -26,6 +26,23 @@ def validate_targets(model, pairs):
             layer = model.model.get_submodule(target.removesuffix(".weight"))
         except (AttributeError, KeyError):
             layer = None
+        if getattr(layer, "quant_format", None) == "asym_w4a8_int8":
+            import torch
+            from comfy.quant_ops import QuantizedTensor
+
+            weight = getattr(layer, "weight", None)
+            if not isinstance(weight, QuantizedTensor):
+                raise ValueError(f"Orbit LoRA対象のcodebookを確認できません: {target}")
+            try:
+                codebook = weight.params.codebook
+                if codebook is not None:
+                    if codebook.dtype != torch.float32 or tuple(codebook.shape) != (16,):
+                        raise ValueError("unsupported codebook")
+                    values = codebook.detach().to(device="cpu")
+                    if not torch.isfinite(values).all() or not (values[1:] >= values[:-1]).all():
+                        raise ValueError("invalid codebook")
+            except Exception as exc:
+                raise ValueError(f"Orbit LoRA対象のcodebookを確認できません: {target}") from exc
         in_features, out_features = getattr(layer, "in_features", None), getattr(layer, "out_features", None)
         shape = (
             (out_features, in_features)
@@ -106,5 +123,5 @@ class MiniMaxH3OrbitLora:
         return {"ui": {"orbit_receipt": [receipt]}, "result": (patched,)}
 
 
-NODE_CLASS_MAPPINGS = {"MiniMaxH3OrbitLora": MiniMaxH3OrbitLora}
-NODE_DISPLAY_NAME_MAPPINGS = {"MiniMaxH3OrbitLora": "MiniMax H3 Verified Orbit LoRA"}
+NODE_CLASS_MAPPINGS = {"MiniMaxH3OrbitLoraV2": MiniMaxH3OrbitLora}
+NODE_DISPLAY_NAME_MAPPINGS = {"MiniMaxH3OrbitLoraV2": "MiniMax H3 Verified Orbit LoRA"}

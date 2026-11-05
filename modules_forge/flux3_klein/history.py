@@ -65,7 +65,11 @@ class History:
                 raise Flux3Error("履歴の出力パスが一致しません。")
             request = _json(directory / "request.json")
             validate_request(
-                {key: value for key, value in request.items() if key not in {"reference_sha256", "lora_identity"}}
+                {
+                    key: value
+                    for key, value in request.items()
+                    if key not in {"reference_sha256", "lora_identity", "checkpoint_identity"}
+                }
             )
             result = Service.validate_result(directory)
             return {

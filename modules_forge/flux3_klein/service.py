@@ -12,7 +12,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from . import lora
+from . import checkpoints, lora
 from .core import ROOT, RUNTIME, Flux3Error, atomic_json, model_ready, python_path, validate_request
 from .paths import canonical_path
 
@@ -27,10 +27,13 @@ class Service:
         self.jobs = {}
         self._guard = threading.RLock()
 
-    def start(self, value):
+    def start(self, value, *, checkpoint_identity=None):
         from modules_forge.gpu_ownership import GPUOwnership
 
         request = validate_request(value)
+        if checkpoint_identity is not None:
+            request["checkpoint_identity"] = checkpoint_identity
+        checkpoints.bind(self.root, request)
         lora.bind(self.root, request)
         images = request.get("images", [])
         for image in images:
@@ -90,6 +93,12 @@ class Service:
             raise Flux3Error("生成条件が元の要求と一致しません。")
         if result.get("reference_hashes") != request.get("reference_sha256", []):
             raise Flux3Error("参照画像の生成条件が元の要求と一致しません。")
+        expected_checkpoint = checkpoints.record(request)
+        if request.get("checkpoint") or "checkpoint" in result:
+            if result.get("checkpoint") != expected_checkpoint or result.get(
+                "model_revision"
+            ) != expected_checkpoint.get("revision"):
+                raise Flux3Error("本体の出所が元の要求と一致しません。")
         expected_lora = lora.record(request)
         if result.get("lora") != expected_lora:
             raise Flux3Error("LoRAの生成条件が元の要求と一致しません。")
@@ -120,6 +129,8 @@ class Service:
             raise Flux3Error("PNG内の生成条件を読み取れません。")
         if metadata.get("lora") != expected_lora:
             raise Flux3Error("PNG内のLoRAが保存記録と一致しません。")
+        if (request.get("checkpoint") or "checkpoint" in result) and metadata.get("checkpoint") != expected_checkpoint:
+            raise Flux3Error("PNG内の本体の出所が保存記録と一致しません。")
         if any(result.get(key) != value for key, value in metadata.items()) or any(
             key not in metadata for key in fields
         ):

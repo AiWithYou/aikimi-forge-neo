@@ -193,9 +193,57 @@ def runtime_manifest(root: Path, engine: str, checkpoint: str = "") -> dict:
         if not model_directory_compatible(selected, engine):
             raise YuE2Error("選択したエンジンに対応するYuE2モデル一式を指定してください。")
         entry = dict(entry)
+        entry.pop("model_revision", None)
         entry["model" if engine == "official" else "models"] = str(selected)
         entry["checkpoint_identity"] = local_assets.identity(selected)
+        if engine == "official":
+            verify_weights_manifest(selected, entry["checkpoint_identity"])
     return entry
+
+
+def official_weight_files(path: Path) -> set[str]:
+    """Follow Transformers' single-file or indexed safetensors layouts."""
+    single = path / "model.safetensors"
+    index = path / "model.safetensors.index.json"
+    if index.is_file():
+        if single.is_file():
+            raise YuE2Error("単一重みと分割重みの索引は同時に置けません。")
+        data = read_json(index, limit=32 * 1024 * 1024)
+        mapping = data.get("weight_map") if isinstance(data, dict) else None
+        if not isinstance(mapping, dict) or not mapping or not all(
+            isinstance(key, str) and key and isinstance(name, str) and name
+            and not any(char in name for char in "/\\:") and name.endswith(".safetensors")
+            for key, name in mapping.items()
+        ):
+            raise YuE2Error("YuE2の分割重み索引が不正です。")
+        expected = set(mapping.values())
+    else:
+        expected = {"model.safetensors"}
+    actual = {item.name for item in path.glob("*.safetensors") if item.is_file()}
+    if expected != actual:
+        raise YuE2Error("YuE2の重みが不足しているか、余分なsafetensorsがあります。")
+    return expected
+
+
+def verify_weights_manifest(path: Path, identity: dict) -> None:
+    """Match upstream's optional manifest check using the already hashed source."""
+    manifest = path / "weights_manifest.json"
+    if not manifest.exists():
+        return
+    try:
+        value = read_json(manifest)
+        expected = value.get("files") if isinstance(value, dict) else None
+        actual = {
+            item["path"]: item["sha256"] for item in identity["files"]
+            if "/" not in item["path"] and item["path"].endswith(".safetensors")
+        }
+        if (not isinstance(expected, dict) or set(expected) != set(actual) or any(
+            not isinstance(record, dict) or record.get("sha256") != actual[name]
+            for name, record in expected.items()
+        )):
+            raise ValueError("manifest mismatch")
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise YuE2Error("weights_manifest.jsonの重み名またはSHA-256が本体と一致しません。") from error
 
 
 def model_directory_compatible(path: Path, engine: str) -> bool:
@@ -205,8 +253,11 @@ def model_directory_compatible(path: Path, engine: str) -> bool:
         return any(all(item.is_file() for item in required_cpp_files(path, quant)) for quant in GGUF_MODELS)
     try:
         config = read_json(path / "config.json")
-        return config.get("model_type") == "yue2" and all((path / name).is_file() for name in ("model.safetensors", "qwen.tiktoken", "weights_manifest.json"))
-    except (OSError, ValueError, AttributeError):
+        if config.get("model_type") != "yue2" or not (path / "qwen.tiktoken").is_file() or (path / "pipeline.json").exists():
+            return False
+        official_weight_files(path)
+        return True
+    except (OSError, ValueError, AttributeError, TypeError):
         return False
 
 

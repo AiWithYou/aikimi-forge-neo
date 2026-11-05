@@ -566,7 +566,7 @@ def model_file_status(runtime_root: Path | None, acceleration: H3Acceleration | 
     except ValueError as exc:
         raise H3BridgeError(str(exc)) from exc
     return {
-        name: (Path(acceleration.checkpoint).is_file() if acceleration and acceleration.checkpoint and filename == Path(acceleration.checkpoint).name else (models / directory / filename).is_file())
+        name: (Path(acceleration.checkpoint).is_file() if acceleration and acceleration.checkpoint and name == acceleration.checkpoint_mode else (models / directory / filename).is_file())
         for name, (directory, filename) in files.items()
     }
 
@@ -1684,8 +1684,18 @@ def validate_readiness(
         )
     if acceleration.attention != "dense" and _version_tuple(kitchen) < (0, 2, 33):
         raise H3BridgeError("Sparse Attentionにはcomfy-kitchen 0.2.33以上が必要です。ComfyUIのrequirementsを更新してください。")
-    if acceleration.model_variant == "w4a8" and _version_tuple(kitchen) < (0, 2, 31):
-        raise H3BridgeError("W4A8にはcomfy-kitchen 0.2.31以上が必要です。H3専用環境を更新してください。")
+    if acceleration.storage_variant == "w4a8":
+        if acceleration.checkpoint:
+            from packaging.version import InvalidVersion, Version
+
+            try:
+                kitchen_supported = Version(kitchen) >= Version("0.2.41")
+            except InvalidVersion:
+                kitchen_supported = False
+            if not kitchen_supported:
+                raise H3BridgeError("追加のW4A8本体にはcomfy-kitchen 0.2.41以上が必要です。H3専用環境を更新してください。")
+        elif _version_tuple(kitchen) < (0, 2, 31):
+            raise H3BridgeError("W4A8にはcomfy-kitchen 0.2.31以上が必要です。H3専用環境を更新してください。")
     try:
         acceleration.validate_nodes(readiness.node_schemas)
         if acceleration.hybrid.enabled:
@@ -2364,9 +2374,11 @@ def mirror_result(
     seed: int,
     readiness: RuntimeReadiness,
     *, checkpoint_snapshot: dict | None = None, orbit_snapshot: dict | None = None, orbit_identity: dict | None = None,
+    orbit_model_snapshot: dict | None = None,
 ) -> Path:
     from modules_forge.studio_checkpoints import result_identity, verify_snapshot
     checkpoint_identity = result_identity(request.acceleration.checkpoint, checkpoint_snapshot)
+    verify_snapshot(orbit_model_snapshot)
     if request.mode == MODE_ORBIT and (orbit_snapshot is None or orbit_identity != orbit_assets.applied_identity(orbit_snapshot, request.orbit_strength)):
         raise H3BridgeError("Orbit LoRAの読み込み結果を受付時の実体と照合できません。")
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -2426,6 +2438,7 @@ def mirror_result(
             newline="\n",
         )
         verify_snapshot(checkpoint_snapshot)
+        verify_snapshot(orbit_model_snapshot)
         orbit_assets.verify(orbit_snapshot)
         os.replace(staged_metadata, metadata_path)
         try:
@@ -2485,7 +2498,7 @@ def validate_orbit_runtime(readiness: RuntimeReadiness) -> None:
         ):
             inputs = specs.get(node, {}).get("input", {}).get("required", {})
             if not required <= inputs.keys():
-                raise ValueError("Orbit専用ノードが未導入、または入力仕様が異なります。同梱のAikimi-MiniMax-H3-Orbitを導入してComfyUIを再起動してください。")
+                raise ValueError(f"Orbit専用ノードが未導入、または入力仕様が異なります。同梱の{orbit_assets.PACK}を導入してComfyUIを再起動してください。")
     except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
         raise H3BridgeError(str(exc)) from exc
     finally:
@@ -2568,9 +2581,18 @@ def run_generation(
     runtime_profile: str = RUNTIME_PROFILE_FAST,
     poll_seconds: float | None = None,
 ) -> Iterator[dict[str, Any]]:
-    from modules_forge.studio_checkpoints import snapshot_checkpoint
+    from modules_forge.studio_checkpoints import h3_variant, snapshot_checkpoint, verify_snapshot
     checkpoint_snapshot = snapshot_checkpoint(request.acceleration.checkpoint)
     orbit_snapshot = orbit_assets.snapshot(runtime_root) if request.mode == MODE_ORBIT else None
+    orbit_model_snapshot = None
+    if orbit_snapshot is not None and request.orbit_strength != 0 and request.acceleration.storage_variant == "w4a8":
+        selected = request.acceleration.checkpoint
+        if not selected:
+            directory, filename = request.acceleration.model_files(MODEL_FILES)["FL2VA"]
+            selected = str(model_root(runtime_root) / directory / filename)
+        orbit_model_snapshot = checkpoint_snapshot or snapshot_checkpoint(selected)
+        h3_variant(selected, lora_targets=orbit_snapshot["targets"])
+        verify_snapshot(orbit_model_snapshot)
     ownership = GPUOwnership()
     ownership.engine = "h3"
     waiting_id = str(uuid.uuid4())
@@ -2584,7 +2606,8 @@ def run_generation(
             raise H3GenerationCancelled("生成を停止しました。")
         orbit_assets.verify(orbit_snapshot)
         release_forge_vram()
-        yield from _run_generation(request, runtime_root, server_url, log_directory, output_directory, runtime_profile, poll_seconds, ownership, waiting_id, checkpoint_snapshot, orbit_snapshot)
+        snapshot_options = {"orbit_model_snapshot": orbit_model_snapshot} if orbit_model_snapshot is not None else {}
+        yield from _run_generation(request, runtime_root, server_url, log_directory, output_directory, runtime_profile, poll_seconds, ownership, waiting_id, checkpoint_snapshot, orbit_snapshot, **snapshot_options)
     finally:
         with _ACTIVE_GENERATION_LOCK:
             retained = ownership in _GPU_OWNERSHIPS.values()
@@ -2635,9 +2658,11 @@ def _run_generation(
     submission_id: str,
     checkpoint_snapshot: dict | None = None,
     orbit_snapshot: dict | None = None,
+    orbit_model_snapshot: dict | None = None,
 ) -> Iterator[dict[str, Any]]:
     from modules_forge.studio_checkpoints import result_identity, verify_snapshot
     result_identity(request.acceleration.checkpoint, checkpoint_snapshot)
+    verify_snapshot(orbit_model_snapshot)
     if request.mode == MODE_ORBIT and orbit_snapshot is None:
         raise H3BridgeError("Orbit LoRAの受付時の実体情報がありません。")
     orbit_assets.verify(orbit_snapshot)
@@ -2674,6 +2699,7 @@ def _run_generation(
         workflow = build_workflow(request, prepared, seed=seed, **workflow_options)
         with _RUNTIME_LIFECYCLE_LOCK:
             verify_snapshot(checkpoint_snapshot)
+            verify_snapshot(orbit_model_snapshot)
             orbit_assets.verify(orbit_snapshot)
             readiness = ensure_ready(
                 runtime_root,
@@ -2694,6 +2720,7 @@ def _run_generation(
             if server_process is None:
                 raise H3BridgeError("H3の送信先processを確認できません。")
             verify_snapshot(checkpoint_snapshot)
+            verify_snapshot(orbit_model_snapshot)
             orbit_assets.verify(orbit_snapshot)
             pending_jobs.write({
                 "version": 1, "prompt_id": submission_id,
@@ -2788,7 +2815,10 @@ def _run_generation(
                 else:  # pragma: no cover - loop either breaks or raises
                     raise H3BridgeError(f"完成済みH3ジョブの結果を取得できません: {history_error}")
                 verify_snapshot(checkpoint_snapshot)
+                verify_snapshot(orbit_model_snapshot)
                 snapshot_options = {"checkpoint_snapshot": checkpoint_snapshot} if checkpoint_snapshot is not None else {}
+                if orbit_model_snapshot is not None:
+                    snapshot_options["orbit_model_snapshot"] = orbit_model_snapshot
                 if orbit_snapshot is not None:
                     try:
                         orbit_identity = orbit_assets.receipt_identity(history, prompt_id, orbit_snapshot, request.orbit_strength)

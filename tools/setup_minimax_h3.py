@@ -170,7 +170,9 @@ class RuntimeInstaller:
         return result
 
     def bootstrap(self) -> Path:
-        spec = ArtifactSpec(**self.data["uv"])
+        from tools.uv_bootstrap import versioned_uv_spec
+
+        spec = versioned_uv_spec(ArtifactSpec(**self.data["uv"]))
         profile = ProfileSpec("uv", "uv", (spec,), (spec.license_url,), spec.size)
         Installer(self.base, {"uv": profile}).install("uv", dry_run=False, keep_source=True)
         with zipfile.ZipFile(self.base / spec.relative_path) as archive:

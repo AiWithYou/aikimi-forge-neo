@@ -102,51 +102,42 @@ class H3AccelerationUITests(unittest.TestCase):
         for name, steps in (("_turbo_four_updates", 4), ("_turbo_eight_updates", 8)):
             index, fn = self.callback(name)
             self.assertEqual([item.elem_id for item in fn.outputs][:3], ["h3-model-variant", "h3-steps", "h3-scheduler"])
-            result = asyncio.run(self.demo.process_api(index, ["16:9", "native", 10.0, "match", ""]))
+            result = asyncio.run(self.demo.process_api(index, ["16:9", "native", 10.0, "match", "", "", "text"]))
             data = result["data"]
             self.assertEqual(data[:3], ["fused_turbo", steps, "simple"])
             self.assertIn(f"{steps} steps", data[3])
             self.assertEqual(len(data), 5)
 
-    def test_saved_custom_w4a8_stays_derived_after_initialization(self):
+    def test_saved_custom_selection_keeps_model_recipe_independent(self):
         self.assertTrue(self.by_id["h3-model-variant"].do_not_save_to_config)
-        _, synchronize = self.callback("_checkpoint_acceleration_updates")
-        self.assertEqual(synchronize.inputs[0].label, "チェックポイント")
-        self.assertEqual(synchronize.outputs[0], self.by_id["h3-model-variant"])
-        with patch.object(self.ui, "_initial_ui_updates", return_value=tuple(range(21))), patch("modules_forge.studio_checkpoints.h3_variant", return_value="w4a8"):
-            result = self.ui._initial_ui_with_acceleration("", "http://127.0.0.1:8188", "fast", "16:9", "custom.safetensors")
-            self.assertEqual(result[21]["value"], "w4a8")
-            self.assertFalse(result[21]["interactive"])
-            self.assertFalse(result[21 + CONTROL_COUNT]["interactive"])
-            self.assertFalse(result[22 + CONTROL_COUNT]["interactive"])
-            updates = self.ui._checkpoint_acceleration_updates("custom.safetensors")
-            self.assertEqual(updates[0]["value"], "w4a8")
-            self.assertFalse(updates[0]["interactive"])
+        with patch.object(self.ui, "_initial_ui_updates", return_value=tuple(range(21))):
+            result = self.ui._initial_ui_with_acceleration("", "http://127.0.0.1:8188", "fast", "16:9", "custom.safetensors", "ref.safetensors")
+            self.assertTrue(result[21]["interactive"])
+            self.assertTrue(result[21 + CONTROL_COUNT]["interactive"])
+            self.assertTrue(result[22 + CONTROL_COUNT]["interactive"])
 
-    def test_custom_base_rejects_turbo_preset(self):
-        with patch("modules_forge.studio_checkpoints.h3_variant", return_value="base"):
-            with self.assertRaisesRegex(ValueError, "Turbo"):
-                self.ui._turbo_four_updates("16:9", "native", 10.0, "match", "custom.safetensors")
-            updates = self.ui._checkpoint_acceleration_updates("custom.safetensors")
-            self.assertFalse(updates[1]["interactive"])
-            self.assertFalse(updates[2]["interactive"])
+    def test_custom_checkpoint_turbo_preset_changes_only_steps_and_scheduler(self):
+        result = self.ui._turbo_four_updates("16:9", "native", 10.0, "match", "custom.safetensors")
+        self.assertEqual(result[0], self.ui.gr.update())
+        self.assertEqual(result[1:3], (4, "simple"))
 
     def test_standard_reset_clears_every_acceleration_and_restores_twenty_steps(self):
         index, fn = self.callback("_reset_acceleration_updates")
-        result = asyncio.run(self.demo.process_api(index, ["9:16", "preview", 5.0, "match", ""]))
+        result = asyncio.run(self.demo.process_api(index, ["9:16", "preview", 5.0, "match", "", ""]))
         data = result["data"]
         self.assertEqual(tuple(data[:CONTROL_COUNT]), H3Acceleration().values())
         self.assertEqual(data[CONTROL_COUNT:CONTROL_COUNT + 2], [20, "simple"])
         self.assertEqual(len(fn.outputs), CONTROL_COUNT + 4)
 
     def test_runtime_and_generation_consume_the_same_controls(self):
-        for name, count in (("_generate_ui", 23 + CONTROL_COUNT), ("_connect_runtime_updates", 3 + CONTROL_COUNT), ("_restart_runtime_updates", 3 + CONTROL_COUNT), ("_rescan_runtime_updates", 3 + CONTROL_COUNT)):
+        for name, count in (("_generate_ui", 23 + CONTROL_COUNT), ("_connect_runtime_updates", 4 + CONTROL_COUNT), ("_restart_runtime_updates", 4 + CONTROL_COUNT), ("_rescan_runtime_updates", 4 + CONTROL_COUNT)):
             _, fn = self.callback(name)
             self.assertEqual(len(fn.inputs), count)
-            self.assertEqual(fn.inputs[-CONTROL_COUNT:], self.callback("_generate_ui")[1].inputs[-CONTROL_COUNT:])
-            self.assertEqual(fn.inputs[-CONTROL_COUNT + 8].elem_id, "h3-negpip-enabled")
-            self.assertEqual(fn.inputs[-CONTROL_COUNT + 8 + len(H3NegPiP().values())].elem_id, "h3-clip-cache")
-            self.assertEqual([item.elem_id for item in fn.inputs][-CONTROL_COUNT:-CONTROL_COUNT + 8], ["h3-model-variant", "h3-video-vae", "h3-decode-mode", "h3-tile-batch", "h3-attention-mode", "h3-sparse-tau", "h3-sparse-keep", "h3-sparse-start"])
+            controls = fn.inputs[-CONTROL_COUNT:] if name == "_generate_ui" else fn.inputs[-CONTROL_COUNT-1:-1]
+            self.assertEqual(controls, self.callback("_generate_ui")[1].inputs[-CONTROL_COUNT:])
+            self.assertEqual(controls[8].elem_id, "h3-negpip-enabled")
+            self.assertEqual(controls[8 + len(H3NegPiP().values())].elem_id, "h3-clip-cache")
+            self.assertEqual([item.elem_id for item in controls[:8]], ["h3-model-variant", "h3-video-vae", "h3-decode-mode", "h3-tile-batch", "h3-attention-mode", "h3-sparse-tau", "h3-sparse-keep", "h3-sparse-start"])
         args = ["text", "test", None, None, None, None, None, "16:9", "preview", 5, 4, 42, "simple", "match", "off", None, 1.0]
         chosen = H3Acceleration("fused_turbo", "int8", "fast", 2, "sla")
         request = self.ui._request_from_ui(*args, *chosen.values())
@@ -160,7 +151,9 @@ class H3AccelerationUITests(unittest.TestCase):
             result = self.ui._restore_history_with_acceleration("id", "")
         self.assertEqual(len(result), 25 + CONTROL_COUNT)
         self.assertTrue(all(value["value"] is None for value in result[2:7]))
-        self.assertEqual(tuple(value["value"] for value in result[22:22 + CONTROL_COUNT]), chosen.values())
+        self.assertEqual(tuple(value["value"] for value in result[22:22 + CONTROL_COUNT - 2]), chosen.values()[:-2])
+        self.assertNotIn("value", result[22 + CONTROL_COUNT - 2])
+        self.assertEqual(result[22 + CONTROL_COUNT - 1]["value"], "")
         self.assertIn("custom", result[19]["value"])
         failure = self.ui._restore_history_with_acceleration("", "")
         self.assertEqual(len(failure), 25 + CONTROL_COUNT)

@@ -1,11 +1,15 @@
 """Installer and isolated dependency provenance contracts without downloads."""
 
+import ast
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
 from modules_forge import qwen_image21_environment as environment
 from modules_forge.qwen_image21.core import DIFFUSERS_REVISION, MODEL_REVISION, QwenImage21Error, atomic_json
@@ -40,10 +44,102 @@ class QwenSetupTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Diffusers"):
             environment._validate(records)
 
+    def test_pinned_runtime_is_accepted_and_old_direct_dependencies_are_rejected(self):
+        records = self.distributions()
+        next(item for item in records if item.metadata["Name"] == "Pillow").version = "13.0.0"
+        environment._validate(records)
+        for name, old in (("Pillow", "12.3.0"), ("setuptools", "83.0.0"), ("certifi", "2026.7.22"), ("gguf", "0.18.0")):
+            with self.subTest(name=name):
+                records = self.distributions()
+                next(item for item in records if item.metadata["Name"] == name).version = old
+                with self.assertRaisesRegex(RuntimeError, name):
+                    environment._validate(records)
+
     def test_installer_and_runtime_use_the_same_pins(self):
         self.assertEqual(setup.MODEL_REVISION, MODEL_REVISION)
         self.assertEqual(setup.DIFFUSERS_REVISION, DIFFUSERS_REVISION)
         self.assertEqual(environment.DIFFUSERS_REVISION, DIFFUSERS_REVISION)
+
+    def test_direct_installation_pins_match_every_runtime_version_check(self):
+        pins, urls = {}, {}
+        lines = setup.REQUIREMENTS.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(lines.count("./vendor/accelerate"), 1)
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#") or line == "./vendor/accelerate":
+                continue
+            requirement = Requirement(line)
+            name = canonicalize_name(requirement.name)
+            self.assertNotIn(name, pins)
+            self.assertNotIn(name, urls)
+            self.assertIsNone(requirement.marker)
+            if requirement.url:
+                urls[name] = requirement.url
+                continue
+            versions = list(requirement.specifier)
+            self.assertEqual(len(versions), 1, line)
+            self.assertEqual(versions[0].operator, "==", line)
+            self.assertNotIn("*", versions[0].version, line)
+            pins[name] = versions[0].version
+
+        checked = {
+            canonicalize_name(name): version for name, version in environment.VERSIONS.items() if name != "accelerate"
+        }
+        self.assertEqual(pins, checked)
+        self.assertEqual(
+            urls, {"diffusers": f"git+https://github.com/huggingface/diffusers.git@{DIFFUSERS_REVISION}"}
+        )
+        vendor = setup.ROOT / "vendor/accelerate"
+        setup_tree = ast.parse((vendor / "setup.py").read_text(encoding="utf-8"))
+        setup_calls = [
+            node for node in ast.walk(setup_tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "setup"
+        ]
+        self.assertEqual(len(setup_calls), 1)
+        setup_versions = [item.value for item in setup_calls[0].keywords if item.arg == "version"]
+        init_tree = ast.parse((vendor / "src/accelerate/__init__.py").read_text(encoding="utf-8"))
+        init_versions = [
+            node.value for node in init_tree.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets)
+        ]
+        self.assertEqual(len(setup_versions), 1)
+        self.assertEqual(len(init_versions), 1)
+        for value in (*setup_versions, *init_versions):
+            self.assertEqual(ast.literal_eval(value), environment.VERSIONS["accelerate"])
+        installed = [FakeDistribution(name, version) for name, version in pins.items()]
+        installed.extend([
+            FakeDistribution("accelerate", "1.15.0+aikimi.1"),
+            FakeDistribution("diffusers", "0.41.0.dev0", DIFFUSERS_REVISION),
+        ])
+        environment._validate(installed)
+
+    def test_environment_status_reads_installed_metadata_without_importing_model_libraries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worker = root / "worker-env"
+            if environment.os.name == "nt":
+                python, site = worker / "Scripts/python.exe", worker / "Lib/site-packages"
+            else:
+                python, site = worker / "bin/python", worker / "lib/python3.13/site-packages"
+            python.parent.mkdir(parents=True)
+            python.touch()
+            for name, version in {**environment.VERSIONS, "diffusers": "0.41.0.dev0"}.items():
+                distribution = site / f"{name.replace('-', '_')}-{version}.dist-info"
+                distribution.mkdir(parents=True)
+                (distribution / "METADATA").write_text(
+                    f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n", encoding="utf-8"
+                )
+                if name == "diffusers":
+                    (distribution / "direct_url.json").write_text(
+                        json.dumps({"vcs_info": {"commit_id": DIFFUSERS_REVISION}}), encoding="utf-8"
+                    )
+            self.assertTrue(environment.environment_status(root)[0])
+            pillow = site / "Pillow-13.0.0.dist-info/METADATA"
+            pillow.write_text("Metadata-Version: 2.1\nName: Pillow\nVersion: 12.3.0\n", encoding="utf-8")
+            ready, message = environment.environment_status(root)
+            self.assertFalse(ready)
+            self.assertIn("Pillow==13.0.0", message)
 
     def test_dry_run_creates_no_environment_or_files(self):
         with tempfile.TemporaryDirectory() as directory:

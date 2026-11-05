@@ -10,6 +10,7 @@ import time
 import uuid
 from pathlib import Path
 
+from . import checkpoints
 from .core import (
     MODELS,
     ROOT,
@@ -34,7 +35,7 @@ class Service:
         self.worker = worker or ResidentWorker("irodori", ROOT / "cache/irodori-worker")
         self.jobs = {}
         self.guard = threading.Lock()
-        self._precision = None
+        self._model_key = None
 
     @staticmethod
     def new_job(owner, directory):
@@ -53,7 +54,7 @@ class Service:
         while True:
             try:
                 self.worker.close()
-                self._precision = None
+                self._model_key = None
                 return
             except Exception:
                 logging.getLogger(__name__).warning("Irodori workerの終了確認を再試行します", exc_info=True)
@@ -63,10 +64,17 @@ class Service:
         from modules_forge.gpu_ownership import GPUOwnership
 
         request = validate_request(value)
+        selected_identity = value.get("checkpoint_identity")
+        if selected_identity is not None:
+            if not isinstance(selected_identity, dict):
+                raise IrodoriError("選択した本体の記録が不正です。")
+            request["checkpoint_identity"] = selected_identity
         if not owner:
             raise IrodoriError("ブラウザーを再読み込みしてから生成してください。")
-        if not ready(self.root, self.models):
+        if not ready(self.root, self.models, checkpoint=request["checkpoint"]):
             raise IrodoriError("aikimi-irodori-setup.batで実行環境とモデルを準備してください。")
+        checkpoints.bind(self.models, request, runtime=self.root)
+        checkpoints.verify_components(self.models, runtime=self.root)
         with self.guard:
             if any(x["status"] in {"running", "stopping"} for x in self.jobs.values()):
                 raise IrodoriError("Irodori TTSは実行中です。終了を待ってください。")
@@ -102,8 +110,13 @@ class Service:
         status, registered = "error", False
         try:
             release_forge_vram()
-            precision = json.loads((directory / "request.json").read_text(encoding="utf-8"))["precision"]
-            if self._precision is not None and self._precision != precision:
+            request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
+            identity = request.get("checkpoint_identity")
+            if identity is not None:
+                checkpoints.bind(self.models, request, runtime=self.root)
+                checkpoints.verify_components(self.models, runtime=self.root)
+            model_key = (request["precision"], request.get("checkpoint", "official"), (identity or {}).get("sha256"))
+            if self._model_key is not None and self._model_key != model_key:
                 self.close_safely()
             environment = child_environment(offline=True)
             gpu_residency.register("irodori", self.close_safely, "irodori")
@@ -115,12 +128,15 @@ class Service:
                 {"root": str(self.root), "models": str(self.models), "job_dir": str(directory)},
                 directory / "run.log",
             )
-            self._precision = precision
+            self._model_key = model_key
             while not job["cancel"].is_set():
                 response = self.worker.result()
                 if response is not None:
                     if not response.get("ok"):
                         raise IrodoriError(response.get("error", "音声生成に失敗しました。"))
+                    if identity is not None:
+                        checkpoints.bind(self.models, request, runtime=self.root)
+                        checkpoints.verify_components(self.models, runtime=self.root)
                     verify_result(directory)
                     status = "complete"
                     break

@@ -146,12 +146,13 @@ def prepare_runtime(root=MODEL_ROOT):
     prepare_comfy_checkout(paths["comfy"], command, git)
     (base / ".runtime.json").unlink(missing_ok=True)
     from tools.aikimi_setup import ArtifactSpec, Installer, ProfileSpec
+    from tools.uv_bootstrap import versioned_uv_spec
 
-    uv_spec = ArtifactSpec(**manifest()["uv"])
+    uv_spec = versioned_uv_spec(ArtifactSpec(**manifest()["uv"]))
     profile = ProfileSpec("uv", "MOSS package installer", (uv_spec,), (uv_spec.license_url,), uv_spec.size)
     Installer(base, {"uv": profile}).install("uv", dry_run=False, keep_source=True)
     executable = target_path(base, "bootstrap/uv.exe")
-    with zipfile.ZipFile(target_path(base, "bootstrap/uv.whl")) as archive:
+    with zipfile.ZipFile(target_path(base, uv_spec.relative_path)) as archive:
         members = [name for name in archive.namelist() if name.endswith("/uv.exe")]
         if len(members) != 1:
             raise MossImageSetupError("固定版uvの構成が一致しません。")

@@ -29,13 +29,13 @@ class Flux3SetupError(core.Flux3Error):
     """Setup failed without exposing network credentials or raw hub errors."""
 
 
-def download_plan(*, model="distilled", precision="int8", with_pup=False) -> list[dict]:
-    if type(with_pup) is not bool:
+def download_plan(*, model="distilled", precision="int8", with_pup=False, components_only=False) -> list[dict]:
+    if type(with_pup) is not bool or type(components_only) is not bool:
         raise Flux3SetupError("PUPの導入指定はtrueまたはfalseです。")
     return [
         dict(spec)
         for name, spec in core.model_specs({"model": model, "precision": precision}).items()
-        if with_pup or name not in {"pup", "pup_prompts"}
+        if (with_pup or name not in {"pup", "pup_prompts"}) and (not components_only or name != "dit")
     ]
 
 
@@ -211,9 +211,13 @@ def prepare_runtime(root: Path = core.RUNTIME, *, report=print, verify=True) -> 
         raise Flux3SetupError("FLUX 3のセットアップはPython 3.13から実行してください。")
     if _worker_running(root):
         raise Flux3SetupError("FLUX 3のworkerが起動中です。生成を停止し、モデルを解放してから導入してください。")
+    from tools.aikimi_setup import ArtifactSpec, Installer, ProfileSpec
+    from tools.uv_bootstrap import versioned_uv_spec
+
+    spec = versioned_uv_spec(ArtifactSpec(**core.manifest()["uv"]))
     runtime = core.comfy_path(root)
     repository = root.parent.parent.resolve()
-    for relative in ("worker-env", "bootstrap/uv.exe", "bootstrap/uv.whl", ".runtime.json"):
+    for relative in ("worker-env", "bootstrap/uv.exe", spec.relative_path, ".runtime.json"):
         _target(root, relative)
     _target(repository, "repositories/flux3-klein/ComfyUI")
     runtime.parent.mkdir(parents=True, exist_ok=True)
@@ -242,13 +246,10 @@ def prepare_runtime(root: Path = core.RUNTIME, *, report=print, verify=True) -> 
     report("FLUX 3専用の固定版ComfyUIを確認しています。")
     prepare_comfy_checkout(runtime, command, git)
     (root / ".runtime.json").unlink(missing_ok=True)
-    from tools.aikimi_setup import ArtifactSpec, Installer, ProfileSpec
-
-    spec = ArtifactSpec(**core.manifest()["uv"])
     profile = ProfileSpec("uv", "FLUX 3 package installer", (spec,), (spec.license_url,), spec.size)
     Installer(root, {"uv": profile}).install("uv", dry_run=False, keep_source=True)
     executable = root / "bootstrap/uv.exe"
-    with zipfile.ZipFile(root / "bootstrap/uv.whl") as archive:
+    with zipfile.ZipFile(_target(root, spec.relative_path)) as archive:
         members = [name for name in archive.namelist() if name.endswith("/uv.exe")]
         if len(members) != 1:
             raise Flux3SetupError("固定版uvの構成が一致しません。")
@@ -320,10 +321,13 @@ def run(
     dry_run=False,
     root=core.RUNTIME,
     runtime_only=False,
+    components_only=False,
     report=print,
 ) -> dict:
     root = Path(root)
-    plan = download_plan(model=model, precision=precision, with_pup=with_pup)
+    if runtime_only and components_only:
+        raise Flux3SetupError("runtime-onlyとcomponents-onlyは同時に指定できません。")
+    plan = download_plan(model=model, precision=precision, with_pup=with_pup, components_only=components_only)
     if dry_run:
         return {
             "dry_run": True,
@@ -341,10 +345,12 @@ def run(
         prepare_runtime(root, report=report)
         ready = runtime_ready(root)
         models = core.model_ready(root, {"model": model, "precision": precision, "pup": with_pup})
+        components = core.components_ready(root, {"model": model, "precision": precision, "pup": with_pup})
         return {
-            "ok": bool(ready and (runtime_only or models)),
+            "ok": bool(ready and (runtime_only or (components if components_only else models))),
             "runtime_ready": ready,
             "model_ready": models,
+            "components_ready": components,
             "model": model,
             "precision": precision,
             "comfy_revision": core.COMFY_REVISION,
@@ -360,7 +366,9 @@ def main(argv=None) -> int:
     pup.add_argument("--without-pup", dest="with_pup", action="store_false", help="PUPを取得せず導入します。")
     parser.set_defaults(with_pup=False)
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--runtime-only", action="store_true", help="重みを取得せず専用実行環境だけを準備します。")
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument("--runtime-only", action="store_true", help="重みを取得せず専用実行環境だけを準備します。")
+    scope.add_argument("--components-only", action="store_true", help="公式生成本体を除く共通部品を準備します。")
     args = parser.parse_args(argv)
     try:
         result = run(**vars(args))

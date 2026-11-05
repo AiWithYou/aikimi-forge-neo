@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from modules_forge.irodori import checkpoints  # noqa: E402
 from modules_forge.irodori.core import (  # noqa: E402
     CODE_REVISION,
     CODEC_REVISION,
@@ -50,6 +51,22 @@ def local_watermark(directory):
         silentcipher.get_model = original
 
 
+@contextmanager
+def local_tokenizer(upstream, directory):
+    original = upstream._resolve_tokenizer_source
+
+    def resolve(_checkpoint, repository):
+        if repository != "google/t5gemma-2-1b-1b":
+            raise ValueError("公式tokenizerと異なる本体には対応していません。")
+        return str(directory), True
+
+    upstream._resolve_tokenizer_source = resolve
+    try:
+        yield
+    finally:
+        upstream._resolve_tokenizer_source = original
+
+
 def check_token_lengths(runtime, request):
     for text, tokenizer, limit, label in (
         (request["text"], runtime.tokenizer, runtime.default_text_max_len, "読み上げ文"),
@@ -67,11 +84,20 @@ def resident_run(payload):
 
     source = Path(payload["root"]) / "source"
     sys.path.insert(0, str(source))
-    from irodori_tts.inference_runtime import InferenceRuntime, RuntimeKey, SamplingRequest, save_wav
+    import irodori_tts.inference_runtime as upstream
+
+    InferenceRuntime, RuntimeKey = upstream.InferenceRuntime, upstream.RuntimeKey
+    SamplingRequest, save_wav = upstream.SamplingRequest, upstream.save_wav
 
     directory, models = Path(payload["job_dir"]), Path(payload["models"])
     original = json.loads((directory / "request.json").read_text(encoding="utf-8"))
     request = validate_request(original)
+    if not isinstance(original.get("checkpoint_identity"), dict):
+        raise ValueError("選択した本体の記録がありません。")
+    request["checkpoint_identity"] = original["checkpoint_identity"]
+    identity = checkpoints.bind(models, request, runtime=payload["root"])
+    checkpoints.verify_components(models, runtime=payload["root"])
+    checkpoint_path = checkpoints.resolve(models, request["checkpoint"])
     references = original.get("references", [])
     paths = []
     for record in references:
@@ -81,20 +107,24 @@ def resident_run(payload):
         paths.append(str(path))
     if request["precision"] == "bf16" and not torch.cuda.is_bf16_supported():
         raise ValueError("このGPUはBF16に対応していません。FP32を選んでください。")
+    if identity["format"] == "int4_weight_only" or identity["format"].startswith("float8_"):
+        checkpoints.ensure_gpu_compatibility(identity["format"], torch.cuda.get_device_capability())
     started = time.monotonic()
-    with local_watermark(models / "watermark"):
-        runtime = cached_runtime(
-            RuntimeKey(
-                checkpoint=str(models / "v4-Large/model.safetensors"),
-                model_device="cuda",
-                codec_repo=str(models / "codec/weights.pth"),
-                model_precision=request["precision"],
-                codec_device="cuda",
-                codec_precision="fp32",
-                compile_model=False,
-            ),
-            InferenceRuntime.from_key,
+    with local_watermark(models / "watermark"), local_tokenizer(upstream, models / "v4-Large/tokenizer"):
+        key = RuntimeKey(
+            checkpoint=str(checkpoint_path),
+            model_device="cuda",
+            codec_repo=str(models / "codec/weights.pth"),
+            model_precision=request["precision"],
+            codec_device="cuda",
+            codec_precision="fp32",
+            compile_model=False,
         )
+        runtime = cached_runtime(
+            (key, identity["sha256"]),
+            lambda value: InferenceRuntime.from_key(value[0]),
+        )
+    checkpoints.bind(models, request, runtime=payload["root"])
     check_token_lengths(runtime, request)
     sampling = SamplingRequest(
         text=request["text"],
@@ -112,6 +142,8 @@ def resident_run(payload):
     )
     result = runtime.synthesize(sampling, log_fn=None)
     torch.cuda.synchronize()
+    checkpoints.bind(models, request, runtime=payload["root"])
+    checkpoints.verify_components(models, runtime=payload["root"])
     samples = result.audio.detach().float().cpu().numpy().squeeze()
     if samples.ndim != 1 or len(samples) == 0 or not np.isfinite(samples).all() or not np.any(samples):
         raise ValueError("音声が空、無音、または不正な値を含んでいます。")
@@ -135,7 +167,8 @@ def resident_run(payload):
             "sample_rate": result.sample_rate,
             "samples": len(samples),
             "seconds": len(samples) / result.sample_rate,
-            "model_revision": MODEL_REVISION,
+            "model_revision": MODEL_REVISION if request["checkpoint"] == "official" else None,
+            "checkpoint_identity": identity,
             "code_revision": CODE_REVISION,
             "codec_revision": CODEC_REVISION,
             "watermarked": bool(runtime.watermarker.ready),

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image, PngImagePlugin
 
-from . import conditioning, lora
+from . import checkpoints, conditioning, lora
 from .paths import canonical_path
 
 
@@ -140,6 +140,7 @@ class Runner:
         if boxes:
             conditioning.to_canvas(boxes)
         paths = model_paths(self.root, request)
+        checkpoints.bind(self.root, request)
         selected_lora = lora.bind(self.root, request)
         images, references = [], []
         for index, path in enumerate(request.get("images") or []):
@@ -193,6 +194,7 @@ class Runner:
                     ref_latents.append(runtime.encode_reference(vae, image))
                 runtime.offload()
             progress("loading_model")
+            checkpoints.bind(self.root, request)
             model = runtime.load_dit(paths["dit"], model_kind)
             if selected_lora and request.get("lora_strength", 1.0):
                 progress("loading_lora")
@@ -233,11 +235,14 @@ class Runner:
             from . import core
 
             lora.bind(self.root, request)
+            checkpoints.bind(self.root, request)
+            checkpoint_record = checkpoints.record(request)
 
             record = {
                 "model": model_kind,
                 "precision": request.get("precision", "int8"),
-                "model_revision": core.MODEL_REVISION,
+                "model_revision": checkpoint_record.get("revision"),
+                "checkpoint": checkpoint_record,
                 "comfy_revision": core.COMFY_REVISION,
                 "input_prompt": prompt,
                 "prompt": caption,
@@ -309,8 +314,14 @@ class ComfyRuntime:
             folder_paths.add_model_folder_path(category, str(self.root / category), is_default=True)
 
     def ensure_precision(self, precision):
-        if precision not in ("int8", "bf16", "nvfp4"):
+        if precision not in ("int8", "bf16", "nvfp4", "w4a8"):
             raise ValueError("unsupported FLUX 3 precision")
+        if precision == "w4a8" and (
+            getattr(self.torch.version, "hip", None)
+            or not self.torch.cuda.is_available()
+            or self.torch.cuda.get_device_capability()[0] < 8
+        ):
+            raise ValueError("W4A8 inference requires an NVIDIA Ampere or newer GPU")
         if precision == "nvfp4":
             if (
                 getattr(self.torch.version, "hip", None)
@@ -401,7 +412,7 @@ class ComfyRuntime:
         return latent.cpu()
 
     def load_dit(self, path, model):
-        loaded = self.nodes.NODE_CLASS_MAPPINGS["UNETLoader"]().load_unet(Path(path).name, "default")[0]
+        loaded = self.sd.load_diffusion_model(str(path), model_options={})
         actual = loaded.model.diffusion_model
         if actual.__class__.__module__ != "comfy.ldm.flux3.model" or actual.flow_map != (model == "distilled"):
             raise ValueError("Comfy loaded a different diffusion architecture")
@@ -444,7 +455,7 @@ class ComfyRuntime:
         state, _metadata = self.utils.load_torch_file(str(path), return_metadata=True)
         mapper = importlib.import_module("comfy.lora")
         key_map = mapper.model_lora_keys_unet(model.model, {})
-        count = lora.validate_tensors(state, key_map, model.model.state_dict(), self.torch)
+        count = lora.validate_tensors(state, key_map, model.model.state_dict(), self.torch, model=model.model)
         targets = {key_map[prefix] for prefix in lora.pairs(state)}
         patches = mapper.load_lora(state, key_map)
         if len(targets) != count or set(patches) != targets:

@@ -127,6 +127,23 @@ class ServiceTests(unittest.TestCase):
                     service.start({"prompt": "a fox"})
             ownership.assert_not_called()
 
+    def test_changed_selected_checkpoint_is_rejected_before_gpu_acquisition(self):
+        from modules_forge.moss_image import checkpoints
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "checkpoints/custom.safetensors"
+            path.parent.mkdir()
+            path.write_bytes(b"first")
+            service = Service(root)
+            with patch.object(checkpoints, "precision", return_value="bf16"):
+                identity = checkpoints.inspect(root, path.name)
+                path.write_bytes(b"other")
+                with patch("modules_forge.gpu_ownership.GPUOwnership") as ownership:
+                    with self.assertRaisesRegex(ValueError, "変更"):
+                        service.start({"prompt": "cat", "checkpoint": path.name, "precision": "bf16"}, checkpoint_identity=identity)
+                    ownership.assert_not_called()
+
     def test_redirected_output_ancestor_is_rejected_before_gpu(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

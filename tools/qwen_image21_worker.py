@@ -390,6 +390,17 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         from modules_forge.qwen_image21.local_source import validate_folder_tensors
 
         validate_folder_tensors(selected_transformer, QwenImage21Transformer2DModel)
+    single_float = (
+        local and selected_transformer.is_file() and selected_transformer.suffix.lower() == ".safetensors"
+        and (request.get("local_source") or {}).get("format") == "float" and precision in {"int8", "w4a8"}
+    )
+    if single_float:
+        from modules_forge.qwen_image21.single_file import RECIPE, _plan, source_guard, staged_transformer
+
+        source_identity = request["local_source"]["identity"]
+        check_source, verify_source = source_guard(selected_transformer, source_identity, check_cancel=lambda: _check_cancel(job))
+        single_plan = _plan(selected_transformer, QwenImage21Transformer2DModel)
+        check_source()
     cache_base = runtime_root(model_path, request) / "model" if local else model_path
     counts: dict[str, int] = {}
     w4a8_stats: dict[str, dict] = {}
@@ -401,6 +412,16 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
         component_identity,
         load_or_create,
     )
+
+    def cache_source(name, folder):
+        if official and name == "transformer":
+            return official_source
+        if local and (name == "transformer" or model_path != cache_base):
+            result = {"source_path": folder}
+            if single_float and name == "transformer":
+                result.update(source_transform=RECIPE, check_cancel=check_source)
+            return result
+        return {}
 
     if precision in {"int8", "base_q4_k_m", "turbo_q4_k_m"}:
         loaders = [
@@ -426,20 +447,14 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
                 name,
                 "int8",
                 skip_modules=INT8_SKIP_MODULES if name == "transformer" else (),
-                **(
-                    official_source
-                    if official and name == "transformer"
-                    else {"source_path": selected_transformer if name == "transformer" else model_path / name}
-                    if local and (name == "transformer" or model_path != cache_base)
-                    else {}
-                ),
+                **cache_source(name, selected_transformer if name == "transformer" else model_path / name),
             )
 
-            def load_int8(folder, *, cached=False, model_class=model_class, name=name, quantization=quantization):
+            def load_int8(folder, *, cached=False, converted=False, model_class=model_class, name=name, quantization=quantization):
                 loaded = model_class.from_pretrained(
                     str(
                         folder
-                        if cached
+                        if cached or converted
                         else selected_transformer
                         if (local or official) and name == "transformer"
                         else folder
@@ -465,16 +480,24 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
                 loaded.to("cpu")
                 return loaded
 
+            def create_int8(name=name, model_class=model_class):
+                if single_float and name == "transformer":
+                    with staged_transformer(selected_transformer, model_class, root, source_identity,
+                                            check_cancel=check_source, plan=single_plan) as folder:
+                        return load_int8(folder, converted=True)
+                return load_int8(model_path)
+
             component, disk_cache[name] = load_or_create(
                 cache_base,
                 identity,
                 lambda path: load_int8(path, cached=True),
-                lambda: load_int8(model_path),
+                create_int8,
                 lambda model, path: model.save_pretrained(path, safe_serialization=True, max_shard_size="2GB"),
-                check_cancel=lambda: _check_cancel(job),
+                check_cancel=check_source if single_float and name == "transformer" else lambda: _check_cancel(job),
                 progress=lambda message, stage_end=0.17 if name == "transformer" else 0.27: _progress(
                     job, "loading", message, stage_end
                 ),
+                **({"verify_source": verify_source} if single_float and name == "transformer" else {}),
             )
             components[name] = component
             torch.cuda.empty_cache()
@@ -518,7 +541,11 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
             _progress(job, "loading", f"{name} の W4A8 モデルを確認中", component_progress)
             folder = selected_transformer if (local or official) and name == "transformer" else model_path / name
             if name == "transformer":
-                config = model_class.load_config(str(folder), local_files_only=True)
+                if single_float:
+                    from modules_forge.qwen_image21.local_source import TRANSFORMER_CONFIG
+                    config = TRANSFORMER_CONFIG
+                else:
+                    config = model_class.load_config(str(folder), local_files_only=True)
                 factory = partial(model_class.from_config, config)
             else:
                 config = model_class.config_class.from_pretrained(str(folder), local_files_only=True)
@@ -539,24 +566,27 @@ def _load_runtime(model_path: Path, request: dict[str, Any], job: Path) -> dict[
                 model_path,
                 name,
                 "w4a8",
-                **(
-                    official_source
-                    if official and name == "transformer"
-                    else {"source_path": folder}
-                    if local and (name == "transformer" or model_path != cache_base)
-                    else {}
-                ),
+                **cache_source(name, folder),
             )
+
+            def create_w4a8(name=name, model_class=model_class, folder=folder, factory=factory):
+                if single_float and name == "transformer":
+                    with staged_transformer(selected_transformer, model_class, root, source_identity,
+                                            check_cancel=check_source, plan=single_plan) as staged:
+                        return load_model(staged, name, factory, progress=packing_progress)
+                return load_model(folder, name, factory, progress=packing_progress)
+
             saved, disk_cache[name] = load_or_create(
                 cache_base,
                 identity,
                 partial(load_saved_model, component=name, factory=factory, check_cancel=lambda: _check_cancel(job)),
-                partial(load_model, folder, name, factory, progress=packing_progress),
+                create_w4a8,
                 lambda result, path: save_model(result[0], path, result[1], check_cancel=lambda: _check_cancel(job)),
-                check_cancel=lambda: _check_cancel(job),
+                check_cancel=check_source if single_float and name == "transformer" else lambda: _check_cancel(job),
                 progress=lambda message, stage_end=component_progress + 0.10: _progress(
                     job, "loading", message, stage_end
                 ),
+                **({"verify_source": verify_source} if single_float and name == "transformer" else {}),
             )
             component, w4a8_stats[name] = saved
             components[name] = component

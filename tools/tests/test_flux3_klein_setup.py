@@ -12,6 +12,27 @@ from tools import setup_flux3_klein as setup
 
 
 class Flux3SetupTests(unittest.TestCase):
+    def test_components_only_omits_diffusion_model(self):
+        plan = setup.download_plan(precision="bf16", components_only=True)
+        self.assertEqual(len(plan), 2)
+        self.assertFalse(any(entry["path"].startswith("diffusion_models/") for entry in plan))
+
+    def test_components_only_succeeds_without_official_diffusion_model(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with (
+                patch.object(setup, "prepare_runtime"),
+                patch.object(setup, "runtime_ready", return_value=True),
+                patch.object(setup.core, "model_ready", return_value=False),
+                patch.object(setup.core, "components_ready", return_value=True),
+                patch.object(setup, "download_asset") as download,
+            ):
+                result = setup.run(components_only=True, root=Path(temporary), report=lambda *_: None)
+            self.assertTrue(result["ok"])
+            self.assertTrue(result["components_ready"])
+            self.assertFalse(result["model_ready"])
+            self.assertEqual(download.call_count, 2)
+            self.assertFalse(any("diffusion_models/" in call.args[1]["path"] for call in download.call_args_list))
+
     def test_cli_defaults_skip_pup_and_allow_explicit_opt_in(self):
         with patch.object(setup, "run", return_value={"ok": True}) as run, redirect_stdout(io.StringIO()):
             self.assertEqual(setup.main([]), 0)

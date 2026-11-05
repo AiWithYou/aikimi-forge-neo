@@ -17,6 +17,18 @@ from modules_forge.moss_image.api import public_result, register_api
 
 
 class ApiTests(unittest.TestCase):
+    def test_custom_checkpoint_identity_is_public_without_local_paths(self):
+        result = public_result({
+            "status": "running",
+            "weight_sources": {
+                "dit": {"name": "styles/custom-w4a8.safetensors", "sha256": "a" * 64,
+                        "precision": "w4a8", "path": "H:/private/custom.safetensors"},
+            },
+        })
+        self.assertEqual(result["weight_sources"]["dit"], {
+            "name": "styles/custom-w4a8.safetensors", "sha256": "a" * 64, "precision": "w4a8",
+        })
+
     def test_reference_uploads_are_decoded_and_paths_are_rejected_before_dispatch(self):
         app = FastAPI()
         register_api(app)

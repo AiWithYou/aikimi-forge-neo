@@ -50,16 +50,34 @@ class MossRopeTests(unittest.TestCase):
 
     def test_ui_passes_both_axes_without_changing_dimensions_or_hires(self):
         screen = ui_tests.UITests().load_screen()
+        with patch.object(screen.local_assets, "selection", return_value={"checkpoint": "official"}):
+            restored = screen.restore_model("official", "int8")
+        self.assertEqual(restored[0]["value"], "official")
+        self.assertIsNone(restored[1])
+        self.assertIs(restored[-1], True)
         with patch.object(screen.SERVICE, "start", return_value="job") as start:
+            with self.assertRaises(screen.gr.Error):
+                screen.start({}, "cat", "", 1024, 768, 8, 3, 5, 7, False, checkpoint_ready=False)
+            start.assert_not_called()
             screen.start({}, "cat", "", 1024, 768, 8, 3, 5, 7, False, rope_x=.75, rope_y=.5,
-                         hires_enabled=True, hires_scale=1.5)
+                         hires_enabled=True, hires_scale=1.5, checkpoint=restored[0]["value"],
+                         checkpoint_identity=restored[1], checkpoint_ready=restored[-1])
+        start.assert_called_once()
+        self.assertFalse(start.call_args.kwargs)
         request = start.call_args.args[0]
         self.assertEqual(request["rope"], {"scale_x": .75, "scale_y": .5})
         self.assertEqual((request["width"], request["height"]), (1536, 1152))
+        self.assertEqual((request["hires"]["base_width"], request["hires"]["base_height"]), (1024, 768))
         blocks = screen.on_ui_tabs()[0][0]
         self.addCleanup(blocks.close)
         ids = {component.elem_id for component in blocks.blocks.values()}
         self.assertTrue({"moss-image-rope-x", "moss-image-rope-y"} <= ids)
+        generation = next(event for event in blocks.fns.values() if event.fn is screen.start)
+        restore = next(event for event in blocks.fns.values() if event.fn is screen.restore_model)
+        self.assertEqual([component.elem_id for component in generation.inputs[-5:-3]],
+                         ["moss-image-rope-x", "moss-image-rope-y"])
+        self.assertIs(generation.inputs[-2], restore.outputs[1])
+        self.assertIs(generation.inputs[-1], restore.outputs[-1])
 
     def test_reference_positions_use_new_rope_axes_and_keep_reference_identity(self):
         import torch

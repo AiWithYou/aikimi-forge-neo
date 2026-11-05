@@ -276,6 +276,149 @@ class LoraTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.lora().apply(original, root, {"loras": [{"name": path.name, "strength": 1}]}, mapping, torch)
 
+    def test_packed_w4a8_uses_original_linear_dimensions_for_narrow_lora(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = adapter(root / "loras/query.safetensors")
+            original = Patcher()
+            fused = "diffusion_model.layers.0.proj.qkv.weight"
+            original.model = SimpleNamespace(
+                state_dict=lambda: {fused: torch.zeros(9, 1, dtype=torch.int8)},
+                get_submodule=lambda name: SimpleNamespace(in_features=2, out_features=9),
+            )
+            mapping = mapper()
+            target = (fused, (0, 3, 3))
+            mapping.model_lora_keys_unet.return_value = {"diffusion_model." + PREFIX: target}
+            patched, count = self.lora().apply(
+                original, root, {"loras": [{"name": path.name, "strength": 1}]}, mapping, torch
+            )
+            self.assertEqual(count, 1)
+            self.assertEqual(set(patched.calls[0][0]), {target})
+
+    def test_w4a8_unsorted_target_codebook_is_rejected_before_any_patch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = adapter(root / "loras/query.safetensors")
+            for fused in (False, True):
+                with self.subTest(fused=fused):
+                    key = "diffusion_model.layers.0.proj.qkv.weight" if fused else TARGET
+                    rows = 9 if fused else 3
+                    target = (key, (0, 3, 3)) if fused else key
+                    codebook = torch.arange(16, dtype=torch.float32)
+                    codebook[4], codebook[5] = 5, 4
+                    original_codebook = codebook.clone()
+                    original = Patcher()
+                    original.clone = Mock(side_effect=AssertionError("must reject before cloning"))
+                    state = {
+                        key: torch.zeros(rows, 1, dtype=torch.int8),
+                        key.removesuffix(".weight") + ".comfy_quant": torch.zeros(5, dtype=torch.uint8),
+                        key.removesuffix(".weight") + ".weight_s_rel": torch.zeros(rows, 1),
+                        key.removesuffix(".weight") + ".weight_s_channel": torch.zeros(rows),
+                        key.removesuffix(".weight") + ".weight_codebook": codebook,
+                    }
+                    original.model = SimpleNamespace(
+                        state_dict=Mock(return_value=state),
+                        get_submodule=lambda name, rows=rows: SimpleNamespace(in_features=2, out_features=rows),
+                    )
+                    mapping = mapper()
+                    mapping.model_lora_keys_unet.return_value = {"diffusion_model." + PREFIX: target}
+                    with self.assertRaisesRegex(ValueError, "コードブック"):
+                        self.lora().apply(
+                            original, root, {"loras": [{"name": path.name, "strength": 1}]}, mapping, torch
+                        )
+                    mapping.load_lora.assert_not_called()
+                    original.clone.assert_not_called()
+                    self.assertTrue(torch.equal(codebook, original_codebook))
+
+    def test_w4a8_permits_sorted_duplicate_zero_or_omitted_codebooks(self):
+        codebooks = (
+            None,
+            torch.zeros(16),
+            torch.tensor([-3.0, -1.0, -1.0, -0.5, -0.25, 0.0, 0.0, 0.1,
+                          0.2, 0.4, 0.7, 0.9, 1.1, 2.0, 4.0, 9.0]),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = adapter(root / "loras/query.safetensors")
+            for codebook in codebooks:
+                with self.subTest(codebook=codebook):
+                    prefix = TARGET.removesuffix(".weight")
+                    state = {
+                        TARGET: torch.zeros(3, 1, dtype=torch.int8),
+                        prefix + ".comfy_quant": torch.zeros(5, dtype=torch.uint8),
+                        prefix + ".weight_s_rel": torch.zeros(3, 1),
+                        prefix + ".weight_s_channel": torch.zeros(3),
+                        "diffusion_model.layers.1.proj.q.weight": torch.zeros(3, 1, dtype=torch.int8),
+                        "diffusion_model.layers.1.proj.q.comfy_quant": torch.zeros(5, dtype=torch.uint8),
+                        "diffusion_model.layers.1.proj.q.weight_s_rel": torch.zeros(3, 1),
+                        "diffusion_model.layers.1.proj.q.weight_s_channel": torch.zeros(3),
+                        "diffusion_model.layers.1.proj.q.weight_codebook": torch.arange(15, -1, -1).float(),
+                    }
+                    if codebook is not None:
+                        state[prefix + ".weight_codebook"] = codebook
+                    original = Patcher()
+                    original.model = SimpleNamespace(
+                        state_dict=Mock(return_value=state),
+                        get_submodule=lambda name: SimpleNamespace(in_features=2, out_features=3),
+                    )
+                    patched, count = self.lora().apply(
+                        original, root, {"loras": [{"name": path.name, "strength": 1}]}, mapper(), torch
+                    )
+                    self.assertIsNot(patched, original)
+                    self.assertEqual(count, 1)
+
+    def test_non_w4a8_target_does_not_check_unrelated_codebook(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = adapter(root / "loras/query.safetensors")
+            original = Patcher()
+            original.model = SimpleNamespace(state_dict=lambda: {
+                TARGET: torch.zeros(3, 2),
+                TARGET.removesuffix(".weight") + ".weight_codebook": torch.arange(15, -1, -1).float(),
+            })
+            patched, count = self.lora().apply(
+                original, root, {"loras": [{"name": path.name, "strength": 1}]}, mapper(), torch
+            )
+            self.assertIsNot(patched, original)
+            self.assertEqual(count, 1)
+
+    def test_w4a8_nonmonotonic_codebook_is_ignored_when_no_lora_is_active(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = adapter(root / "loras/query.safetensors")
+            original = Patcher()
+            original.model = SimpleNamespace(state_dict=Mock(return_value={
+                TARGET: torch.zeros(3, 1, dtype=torch.int8),
+                TARGET.removesuffix(".weight") + ".weight_s_rel": torch.zeros(3, 1),
+                TARGET.removesuffix(".weight") + ".weight_s_channel": torch.zeros(3),
+                TARGET.removesuffix(".weight") + ".weight_codebook": torch.arange(15, -1, -1).float(),
+            }))
+            for selections in ([], [{"name": path.name, "strength": 0}]):
+                with self.subTest(selections=selections):
+                    mapping = mapper()
+                    result, count = self.lora().apply(original, root, {"loras": selections}, mapping, torch)
+                    self.assertIs(result, original)
+                    self.assertEqual(count, 0)
+                    mapping.load_lora.assert_not_called()
+            original.model.state_dict.assert_not_called()
+
+    def test_quantized_lora_is_rejected_when_logical_dimensions_are_unavailable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "loras/query.safetensors"
+            path.parent.mkdir()
+            save_file({PREFIX + ".lora_A.weight": torch.ones(1, 1),
+                       PREFIX + ".lora_B.weight": torch.ones(3, 1)}, str(path))
+            original = Patcher()
+            original.model = SimpleNamespace(state_dict=lambda: {
+                TARGET: torch.zeros(3, 1, dtype=torch.int8),
+                TARGET.removesuffix(".weight") + ".comfy_quant": torch.zeros(5, dtype=torch.uint8),
+            })
+            with self.assertRaisesRegex(ValueError, "寸法"):
+                self.lora().apply(
+                    original, root, {"loras": [{"name": path.name, "strength": 1}]}, mapper(), torch
+                )
+
     def test_normalized_aliases_cannot_duplicate_an_adapter_target(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

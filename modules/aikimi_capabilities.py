@@ -218,6 +218,23 @@ def _implementation_check(
     )
 
 
+def _h3_selected_model_status(runtime) -> bool:
+    """Report file presence for either explicitly selected H3 mode."""
+    from modules_forge import local_assets
+    from modules_forge.minimax_h3_acceleration import H3Acceleration
+    from modules_forge.minimax_h3_bridge import model_file_status
+
+    for mode, engine in (("FL2VA", "h3_fl2va"), ("Ref2VA", "h3_ref2va")):
+        try:
+            selected = local_assets.selection(engine).get("checkpoint", "")
+            files = model_file_status(runtime, acceleration=H3Acceleration(checkpoint=selected or "", checkpoint_mode=mode))
+            if all(files.get(name) for name in (mode, "Qwen3-VL 32B", "Video VAE", "Audio VAE")):
+                return True
+        except (OSError, ValueError, TypeError):
+            continue
+    return False
+
+
 def _minimax_h3_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     implementation = (paths.root / "modules_forge/minimax_h3_bridge.py").is_file() and (
         paths.root / "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_studio.py"
@@ -232,16 +249,13 @@ def _minimax_h3_check(paths: DiagnosticPaths) -> DiagnosticCheck:
             available=False,
         )
     try:
-        from modules_forge.minimax_h3_bridge import (
-            model_file_status,
-        )
         from modules_forge.minimax_h3_runtime import installed_runtime_root
 
         runtime = installed_runtime_root(paths.root)
-        files = model_file_status(runtime)
+        ready = _h3_selected_model_status(runtime) if runtime is not None else False
     except Exception:
         runtime = None
-        files = {}
+        ready = False
     if runtime is None:
         return DiagnosticCheck(
             "minimax_h3",
@@ -251,13 +265,12 @@ def _minimax_h3_check(paths: DiagnosticPaths) -> DiagnosticCheck:
             "Open H3 Studio and prepare the managed runtime and models.",
             available=False,
         )
-    ready_files = sum(bool(value) for value in files.values())
-    if ready_files != len(files):
+    if not ready:
         return DiagnosticCheck(
             "minimax_h3",
             "MiniMax H3",
             CheckState.WARNING,
-            f"A local ComfyUI runtime was detected with {ready_files}/{len(files)} required H3 model files.",
+            "A local ComfyUI runtime was detected, but neither selected H3 mode has all required files.",
             "Install the missing H3 files, then run the Studio status check.",
             available=False,
         )
@@ -265,7 +278,7 @@ def _minimax_h3_check(paths: DiagnosticPaths) -> DiagnosticCheck:
         "minimax_h3",
         "MiniMax H3",
         CheckState.WARNING,
-        "A local ComfyUI runtime and all required H3 model files were detected; no live backend request was sent.",
+        "A local ComfyUI runtime and the files for at least one selected H3 mode were detected; no live backend request was sent.",
         "Open H3 Studio and run its status check before generation.",
         available=True,
     )
@@ -310,19 +323,11 @@ def _minimax_h3_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     ph3_ready = legacy_ready = upsampler_ready = False
     try:
         from modules_forge import local_assets, p_h3_image
-        from modules_forge.minimax_h3_acceleration import H3Acceleration
-        from modules_forge.minimax_h3_bridge import model_file_status
         from modules_forge.minimax_h3_runtime import candidate_runtime_root, installed_runtime_root, model_root
 
         runtime = installed_runtime_root(paths.root)
         if runtime is not None:
-            try:
-                selected = local_assets.selection("h3").get("checkpoint", "")
-                files = model_file_status(runtime, acceleration=H3Acceleration(checkpoint=selected or ""))
-                common = all(files.get(name) for name in ("Qwen3-VL 32B", "Video VAE", "Audio VAE"))
-                legacy_ready = common and bool(files.get("FL2VA") or files.get("Ref2VA"))
-            except (OSError, ValueError, TypeError):
-                legacy_ready = False
+            legacy_ready = _h3_selected_model_status(runtime)
             if (paths.root / "modules_forge/p_h3_image.py").is_file() and runtime.resolve() == candidate_runtime_root(paths.root).resolve():
                 models = model_root(runtime)
                 selected = local_assets.selection("p-h3-image").get("checkpoint", "")
@@ -358,9 +363,11 @@ def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | Non
 
 
 def _irodori_check(paths: DiagnosticPaths) -> DiagnosticCheck:
+    from modules_forge.irodori.checkpoints import inventory
     from modules_forge.irodori.core import ready
 
-    available = ready(paths.root / "repositories/irodori", paths.models_root / "Irodori-TTS")
+    runtime, models = paths.root / "repositories/irodori", paths.models_root / "Irodori-TTS"
+    available = any(ready(runtime, models, checkpoint=name) for _, name in inventory(models))
     return DiagnosticCheck(
         "irodori",
         "Irodori TTS",

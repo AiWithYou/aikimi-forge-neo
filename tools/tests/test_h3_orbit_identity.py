@@ -19,7 +19,7 @@ from modules_forge import minimax_h3_orbit_assets as orbit
 from modules_forge import minimax_h3_runtime as runtime
 
 ROOT = Path(__file__).resolve().parents[2]
-NODE_FILE = ROOT / "extensions-builtin/minimax-h3-studio/comfyui_nodes/Aikimi-MiniMax-H3-Orbit/__init__.py"
+NODE_FILE = ROOT / "extensions-builtin/minimax-h3-studio/comfyui_nodes/Aikimi-MiniMax-H3-Orbit-v2/__init__.py"
 TARGET = "diffusion_model.blocks.0.attn.out_proj.weight"
 
 
@@ -209,6 +209,61 @@ class OrbitIdentityTests(OrbitFixture):
             )
         self.assertEqual(list(output.iterdir()), [])
 
+    def test_standard_w4a8_replacement_after_submission_stops_before_save(self):
+        from dataclasses import replace
+
+        from modules_forge.minimax_h3_acceleration import H3Acceleration
+        from tools.tests.test_h3_checkpoint_modes import checkpoint
+
+        acceleration = H3Acceleration(model_variant="w4a8")
+        with ExitStack() as stack:
+            bridge, client, _ = self.generation_fakes(stack)
+            directory, filename = acceleration.model_files(bridge.MODEL_FILES)["FL2VA"]
+            model = Path(checkpoint(self.root / "models" / directory / filename, storage="w4a8"))
+            stack.enter_context(patch.object(bridge, "model_root", return_value=self.root / "models"))
+            snapshot = orbit.snapshot(self.root)
+            expected = dict(snapshot["identity"], applied_targets=[TARGET], strength_model=1.0)
+            receipt = dict(expected, version=snapshot["versions"][""])
+
+            def changed(job):
+                with model.open("ab") as stream:
+                    stream.write(b"changed")
+                return {job: {"outputs": {"40": {"orbit_receipt": [receipt]}}}}
+
+            client.history.side_effect = changed
+            request = replace(self.request(), acceleration=acceleration)
+            with self.assertRaisesRegex(ValueError, "変更"):
+                list(bridge.run_generation(request, self.root, "http://127.0.0.1:8189", self.root, self.root))
+            client.submit.assert_called_once()
+            bridge.mirror_result.assert_not_called()
+
+    def test_standard_w4a8_replacement_during_save_leaves_no_output(self):
+        from modules_forge import minimax_h3_bridge as bridge
+        from modules_forge.studio_checkpoints import snapshot_checkpoint
+
+        model = self.root / "w4.safetensors"
+        model.write_bytes(b"first")
+        model_snapshot = snapshot_checkpoint(str(model))
+        snapshot = orbit.snapshot(self.root)
+        source = self.root / "source.mp4"
+        source.write_bytes(b"fixture video")
+        output = self.root / "output"
+
+        def changed(*_):
+            model.write_bytes(b"replacement")
+            return {}
+
+        with (patch.object(bridge, "_validate_video_result", side_effect=changed),
+              self.assertRaisesRegex(ValueError, "変更")):
+            bridge.mirror_result(
+                source, output, self.request(), "job", 42,
+                bridge.RuntimeReadiness(self.root, "http://127.0.0.1:8189", connected=True),
+                orbit_snapshot=snapshot,
+                orbit_identity=dict(snapshot["identity"], applied_targets=[TARGET], strength_model=1.0),
+                orbit_model_snapshot=model_snapshot,
+            )
+        self.assertEqual(list(output.iterdir()), [])
+
     def test_acceptance_snapshot_rejects_wrong_pin_and_detects_replacement(self):
         snapshot = orbit.snapshot(self.root)
         self.assertEqual(
@@ -259,6 +314,20 @@ class OrbitIdentityTests(OrbitFixture):
             start.assert_not_called()
             self.assertFalse((self.root / "custom_nodes").exists())
 
+    def test_external_runtime_with_only_previous_node_is_rejected(self):
+        from modules_forge import minimax_h3_bridge as bridge
+
+        readiness = bridge.RuntimeReadiness(self.root, "http://127.0.0.1:8189", connected=True)
+        with (patch.object(bridge, "ComfyH3Client") as client,
+              patch.object(bridge, "_stop_managed_runtime") as stop,
+              patch.object(bridge, "start_runtime") as start):
+            client.return_value.object_info.return_value = {"MiniMaxH3OrbitLora": {"input": {"required": {}}}}
+            with self.assertRaisesRegex(bridge.H3BridgeError, "Orbit.*ノード"):
+                bridge.validate_orbit_runtime(readiness)
+            stop.assert_not_called()
+            start.assert_not_called()
+            self.assertFalse((self.root / "custom_nodes").exists())
+
     def test_owned_node_install_is_exact_and_does_not_overwrite_existing_code(self):
         root = registered_runtime(self, self.root / "repository")
         target = orbit.install_node(root)
@@ -270,6 +339,56 @@ class OrbitIdentityTests(OrbitFixture):
         with self.assertRaisesRegex(ValueError, "既存ファイル"):
             orbit.install_node(root)
         self.assertEqual((target / "__init__.py").read_bytes(), b"unrelated existing code")
+
+    def test_unexpected_v2_file_is_preserved_without_overwriting_node(self):
+        root = registered_runtime(self, self.root / "repository")
+        target = orbit.install_node(root)
+        before = {p.name: p.read_bytes() for p in target.iterdir()}
+        extra = target / "unknown.py"
+        extra.write_bytes(b"keep")
+        with self.assertRaisesRegex(ValueError, "既存ファイル"):
+            orbit.install_node(root)
+        self.assertEqual(extra.read_bytes(), b"keep")
+        self.assertEqual({name: (target / name).read_bytes() for name in before}, before)
+
+    def test_previous_node_is_neither_read_nor_changed_when_new_node_is_installed(self):
+        root = registered_runtime(self, self.root / "repository")
+        legacy = root / "custom_nodes" / "Aikimi-MiniMax-H3-Orbit"
+        legacy.mkdir(parents=True)
+        original = {"__init__.py": b"modified old node\n", "unknown.py": b"unknown contents\n"}
+        for name, data in original.items():
+            (legacy / name).write_bytes(data)
+        with ExitStack() as stack:
+            for method in ("exists", "is_dir", "is_symlink", "iterdir", "read_bytes", "stat", "lstat", "open", "resolve"):
+                original_method = getattr(Path, method)
+
+                def reject_read(path, *args, _original=original_method, **kwargs):
+                    if path == legacy or legacy in path.parents:
+                        raise AssertionError("previous node must not be inspected")
+                    return _original(path, *args, **kwargs)
+
+                stack.enter_context(patch.object(Path, method, reject_read))
+            target = orbit.install_node(root)
+        self.assertEqual(target.name, "Aikimi-MiniMax-H3-Orbit-v2")
+        self.assertEqual({name: (legacy / name).read_bytes() for name in original}, original)
+        for name in ("__init__.py", "orbit_bytes.py"):
+            self.assertEqual((target / name).read_bytes(), (orbit.BUNDLE / name).read_bytes())
+
+    def test_previous_node_link_does_not_block_new_node_or_modify_link_target(self):
+        root = registered_runtime(self, self.root / "repository")
+        legacy = root / "custom_nodes" / "Aikimi-MiniMax-H3-Orbit"
+        legacy.parent.mkdir(parents=True)
+        outside = self.root / "legacy-outside"
+        outside.mkdir()
+        (outside / "unknown.py").write_bytes(b"keep")
+        self.create_directory_link(legacy, outside)
+        target = orbit.install_node(root)
+        self.assertEqual(target.name, "Aikimi-MiniMax-H3-Orbit-v2")
+        self.assertTrue(legacy.exists())
+        self.assertEqual({p.name: p.read_bytes() for p in outside.iterdir()}, {"unknown.py": b"keep"})
+
+    def test_orbit_guard_has_a_distinct_node_identifier(self):
+        self.assertEqual(orbit.NODE, "MiniMaxH3OrbitLoraV2")
 
     def test_owned_start_installs_node_before_spawn_and_enables_it(self):
         from modules_forge import minimax_h3_bridge as bridge
@@ -303,6 +422,8 @@ class OrbitIdentityTests(OrbitFixture):
             )
             install.assert_called_once_with(root)
             self.assertIn(orbit.PACK, spawn.call_args.args[0])
+            self.assertIn("--disable-all-custom-nodes", spawn.call_args.args[0])
+            self.assertNotIn("Aikimi-MiniMax-H3-Orbit", spawn.call_args.args[0])
 
     def test_structurally_valid_unregistered_runtime_cannot_receive_node_files(self):
         registered_runtime(self, self.root / "repository")
@@ -362,6 +483,19 @@ class OrbitIdentityTests(OrbitFixture):
             orbit.install_node(root)
         self.assertEqual(list(outside.iterdir()), [])
         self.assertTrue((root / "custom_nodes").exists())
+
+    def test_v2_node_link_is_preserved_without_writing_target(self):
+        root = registered_runtime(self, self.root / "repository")
+        custom = root / "custom_nodes"
+        custom.mkdir()
+        outside = self.root / "v2-outside"
+        outside.mkdir()
+        (outside / "keep.py").write_bytes(b"keep")
+        link = custom / orbit.PACK
+        self.create_directory_link(link, outside)
+        with self.assertRaisesRegex(ValueError, "リンク"):
+            orbit.install_node(root)
+        self.assertEqual({p.name: p.read_bytes() for p in outside.iterdir()}, {"keep.py": b"keep"})
 
     def test_unregistered_h3_start_rejects_before_handoff_config_logs_lock_or_spawn(self):
         from modules_forge import minimax_h3_bridge as bridge
@@ -505,6 +639,30 @@ class OrbitWorkerByteTests(OrbitFixture):
         }
         values.update(changes)
         return self.node.MiniMaxH3OrbitLora().apply(**values)
+
+    def test_loaded_w4_target_checks_codebook_before_applying_lora(self):
+        quant = types.ModuleType("comfy.quant_ops")
+
+        class FakeQuantizedTensor:
+            def __init__(self, codebook):
+                self.params = types.SimpleNamespace(codebook=codebook)
+
+        quant.QuantizedTensor = FakeQuantizedTensor
+        layer = types.SimpleNamespace(in_features=1, out_features=1, quant_format="asym_w4a8_int8")
+        model = FakePatcher()
+        model.model.get_submodule = lambda _: layer
+        with patch.dict(sys.modules, {"comfy.quant_ops": quant}):
+            for bad in (torch.arange(15, -1, -1, dtype=torch.float32),
+                        torch.tensor([*range(15), float("nan")]),
+                        torch.empty(16, device="meta")):
+                with self.subTest(codebook=bad), self.assertRaisesRegex(ValueError, "codebook"):
+                    layer.weight = FakeQuantizedTensor(bad)
+                    self.execute(model=model)
+            self.apply.assert_not_called()
+            for good in (None, torch.arange(16, dtype=torch.float32), torch.ones(16)):
+                with self.subTest(codebook=good):
+                    layer.weight = FakeQuantizedTensor(good)
+                    self.execute(model=model)
 
     def test_same_basename_in_another_registered_root_cannot_shadow_accepted_bytes(self):
         wrong = self.root / "wrong" / self.path.name

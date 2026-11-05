@@ -12,6 +12,8 @@ from pathlib import Path
 
 FORMAT_VERSION = 1
 INT8_SKIP_MODULES = ("img_in", "txt_in", "modulation", "norm_out", "proj_out", "time_text_embed")
+W4A8_SETTINGS = {"group_size": 16, "convrot_groupsize": 256, "symmetric": True,
+                 "codebook": True, "scale_dtype": "float8_e4m3fn"}
 
 
 class InvalidQuantizedCheckpoint(ValueError, RuntimeError):
@@ -28,7 +30,8 @@ def file_hash(path, check_cancel=lambda: None):
 
 
 def component_identity(
-    model_path, component, precision, *, skip_modules=(), versions=None, source_path=None, source_record=None
+    model_path, component, precision, *, skip_modules=(), versions=None, source_path=None, source_record=None,
+    source_transform=None, check_cancel=lambda: None,
 ):
     """Bind artifacts to the source revision, actual files, recipe and runtime."""
     model_path = Path(model_path).resolve()
@@ -65,11 +68,17 @@ def component_identity(
         result["source_record"] = source_record
         result["source_inventory"] = []
     elif source_path is not None:
-        from modules_forge.local_assets import identity
+        from modules_forge.local_assets import file_identity, identity
 
-        result["local_source"] = identity(folder)
+        result["local_source"] = file_identity(folder, check_cancel=check_cancel) if folder.is_file() else identity(folder)
         result["revision"] = None
         result["source_inventory"] = []
+    if source_transform is not None:
+        result["recipe"]["source_transform"] = source_transform
+        result["recipe"]["quantization"] = (
+            {"format": "asym_w4a8_int8", **W4A8_SETTINGS}
+            if precision == "w4a8" else {"format": "bitsandbytes_llm_int8", "load_in_8bit": True}
+        )
     return result
 
 
@@ -178,7 +187,7 @@ def quarantine(path):
 
 
 @contextmanager
-def staging(path, identity, *, check_cancel=lambda: None):
+def staging(path, identity, *, check_cancel=lambda: None, verify_source=lambda: None):
     """Publish only after serialization and verification finish on this volume.
 
     The Qwen runtime lock serializes writers. Interrupted staging directories are
@@ -211,14 +220,17 @@ def staging(path, identity, *, check_cancel=lambda: None):
         os.fsync(stream.fileno())
     check_cancel()
     manifest(temporary, identity, check_cancel=check_cancel)
+    verify_source()
     # No deletion or replacement of a previously valid checkpoint.
     temporary.rename(path)
 
 
-def load_or_create(model_path, identity, load, create, save, *, check_cancel=lambda: None, progress=lambda _: None):
+def load_or_create(model_path, identity, load, create, save, *, check_cancel=lambda: None, progress=lambda _: None,
+                   verify_source=lambda: None):
     from safetensors import SafetensorError
 
     path = cache_path(model_path, identity)
+    verify_source()
     if path.exists():
         try:
             manifest(path, identity, check_cancel=check_cancel)
@@ -232,11 +244,13 @@ def load_or_create(model_path, identity, load, create, save, *, check_cancel=lam
             quarantine(path)
             progress(f"保存済みモデルを再作成します（{type(exc).__name__}）")
         else:
+            verify_source()
             return result, {"status": "hit", "path": str(path)}
     check_cancel()
     result = create()
     check_cancel()
+    verify_source()
     progress(f"{identity['component']} {identity['precision'].upper()} を次回用に保存中")
-    with staging(path, identity, check_cancel=check_cancel) as temporary:
+    with staging(path, identity, check_cancel=check_cancel, verify_source=verify_source) as temporary:
         save(result, temporary)
     return result, {"status": "created", "path": str(path)}

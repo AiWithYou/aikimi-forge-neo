@@ -121,8 +121,10 @@ def validate_request(value, *, internal=False) -> dict:
     if type(skip_layer) is not bool:
         raise MossImageError("負条件側の層スキップはtrueまたはfalseで指定してください。")
     precision, text_precision = value.get("precision", "int8"), value.get("text_precision", "int8")
-    if not isinstance(precision, str) or precision not in {"int8", "bf16"}:
-        raise MossImageError("本体の保存形式はINT8またはBF16を選択してください。")
+    if not isinstance(precision, str) or precision not in {"int8", "w4a8", "bf16"}:
+        raise MossImageError("本体の保存形式はINT8・W4A8・BF16を選択してください。")
+    if precision == "w4a8" and value.get("checkpoint", "official") == "official":
+        raise MossImageError("W4A8本体は対応する独自モデルを選択してください。")
     if not isinstance(text_precision, str) or text_precision not in {"int8", "w4a8", "bf16"}:
         raise MossImageError("テキストの保存形式はINT8・W4A8・BF16を選択してください。")
     loras, names = value.get("loras", []), set()
@@ -231,10 +233,12 @@ def model_specs(request=None) -> list[dict]:
     value = manifest()
     request = request or {}
     precision, text_precision = request.get("precision", "int8"), request.get("text_precision", "int8")
-    if precision not in {"int8", "bf16"} or text_precision not in {"int8", "w4a8", "bf16"}:
+    if precision not in {"int8", "w4a8", "bf16"} or text_precision not in {"int8", "w4a8", "bf16"}:
         raise MossImageError("モデルの保存形式が不正です。")
     prefixes = ["checkpoints/MOSS-Image-SFT/vae/"]
     custom = request.get("checkpoint", "official") != "official"
+    if precision == "w4a8" and not custom:
+        raise MossImageError("W4A8本体は対応する独自モデルを選択してください。")
     if precision == "bf16" and not custom:
         prefixes.append("checkpoints/MOSS-Image-SFT/transformer/")
     if text_precision == "bf16":
@@ -254,6 +258,8 @@ def model_specs(request=None) -> list[dict]:
 def asset_paths(root, request) -> dict:
     from . import checkpoints
 
+    if request["precision"] == "w4a8" and request.get("checkpoint", "official") == "official":
+        raise MossImageError("W4A8本体は対応する独自モデルを選択してください。")
     root = safe_model_root(root)
     bundle = root / "checkpoints/MOSS-Image-SFT"
     assets = manifest()["assets"]

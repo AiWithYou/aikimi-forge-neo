@@ -7,6 +7,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -94,6 +95,50 @@ class ProcessTree:
             self.handle = None
 
 
+def validate_custom_checkpoint(runtime: Path, entry: dict, checkpoint: str) -> None:
+    """Check the selected architecture without loading weights or acquiring the GPU."""
+    expected = Path(runtime).absolute() / "official" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    configured = Path(entry.get("python", "")).absolute()
+    if os.path.normcase(str(configured)) != os.path.normcase(str(expected)) or not expected.is_file():
+        raise YuE2Error("YuE2の専用Pythonを確認できません。実行環境を再セットアップしてください。")
+    env = safe_environment()
+    env.update(CUDA_VISIBLE_DEVICES="-1", PYTHONDONTWRITEBYTECODE="1")
+    options = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {"start_new_session": True}
+    with tempfile.TemporaryFile() as output:
+        process = subprocess.Popen(  # noqa: S603 - pinned interpreter, fixed module, no shell
+            [str(expected), "-m", "modules_forge.yue2_studio.checkpoint_validation", str(Path(checkpoint).resolve())],
+            cwd=str(Path(__file__).resolve().parents[2]), env=env,
+            stdin=subprocess.PIPE, stdout=output, stderr=subprocess.STDOUT, **options,
+        )
+        tree = None
+        try:
+            tree = ProcessTree(process)
+            process.stdin.write(tree.handshake())
+            process.stdin.flush()
+            try:
+                result = process.wait(timeout=60)
+            except subprocess.TimeoutExpired as error:
+                raise YuE2Error("YuE2の本体検証が制限時間を超えました。") from error
+            if result:
+                output.seek(0)
+                detail = output.read(4096).decode("utf-8", "replace").strip()
+                raise YuE2Error(f"YuE2の本体検証に失敗しました: {detail}")
+        finally:
+            try:
+                if tree is not None and process.poll() is None:
+                    tree.terminate()
+            finally:
+                if tree is not None:
+                    tree.close()
+                try:
+                    process.stdin.close()
+                except BrokenPipeError:
+                    pass
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=5)
+
+
 @dataclass
 class Job:
     identifier: str
@@ -142,6 +187,9 @@ class Studio:
             try:
                 entry = runtime_manifest(self.runtime, request.engine, request.checkpoint)
                 verify_snapshot(checkpoint_snapshot)
+                if request.engine == "official" and request.checkpoint:
+                    validate_custom_checkpoint(self.runtime, entry, request.checkpoint)
+                    verify_snapshot(checkpoint_snapshot)
                 if checkpoint_snapshot is not None:
                     entry["checkpoint_identity"] = checkpoint_snapshot["identity"]
                 if not lease.acquire(blocking=False):

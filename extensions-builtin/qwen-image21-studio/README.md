@@ -38,7 +38,7 @@ Outpaintの「生成設定」でLoRA v2／v1／なし、Steps（通常版の初�
 | Sparse＋Fun Acc／ControlNet | 実行可能。KVキャッシュを無効にしてdense Attentionで生成します。Sparseの高速化効果は得られません。 |
 | ローカル互換本体＋Outpaint／Fun Acc／画風LoRA | 対応。構造・形状・必要な共通部品を検証します。Turbo選択との同時指定は受け付けません。 |
 
-OutpaintでControlNetを使う場合、前処理済み画像は**元画像と同じサイズ**か**完成キャンバスと同じサイズ**にしてください。元画像サイズなら元画像と同じ位置へ余白を付け、制御の位置を保持します。ControlNet欄の「ControlNetにもマスクを渡す」をONにすると、余白だけ白・元画像部分は黒のマスクを自動作成します。通常版INT8／W4A8／BF16には公式フル本体、Turboには選択したTurbo本体が必要です。対応表は読み込み・実行方式の対応を示し、すべての画風LoRAや被写体で画質を保証するものではありません。
+OutpaintでControlNetを使う場合、前処理済み画像は**元画像と同じサイズ**か**完成キャンバスと同じサイズ**にしてください。元画像サイズなら元画像と同じ位置へ余白を付け、制御の位置を保持します。ControlNet欄の「ControlNetにもマスクを渡す」をONにすると、余白だけ白・元画像部分は黒のマスクを自動作成します。通常版INT8／W4A8／BF16には公式フル本体または対応するローカル本体と共通部品、Turboには選択したTurbo本体が必要です。対応表は読み込み・実行方式の対応を示し、すべての画風LoRAや被写体で画質を保証するものではありません。
 
 元画像は拡縮せず、指定した方向の余白だけを32 px単位へ調整し、調整量をプレビューに表示します。完成寸法は各辺256〜4096 px、合計約2 MPまで。余白がすべて0、上限超過などの場合は理由を表示して生成を無効にします。再拡張でも上限は同じです。開始時の元画像・余白・Seed・LoRA情報をジョブへ保存するので、途中で入力を変更しても開始済みの生成には混ざりません。結果のSeedなどは**この結果の生成情報**にまとまっています。
 
@@ -69,7 +69,9 @@ GGUFは画像生成本体だけです。共通のテキストエンコーダー�
 
 Qwen Image 2.1用の `.safetensors` を `models/Qwen-Image-2.1/loras/` に置き、**LoRA → 一覧更新**。サブフォルダーも読めます。v3.3.0からは選択欄へ外部ファイルのフルパスを貼り付けてEnterを押す方法も使えます。複数選択し、表の「強度」を各LoRAごとに設定します（−2〜2、初期値1、0は読み込み省略）。選択を追加・削除しても残ったLoRAの強度は保持されます。×で外したものを再選択すると1に戻ります。
 
-**チェックポイント**では互換モデルのファイル／Diffusersフォルダーも指定できます。**モデル詳細**の**環境・共通部品を準備（標準本体なし）**を使えば、標準の本体をダウンロードする必要はありません。単一safetensorsはBF16またはINT8 ConvRot、TransformerフォルダーはBF16／実行時INT8／W4A8、対応GGUFは通常版Q4で使用します。[導入手順と対応範囲](../../docs/local-models.md)
+**チェックポイント**では互換モデルのファイル／Diffusersフォルダーも指定できます。**モデル詳細**の**環境・共通部品を準備（標準本体なし）**を使えば、標準の本体をダウンロードする必要はありません。未量子化の単一safetensorsとTransformerフォルダーはBF16／実行時INT8／W4A8、INT8 ConvRotファイルはINT8、対応GGUFは通常版Q4で使用します。[導入手順と対応範囲](../../docs/local-models.md)
+
+未量子化の単一ファイルをINT8／W4A8で使う場合は、全テンソルの名前・寸法を確認し、一時的なDiffusers形式へ変換してから量子化します。初回は一時データと量子化済みモデルの保存領域が必要です。一時変換用の空き容量が不足する場合は変換を始めません。生成開始後に元ファイルが変わった場合や変換を中断した場合、結果を完成版として保存しません。量子化後は元ファイルのSHA-256・変換規則・量子化条件を記録し、次回以降に一致する保存済みモデルを再利用します。INT8 ConvRotやGGUFを再量子化することはできません。
 
 通常版Q4_K_M・W4A8・INT8・BF16とTurboで使用できます。SushiUIの `lora_unet_...__...`、Diffusers/Comfy系の `transformer.` / `diffusion_model.` 配下の線形LoRA（A/Bまたはdown/up、alpha/rank）を読み込みます。Qwen Imageの別バージョン、DoRA、独自ヘッドなど、すべての形式への対応ではありません。未対応キー・不足ペア・寸法不一致があれば部分適用せずエラーにします。Fun Acc・Outpaint・Sparseとの併用も受け付けます。LoRAの選択で現在の本体・精度・Stepsは変更しません。
 
@@ -89,7 +91,7 @@ Hugging Faceからファイル名を指定して取得する補助コマンド�
 
 [公式のQwen Image 2.1 Fun ControlNet Union](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)を、[KijaiのINT8 ConvRot変換](https://huggingface.co/Kijai/QwenImage_experimental/tree/04987755e10002ff33e4ea307a811487dddd79d9/model_patches)で使えます。Canny、Depth、Gray、HED、Lineart、MLSD、Pose、Scribbleの**前処理済み画像**に対応します。種類の選択は記録用で、モデルは共通のUnion重みを使います。画像をアップロードしただけでCannyやPoseを抽出する機能ではありません。
 
-1. 使用するQwen本体・共通部品を導入します。通常版Q4_K_Mでも利用できます。INT8／W4A8／BF16では `aikimi-qwen-image21-setup.bat --official-full` が必要です。
+1. 使用するQwen本体・共通部品を導入します。通常版Q4_K_Mでも利用できます。公式フル本体を使うINT8／W4A8／BF16では `aikimi-qwen-image21-setup.bat --official-full` を使います。互換のローカル本体を使う場合は、専用環境と共通部品を準備してください。
 2. Qwen専用環境で追加の約3.78GBの重みを取得・SHA-256検証します。
 
 ```powershell
@@ -110,7 +112,7 @@ ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所
 
 [Alibaba PAI公式のFun Acc LoRA](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs)は、Qwen Image 2.1の新規生成と参照画像編集を**4回のモデル評価（4 NFE）**で行うPDDアダプターです。通常のLoRA読み込みに加えて、配布元の専用PDDスケジューラ、sigma列、stepコールバックを使います。選んだ本体を使い、LoRAの差分やPDDの出力ヘッドは浮動小数点のままです。全体を一律INT8に変換する機能ではありません。
 
-1. 通常版Qwen本体と共通部品を導入します。通常版Q4_K_Mでも利用できます。INT8／W4A8／BF16を使う場合は `aikimi-qwen-image21-setup.bat --official-full` が必要です。
+1. 通常版Qwen本体と共通部品を導入します。通常版Q4_K_Mでも利用できます。公式フル本体を使うINT8／W4A8／BF16では `aikimi-qwen-image21-setup.bat --official-full` を使います。互換のローカル本体を使う場合は、専用環境と共通部品を準備してください。
 2. 専用環境で約346MBのLoRA重み、PDD設定、利用条件を取得し、固定revisionのSHA-256を検証します。
 
 ```powershell
@@ -123,7 +125,7 @@ ControlNetは生成Transformerの32ブロック中、0・2・…・30の16か所
 
 配布元は[小さく密な文字の可読性低下、編集画像のぼけ・暗さ、細部の劣化](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs#limitations)を挙げています。4 NFEは生成全体の所要時間が必ず10分の1になるという意味ではありません。重みはGitに含めません。重みには[Qwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs/blob/f7545234760e1847cd8e89e52bd951cb0b7e327f/LICENSE)が適用され、非商用の研究・評価用途に限られます。
 
-2026年9月25日にRTX 3090で、通常版INT8・CPU退避・1024×1024・4 steps・固定Seedの直接worker実行を確認しました。新規生成した白いティーポットを参照画像にして青へ変える編集も行い、どちらもRGBA PNG・専用PDDスケジューラ・KVキャッシュOFFを記録し、画像を確認しています。初回のモデル読み込みは約382秒、生成部分は約20秒でした。編集は再起動したworkerで読み込み約149秒、生成部分は約26秒です。この確認に40 stepsとの同条件の速度・画質比較は含めていません。
+RTX 3090の通常版INT8・CPU退避で、4 stepsによる新規生成と1枚参照編集を確認しています。
 
 ### T2I・I2IのLoRA ON/OFF作例
 
@@ -172,9 +174,7 @@ BF16は[ViggleのフルTransformer](https://huggingface.co/Viggle/Qwen-Image-2.1
 
 これは[公式のLocal Editing](https://github.com/QwenLM/Qwen-Image-2.1#local-editing)に沿った、**色付きの注釈をモデルへ見せる編集**です。囲み線を消し、対象外をできるだけ保つ指示を自動で加えます。**範囲外のピクセルを完全に固定するマスク編集ではありません。** 囲み線の消去や編集範囲の遵守は生成結果を確認してください。入力の追加で参照枚数は増えないため、最大10枚のまま使えます。INT8/BF16の両設定で同じ操作です。
 
-2026年9月21日、RTX 3090で1024×1280・40 steps・INT8・CPU退避の囲み編集を2回実行しました。リボンの色変更は囲み線が消えましたが、保持を指定した襟も変色しました。続く小物の削除では、囲んだ切符と台座が消え、机の木目で補完されました。生成処理は約105秒・110秒（初回モデル読み込み約871秒は別）です。画面のUndo/Redo、並べ替え後の参照追跡、削除時の解除、透過PNGの保持、結果からの編集は別途操作と回帰テストで確認しています。
-
-描画欄の更新後も、実WebUIで切符と台座を囲んで削除しました。同じ入力・Seed 92113で2回実行し、生成処理は約96秒と約92秒、初回モデル読み込みは約858秒でした。2回目は読み込み済みモデルを再利用し、2枚のRGBA全ピクセルが一致しています。元画像のピクセルも保持されています。新しい編集元へ切り替えた後、Undoで以前の囲みが戻る問題も修正しています。
+囲みの外でも、保持を指定した部分の色や形が変わる場合があります。必要に応じて「マスク範囲外を元画像に固定」を併用してください。
 
 ## マスク範囲外を固定する
 
@@ -228,7 +228,7 @@ aikimi-qwen-image21-setup.bat --edit-prompt-rewriter-only
 
 ## INT8とメモリ設定
 
-**W4A8**も選べます。追加ライブラリは `aikimi-qwen-image21-setup.bat --runtime-only` で導入します。精度を選び、**変換モデルを保存**を押すと、画像生成なしでINT8・W4A8を準備できます。「保存済み」と表示されたモデルは、次回から自動で使います。通常の生成時にも自動保存します。対象層、対応GPU、検証結果は [W4A8の使い方](../../docs/w4a8.md) を参照してください。
+**W4A8**も選べます。追加ライブラリは `aikimi-qwen-image21-setup.bat --runtime-only` で導入します。標準本体では、精度を選び **変換モデルを保存** を押すと、画像生成なしでINT8・W4A8を準備できます。ローカル本体ではこのボタンは使えず、初回生成時に変換・保存します。保存済みの条件が一致するモデルは、次回から自動で使います。対象層、対応GPU、検証結果は [W4A8の使い方](../../docs/w4a8.md) を参照してください。
 
 | 設定 | 動作 |
 |---|---|
@@ -241,9 +241,7 @@ INT8は公式BF16重みから変換して保存します。同じ精度・メモ
 
 CPU退避では、PNG保存後に未使用のPyTorch GPUキャッシュを解放します。モデル本体の再利用は維持し、GPU常駐ではキャッシュを保持します。`metadata.json`の`memory`に、処理中のピーク、保存後の使用量、解放したキャッシュ量をMiBで記録します。この値はPyTorchのGPU割り当て量であり、パソコン全体のRAMやデスクトップを含むVRAM総使用量とは区別してください。
 
-ブラウザーの描画欄もメモリを使います。Qwenの編集元は短いキャッシュファイル参照で渡し、大きなPNGのBase64文字列を入力欄へ入れる処理を避けています。1024×1280の大きなテスト画像で2回の生成・再編集・ペン入力・PNG/JSON保存を確認し、独立したChromium全プロセスの観測最大RSSは約1,483MiBから約857MiBへ減りました。これはモデルを実行しないUI回帰テストの値です。
-
-上記の実INT8編集では、保存後のPyTorch予約メモリを2,794→88MiB、再実行時は2,716→88MiBへ減らせました。2回の実行で観測したGPU総使用量の最大は15,741MiB（デスクトップ等を含む）、workerのRSS最大は約21.9GiBです。INT8でもCPU退避先のRAMにはモデルが残ります。この検証では上部の**GPU・モデル保持 → 今すぐモデルを解放**でworkerの終了を確認し、PC全体のRAMはピーク約44.9GiBから約22.7GiBへ戻りました。共通設定には**自動（5分後に解放）**もあります。**毎回解放**を選ぶとRAMを保持しない代わりに、次の生成で初回読み込みが再び必要です。
+大きな画像を編集する場合は、ブラウザーの描画欄にもメモリが必要です。INT8でもCPU退避先のRAMにはモデルが残ります。**毎回解放**を選ぶと待機中のモデルを保持しない代わりに、次の生成で再読み込みが必要です。
 
 **標準本体のINT8はbitsandbytes形式です。ローカル本体にはQwen Image 2.1のINT8 ConvRot safetensorsも指定できます。** [abenzerps UC版の導入方法](../../docs/local-models.md#qwen-image-21-uc版を追加する例)を参照してください。ファイル内の量子化設定・224線形層・全テンソルの寸法を確認し、配布時のINT8重みとFP32スケールを保持します。本体を選ぶと精度はINT8に切り替わり、テキストエンコーダーには従来のbitsandbytes INT8を使います。ConvRot以外の事前量子化形式や旧Qwen Imageのチェックポイントは未対応です。Fun ControlNetは別のINT8 ConvRotパッチとして読み込みます。量子化後の画質・速度・メモリ使用量は設定に依存します。BF16と同じ画像になるとは限りません。UC版は2026-10-07にRTX 3090で256×256・2 stepsのRGBA生成とCPU退避を確認しました。通常ステップ数での画質・速度は未評価です。
 
@@ -254,10 +252,11 @@ CPU退避では、PNG保存後に未使用のPyTorch GPUキャッシュを解放
 - モデル: `Qwen/Qwen-Image-2.1`、revision `b3179ad355be050328e483a9dfdd9e60cd62adfa`
 - 通常版GGUF: `unsloth/Qwen-Image-2.1-GGUF`、revision `2c31ccd392b367a6637841a143813320a02dff55`、`qwen-image-2.1-Q4_K_M.gguf`
 - Diffusers: `6256aa7666cedd47443adc8f82da9a10e110b09c`（Qwen Image 2.1対応の公式コミット）
-- Transformers 5.17.0、bitsandbytes 0.50.2、comfy-kitchen 0.2.31、Accelerate 1.15.0
+- Transformers 5.17.0、bitsandbytes 0.50.2、comfy-kitchen 0.2.31、同梱のAccelerate 1.15.0+aikimi.1
+- Pillow 13.0.0、setuptools 84.1.0。その他の固定依存は[専用環境の指定](../../tools/requirements-qwen-image21.txt)を参照してください。
 - PyTorch 2.13.0 / CUDA 13.0。対応するNVIDIAドライバーとBF16対応GPUが必要です。
 
-導入内容の表示だけなら`aikimi-qwen-image21-setup.bat --dry-run`、環境だけの準備は`--runtime-only`、モデルの完全性の再検証は`--verify`を付けて実行します。生成時にはモデルを自動取得しません。不足があればセットアップ方法を表示します。
+導入内容の表示だけなら`aikimi-qwen-image21-setup.bat --dry-run`、環境だけの準備は`--runtime-only`、モデルの完全性の再検証は`--verify`を付けて実行します。専用環境の依存が固定版と一致しない場合は、Neoを終了して`aikimi-qwen-image21-setup.bat --runtime-only`で環境を更新します。生成時にはモデルを自動取得しません。不足があればセットアップ方法を表示します。
 
 ## 出典と利用条件
 

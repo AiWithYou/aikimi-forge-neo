@@ -63,6 +63,44 @@ class RetentionTests(unittest.TestCase):
         self.complete(self.job("c", "fp32"))
         self.assertEqual(events, ["start", "start", "close", "start"])
 
+    def test_same_name_new_content_and_new_selection_restart_resident_worker(self):
+        events = []
+        self.worker.start.side_effect = lambda *args: events.append("start")
+        self.worker.close.side_effect = lambda: events.append("close")
+        for index, (name, digest) in enumerate((
+            ("A.safetensors", "a" * 64), ("A.safetensors", "a" * 64),
+            ("A.safetensors", "b" * 64), ("B.safetensors", "b" * 64),
+        )):
+            job = self.job(f"model-{index}")
+            request_file = job["directory"] / "request.json"
+            import json
+
+            request = json.loads(request_file.read_text(encoding="utf-8"))
+            request.update(checkpoint=name, checkpoint_identity={"name": name, "sha256": digest, "format": "float"})
+            atomic_json(request_file, request)
+            with (
+                patch("modules_forge.irodori.service.checkpoints.bind"),
+                patch("modules_forge.irodori.service.checkpoints.verify_components"),
+            ):
+                self.complete(job)
+        self.assertEqual(events, ["start", "start", "close", "start", "close", "start"])
+
+    def test_changed_checkpoint_before_worker_start_fails_and_releases_lease(self):
+        import json
+
+        job = self.job("changed")
+        path = job["directory"] / "request.json"
+        request = json.loads(path.read_text(encoding="utf-8"))
+        request.update(checkpoint="A.safetensors", checkpoint_identity={"name": "A.safetensors", "sha256": "a" * 64})
+        atomic_json(path, request)
+        lease = self.lease()
+        self.assertTrue(lease.acquire(False))
+        with patch("modules_forge.irodori.service.checkpoints.bind", side_effect=ValueError("changed")):
+            self.service.execute(job, lease)
+        self.assertEqual(job["status"], "error")
+        self.worker.start.assert_not_called()
+        self.assertFalse(lease._owned)
+
     def blocking_cleanup(self):
         entered, proceed = threading.Event(), threading.Event()
         attempts = []
@@ -153,6 +191,19 @@ class RetentionTests(unittest.TestCase):
             factory.assert_called_once_with("bf16")
             with self.assertRaises(ValueError):
                 cached_runtime("fp32", factory)
+
+    def test_worker_cache_distinguishes_same_model_path_with_new_sha(self):
+        from tools.irodori_worker import _STATE, cached_runtime
+
+        factory = Mock()
+        first_key = ("same/path.safetensors", "a" * 64, "bf16")
+        second_key = ("same/path.safetensors", "b" * 64, "bf16")
+        with patch.dict(_STATE, {"key": None, "runtime": None}):
+            cached_runtime(first_key, factory)
+            cached_runtime(first_key, factory)
+            factory.assert_called_once_with(first_key)
+            with self.assertRaises(ValueError):
+                cached_runtime(second_key, factory)
 
     def test_cancel_accepted_before_commit_cannot_be_reported_complete(self):
         job = self.job("cancel")

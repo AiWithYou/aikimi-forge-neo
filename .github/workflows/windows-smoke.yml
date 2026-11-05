@@ -18,6 +18,8 @@ on:
       - "extensions-builtin/minimax-h3-studio/**"
       - "extensions-builtin/sd_forge_controlnet/**"
       - "extensions-builtin/yue2-studio/**"
+      - "modules_forge/yue2_studio/**"
+      - "tools/tests/test_yue2_checkpoint_validation.py"
       - "modules_forge/irodori/**"
       - "extensions-builtin/irodori-studio/**"
       - "tools/*irodori*.py"
@@ -79,6 +81,10 @@ on:
       - "modules_forge/local_assets.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
+      - "tools/tests/test_h3_checkpoint_modes.py"
+      - "tools/tests/test_qwen_single_file_quantization.py"
+      - "tools/tests/test_uv_bootstrap_upgrade.py"
+      - "tools/uv_bootstrap.py"
       - "tools/tests/test_forge_lora*.py"
       - "tools/minimax_h3_runtime_manifest.json"
       - "tools/requirements-minimax-h3.*"
@@ -154,6 +160,8 @@ on:
       - "extensions-builtin/minimax-h3-studio/**"
       - "extensions-builtin/sd_forge_controlnet/**"
       - "extensions-builtin/yue2-studio/**"
+      - "modules_forge/yue2_studio/**"
+      - "tools/tests/test_yue2_checkpoint_validation.py"
       - "modules_forge/irodori/**"
       - "extensions-builtin/irodori-studio/**"
       - "tools/*irodori*.py"
@@ -215,6 +223,10 @@ on:
       - "modules_forge/local_assets.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
+      - "tools/tests/test_h3_checkpoint_modes.py"
+      - "tools/tests/test_qwen_single_file_quantization.py"
+      - "tools/tests/test_uv_bootstrap_upgrade.py"
+      - "tools/uv_bootstrap.py"
       - "tools/tests/test_forge_lora*.py"
       - "tools/minimax_h3_runtime_manifest.json"
       - "tools/requirements-minimax-h3.*"
@@ -350,6 +362,7 @@ jobs:
         run: >-
           python tools/run_ci_tests.py --verbosity 2
           --preload modules.shared
+          --module tools.tests.test_yue2_checkpoint_validation
           --module tools.tests.test_aikimi_diagnostics
           --module tools.tests.test_aikimi_status
           --module tools.tests.test_aikimi_tabs
@@ -414,6 +427,13 @@ jobs:
           --module tools.tests.test_ui_tempdir_security
           --module tools.tests.test_upstream_neo_regressions
           --module tools.tests.test_workflow_ui
+      - name: Run local checkpoint and uv bootstrap CPU contracts
+        if: ${{ !cancelled() && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}
+        run: >-
+          python tools/run_ci_tests.py --pytest
+          tools/tests/test_h3_checkpoint_modes.py
+          tools/tests/test_qwen_single_file_quantization.py
+          tools/tests/test_uv_bootstrap_upgrade.py -q
       - name: Run FLUX 3 CPU contracts without model downloads
         if: ${{ !cancelled() && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}
         run: python tools/run_ci_tests.py --pattern "test_flux3_klein*.py" --verbosity 2

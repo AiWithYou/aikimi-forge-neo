@@ -134,14 +134,8 @@ def resolve(runtime: Path, model: str, components: str, precision: str) -> dict:
     if gguf != (precision == "base_q4_k_m"):
         raise ValueError("GGUFにはQ4の設定、safetensors／フォルダーにはBF16・INT8・W4A8を選んでください。")
     format_name = validate_transformer(transformer)
-    if transformer.is_file() and not gguf:
-        required = "int8" if format_name == "int8_convrot" else "bf16"
-        if precision != required:
-            raise ValueError(
-                "INT8 ConvRot本体はINT8設定で使用してください。"
-                if format_name == "int8_convrot"
-                else "単一safetensorsはBF16設定で使用します。INT8／W4A8にはDiffusers Transformerフォルダーを指定してください。"
-            )
+    if transformer.is_file() and not gguf and format_name == "int8_convrot" and precision != "int8":
+        raise ValueError("INT8 ConvRot本体はINT8設定で使用してください。再量子化には対応しません。")
     return {
         "model": str(base),
         "transformer": str(transformer),

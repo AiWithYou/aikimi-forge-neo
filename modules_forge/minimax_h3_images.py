@@ -83,8 +83,8 @@ class H3ImageRequest:
 
     @property
     def runtime_acceleration(self) -> H3Acceleration:
-        from modules_forge.studio_checkpoints import h3_variant
-        return H3Acceleration(model_variant=h3_variant(self.checkpoint), negpip=self.negpip, checkpoint=self.checkpoint)
+        return H3Acceleration(negpip=self.negpip, checkpoint=self.checkpoint,
+                              checkpoint_mode="Ref2VA" if self.mode == "references" else "FL2VA")
 
     def validate(self) -> None:
         try:

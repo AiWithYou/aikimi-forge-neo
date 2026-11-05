@@ -17,7 +17,9 @@ VERSIONS = {
     "accelerate": "1.15.0+aikimi.1",
     "setuptools": "84.1.0",
     "pip": "26.2.1",
-    "Pillow": "12.3.0",
+    "Pillow": "13.0.0",
+    "certifi": "2026.10.19",
+    "gguf": "0.19.0",
     "safetensors": "0.8.0",
 }
 

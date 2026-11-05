@@ -58,6 +58,7 @@ def public_result(value):
         "reference_hashes",
         "references",
         "model_revision",
+        "checkpoint",
         "comfy_revision",
         "sampling_width",
         "sampling_height",

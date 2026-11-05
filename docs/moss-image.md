@@ -10,7 +10,7 @@
 
 既定ではSFTの画像生成本体とテキストエンコーダーをINT8 ConvRotで取得します。VAEは公式のFP32を保持します。モデルは`models/MOSS-Image/`、MOSSに標準対応した専用の固定ComfyUIは`repositories/moss-image/`へ導入します。NVIDIA CUDA GPUと、セットアップ済みのForge Neo環境が必要です。
 
-画像生成本体はINT8／BF16、テキストエンコーダーはINT8／W4A8／BF16を個別に選択できます。量子化版はコミュニティ配布で、BF16版とは細部が変わる可能性があります。選んだ形式が未導入の場合、自動で別の形式へ切り替えません。
+公式の画像生成本体はINT8／BF16、テキストエンコーダーはINT8／W4A8／BF16を個別に選択できます。独自のMOSS Image本体は、BF16・INT8 ConvRotに加え、このStudioが対応するComfy形式のW4A8も選択できます。量子化によってBF16版とは細部が変わる可能性があります。選んだ形式が未導入の場合、自動で別の形式へ切り替えません。
 
 標準のINT8構成は約14.1GBです。テキストをW4A8にする場合は次のように導入し、Studioでも同じ形式を選択します。この構成の重みは約11.1GBです。これらはファイル容量で、生成中のVRAM使用量とは異なります。
 
@@ -108,13 +108,13 @@ RTX 3090（24GB）、RAM 64GB、Windows 11、ドライバー610.74、専用PyTor
 
 生成記録の`inference_policy`には設定した方式と呼出回数を保存します。これは実際のGPUカーネルを計測した記録ではありません。GPU異常後の停止と解除は[トラブルシューティング](troubleshooting.md#gpu異常後の停止)を参照してください。
 
-2026年10月21日、Windows 11、RTX 3090（24GB）、ドライバー617.42、専用PyTorch 2.13.0+cu130で、MOSS-Aikimi S5の通常生成5枚のPNG保存と画像を確認しました。本体・テキストはINT8 ConvRot、VAEはFP32、長辺2560px、36 Steps、CFG 3、RoPE横・縦1です。GPU電力上限は1枚目が220W、残り4枚が200Wでした。この条件は温度制御の推奨値や長時間の安定動作を保証するものではありません。3K・4K、Hires.fix、参照編集は、この変更後の完走確認ができていません。
+RTX 3090で、INT8本体・INT8テキストを使う長辺2560pxの通常生成を確認しています。3K・4K、Hires.fix、参照編集は、この演算設定での完走確認ができていません。
 
 ## マージモデル
 
-MOSS Image互換の画像生成本体を、単一の`.safetensors`として`models/MOSS-Image/checkpoints/`へ置きます。「モデル」の一覧を更新して選択すると、BF16またはINT8 ConvRotの保存形式が反映されます。テキストエンコーダーとVAEは導入済みの共通部品を使用します。公式モデルへ戻す場合は「MOSS-Image-SFT」を選びます。
+MOSS Image互換の画像生成本体を、単一の`.safetensors`として`models/MOSS-Image/checkpoints/`へ置きます。「モデル」の一覧を更新して選択すると、BF16、INT8 ConvRot、またはW4A8の保存形式が反映されます。直前に選んだ本体は次回起動時に復元し、保存した識別情報と再照合します。起動・画面再読み込み時の確認が終わるまでは生成できません。ファイルが見つからないか変更されていた場合は、その旨を表示して選び直しを求め、公式本体へ自動で切り替えません。W4A8は42層の252投影がComfyUIの`asym_w4a8_int8`形式で、グループサイズ16・ConvRot 256の本体に対応します。補正テンソル付きなど、ほかの方式で保存されたW4A8がすべて読み込めるわけではありません。テキストエンコーダーとVAEは導入済みの共通部品を使用します。公式モデルへ戻す場合は「MOSS-Image-SFT」を選びます。公式本体のW4A8は自動取得しません。
 
-ファイルの全対象・形状と保存形式を検証し、生成条件のPNGとJSONへモデル名とSHA-256を記録します。選択したモデルが削除・変更された場合は生成を停止します。マージ済みモデルには、同じLoRAを重ねて選択すると差分が二重に適用されます。
+ファイルの全対象・形状と保存形式を検証し、生成条件のPNGとJSONへモデル名とSHA-256を記録します。APIの生成結果では、独自本体のモデル名とSHA-256を`weight_sources.dit`に返します。選択したモデルが削除・変更された場合は生成を停止します。マージ済みモデルには、同じLoRAを重ねて選択すると差分が二重に適用されます。
 
 BF16のMOSS本体からINT8 ConvRotを作成する場合は、Forge環境で次を実行します。元のファイルは保持し、42層の252個の線形投影を量子化します。
 
@@ -122,11 +122,19 @@ BF16のMOSS本体からINT8 ConvRotを作成する場合は、Forge環境で次�
 .\venv\Scripts\python.exe -m tools.convert_moss_int8_convrot --source models/MOSS-Image/checkpoints/MyMOSS.safetensors --output models/MOSS-Image/checkpoints/MyMOSS-int8-convrot.safetensors
 ```
 
+BF16の本体からW4A8を作る場合は、MOSS専用環境で次を実行します。NVIDIA GPUのCompute Capability 8.0以上が必要です。変換はStudioの生成待ち行列とは別に動くため、他のGPU処理を終えてから開始し、完了まで新しい生成を開始しないでください。GPU異常後の停止中は変換を開始できません。元のモデルは変更せず、別名の出力ファイルを作成します。既存の出力は上書きしません。
+
+```powershell
+.\repositories\moss-image\venv\Scripts\python.exe -m tools.convert_moss_image_w4a8 --source models/MOSS-Image/checkpoints/MyMOSS.safetensors --output models/MOSS-Image/checkpoints/MyMOSS-w4a8.safetensors
+```
+
+W4A8本体の実際のメモリー使用量や生成結果は、ハードウェアと設定によって変わります。LoRAはモデルの元の行列寸法と対応先を確認して適用し、量子化された元ファイルは書き換えません。
+
 ## LoRA
 
 MOSSの画像生成本体と互換の線形LoRAを`models/MOSS-Image/loras/`へ置き、一覧を更新して選びます。最大16件の複数選択と個別の強度調整に対応します。通常の`lora_A/lora_B`または`lora_down/lora_up`形式を読み、対象と形状が一致することを検証します。学習元の名前だけで拒否したり、モデル・Steps・CFGを自動変更したりしません。
 
-量子化した本体にもLoRAの差分を適用します。保存した量子化モデルは書き換えず、変更したLoRAの選択・強度は次の生成に反映します。LoRAの読み込み前後と生成後にファイルの変更を確認し、適用直前の重複した全量検査は行いません。PNGと生成条件JSONに実際のLoRA名・SHA-256・強度を記録します。MOSS以外のLoRAや未対応の追加方式は、対応する対象を確認できなければエラーになります。
+量子化した本体にもLoRAの差分を適用します。W4A8でLoRAを適用する層にコードブックがある場合、値が小さい順に並んでいないとエラーになります。同じ値の重複やコードブックの省略は使用できます。LoRAを適用しない層や強度0では、この順序確認は行いません。保存した量子化モデルは書き換えず、変更したLoRAの選択・強度は次の生成に反映します。LoRAの読み込み前後と生成後にファイルの変更を確認し、適用直前の重複した全量検査は行いません。PNGと生成条件JSONに実際のLoRA名・SHA-256・強度を記録します。MOSS以外のLoRAや未対応の追加方式は、対応する対象を確認できなければエラーになります。
 
 LoRA適用時は重みを一時的に復元して計算するため、追加のメモリーが必要です。ComfyUIのサンプリングを使用するため、同じSeedと設定でも元のDiffusers出力との画素一致は保証しません。
 

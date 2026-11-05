@@ -47,6 +47,9 @@ def link_or_copy(source, destination):
 
 def auxiliary_assets(profile):
     assets = {"clef_runtime/" + name: (ROOT / "modules_forge/clef" / name).read_bytes() for name in PORTABLE_MODULES}
+    assets["clef_runtime/official_joint_schema_model.py.txt"] = (
+        ROOT / "modules_forge/clef/official_joint_schema_model.py.txt"
+    ).read_bytes()
     assets.update(
         {
             "README.md": model_card(profile).encode("utf-8"),

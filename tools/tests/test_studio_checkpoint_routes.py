@@ -1,5 +1,6 @@
 """Selected checkpoint contracts for the video and music Studio adapters."""
 
+import hashlib
 import json
 import os
 import struct
@@ -14,6 +15,9 @@ from modules_forge.yue2_studio.core import Request, runtime_manifest
 
 
 def checkpoint(path, names):
+    if {"audio_patch_proj.weight", "video_patch_proj.weight", "adaln_t_table"} <= set(names):
+        from tools.tests.test_h3_checkpoint_modes import checkpoint as h3_checkpoint
+        return h3_checkpoint(path)
     header = {name: {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]} for name in names}
     header["__metadata__"] = {"h3_variant": "base"}
     for name, shape in {
@@ -33,7 +37,7 @@ def checkpoint(path, names):
 
 
 class SelectedCheckpointRoutes(unittest.TestCase):
-    def test_h3_rejects_ambiguous_roles_unless_metadata_or_fused(self):
+    def test_h3_accepts_structure_regardless_of_filename_or_role_metadata(self):
         with TemporaryDirectory() as folder:
             path = Path(
                 checkpoint(
@@ -41,16 +45,11 @@ class SelectedCheckpointRoutes(unittest.TestCase):
                     ["audio_patch_proj.weight", "video_patch_proj.weight", "adaln_t_table"],
                 )
             )
-            with self.assertRaisesRegex(ValueError, "役割"):
-                studio_checkpoints.h3_role(path)
-            self.assertFalse(studio_checkpoints.h3_compatible(path))
-            header = local_assets.read_header(path)
-            header["__metadata__"]["h3_role"] = "fl2va"
-            with patch.object(local_assets, "read_header", return_value=header):
-                self.assertEqual(studio_checkpoints.h3_role(path), "fl2va")
+            self.assertTrue(studio_checkpoints.h3_compatible(path))
             fused = path.with_name("h3_fl2va_ref2va_fused_turbo.safetensors")
             path.rename(fused)
-            self.assertEqual(studio_checkpoints.h3_role(fused), "both")
+            self.assertTrue(studio_checkpoints.h3_compatible(fused))
+            self.assertEqual(studio_checkpoints.h3_variant(str(fused)), "base")
 
     def test_compatibility_scans_reject_non_mapping_tensor_entries(self):
         with TemporaryDirectory() as folder:
@@ -178,21 +177,9 @@ class SelectedCheckpointRoutes(unittest.TestCase):
                 )
 
     def test_renamed_h3_w4a8_keeps_runtime_precision_requirement(self):
+        from tools.tests.test_h3_checkpoint_modes import checkpoint as h3_checkpoint
         with TemporaryDirectory() as folder:
-            path = Path(
-                checkpoint(
-                    Path(folder) / "custom_fl2va.safetensors",
-                    ["audio_patch_proj.weight", "video_patch_proj.weight", "adaln_t_table"],
-                )
-            )
-            header = local_assets.read_header(path)
-            header["__metadata__"] = {
-                "_quantization_metadata": json.dumps(
-                    {"layers": {"blocks.0.attn.out_proj": {"format": "asym_w4a8_int8"}}}
-                )
-            }
-            encoded = json.dumps(header).encode()
-            path.write_bytes(struct.pack("<Q", len(encoded)) + encoded + b"\0" * 4)
+            path = Path(h3_checkpoint(Path(folder) / "custom.safetensors", storage="w4a8"))
             self.assertEqual(studio_checkpoints.h3_variant(str(path)), "w4a8")
 
     def test_comfy_config_changes_for_equal_names_and_overwritten_file(self):
@@ -253,7 +240,7 @@ class SelectedCheckpointRoutes(unittest.TestCase):
                 root / "custom.safetensors", ["audio_patch_proj.weight", "video_patch_proj.weight", "adaln_t_table"]
             )
             wrong = checkpoint(root / "other_fl2va.safetensors", ["other.weight"])
-            self.assertFalse(studio_checkpoints.h3_compatible(Path(unknown)))
+            self.assertTrue(studio_checkpoints.h3_compatible(Path(unknown)))
             self.assertFalse(studio_checkpoints.h3_compatible(Path(wrong)))
 
     def test_h3_acceleration_uses_selected_file_after_profile(self):
@@ -276,7 +263,6 @@ class SelectedCheckpointRoutes(unittest.TestCase):
             (models / "config.json").write_text('{"model_type":"yue2"}')
             (models / "model.safetensors").write_bytes(b"weights")
             (models / "qwen.tiktoken").write_bytes(b"tokenizer")
-            (models / "weights_manifest.json").write_text("{}")
             (root / "runtime.json").write_text(
                 json.dumps({"schema": 1, "official": {"model": "old", "vae": "shared", "python": "python"}})
             )
@@ -286,6 +272,83 @@ class SelectedCheckpointRoutes(unittest.TestCase):
             self.assertEqual(entry["model"], str(models.resolve()))
             self.assertEqual(entry["vae"], "shared")
             self.assertEqual(entry["checkpoint_identity"], {"sha256": "selected"})
+
+
+class YuE2CustomCheckpointTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.model = self.root / "finetune"
+        self.model.mkdir()
+        (self.model / "config.json").write_text('{"model_type":"yue2"}', encoding="utf-8")
+        (self.model / "qwen.tiktoken").write_bytes(b"shared tokenizer")
+        (self.root / "runtime.json").write_text(json.dumps({"schema": 1, "official": {"model": "old", "vae": "shared"}}))
+        self.hashes = patch.object(local_assets, "HASH_CACHE", self.root / "hashes.json")
+        self.hashes.start()
+        self.addCleanup(self.hashes.stop)
+
+    def select(self):
+        return runtime_manifest(self.root, "official", str(self.model))
+
+    def weight(self, name, data=b"trained weights"):
+        (self.model / name).write_bytes(data)
+
+    def index(self, mapping):
+        (self.model / "model.safetensors.index.json").write_text(json.dumps({"weight_map": mapping}), encoding="utf-8")
+
+    def manifest(self, files):
+        (self.model / "weights_manifest.json").write_text(json.dumps({"files": files}), encoding="utf-8")
+
+    def test_single_finetune_without_manifest_uses_shared_vae_without_mutating_source(self):
+        from modules_forge.yue2_studio.core import model_directory_compatible
+
+        self.weight("model.safetensors")
+        before = {path.name: path.read_bytes() for path in self.model.iterdir()}
+        self.assertTrue(model_directory_compatible(self.model, "official"))
+        entry = self.select()
+        self.assertEqual(entry["model"], str(self.model.resolve()))
+        self.assertEqual(entry["vae"], "shared")
+        self.assertEqual({path.name: path.read_bytes() for path in self.model.iterdir()}, before)
+
+    def test_indexed_shards_are_discovered_and_selected(self):
+        from modules_forge.yue2_studio.core import model_directory_compatible
+
+        names = ["model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors"]
+        for name in names:
+            self.weight(name)
+        self.index({"first.weight": names[0], "second.weight": names[1]})
+        self.assertTrue(model_directory_compatible(self.model, "official"))
+        self.assertEqual(self.select()["model"], str(self.model.resolve()))
+
+    def test_matching_manifest_is_checked_against_the_actual_custom_file(self):
+        self.weight("model.safetensors")
+        self.manifest({"model.safetensors": {"sha256": hashlib.sha256(b"trained weights").hexdigest(), "bytes": 15}})
+        before = (self.model / "weights_manifest.json").read_bytes()
+        self.assertEqual(self.select()["model"], str(self.model.resolve()))
+        self.assertEqual((self.model / "weights_manifest.json").read_bytes(), before)
+
+    def test_stale_or_incomplete_manifest_is_reported_before_generation(self):
+        self.weight("model.safetensors")
+        for files in ({"model.safetensors": {"sha256": "0" * 64}}, {},
+                      {"other.safetensors": {"sha256": hashlib.sha256(b"trained weights").hexdigest()}}):
+            with self.subTest(files=files):
+                self.manifest(files)
+                with self.assertRaisesRegex(ValueError, "weights_manifest.json"):
+                    self.select()
+
+    def test_bad_shard_indexes_and_redirecting_pipeline_are_rejected(self):
+        from modules_forge.yue2_studio.core import model_directory_compatible
+
+        self.weight("model-00001-of-00002.safetensors")
+        for mapping in ({}, {"first.weight": "missing.safetensors"}, {"first.weight": "../outside.safetensors"},
+                        {"first.weight": "model-00001-of-00002.safetensors", "second.weight": "missing.safetensors"}):
+            with self.subTest(mapping=mapping):
+                self.index(mapping)
+                self.assertFalse(model_directory_compatible(self.model, "official"))
+        self.index({"first.weight": "model-00001-of-00002.safetensors"})
+        (self.model / "pipeline.json").write_text('{"model":"../other"}', encoding="utf-8")
+        self.assertFalse(model_directory_compatible(self.model, "official"))
 
 
 if __name__ == "__main__":

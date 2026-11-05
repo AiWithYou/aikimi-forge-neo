@@ -13,7 +13,7 @@ def save(engine, checkpoint):
     local_assets.save_selection(engine, {"checkpoint": checkpoint or ""})
 
 
-def create(engine, family, roots, validator, *, gradio, folders=False, details=""):
+def create(engine, family, roots, validator, *, gradio, folders=False, details="", label="チェックポイント"):
     gr = gradio
     value = local_assets.selection(engine)
     current = value.get("checkpoint", "")
@@ -22,7 +22,7 @@ def create(engine, family, roots, validator, *, gradio, folders=False, details="
             gr.Dropdown(
                 choices=inventory(family, roots, validator, current=current, folders=folders),
                 value=current,
-                label="チェックポイント",
+                label=label,
                 scale=5,
                 interactive=True,
             )

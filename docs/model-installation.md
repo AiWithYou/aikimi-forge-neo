@@ -6,6 +6,8 @@ WindowsではNeoを終了して`aikimi-setup.bat`を実行し、モデルを選�
 
 本体の仮想環境とGPUライブラリを準備してから、選んだモデルを導入します。AnimaはINT8へ自動変換し、H3は専用ComfyUIも準備します。既存の環境を使用する場合もPython 3.13であることを確認し、失敗した処理以降は実行しません。
 
+FLUX 3・MOSS Image・H3の専用環境では、固定版uvをバージョン別のファイルとして取得し、サイズとSHA-256を検証して使用します。旧版の`bootstrap/uv.whl`は更新時に上書き・削除せず残します。新しい固定版の保存先に異なる内容のファイルがある場合は使用せず、内容を保って停止します。
+
 ```powershell
 .\aikimi-setup.bat -Model krea2
 .\aikimi-setup.bat -Model anima38

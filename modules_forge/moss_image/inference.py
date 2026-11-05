@@ -27,8 +27,10 @@ class Cancelled(RuntimeError):
 def require_finite(value, stage):
     import torch
 
-    if torch.is_tensor(value) and not bool(torch.isfinite(value).all()):
-        raise RuntimeError(f"MOSS Image {stage} contains non-finite values")
+    if torch.is_tensor(value):
+        checked = value.float() if str(value.dtype).startswith("torch.float8") else value
+        if not bool(torch.isfinite(checked).all()):
+            raise RuntimeError(f"MOSS Image {stage} contains non-finite values")
 
 
 @contextmanager
