@@ -25,14 +25,11 @@ FORGE_FAMILIES = (
 )
 STUDIO_FAMILIES = (
     "Qwen-Image-2.1",
-    "Ming-Image",
     "Iris-3B",
     "Flux-3-Klein",
     "MOSS-Image",
     "Clef",
-    "SenseNova-U1",
     "MiniMax-H3",
-    "Nanosaur2",
     "YuE2",
 )
 
@@ -41,7 +38,7 @@ def prepare_directories():
     """Prepare empty user-facing storage once during app startup; leave all weights in place."""
     for family in ("Stable-diffusion", *FORGE_FAMILIES, *STUDIO_FAMILIES):
         (ROOT / "models" / family / "checkpoints").mkdir(parents=True, exist_ok=True)
-    for relative in ("Lora", "Qwen-Image-2.1/loras", "Ming-Image/loras", "Iris-3B/loras", "MOSS-Image/loras"):
+    for relative in ("Lora", "Qwen-Image-2.1/loras", "Iris-3B/loras", "MOSS-Image/loras"):
         (ROOT / "models" / relative).mkdir(parents=True, exist_ok=True)
 
 

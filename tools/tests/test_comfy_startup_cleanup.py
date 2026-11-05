@@ -36,8 +36,6 @@ class StartupCleanupTests(unittest.TestCase):
         self.stack.enter_context(patch.object(bridge.workflow_handoff, "install_bundle", return_value=False))
         self.stack.enter_context(patch.object(bridge.orbit_assets, "trusted_runtime_root", return_value=self.root))
         self.stack.enter_context(patch.object(bridge.orbit_assets, "install_node"))
-        self.stack.enter_context(patch("modules_forge.nanosaur2_studio.source_ready", return_value=False))
-        self.stack.enter_context(patch("modules_forge.ming_local.source_ready", return_value=False))
         self.spawn = self.stack.enter_context(patch.object(bridge.subprocess, "Popen", return_value=self.process))
         self.disconnected = bridge.RuntimeReadiness(self.root, self.url, connected=False, acceleration=H3Acceleration())
         self.connected = bridge.RuntimeReadiness(self.root, self.url, connected=True, acceleration=H3Acceleration())

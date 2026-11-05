@@ -25,12 +25,6 @@
             kind: "alias",
             preset: "anima",
         }),
-        sensenova: Object.freeze({
-            buttonId: "aikimi-tab-sensenova",
-            containerId: "tab_sensenova_u15_studio",
-            label: "SenseNova",
-            kind: "native",
-        }),
         minimax_h3: Object.freeze({
             buttonId: "aikimi-tab-minimax-h3",
             containerId: "tab_minimax_h3_studio",
@@ -48,22 +42,10 @@
             label: "Qwen Image 2.1",
             kind: "native",
         }),
-        ming_image: Object.freeze({
-            buttonId: "aikimi-tab-ming-image",
-            containerId: "tab_ming_image_studio",
-            label: "Ming Image",
-            kind: "native",
-        }),
         minimax_h3_image: Object.freeze({
             buttonId: "aikimi-tab-h3-image",
             containerId: "tab_minimax_h3_image_studio",
             label: "H3 Image",
-            kind: "native",
-        }),
-        nanosaur2: Object.freeze({
-            buttonId: "aikimi-tab-nanosaur2",
-            containerId: "tab_nanosaur2_studio",
-            label: "Nanosaur2",
             kind: "native",
         }),
         yue2: Object.freeze({
@@ -106,11 +88,8 @@
     const FEATURE_ORDER = Object.freeze([
         "krea2",
         "anima38",
-        "sensenova",
         "qwen_image21",
-        "ming_image",
         "minimax_h3_image",
-        "nanosaur2",
         "minimax_h3",
         "yue2",
         "irodori",

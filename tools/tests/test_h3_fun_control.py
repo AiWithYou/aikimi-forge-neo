@@ -35,9 +35,9 @@ class FunControlTests(unittest.TestCase):
         nodes["ModelAttentionBackend"]["input"]["required"]["attention"][1]["options"] = ["pytorch attention"]
         self.assertFalse(bridge.ck_attention_available(nodes))
 
-    def test_h3_launch_keeps_memory_compiler_enabled(self):
+    def test_h3_launch_keeps_memory_compiler_disabled(self):
         command = bridge._runtime_command(Path("python"), 8199)
-        self.assertNotIn("--disable-comfy-compiler", command)
+        self.assertIn("--disable-comfy-compiler", command)
         self.assertTrue(bridge._runtime_arguments_are_allowed(command[1:]))
 
     def test_controls_validate_and_missing_video_fails_before_generation(self):

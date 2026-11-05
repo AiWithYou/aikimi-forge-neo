@@ -8,7 +8,7 @@ MOSS ImageはMOSS-Image-SFTの画像生成本体とテキストエンコーダ�
 
 ## フォルダー構造
 
-手元のモデルを追加する標準の置き場は `models/<系列>/checkpoints/` です。起動時に追加用フォルダーを用意します。Forge・Qwen・Ming・IrisのLoRAフォルダーも同様に用意し、下位フォルダーを作って整理できます。
+手元のモデルを追加する標準の置き場は `models/<系列>/checkpoints/` です。起動時に追加用フォルダーを用意します。Forge・Qwen・IrisのLoRAフォルダーも同様に用意し、下位フォルダーを作って整理できます。
 
 ```text
 models/
@@ -16,14 +16,11 @@ models/
 ├─ Anima/checkpoints/
 ├─ Krea2/checkpoints/
 ├─ Qwen-Image-2.1/checkpoints/
-├─ Ming-Image/checkpoints/
 ├─ Iris-3B/checkpoints/
 ├─ Iris-3B/loras/             # 画像生成用の互換LoRA（下位フォルダーで整理可能）
 ├─ MOSS-Image/loras/          # MOSS画像生成本体の互換LoRA（下位フォルダーで整理可能）
 ├─ Clef/checkpoints/
-├─ SenseNova-U1/checkpoints/
 ├─ MiniMax-H3/checkpoints/
-├─ Nanosaur2/checkpoints/
 ├─ YuE2/checkpoints/
 ├─ Lora/                      # Forgeの追加LoRA（下位フォルダーで整理可能）
 ├─ VAE/                       # Forgeの分離VAE
@@ -40,27 +37,24 @@ models/
 |---|---|---|
 | Forge | safetensors・GGUFなど、既存ForgeローダーのCheckpoint | 分離モデルは **VAE / Text Encoder** も指定。Animaの参照・Krea2など既存の機能設定を使用 |
 | Qwen Image 2.1 | 単一safetensors・GGUF、Transformerフォルダー、完全なDiffusersフォルダー | **2.1** と互換の構造。BF16、INT8 ConvRot、対応GGUF、フォルダーの実行時INT8/W4A8。旧Qwen Image／Image Editは対応Forgeプリセットを使用 |
-| Ming Image | ComfyUI形式の単一safetensors | 互換の本体構造。テキスト・VAEは共通部品として個別指定可能 |
 | Iris | 隣接する `config.yaml` を持つ単一safetensors | 生成用Full FT、通常版BF16／FP32、Iris専用INT8／W4A8。深度・復元はそれぞれの公式モデルを使用。[詳細](iris-studio.md#ローカルで学習したチェックポイント) |
 | Clef | 対応するモデル一式のフォルダー | Clef／Clef-Flashの同版・同精度の設定・tokenizer・joint headを含む構成。量子化版は対応manifestとbundle形式 |
-| SenseNova U1.5 | final／pruned INT8 ConvRot safetensors | U1.5の対応テンソル構造と量子化設定。通常BF16や別世代はこのローダーでは扱わない |
-| MiniMax H3・H3 Image | 対応するFL2VA／Ref2VA本体 | 用途と実行プロファイルに合うモデル。text encoder・VAE・音声部品は導入済み共通部品を使用 |
-| Nanosaur2 | 対応する本体safetensors | Nanosaur2の本体構造。共有text encoder・VAEを使用 |
+| MiniMax H3・H3 Image（実験） | 対応するFL2VA／Ref2VA本体 | 用途と実行プロファイルに合うモデル。text encoder・VAE・音声部品は導入済み共通部品を使用 |
+| P-H3 Image | P-H3互換構造のBF16／INT8／W4A8本体 | 同じ `MiniMax-H3/checkpoints/` の下位フォルダーまたは画面で指定した絶対パスから選択。P-H3用のテキストエンコーダーとVAEが必要です。構造の一致は画質や互換性の保証ではありません。 |
 | YuE2 | officialのモデルフォルダー、またはGGUF一式のフォルダー | 選択エンジンに対応するモデル・tokenizer／sidecars・VAEが必要 |
 
 モデル一式に対応するStudioでは、内部にある分割重み・encoder・VAEを本体とは別のCheckpointとして表示しません。同じ拡張子でも異なる系列・世代・量子化方式には互換性がありません。各ローダーは用途、設定、テンソル構造、必要な共通部品を確認します。
 
 ## 標準本体を取得せずに使う
 
-Qwen・Ming・Irisではローカル本体を選んでから、環境と不足する共通部品だけを準備できます。
+Qwen・Irisではローカル本体を選んでから、環境と不足する共通部品だけを準備できます。
 
 ```powershell
 .\aikimi-qwen-image21-setup.bat --components-only
-.\venv\Scripts\python.exe tools\setup_ming_image.py --components-only
 .\venv\Scripts\python.exe tools\setup_iris.py --components-only
 ```
 
-Qwenの完全なDiffusersフォルダーやMingの本体・text encoder・VAE一式を指定済みなら、`--runtime-only` で専用実行環境だけを準備できます。生成ボタンはモデルを取得しません。不足する部品や形式の不一致は準備状態・エラーで確認できます。
+Qwenの完全なDiffusersフォルダーを指定済みなら、`--runtime-only` で専用実行環境だけを準備できます。生成ボタンはモデルを取得しません。不足する部品や形式の不一致は準備状態・エラーで確認できます。
 
 ## LoRAとモデルの変更
 
@@ -68,7 +62,7 @@ LoRAの学習元モデル名や推奨設定は参考情報です。それだけ�
 
 Forgeは `models/Lora/` と下位フォルダーのLoRAを「LoRAを組み合わせる」で複数選択し、表で各強度を−2〜2に設定します。初期値は1、0は読み込みを省略します。従来のLoRAカード・プロンプトの `<lora:名前:強度>` と、Animaの専用選択欄も利用できます。下位フォルダーの同名LoRAはフォルダー名を含む名前で区別します。同じLoRAを専用欄とプロンプトの両方で重ねて指定しないでください。選択と各強度は保存し、画面を開き直しても復元します。
 
-Qwenは `models/Qwen-Image-2.1/loras/`、Mingは `models/Ming-Image/loras/` とその下位フォルダーへ追加LoRAを置きます。追加LoRAを複数選択し、表で各強度を−2〜2に設定します。初期値は1、0は読み込みを省略します。フルパスの直接入力も利用できます。同じ実ファイルの重複指定は受け付けません。Mingの導入済み共有ランタイム内の `models/loras/` も利用できます。
+Qwenは `models/Qwen-Image-2.1/loras/` とその下位フォルダーへ追加LoRAを置きます。追加LoRAを複数選択し、表で各強度を−2〜2に設定します。初期値は1、0は読み込みを省略します。フルパスの直接入力も利用できます。同じ実ファイルの重複指定は受け付けません。
 
 ForgeでPNGの生成情報を読み込むと、LoRA選択欄は空に戻ります。保存されたプロンプトのLoRAタグを使用するため、前回の選択が二重に適用されません。
 

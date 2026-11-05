@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class DependencySecurityVersionTests(unittest.TestCase):
     def test_audited_requirements_use_fixed_setuptools_and_gitpython(self):
         files = [ROOT / "requirements.txt"] + [
-            ROOT / "tools" / f"requirements-{name}.txt" for name in ("clef", "iris", "sensenova", "qwen-image21")
+            ROOT / "tools" / f"requirements-{name}.txt" for name in ("clef", "iris", "qwen-image21")
         ]
         for path in files:
             with self.subTest(path=path):

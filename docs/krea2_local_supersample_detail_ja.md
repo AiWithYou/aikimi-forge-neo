@@ -6,7 +6,7 @@
 
 本機能には2経路があります。通常modeは約512×512pxの固定payloadを1536×1536または2048×2048へ一時的に拡大し、round-trip基準との差から抽出した安全側の局所detail残差だけを元画像へ加えます。`Focused ROI Rewrite` は顔などを実際に描き直す経路です。tight target ROI全体と周囲contextを1枚の正方形として1536へ拡大し、Krea2で1回のcoherent regenerationを行い、同じ縮小経路で戻したフル差分をtarget内だけへフェザー合成します。
 
-実画像に対する品質はprompt、checkpoint、入力detail、denoise、対象領域によって変わります。2026-07-14にRTX 3090で4096×1756画像のfocused実生成を行い、5.12倍のmodel入力、target内16,646画素変更、target外0画素を確認しました。これは単一事例であり、「必ず高画質になる」「既存方式より優れる」とは主張しません。100%表示での目視確認を省略しないでください。既存の `docs/vram_canvas_b5_ja.md` とPDFに記録された実測値、図表、SHA-256は別経路の結果です。
+実画像に対する品質はprompt、checkpoint、入力detail、denoise、対象領域によって変わります。Focused modeでは顔や表情が意図以上に変化する場合があります。100%表示で目視確認してください。
 
 ## 2. 標準ワークフロー
 
@@ -280,108 +280,7 @@ aggregateのmean/p95は、全処理candidateがmetadataへ残すtile-level summa
 
 通常は最初の代表tileまたはFocused targetを保存します。全tileがno-opの場合は最初の診断候補を保存し、`selected_candidate: null` とrejection reasonをmanifestへ記録します。Focusedでは選択候補、`payload_box`、`effective_zoom`、元の `quality_gate_override_reason` を記録します。QA画像をForge galleryへ追加せず、既存ファイルを上書きしません。QA manifestにprompt全文は入れません。
 
-## 14. CPU自動テスト
-
-実modelや外部downloadを使わないテスト:
-
-```powershell
-.\venv\Scripts\python.exe -m unittest -v `
-  tools.tests.test_krea2_local_supersample `
-  tools.tests.test_krea2_local_supersample_gui
-```
-
-compileとpure import:
-
-```powershell
-.\venv\Scripts\python.exe -m py_compile `
-  .\modules_forge\krea2_local_supersample.py `
-  .\scripts\krea2_local_supersample_detail.py
-
-.\venv\Scripts\python.exe -c "import modules_forge.krea2_local_supersample"
-```
-
-既存関連回帰:
-
-```powershell
-.\venv\Scripts\python.exe -m unittest -v `
-  tools.tests.test_vram_canvas `
-  tools.tests.test_vram_canvas_gui `
-  tools.tests.test_krea2_tiled_refine `
-  tools.tests.test_krea2_subject_refine `
-  tools.tests.test_krea2_quality
-```
-
-## 15. Windows / Forge手動確認
-
-1. Forgeを再起動し、Krea2 checkpoint、Qwen Image VAE、Qwen3-VLを選択します。
-2. `img2img` へ承認済み4Kと元promptを入れ、Batch Count / Batch Sizeを1にします。
-3. 保守的な全体detailは `Krea2 Local Supersample Detail` → `Safe 1536` を選びます。
-4. `Restore faces` と `Tiling` を任意の元状態にし、Generate後もその状態へ戻ることを確認します。
-5. 入力と出力の寸法が完全に同じで、galleryへ最終画像が1枚だけ返ることを確認します。
-6. 100%で顔、目、髪、手、衣装、強輪郭、色面、tile境界を比較します。
-7. `ROI Boxes` で小さな領域を指定し、ROI外をpixel比較して不変であることを確認します。
-8. `Ultra Detail 1536` のCandidate Count 2を実行し、PNG metadataに別seedと代表候補、agreementが記録されることを確認します。
-9. 必要なROIだけで `ROI Ultra 2048` を試します。OOM時に1536へ自動再試行されず、具体的な案内が出ることを確認します。
-10. `Save QA crops` をONにし、同じ512px範囲のbefore/after、C0/C1、residualを比較します。
-11. 顔を書き直す場合は `Focused ROI Rewrite` / `Focused Face Rewrite 1536` を選び、1顔を囲むtight targetを指定します。job表示とPNG metadataで実効拡大率が1倍を超えることを確認します。
-12. 実行中断、skip、意図的なvalidation error後にもprompt、seed、mask、Restore faces、Tiling、保存設定が元へ戻ることを確認します。
-13. 最終PNGの `parameters` と `krea2_local_supersample` chunkを確認します。
-
-## 16. 指定プロンプト実機ケーススタディ（2026-07-13）
-
-指定された次のbase promptを、綴り・大小文字・末尾commaを含めてそのまま使用しました。seedは `3883506083`、入力は既存4K preflightを通過した `2896x4096` RGB PNGです。
-
-```text
-light blue hair,long_wavy_hair,devil’s_horn,purple horn,purple_eyes,green_slime,jig eyes,smile,jitome,Expressionless,
-```
-
-RTX 3090 24 GB上の実測結果:
-
-| 条件 | 処理tile / 候補 | 採用tile | 変更画素 | 時間 | peak VRAM |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 顔ROI / Safe 1536 | 9 / 9 | 0 | 0% | 310.1 s（初回model load込み） | 21,479 MiB |
-| 顔ROI / Ultra Detail 1536 | 9 / 18 | 0 | 0% | 197.4 s | 21,617 MiB |
-| 目ROI / ROI Ultra 2048 | 1 / 2 | 0 | 0% | 49.4 s | 22,600 MiB |
-| 全画面 / Safe 1536 | 117 / 117 | 12 | 3.7205% | 1,387.2 s | 22,478 MiB |
-
-顔・目の3条件は候補の局所detail energyが増えず、品質gateにより全件不採用になりました。出力は入力と変更0画素で、decoded RGB pixel SHA-256も `241cba297e05…` のままです。2048は単一ROIでOOMなく完走しましたが、ピーク22,600 MiBで有用な残差は得られませんでした。
-
-全画面Safe 1536は117 tile中12 tileだけを採用し、変更441,330画素（3.7205%）、全RGB channelの平均絶対code差0.02018、p95=0、p99=1、最大8でした。採用位置は上端・左端・下部衣装の一部に偏り、顔中心は不採用です。候補全体のdetail-energy増分は平均−0.1733 codeで、多くは既存4Kより平滑化方向でした。合成metadataのclipping fractionは0です。
-
-この単一事例が示すのは一般的な画質向上ではなく、改善根拠がない候補をbit-identical no-opへ戻せることです。本画像では全画面よりSafe 1536 ROIを先に試し、採用tileと100% cropを確認する運用が妥当です。
-
-- [JIS B5判2ページ・採否マップと原寸crop入り実測短報](krea2_local_supersample_b5_ja.pdf)
-- [短報テキスト版](krea2_local_supersample_b5_ja.md)
-- 再現実行器: `tools/run_krea2_local_supersample_experiment.py`
-- B5 PDF生成器: `tools/build_krea2_local_supersample_paper.py`
-
-再現実行器は画像と無関係なpromptを誤って送らないよう `--prompt` を必須にしています。上記ケースを再現するときも、別画像を評価するときも、画像内容と一致するbase promptを `--prompt '<exact prompt>'` で明示してください。標準出力にはprompt全文を出さず、SHA-256だけを表示します。
-
-## 17. Focused ROI Rewrite実機ケース（2026-07-14）
-
-4096×1756の雪景色の駅構内画像を入力とし、画面右寄りの人物の顔をtarget `(2608,635,2728,785)` としました。targetは120×150px、Context Scale 2.0から得た正方形contextは `(2518,560,2818,860)` の300×300pxです。これを1536×1536へ拡大したため実効拡大率は **5.12倍** です。顔は1枚のprocess input中央に収まり、複数tileや複数seedへ分割されていません。
-
-設定は `Focused Face Rewrite 1536`、6 steps、denoise 0.38、2候補、source側20px inward featherです。checkpointは `turbo_gpt0630_krea2_final_forge_bnb_nf4.safetensors`、Qwen Image VAE、Qwen3-VL 4B bf16、GPUはRTX 3090 24GBです。
-
-| 測定項目 | 結果 |
-|---|---:|
-| 入力 / 出力 | 4096×1756 / 4096×1756 |
-| target / context | 120×150 / 300×300 px |
-| Krea2 process input | 1536×1536 px |
-| 実効拡大率 | 5.12× |
-| target内変更 | 16,646画素 / 92.4778% |
-| target外変更 | 0画素 |
-| target内RGB絶対差 | mean 9.007 / p95 26 / max 77 code |
-| 処理時間 | 49.1 s |
-| peak VRAM | 20,957 MiB（GPU全体、1秒標本） |
-
-選択された高解像度候補では、元4Kで潰れていた両目、虹彩、まつ毛、鼻口、顎線が再構成され、縮小後の4Kへ反映されました。これは自動的な知覚品質保証ではなく、ground truthや盲検評価を持たない単一画像の観察です。一方、処理が実際に1536入力を通り、書き直しがtarget内へ反映され、target外がbit-exactであることは画像差分とmetadataで検証済みです。
-
-- 実行結果: `output/krea2_smart4k_snow_station/focused_face_rewrite_1536/local_supersample_20260714_122916_778319/`
-- 再現実行器: `tools/run_krea2_local_supersample_experiment.py`
-- 実測短報: `docs/krea2_focused_roi_rewrite_b5_ja.pdf`
-
-## 18. 制約と残存リスク
+## 14. 制約と残存リスク
 
 - Krea2が局所cropを全体画像として誤解する可能性はpromptと低denoiseで抑えますが、完全には排除できません。
 - 通常modeのCandidate agreementは誤った同一detailが2候補で一致する場合まで真偽判定できません。
@@ -392,4 +291,3 @@ RTX 3090 24 GB上の実測結果:
 - luma/chroma capはlinear-light単位であり、見た目のsRGB差は元の明るさによって変わります。
 - Focusedはdetail増加、低周波drift、agreementの棄却を採否に使わないため、通常modeより顔形状・明度・柔らかさが変わります。意図的な書き直し用途に限定してください。
 - RGB pixel SHA-256はPNG containerやmetadataのfile hashではありません。
-- Focusedの実画像比較は画像1枚・target 1件・seed系列1件であり、品質改善や設定値の一般性を断定できません。

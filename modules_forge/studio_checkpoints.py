@@ -75,36 +75,6 @@ def h3_compatible(path: Path) -> bool:
         return False
 
 
-def nanosaur_compatible(path: Path) -> bool:
-    try:
-        header = local_assets.read_header(local_assets.local_path(str(path), suffixes=(".safetensors",)))
-        required = {
-            "s_embedder.proj.weight",
-            "final_layer.linear.weight",
-            "blocks.0.attn.q_norm.weight",
-            "blocks.0.mlp.w12.weight",
-        }
-        if not required <= header.keys():
-            return False
-        input_shape = header["s_embedder.proj.weight"].get("shape", [])
-        output_shape = header["final_layer.linear.weight"].get("shape", [])
-        q_shape = header["blocks.0.attn.q_norm.weight"].get("shape", [])
-        mlp_shape = header["blocks.0.mlp.w12.weight"].get("shape", [])
-        return (
-            len(input_shape) == 2
-            and input_shape[1] == 64
-            and output_shape == [64, input_shape[0]]
-            and len(q_shape) == 1
-            and q_shape[0] > 0
-            and input_shape[0] % q_shape[0] == 0
-            and len(mlp_shape) == 2
-            and mlp_shape[1] == input_shape[0]
-            and mlp_shape[0] % 2 == 0
-        )
-    except (OSError, ValueError, TypeError, AttributeError):
-        return False
-
-
 def config_path(runtime: Path, checkpoint: str) -> Path:
     selected = Path(checkpoint).resolve()
     version = local_assets.file_version(selected)
@@ -173,13 +143,20 @@ def _snapshot_versions(path: Path, directory: bool) -> dict:
     return {str(item.relative_to(path)) if directory else "": list(local_assets.file_version(item)) for item in paths}
 
 
-def snapshot_checkpoint(checkpoint: str, *, directory: bool = False) -> dict | None:
+def snapshot_checkpoint(checkpoint: str, *, directory: bool = False, check_cancel=None) -> dict | None:
     """Freeze the selected content before a job starts waiting for the GPU."""
     if not checkpoint:
         return None
     path = local_assets.local_path(checkpoint, directory=directory)
     before = _snapshot_versions(path, directory)
-    identity = local_assets.identity(path) if directory else local_assets.file_identity(path)
+    if directory and check_cancel is not None:
+        raise ValueError("フォルダーの中断可能な検証には対応していません。")
+    if directory:
+        identity = local_assets.identity(path)
+    elif check_cancel is None:
+        identity = local_assets.file_identity(path)
+    else:
+        identity = local_assets.file_identity(path, check_cancel=check_cancel)
     after = _snapshot_versions(path, directory)
     if before != after:
         raise ValueError("選択したチェックポイントが変更されました。実行し直してください。")

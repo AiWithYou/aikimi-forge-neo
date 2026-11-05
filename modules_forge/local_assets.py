@@ -84,35 +84,57 @@ def file_version(path: Path) -> tuple:
     return stat.st_size, stat.st_mtime_ns, changed, stat.st_ino
 
 
-@lru_cache(maxsize=256)
-def _digest(path: str, *version) -> str:
+def _hash_cache_records() -> dict:
+    try:
+        records = json.loads(HASH_CACHE.read_text(encoding="utf-8"))
+        return records if isinstance(records, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def _calculate_digest(path: str, *version, check_cancel=None) -> str:
+    if check_cancel is not None:
+        check_cancel()
     records = {}
     if version[2] is not None:
-        try:
-            records = json.loads(HASH_CACHE.read_text(encoding="utf-8"))
-            if not isinstance(records, dict):
-                records = {}
-            entry = records.get(path, {})
-            if (
-                entry.get("version") == list(version)
-                and isinstance(entry.get("sha256"), str)
-                and len(entry["sha256"]) == 64
-            ):
-                return entry["sha256"]
-        except (OSError, ValueError, AttributeError):
-            records = {}
+        with _LOCK:
+            records = _hash_cache_records()
+        entry = records.get(path, {})
+        if (
+            isinstance(entry, dict)
+            and entry.get("version") == list(version)
+            and isinstance(entry.get("sha256"), str)
+            and len(entry["sha256"]) == 64
+        ):
+            if check_cancel is not None:
+                check_cancel()
+            return entry["sha256"]
     with Path(path).open("rb") as stream:
-        digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        if check_cancel is None:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        else:
+            hasher = hashlib.sha256()
+            while True:
+                check_cancel()
+                chunk = stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+            check_cancel()
+            digest = hasher.hexdigest()
     if version[2] is not None and tuple(version) == file_version(Path(path)):
-        records[path] = {"version": list(version), "sha256": digest}
-        # Losing a concurrent cache entry costs a rehash; never reuse it under a different stamp.
         temporary = None
         try:
-            HASH_CACHE.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=HASH_CACHE.parent, delete=False) as out:
-                temporary = Path(out.name)
-                json.dump(dict(list(records.items())[-1024:]), out)
-            os.replace(temporary, HASH_CACHE)
+            with _LOCK:
+                if check_cancel is not None:
+                    check_cancel()
+                records = _hash_cache_records()
+                records[path] = {"version": list(version), "sha256": digest}
+                HASH_CACHE.parent.mkdir(parents=True, exist_ok=True)
+                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=HASH_CACHE.parent, delete=False) as out:
+                    temporary = Path(out.name)
+                    json.dump(dict(list(records.items())[-1024:]), out)
+                os.replace(temporary, HASH_CACHE)
         except OSError:
             pass  # Read-only workspaces still support local models.
         finally:
@@ -121,14 +143,24 @@ def _digest(path: str, *version) -> str:
     return digest
 
 
-def file_identity(path: Path) -> dict:
+@lru_cache(maxsize=256)
+def _digest(path: str, *version) -> str:
+    return _calculate_digest(path, *version)
+
+
+def file_identity(path: Path, *, check_cancel=None) -> dict:
     path = Path(path).resolve()
     before = file_version(path)
     # Filesystems without a reliable change counter are hashed on every check.
-    digest_fn = _digest if before[2] is not None else _digest.__wrapped__
-    digest = digest_fn(str(path), *before)
+    if check_cancel is not None:
+        digest = _calculate_digest(str(path), *before, check_cancel=check_cancel)
+    else:
+        digest_fn = _digest if before[2] is not None else _digest.__wrapped__
+        digest = digest_fn(str(path), *before)
     if before != file_version(path):
         raise ValueError(f"確認中にファイルが変更されました。再実行してください: {path.name}")
+    if check_cancel is not None:
+        check_cancel()
     return {"path": str(path), "size": before[0], "sha256": digest}
 
 

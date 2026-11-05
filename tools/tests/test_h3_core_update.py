@@ -77,29 +77,32 @@ class CoreUpdateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "更新が未完了"):
                 union2.check_runtime(ready, ancestor=lambda commit: True)
 
-    def test_known_requirement_change_is_removed_only_after_all_files_validate(self):
+    def test_existing_candidate_with_user_edits_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as folder:
             installer = setup.RuntimeInstaller(Path(folder))
             installer.runtime.mkdir(parents=True)
-            (installer.runtime / "requirements.txt").write_text("comfy-aimdo==0.5.3\n", encoding="utf-8")
+            (installer.runtime / ".git").mkdir()
+            (installer.runtime / ".git/index").touch()
             (installer.runtime / "custom.py").write_text("user work\n", encoding="utf-8")
-            responses = ["requirements.txt\ncustom.py\n", "comfy-aimdo==0.5.2\n", "original\n"]
+            responses = [installer.data["comfy_revision"], "custom.py\n"]
             installer.run = Mock(side_effect=[SimpleNamespace(stdout=value) for value in responses])
             with self.assertRaisesRegex(SetupError, "管理対象外"):
-                installer.prepare_core_update("efa6c8f804bff78b46a0fd458ebd2e47bba07a30")
+                installer.install_core()
             self.assertFalse(any("restore" in call.args[0] for call in installer.run.call_args_list))
             self.assertEqual((installer.runtime / "custom.py").read_text("utf-8"), "user work\n")
 
-    def test_custom_requirement_change_cannot_be_overwritten(self):
+    def test_existing_candidate_at_wrong_revision_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as folder:
             installer = setup.RuntimeInstaller(Path(folder))
             installer.runtime.mkdir(parents=True)
+            (installer.runtime / ".git").mkdir()
+            (installer.runtime / ".git/index").touch()
             (installer.runtime / "requirements.txt").write_text("my-package==1\n", encoding="utf-8")
-            installer.run = Mock(side_effect=[SimpleNamespace(stdout=value) for value in
-                                             ("requirements.txt\n", "comfy-aimdo==0.5.2\n")])
-            with self.assertRaisesRegex(SetupError, "管理対象外"):
-                installer.prepare_core_update("efa6c8f804bff78b46a0fd458ebd2e47bba07a30")
-            self.assertEqual(installer.run.call_count, 2)
+            installer.run = Mock(return_value=SimpleNamespace(stdout="wrong-revision"))
+            with self.assertRaisesRegex(SetupError, "異なる版"):
+                installer.install_core()
+            self.assertEqual(installer.run.call_count, 1)
+            self.assertEqual((installer.runtime / "requirements.txt").read_text(encoding="utf-8"), "my-package==1\n")
 
     def test_pending_update_blocks_old_python_fallback(self):
         with tempfile.TemporaryDirectory() as folder:

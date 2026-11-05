@@ -16,6 +16,16 @@ def layout_ids(node):
         yield from layout_ids(child)
 
 
+def layout_subtree(node, identifier):
+    if node["id"] == identifier:
+        return set(layout_ids(node))
+    for child in node.get("children", []):
+        result = layout_subtree(child, identifier)
+        if result:
+            return result
+    return set()
+
+
 class ImageWorkspaceTests(unittest.TestCase):
     def build(self, editable=True):
         from modules_forge.image_workspace import ImageWorkspace
@@ -265,33 +275,6 @@ def studio_ui(path):
 
 
 class ReferenceAdapterTests(unittest.TestCase):
-    def test_sensenova_excludes_hidden_references_in_txt2img(self):
-        from tools.tests.test_sensenova_u15_studio import load_studio_module
-
-        ui = load_studio_module()
-        with patch.object(ui, "normalize_gallery_images", side_effect=AssertionError("must not read retained images")):
-            request = ui._request_from_ui(
-                ui.MODE_TEXT,
-                "a fox",
-                ["retained.png"],
-                ui.DEFAULT_MODEL_ID,
-                ui.QUANT_INT8_CONVROT,
-                "",
-                "",
-                "2048x2048",
-                str(512 * 512),
-                ui.PROFILE_QUALITY,
-                50,
-                4,
-                1,
-                3,
-                123,
-                "low",
-                "sdpa",
-                "bfloat16",
-                should_validate=False,
-            )
-        self.assertEqual(request.input_images, ())
 
     def test_h3_excludes_hidden_references_in_txt2img(self):
         ui = studio_ui("extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py")
@@ -325,9 +308,6 @@ class StudioSurfaceTests(unittest.TestCase):
         models = [
             ("iris-studio/scripts/iris_studio.py", "on_ui_tabs", True, "iris-status"),
             ("qwen-image21-studio/scripts/qwen_image21_studio.py", "on_ui_tabs", True, "qwen21-status"),
-            ("sensenova-u15-studio/scripts/sensenova_u15_studio.py", "_build_ui", True, "sn-progress"),
-            ("ming-image-studio/scripts/ming_image_studio.py", "on_ui_tabs", False, "ming-status"),
-            ("nanosaur2-studio/scripts/nanosaur2_studio.py", "on_ui_tabs", False, "nanosaur2-status"),
             ("minimax-h3-studio/scripts/minimax_h3_image_studio.py", "on_ui_tabs", True, "h3-image-status"),
         ]
         from modules_forge import local_assets
@@ -347,8 +327,18 @@ class StudioSurfaceTests(unittest.TestCase):
                         *(set(layout_ids(item[0].get_config_file()["layout"])) for item in interfaces)
                     )
                     tabs = [item for item in config["components"] if item["type"] == "tabitem"]
-                    self.assertEqual([item["props"]["label"] for item in tabs], ["txt2img", "img2img"])
-                    self.assertEqual(tabs[1]["props"]["interactive"], editable)
+                    mode_tabs = [item for item in tabs if item["props"]["label"] in {"txt2img", "img2img"}]
+                    self.assertEqual([item["props"]["label"] for item in mode_tabs], ["txt2img", "img2img"])
+                    self.assertEqual(mode_tabs[1]["props"]["interactive"], editable)
+                    if path.startswith("minimax-h3-studio/"):
+                        methods = [item for item in tabs if item not in mode_tabs]
+                        self.assertEqual([item["props"]["label"] for item in methods], ["P-H3 Image", "標準H3（実験）"])
+                        legacy = layout_subtree(config["layout"], methods[1]["id"])
+                        p_h3 = layout_subtree(config["layout"], methods[0]["id"])
+                        self.assertTrue({item["id"] for item in mode_tabs} <= legacy)
+                        self.assertFalse({item["id"] for item in mode_tabs} & p_h3)
+                    else:
+                        self.assertEqual(tabs, mode_tabs)
                     status = next(item for item in blocks.blocks.values() if item.elem_id == status_id)
                     ancestors = list()
                     while status is not None:

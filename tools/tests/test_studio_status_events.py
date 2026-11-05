@@ -8,7 +8,6 @@ ROOT = Path(__file__).resolve().parents[2]
 NODE = shutil.which("node")
 STUDIOS = {
     "h3": ROOT / "extensions-builtin/minimax-h3-studio/javascript/minimax_h3_studio.js",
-    "sn": ROOT / "extensions-builtin/sensenova-u15-studio/javascript/sensenova_u15_studio.js",
 }
 
 FIXTURE = r"""
@@ -31,7 +30,6 @@ const progress = {
   querySelector(selector) {
     if (selector === 'strong') return {textContent: message};
     if (selector === "[role='progressbar']") return {getAttribute: () => String(percent)};
-    if (selector === '.sn-progress-head span') return {textContent: `${percent}%`};
     return {textContent: 'Generating'};
   }
 };
@@ -40,11 +38,8 @@ const app = {
   dataset: {}, classList: {toggle() {}}, addEventListener() {},
   querySelector(selector) {
     lookups++;
-    if (selector === '#h3-progress .h3-progress[data-stage]' ||
-        selector === '#sn-progress [data-stage]') return progress;
+    if (selector === '#h3-progress .h3-progress[data-stage]') return progress;
     if (selector === '#h3-progress-announcer .h3-sr-only') return announcer;
-    if (selector === '#sn-validation .sn-inline-error') return {textContent: error};
-    if (selector === '#sensenova-u15-studio') return studio;
     if (selector.includes('generate button') || selector.includes('cancel button')) return button;
     return null;
   }
@@ -120,18 +115,6 @@ process.stdout.write(JSON.stringify(calls));
                 self.assertEqual(len(calls), 1)
                 self.assertEqual(calls[0]["progress"], 0.1)
 
-    def test_sensenova_changed_error_detail_is_published(self):
-        calls = self.run_fixture(
-            "sn",
-            """
-progress.dataset.stage = 'error'; message = 'Generation failed'; update();
-error = 'The runtime was disconnected'; update(); update();
-process.stdout.write(JSON.stringify(calls));
-""",
-        )
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0]["errorDetails"], "Generation failed")
-        self.assertEqual(calls[1]["errorDetails"], "The runtime was disconnected")
 
     def test_showing_status_again_restores_unchanged_studio_state(self):
         for kind in STUDIOS:

@@ -41,6 +41,7 @@ Private Vulnerability Reportingを有効にできないreleaseは、第三者向
 - [ ] FLUX 3の本体module・Studio・setup・worker・テストがlint対象で、Python契約テストはLinux/WindowsのCPU CIが自動探索し、配置JavaScriptの構文確認とNode契約テストも実行される
 - [ ] Irodori TTSの本体・Studio・setup・worker・テストがlint対象で、入力・成果物・モデル保持の契約テストをLinux/WindowsのCPU CIで実行する
 - [ ] MOSS Imageの本体・Studio・setup・worker・テストがlint対象で、精度選択・LoRA・成果物・中断の契約テストをLinux/WindowsのCPU CIで実行する
+- [ ] P-H3の実装・画像画面・setup、H3動画画面とそれぞれのテストを単独で変更した場合も、pull requestとpushのlintが実行され、Ruffの対象に含まれる
 - [ ] FLUX 3の専用依存lockはCUDA 13.0用indexを含む再生成コマンドを保持し、依存変更後は専用環境を再検証する
 - [ ] PowerShell parserがすべての`.ps1`を受理する
 - [ ] actionlintがworkflowを受理する
@@ -53,9 +54,10 @@ Private Vulnerability Reportingを有効にできないreleaseは、第三者向
 - [ ] dependency reviewを確認した
 - [ ] GitHub Actionsの`uses`が確認済みcommit SHAへ固定されている
 
-ローカルの中心command:
+ローカルの中心command（Windows PowerShell。UTF-8設定はこのセッションと子プロセスに適用）:
 
 ```powershell
+$env:PYTHONUTF8 = "1"
 .\venv\Scripts\python.exe .\tools\run_ci_tests.py --verbosity 1
 .\venv\Scripts\python.exe -m unittest -v tools.tests.test_aikimi_setup
 .\venv\Scripts\python.exe -m ruff check tools\aikimi_setup.py tools\tests\test_aikimi_setup.py
@@ -63,7 +65,7 @@ Private Vulnerability Reportingを有効にできないreleaseは、第三者向
 
 ## 4. model installer
 
-- [ ] `list`がKrea2、Anima 3.8B、SenseNovaを表示する
+- [ ] `list`がKrea2、Anima 3.8Bを表示する
 - [ ] `--dry-run`がnetworkとfilesystemを変更しない
 - [ ] path traversal、absolute path、symlink escapeを拒否する
 - [ ] HTTP Range、Range無視、途中切断、不正Content-Rangeをtestした
@@ -89,12 +91,9 @@ Aikimi画像assetの権利noticeを確認できないreleaseは、配布条件�
 
 日本語文書の最終確認:
 
-```powershell
-& "$env:USERPROFILE\.codex\skills\enforce-japanese-style\scripts\japanese_style_guard.py" lint `
-  README.md SECURITY.md CONTRIBUTING.md THIRD_PARTY_NOTICES.md docs
-```
-
-findingがある場合は、単語だけを置換せず、対象文全体を書き直します。
+- [ ] 変更した文書を通して読み、手順・制限・リンク先が現在の仕様と一致することを確認した
+- [ ] 文の対象や条件が伝わり、曖昧な表現・誤字・古い記述がないことを確認した
+- [ ] 個人のパスや作業・検証の詳細記録などを公開文書に含めていないことを確認した
 
 ## 6. 実機確認
 
@@ -106,7 +105,7 @@ findingがある場合は、単語だけを置換せず、対象文全体を書�
 - [ ] `Krea2`を別のタブから開くと`txt2img`へ移動し、`Krea2 2-Stage Upscale`を自動選択しない
 - [ ] `Anima`がUI Presetの`anima`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持する
 - [ ] `Anima`を別のタブから開くと`txt2img`へ移動し、選択したタブのAnima 3.8B設定欄を展開する
-- [ ] `SenseNova`と`MiniMax H3`が専用タブを直接開く
+- [ ] `MiniMax H3`が専用タブを直接開く
 - [ ] 通常のForgeタブに全画面共通Aikimi headerや固定status overlayが表示されない
 - [ ] ちびあいきみがAikimi機能内だけに表示され、通常のForgeタブではpollingを停止する
 - [ ] Aikimiタブをkeyboardで選択でき、ARIA上で同じpanelに二つのselected tabが生じない
@@ -118,7 +117,7 @@ findingがある場合は、単語だけを置換せず、対象文全体を書�
 - [ ] capabilities APIが現在のmodel状態を返す
 - [ ] remote modeが認証なしで失敗する
 - [ ] 認証付きLAN profileを隔離networkで確認した
-- [ ] Krea2、Anima、SenseNova、MiniMax H3の対象testを分離して記録した
+- [ ] Krea2、Anima、MiniMax H3の対象testを分離して記録した
 - [ ] H3の通常生成と360°周回の設定保持、写真入力、履歴とComfyUIへの書き出しをWindowsで確認した
 - [ ] 推論キャッシュを変更した場合、同じ条件でGPU時間・VRAM・出力差と終了後の破棄を確認した
 
@@ -136,12 +135,12 @@ GPU live testを実行していない機能は、成功と記載しません。G
 
 ## 8. GitHub Releases
 
-GitHub Releasesは版ごとの変更点とソースを確認する入口として維持します。VUpは版番号・文書の更新、push、CI成功、同じ版のtagとReleaseの公開までを完了条件とします。版番号を変えない文書修正では、新しいReleaseを作りません。
+GitHub Releasesは版ごとの変更点とソースを確認する入口として維持します。開発中の版はREADMEとCHANGELOGに未リリースと明記し、未作成のtagにはリンクしません。正式版の公開には版番号・文書の更新、push、CI成功、同じ版のtagとReleaseの公開が必要です。版番号を変えない文書修正では、新しいReleaseを作りません。
 
 - [ ] `modules/aikimi_version.py`、README、CHANGELOGの版番号が一致する
 - [ ] READMEの版番号リンクが同じ版のReleaseを指す
 - [ ] CIが成功した公開commitへ`v<版番号>`のtagを付ける。既存tagは移動しない
-- [ ] 前回のRelease以降の変更、必要な更新手順、検証記録をRelease本文へ記載する
+- [ ] 前回のRelease以降の変更、必要な更新手順、利用上の制限をRelease本文へ記載する
 - [ ] Releaseを公開し、最新の正式版をLatestにする
 - [ ] 公開後にLatest、tagのcommit、READMEの版番号が一致することを確認する
 

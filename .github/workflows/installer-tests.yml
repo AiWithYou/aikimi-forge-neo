@@ -19,7 +19,6 @@ on:
       - "tools/tests/test_aikimi_setup.py"
       - "tools/tests/test_anima38_download_script.py"
       - "tools/tests/test_krea2_download_script.py"
-      - "tools/tests/test_sensenova_u15_download_script.py"
       - ".github/workflows/installer-tests.yml"
   push:
     branches: [neo]
@@ -40,7 +39,6 @@ on:
       - "tools/tests/test_aikimi_setup.py"
       - "tools/tests/test_anima38_download_script.py"
       - "tools/tests/test_krea2_download_script.py"
-      - "tools/tests/test_sensenova_u15_download_script.py"
       - ".github/workflows/installer-tests.yml"
   workflow_dispatch:
 
@@ -72,9 +70,9 @@ jobs:
           python -m unittest -v
           tools.tests.test_aikimi_setup
           tools.tests.test_model_setup_launcher
+          tools.tests.test_retired_image_features
           tools.tests.test_anima38_download_script
           tools.tests.test_krea2_download_script
-          tools.tests.test_sensenova_u15_download_script
           tools.tests.test_moss_image_setup
       - name: Parse downloader PowerShell scripts
         if: runner.os == 'Windows'

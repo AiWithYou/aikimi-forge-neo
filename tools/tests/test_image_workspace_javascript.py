@@ -32,7 +32,6 @@ function surface(key, editable = true) {
     return {id: key, buttons, querySelector: () => ui};
 }
 const qwen = surface("qwen21-common");
-const ming = surface("ming-common", false);
 const forge = {id: "tab_txt2img", querySelector: () => null};
 const root = {querySelectorAll: () => [], querySelector: () => null};
 const context = {
@@ -65,11 +64,9 @@ qwen.buttons[1].click();
 emit("click", {target: {closest: selector => selector === 'button[role="tab"]' ? qwen.buttons[1] : null}});
 select(forge, "anima38");
 const alias = {feature, container: current.id, forgeClicks};
-select(ming, "ming_image");
-const textOnlyMode = ming.buttons.map(button => button.selected);
 qwen.buttons[0].click();
 select(qwen, "qwen_image21");
-process.stdout.write(JSON.stringify({alias, textOnlyMode, qwenMode: qwen.buttons.map(button => button.selected)}));
+process.stdout.write(JSON.stringify({alias, qwenMode: qwen.buttons.map(button => button.selected)}));
 """
 
 
@@ -89,8 +86,7 @@ class ImageWorkspaceJavascriptTests(unittest.TestCase):
     def test_studio_mode_memory_does_not_move_the_activated_forge_host(self):
         self.assertEqual(self.result["alias"], {"feature": "anima38", "container": "tab_txt2img", "forgeClicks": 0})
 
-    def test_text_only_studio_does_not_erase_the_desired_edit_mode(self):
-        self.assertEqual(self.result["textOnlyMode"], [True, False])
+    def test_forge_host_does_not_erase_the_desired_edit_mode(self):
         self.assertEqual(self.result["qwenMode"], [False, True])
 
     def test_model_help_waits_for_lazy_settings_and_survives_remount(self):

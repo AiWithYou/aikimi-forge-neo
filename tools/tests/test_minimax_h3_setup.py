@@ -22,7 +22,7 @@ class ModelsOnlyCliTests(unittest.TestCase):
         destination = Path("fixture/models/MiniMax-H3")
         with (
             mock.patch.object(setup.sys, "argv", ["setup_minimax_h3.py", "--models-only"]),
-            mock.patch.object(setup, "plan", return_value={"models": str(destination)}),
+            mock.patch.object(setup, "plan", return_value={"models": str(destination), "shared": False}),
             mock.patch.object(setup, "verify_models") as download,
             mock.patch.object(setup, "RuntimeInstaller") as installer,
             mock.patch.object(setup, "emit"),
@@ -34,7 +34,7 @@ class ModelsOnlyCliTests(unittest.TestCase):
     def test_models_only_reports_download_failure(self):
         with (
             mock.patch.object(setup.sys, "argv", ["setup_minimax_h3.py", "--models-only"]),
-            mock.patch.object(setup, "plan", return_value={"models": "fixture/models"}),
+            mock.patch.object(setup, "plan", return_value={"models": "fixture/models", "shared": False}),
             mock.patch.object(setup, "verify_models", side_effect=SetupError("download failed")),
             mock.patch.object(setup, "RuntimeInstaller") as installer,
             mock.patch.object(setup, "emit"),
@@ -54,6 +54,17 @@ class ModelsOnlyCliTests(unittest.TestCase):
         download.assert_not_called()
         installer.assert_not_called()
 
+    def test_models_only_never_downloads_into_a_shared_model_root(self):
+        destination = Path("fixture/shared-models")
+        with (
+            mock.patch.object(setup.sys, "argv", ["setup_minimax_h3.py", "--models-only"]),
+            mock.patch.object(setup, "plan", return_value={"models": str(destination), "shared": True}),
+            mock.patch.object(setup, "verify_models") as verify,
+            mock.patch.object(setup, "emit"),
+        ):
+            self.assertEqual(setup.main(), 0)
+        verify.assert_called_once_with(destination, shared=True)
+
 
 class ManagedH3RuntimeTests(unittest.TestCase):
     def test_external_model_yaml_cannot_select_an_external_runtime(self):
@@ -67,7 +78,7 @@ class ManagedH3RuntimeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertIsNone(runtime.installed_runtime_root(root))
-            self.assertEqual(runtime.managed_runtime_root(root), root.resolve() / "repositories/minimax-h3/ComfyUI")
+            self.assertEqual(runtime.managed_runtime_root(root), runtime.candidate_runtime_root(root))
 
     def test_incomplete_or_outdated_setup_is_not_ready(self):
         with tempfile.TemporaryDirectory() as temporary:

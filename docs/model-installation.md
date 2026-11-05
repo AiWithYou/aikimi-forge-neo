@@ -4,12 +4,11 @@
 
 WindowsではNeoを終了して`aikimi-setup.bat`を実行し、モデルを選びます。Git、Python 3.13、PowerShell 7、uv、対応するNVIDIAドライバーを先に用意してください。
 
-本体の仮想環境とGPUライブラリを準備してから、選んだモデルを導入します。AnimaはINT8へ自動変換し、SenseNovaは専用Python環境、H3は専用ComfyUIも準備します。既存の環境を使用する場合もPython 3.13であることを確認し、失敗した処理以降は実行しません。
+本体の仮想環境とGPUライブラリを準備してから、選んだモデルを導入します。AnimaはINT8へ自動変換し、H3は専用ComfyUIも準備します。既存の環境を使用する場合もPython 3.13であることを確認し、失敗した処理以降は実行しません。
 
 ```powershell
 .\aikimi-setup.bat -Model krea2
 .\aikimi-setup.bat -Model anima38
-.\aikimi-setup.bat -Model sensenova
 .\aikimi-setup.bat -Model h3
 ```
 
@@ -23,13 +22,13 @@ WindowsではNeoを終了して`aikimi-setup.bat`を実行し、モデルを選�
 |---|---|---|
 | Krea2 | `download_krea2_int8_convrot_models.bat` | INT8・エンコーダー・VAE |
 | Anima 3.8B v1.1 | `download_anima38_v11_int8_convrot_models.bat` | BF16取得・INT8変換・エンコーダー・VAE |
-| SenseNova U1.5 | `download_sensenova_u15_models.bat` | INT8・8-Step LoRA |
 | MiniMax H3 | `download_minimax_h3_models.bat` | 標準INT8モデル・エンコーダー・映像／音声VAE |
 | [MOSS-Image-SFT](moss-image.md) | `aikimi-moss-image-setup.bat` | 標準はINT8本体・INT8テキスト・FP32 VAE、約14.1GB。W4A8テキスト／BF16は個別選択 |
 
-Animaの変換には通常起動で準備済みのNeo環境とNVIDIA GPU、H3のダウンロードにはPython 3.12以上が必要です。H3の保存先は`models/MiniMax-H3`です。
+Animaの変換には通常起動で準備済みのNeo環境とNVIDIA GPU、H3のダウンロードにはPython 3.12以上が必要です。H3の保存先は`models/MiniMax-H3`です。H3の実行環境はH3 Studio画面から準備でき、取得済みモデルは再利用します。
 
-SenseNovaの実行環境も導入する場合は既存の`download_sensenova_u15_int8.bat`を使えます。H3の実行環境はH3 Studio画面から準備できます。取得済みモデルは再利用します。
+P-H3 Imageは起動後に `H3 Image → P-H3 Image → 準備を開く` から環境とモデルを準備します。H3動画と実行環境を共有しますが、P-H3だけであれば動画用モデルは不要です。[必要なファイルと利用条件](../extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)を確認してください。
+
 
 統一CLIはPython 3.13のstdlibだけで、profile一覧、導入、検証、修復を実行します。
 
@@ -37,7 +36,6 @@ SenseNovaの実行環境も導入する場合は既存の`download_sensenova_u15
 python .\tools\aikimi_setup.py list
 python .\tools\aikimi_setup.py install krea2
 python .\tools\aikimi_setup.py install anima38
-python .\tools\aikimi_setup.py install sensenova
 python .\tools\aikimi_setup.py verify
 python .\tools\aikimi_setup.py repair anima38
 ```
@@ -45,7 +43,6 @@ python .\tools\aikimi_setup.py repair anima38
 計画だけを確認する場合は`--dry-run`、機械可読結果には`--json`を付けます。
 
 ```powershell
-python .\tools\aikimi_setup.py install sensenova --dry-run --json
 python .\tools\aikimi_setup.py verify krea2 --json
 ```
 
@@ -110,23 +107,6 @@ python .\tools\aikimi_setup.py install anima38 --keep-source
 
 v1.1用PowerShell installerの一時peakは約17.82 GiBで、この値はAnima共通encoderとVAEがすでにある構成です。統一CLIが共通2ファイルも新規導入する場合は、約19.16 GiBに64 MiB以上の余裕を加えてください。
 
-### SenseNova U1.5
-
-取得物:
-
-- 固定runtime source 27ファイル
-- SenseNova U1.5 INT8 ConvRot checkpoint
-- 公式8-Step LoRA
-- runtime revision record
-
-runtime revisionは`e6dfd45762eb46f805067fe079c14bcb643ccccd`です。各runtime fileもpath、size、SHA-256で固定しており、GitHub tree APIの件数だけを信用しません。
-
-```powershell
-python .\tools\aikimi_setup.py install sensenova
-```
-
-最終配置は約17.28 GiBです。統一CLIは単一`.part`を順番に取得します。既存PowerShell installerは32 MiB chunkを並列取得した後で単一modelへassembleするため、一時peakは約33.79 GiBです。
-
 ## 既存batとの互換
 
 次の入口も残します。
@@ -135,7 +115,6 @@ python .\tools\aikimi_setup.py install sensenova
 download_krea2_int8_convrot_models.bat
 download_anima38_v11_int8_convrot_models.bat
 download_anima38_int8_convrot_models.bat
-download_sensenova_u15_int8.bat
 ```
 
 Animaの旧ファイル名はv1専用の互換入口です。新規導入では`download_anima38_v11_int8_convrot_models.bat`を使います。
@@ -167,7 +146,7 @@ python .\tools\aikimi_setup.py repair krea2
 
 現在の固定artifactはpublicで、Hugging Face tokenを必要としません。CLIはtoken引数を受け付けず、query string付きartifact URLも拒否します。tokenをcommand、URL、logへ書かないでください。
 
-`list`とinstall結果はlicense URLを表示します。Krea2、Anima、SenseNova、Qwenには異なる条件があります。modelを利用または再配布する前に、固定revisionのmodel cardとlicense原文を確認してください。CLIの完全性検証は、利用許諾の判定ではありません。
+`list`とinstall結果はlicense URLを表示します。Krea2、Anima、Qwenには異なる条件があります。modelを利用または再配布する前に、固定revisionのmodel cardとlicense原文を確認してください。CLIの完全性検証は、利用許諾の判定ではありません。
 
 ## JSON結果
 

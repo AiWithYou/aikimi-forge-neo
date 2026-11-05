@@ -55,7 +55,6 @@ class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
             ("txt2img", "txt2img"),
             ("img2img", "img2img"),
             ("extras", "Extras"),
-            ("sensenova_u15_studio", "SenseNova U1.5"),
             ("minimax_h3_studio", "H3 Studio"),
             ("qwen_image21_studio", "Qwen Image 2.1"),
             ("clef_studio", "Clef"),
@@ -457,7 +456,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 14
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 11
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -637,23 +636,14 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
     }}
 
     const studioPanelsWereLazyBeforeVisit =
-        !document.querySelector("#tab_sensenova_u15_studio") &&
         !document.querySelector("#tab_minimax_h3_studio") &&
         !document.querySelector("#tab_qwen_image21_studio");
     let nativeLazyResults = null;
     if ({json.dumps(lazy_panels)}) {{
-        const sensenova = document.querySelector("#aikimi-tab-sensenova");
         const minimax = document.querySelector("#aikimi-tab-minimax-h3");
-        sensenova.click();
-        await waitFor(() => window.AikimiTabs.getActiveContainer()?.id === "tab_sensenova_u15_studio");
-        const sensenovaResult = {{
-            active: window.AikimiTabs.getActiveFeature(),
-            container: window.AikimiTabs.getActiveContainer()?.id || null
-        }};
         minimax.click();
         await waitFor(() => window.AikimiTabs.getActiveContainer()?.id === "tab_minimax_h3_studio");
         nativeLazyResults = {{
-            sensenova: sensenovaResult,
             minimax: {{
                 active: window.AikimiTabs.getActiveFeature(),
                 container: window.AikimiTabs.getActiveContainer()?.id || null
@@ -792,7 +782,6 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         nativeContainsAikimiButtons: currentNativeButtons()
             .some((button) => button.id?.startsWith("aikimi-tab-")),
         nativeStudioButtonsHidden: {{
-            sensenova: getComputedStyle(fixtureNativeButton("tab_sensenova_u15_studio")).display === "none",
             minimax: getComputedStyle(fixtureNativeButton("tab_minimax_h3_studio")).display === "none",
             qwen: getComputedStyle(fixtureNativeButton("tab_qwen_image21_studio")).display === "none",
             clef: getComputedStyle(fixtureNativeButton("tab_clef_studio")).display === "none"
@@ -858,11 +847,8 @@ class AikimiTabsChromiumTests(unittest.TestCase):
             [
                 "Krea2",
                 "Anima",
-                "SenseNova",
                 "Qwen Image 2.1",
-                "Ming Image",
                 "H3 Image",
-                "Nanosaur2",
                 "MiniMax H3",
                 "YuE2 Music",
                 "Irodori TTS",
@@ -888,7 +874,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
         self.assertFalse(result["nativeContainsAikimiButtons"])
         self.assertEqual(
             result["nativeStudioButtonsHidden"],
-            {"sensenova": True, "minimax": True, "qwen": True, "clef": True},
+            {"minimax": True, "qwen": True, "clef": True},
         )
         self.assertEqual(
             result["clefResult"],
@@ -1069,11 +1055,8 @@ class AikimiTabsChromiumTests(unittest.TestCase):
             [
                 "Krea2",
                 "Anima",
-                "SenseNova",
                 "Qwen Image 2.1",
-                "Ming Image",
                 "H3 Image",
-                "Nanosaur2",
                 "MiniMax H3",
                 "YuE2 Music",
                 "Irodori TTS",
@@ -1093,10 +1076,6 @@ class AikimiTabsChromiumTests(unittest.TestCase):
         self.assertTrue(result["animaTxt2imgResult"]["visibleChecked"])
         self.assertTrue(result["animaImg2imgResult"]["visibleChecked"])
         self.assertTrue(result["studioPanelsWereLazyBeforeVisit"])
-        self.assertEqual(
-            result["nativeLazyResults"]["sensenova"],
-            {"active": "sensenova", "container": "tab_sensenova_u15_studio"},
-        )
         self.assertEqual(
             result["nativeLazyResults"]["minimax"],
             {"active": "minimax_h3", "container": "tab_minimax_h3_studio"},

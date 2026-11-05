@@ -189,55 +189,6 @@ def _anima38_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     )
 
 
-def _sensenova_check(paths: DiagnosticPaths) -> DiagnosticCheck:
-    try:
-        from modules_forge.sensenova_u15_bridge import (
-            CONVROT_FILE_NAME,
-            inspect_runtime,
-        )
-
-        status = inspect_runtime(
-            paths.models_root / "SenseNova-U1" / "runtime-final",
-            checkpoint=paths.models_root / "SenseNova-U1" / CONVROT_FILE_NAME,
-        )
-    except Exception:
-        return DiagnosticCheck(
-            "sensenova",
-            "SenseNova U1.5",
-            CheckState.BLOCKED,
-            "SenseNova readiness could not be checked safely.",
-            "Run download_sensenova_u15_int8.bat, then use the Studio status check.",
-            available=False,
-        )
-    if status.ready:
-        profile = "Quality and official 8-Step profiles" if status.lora_ready else "Quality profile"
-        return DiagnosticCheck(
-            "sensenova",
-            "SenseNova U1.5",
-            CheckState.READY,
-            f"{profile} are available with the pinned runtime and checkpoint.",
-            "No action is required.",
-            available=True,
-        )
-    if status.partial_bytes:
-        return DiagnosticCheck(
-            "sensenova",
-            "SenseNova U1.5",
-            CheckState.WARNING,
-            "A partial SenseNova download was detected.",
-            "Run download_sensenova_u15_int8.bat again to resume and verify it.",
-            available=False,
-        )
-    return DiagnosticCheck(
-        "sensenova",
-        "SenseNova U1.5",
-        CheckState.BLOCKED,
-        "The pinned SenseNova runtime or checkpoint is unavailable.",
-        "Run download_sensenova_u15_int8.bat, review the model license, and retry the check.",
-        available=False,
-    )
-
-
 def _implementation_check(
     paths: DiagnosticPaths,
     *,
@@ -345,40 +296,65 @@ def _qwen_image21_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     )
 
 
-def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | None:
-    if feature == "minimax_h3_image":
-        from dataclasses import replace
+def _minimax_h3_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
+    implementation = all((paths.root / name).is_file() for name in (
+        "modules_forge/minimax_h3_bridge.py",
+        "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py",
+    ))
+    if not implementation:
+        return DiagnosticCheck(
+            "minimax_h3_image", "MiniMax H3 Image", CheckState.BLOCKED,
+            "H3 Imageの画面または実行部品が見つかりません。", "H3 Imageの組み込みファイルを復元してください。", available=False,
+        )
 
-        return replace(_minimax_h3_check(paths), id=feature, label="MiniMax H3 Image")
+    ph3_ready = legacy_ready = upsampler_ready = False
+    try:
+        from modules_forge import local_assets, p_h3_image
+        from modules_forge.minimax_h3_acceleration import H3Acceleration
+        from modules_forge.minimax_h3_bridge import model_file_status
+        from modules_forge.minimax_h3_runtime import candidate_runtime_root, installed_runtime_root, model_root
+
+        runtime = installed_runtime_root(paths.root)
+        if runtime is not None:
+            try:
+                selected = local_assets.selection("h3").get("checkpoint", "")
+                files = model_file_status(runtime, acceleration=H3Acceleration(checkpoint=selected or ""))
+                common = all(files.get(name) for name in ("Qwen3-VL 32B", "Video VAE", "Audio VAE"))
+                legacy_ready = common and bool(files.get("FL2VA") or files.get("Ref2VA"))
+            except (OSError, ValueError, TypeError):
+                legacy_ready = False
+            if (paths.root / "modules_forge/p_h3_image.py").is_file() and runtime.resolve() == candidate_runtime_root(paths.root).resolve():
+                models = model_root(runtime)
+                selected = local_assets.selection("p-h3-image").get("checkpoint", "")
+                checkpoint = Path(selected) if selected else models / "diffusion_models" / p_h3_image.MODEL
+                ph3_ready = (
+                    checkpoint.is_absolute() and checkpoint.suffix.casefold() == ".safetensors" and checkpoint.is_file()
+                    and (models / "text_encoders" / p_h3_image.TEXT_ENCODER).is_file()
+                    and (models / "vae" / p_h3_image.VAE).is_file()
+                )
+                upsampler_ready = (models / "text_encoders" / p_h3_image.UPSAMPLER).is_file()
+    except (OSError, ValueError, TypeError, ImportError):
+        pass
+
+    summary = f"P-H3: {'必要ファイルあり' if ph3_ready else '未確認'} / 標準H3: {'必要ファイルあり' if legacy_ready else '未確認'}。"
+    if ph3_ready and not upsampler_ready:
+        summary += "プロンプト補助はオフで使用できます。"
+    action = "ファイルの存在による簡易確認です。生成時にモデルと実行環境を確認します。" if ph3_ready or legacy_ready else "H3 Imageの使いたい方式で実行環境とモデルを準備してください。"
+    return DiagnosticCheck("minimax_h3_image", "MiniMax H3 Image", CheckState.WARNING, summary, action,
+                           available=ph3_ready or legacy_ready)
+
+
+def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | None:
     check = {
         "krea2": _krea2_check,
         "anima38": _anima38_check,
-        "sensenova": _sensenova_check,
         "minimax_h3": _minimax_h3_check,
+        "minimax_h3_image": _minimax_h3_image_check,
         "qwen_image21": _qwen_image21_check,
-        "ming_image": _ming_image_check,
         "yue2": _yue2_check,
         "irodori": _irodori_check,
     }.get(feature)
     return check(paths) if check else None
-
-
-def _ming_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
-    from modules_forge.ming_image_studio import model_ready, runtime_root
-    from tools.setup_ming_image import runtime_ready
-
-    try:
-        ready = runtime_ready(paths.root) and model_ready(runtime_root(paths.root), verify_hash=False)
-    except (OSError, ValueError):
-        ready = False
-    return DiagnosticCheck(
-        "ming_image",
-        "Ming Image",
-        CheckState.READY if ready else CheckState.BLOCKED,
-        "Ming専用環境とINT8・W4A8モデルを確認しました。" if ready else "Ming専用環境またはモデルが不足しています。",
-        "Ming Imageタブの「実行環境とモデル」から準備できます。",
-        available=ready,
-    )
 
 
 def _irodori_check(paths: DiagnosticPaths) -> DiagnosticCheck:
@@ -424,10 +400,8 @@ def feature_checks(paths: DiagnosticPaths) -> tuple[DiagnosticCheck, ...]:
     return (
         _krea2_check(paths),
         _anima38_check(paths),
-        _sensenova_check(paths),
         _minimax_h3_check(paths),
         _qwen_image21_check(paths),
-        _ming_image_check(paths),
         _implementation_check(
             paths,
             check_id="forge_canvas",

@@ -60,7 +60,7 @@ class H3Acceleration:
     jev_interval: int = 2
     jev_max_calls: int = 0
     jev_max_wait_seconds: float = 0.0
-    compiler_mode: str = "on"
+    compiler_mode: str = "off"
     checkpoint: str = ""
     model_path: str = ""  # Shared Comfy runtime registration for another Studio adapter.
 
@@ -89,7 +89,7 @@ class H3Acceleration:
             ("decode_mode", {"standard", "fast", "fp16_accumulation"}),
             ("attention", {"dense", "sol", "sla"}),
             ("clip_cache", {"off", "auto", "refresh"}),
-            ("compiler_mode", {"on", "off"}),
+            ("compiler_mode", {"off"}),
         ):
             value = getattr(self, name)
             if not isinstance(value, str) or value not in allowed:
@@ -143,7 +143,7 @@ class H3Acceleration:
             jev_interval=values[previous_count + 7] if len(values) >= previous_count + 8 else 2,
             jev_max_calls=values[previous_count + 8] if len(values) >= previous_count + 10 else 0,
             jev_max_wait_seconds=values[previous_count + 9] if len(values) >= previous_count + 10 else 0.0,
-            compiler_mode=values[previous_count + 10] if len(values) >= previous_count + 11 else "on",
+            compiler_mode=values[previous_count + 10] if len(values) >= previous_count + 11 else "off",
             checkpoint=values[previous_count + 11] or "" if len(values) >= previous_count + 12 else "",
         )
         result.validate()

@@ -154,7 +154,7 @@ def _generation_label(mode):
 
 
 def _orbit_prepared(runtime_value=""):
-    return orbit_assets.installed(Path(script_path), runtime_root=Path(runtime_value) if runtime_value else None)
+    return orbit_assets.installed(Path(script_path), runtime_root=_initial_runtime() if runtime_value else None)
 
 
 def _generation_gate(mode, installing=False, busy=False, acceleration=None, photo=None, runtime_value=""):
@@ -185,7 +185,7 @@ def _orbit_runtime_updates(runtime_value, installing=False, busy=False):
 def _install_orbit(runtime_value=""):
     yield _orbit_status_html("Orbit LoRAを導入中…"), gr.update(value="導入中…", interactive=False), True
     try:
-        root = resolve_runtime_root(runtime_value) if runtime_value else None
+        root = resolve_runtime_root(_initial_runtime()) if runtime_value else None
         orbit_assets.install(Path(script_path), runtime_root=root)
     except (OSError, ValueError, RuntimeError) as exc:
         yield _orbit_status_html(f"導入に失敗しました: {exc}", error=True), gr.update(value="再試行", interactive=True), False
@@ -344,6 +344,7 @@ def _canvas_ratio_state(quality):
 
 
 def _initial_runtime() -> Path | None:
+    """Resolve on each operation; the hidden field may predate setup."""
     return managed_runtime_root(Path(script_path))
 
 
@@ -705,7 +706,7 @@ def _prompt_music_updates(prompt: str, current_validation: str):
 def _connect_runtime(runtime_value: str, server_url: str, runtime_profile: str, *acceleration_values) -> str:
     acceleration = H3Acceleration.from_values(acceleration_values)
     try:
-        root = resolve_runtime_root(runtime_value)
+        root = resolve_runtime_root(_initial_runtime())
         readiness = ensure_ready(
             root,
             server_url,
@@ -721,7 +722,7 @@ def _connect_runtime(runtime_value: str, server_url: str, runtime_profile: str, 
 def _restart_runtime(runtime_value: str, server_url: str, runtime_profile: str, *acceleration_values) -> str:
     acceleration = H3Acceleration.from_values(acceleration_values)
     try:
-        root = resolve_runtime_root(runtime_value)
+        root = resolve_runtime_root(_initial_runtime())
         readiness = restart_runtime(
             root,
             server_url,
@@ -737,7 +738,7 @@ def _restart_runtime(runtime_value: str, server_url: str, runtime_profile: str, 
 def _rescan_runtime(runtime_value: str, server_url: str, runtime_profile: str, *acceleration_values) -> str:
     acceleration = H3Acceleration.from_values(acceleration_values)
     try:
-        root = resolve_runtime_root(runtime_value)
+        root = resolve_runtime_root(_initial_runtime())
         return readiness_html(inspect_readiness(root, server_url, acceleration=acceleration), runtime_profile)
     except H3BridgeError as exc:
         return _status_error(str(exc))
@@ -799,7 +800,7 @@ def _rescan_runtime_updates(runtime_value: str, server_url: str, runtime_profile
 
 def _history_state(runtime_value: str):
     try:
-        root = resolve_runtime_root(runtime_value) if runtime_value else None
+        root = resolve_runtime_root(_initial_runtime()) if runtime_value else None
     except H3BridgeError:
         root = None
     try:
@@ -1032,7 +1033,7 @@ def _open_current_workflow(runtime_value, server_url, runtime_profile, *values):
     try:
         request = _request_from_ui(*values)
         record, target = handoff.export_current(
-            request, resolve_runtime_root(runtime_value), server_url,
+            request, resolve_runtime_root(_initial_runtime()), server_url,
             LOG_DIRECTORY, runtime_profile,
         )
         return handoff.result_html(record, target), target
@@ -1052,7 +1053,7 @@ def _open_current_workflow_ui(runtime_value, server_url, runtime_profile, orbit_
 
     try:
         request = _request_from_ui(*_active_generation_values(values, orbit_duration), orbit_photo=orbit_photo, orbit_strength=orbit_strength)
-        record, target = handoff.export_current(request, resolve_runtime_root(runtime_value), server_url, LOG_DIRECTORY, runtime_profile)
+        record, target = handoff.export_current(request, resolve_runtime_root(_initial_runtime()), server_url, LOG_DIRECTORY, runtime_profile)
         return handoff.result_html(record, target), target
     except (H3BridgeError, OSError, ValueError, TypeError) as exc:
         return _status_error(str(exc)), ""
@@ -1064,7 +1065,7 @@ def _open_history_workflow(selected, runtime_value, server_url):
     try:
         items, _, _ = _history_state(runtime_value)
         record, target = handoff.export_history(
-            selected, items, resolve_runtime_root(runtime_value), server_url,
+            selected, items, resolve_runtime_root(_initial_runtime()), server_url,
             LOG_DIRECTORY,
         )
         return handoff.result_html(record, target), target
@@ -1149,7 +1150,7 @@ def _generate(
                 _input_validation_html(str(exc), target, control),
             )
             return
-        root = resolve_runtime_root(runtime_value)
+        root = resolve_runtime_root(_initial_runtime())
         for update in run_generation(
             request,
             root,
@@ -1260,7 +1261,7 @@ def _initial_ui_updates(
         else RUNTIME_PROFILE_FAST
     )
     try:
-        root = resolve_runtime_root(runtime_value) if runtime_value else None
+        root = resolve_runtime_root(_initial_runtime()) if runtime_value else None
         readiness = inspect_readiness(root, server_url)
         if readiness.runtime_profile in RUNTIME_PROFILES:
             runtime_profile = readiness.runtime_profile

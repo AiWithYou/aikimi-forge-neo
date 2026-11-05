@@ -11,7 +11,6 @@ import torch
 from safetensors.torch import save_file
 
 from modules.metadata_cache import MetadataCache
-from modules_forge.sensenova_transformers_compat import create_causal_mask
 
 
 class CheckpointShardTests(unittest.TestCase):
@@ -128,39 +127,6 @@ class MetadataCacheTests(unittest.TestCase):
         self.assertEqual(list(self.cache), [])
 
 
-class SenseNovaMaskCompatibilityTests(unittest.TestCase):
-    def config(self):
-        from transformers import Qwen3Config
-
-        config = Qwen3Config()
-        config._attn_implementation = "eager"
-        return config
-
-    def test_explicit_cache_positions_are_preserved(self):
-        embeds = torch.zeros(1, 3, 4)
-        mask = create_causal_mask(self.config(), embeds, None, torch.arange(3), None)
-        self.assertTrue(torch.equal(mask[0, 0] == 0, torch.ones(3, 3, dtype=torch.bool).tril()))
-        shifted = create_causal_mask(self.config(), embeds, None, torch.arange(5, 8), None)
-        self.assertTrue(torch.all(shifted == 0))
-
-    def test_padding_and_custom_4d_masks_remain_supported(self):
-        embeds = torch.zeros(1, 3, 4)
-        mask = create_causal_mask(self.config(), embeds, torch.tensor([[0, 1, 1]]), torch.arange(3), None)
-        self.assertTrue(torch.all(mask[:, :, :, 0] < -1e20))
-        custom = torch.zeros(1, 1, 3, 3)
-        self.assertIs(create_causal_mask(self.config(), embeds, custom, torch.arange(3), None), custom)
-
-    def test_dynamic_cache_prefix_uses_new_cache_size_api(self):
-        from transformers import DynamicCache
-
-        config = self.config()
-        cache = DynamicCache(config=config)
-        keys = torch.zeros(1, 1, 4, 8)
-        cache.update(keys, keys, 0)
-        result = create_causal_mask(config, torch.zeros(1, 2, 4), None, torch.arange(4, 6), cache)
-        self.assertEqual(result.shape, (1, 1, 2, 6))
-        self.assertEqual(int((result[0, 0, 0] == 0).sum()), 5)
-        self.assertEqual(int((result[0, 0, 1] == 0).sum()), 6)
 
 
 if __name__ == "__main__":

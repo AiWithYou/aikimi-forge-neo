@@ -6,12 +6,62 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[2]
 
+H3_LINT_TARGETS = (
+    "modules_forge/p_h3_image.py",
+    "modules_forge/p_h3_image_ui.py",
+    "modules_forge/minimax_h3_bridge.py",
+    "modules_forge/minimax_h3_acceleration.py",
+    "modules_forge/minimax_h3_acceleration_ui.py",
+    "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py",
+    "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_studio.py",
+    "tools/setup_p_h3_image.py",
+    "tools/tests/test_h3_compiler_default.py",
+    "tools/tests/test_comfy_image_job_lifecycle.py",
+    "tools/tests/test_minimax_h3_images.py",
+    "tools/tests/test_minimax_h3_studio.py",
+    "tools/tests/test_h3_orbit_ui.py",
+    "tools/tests/test_p_h3_image.py",
+    "tools/tests/test_p_h3_future.py",
+)
+
 
 class CiWorkflowBoundaryTests(unittest.TestCase):
+    def test_windows_job_uses_utf8_for_python_and_child_processes(self):
+        windows = self.workflow("windows-smoke.yml")
+        job = windows.split("  python-313-windows:\n", 1)[1]
+        environment = job.split("    env:\n", 1)[1].split("    steps:\n", 1)[0]
+        self.assertRegex(environment, r'(?m)^      PYTHONUTF8: ["\']?1["\']?\s*$')
+
     def event_paths(self, workflow, event):
         section = re.search(rf"^  {event}:\n(.*?)(?=^  \w+:|\Z)", workflow, re.MULTILINE | re.DOTALL)
         self.assertIsNotNone(section, f"Missing workflow event: {event}")
         return re.findall(r'^      - "([^"]+)"$', section.group(1), re.MULTILINE)
+
+    def test_h3_changes_trigger_lint_on_pull_request_and_push(self):
+        lint = self.workflow("lint.yml")
+        for event in ("pull_request", "push"):
+            patterns = self.event_paths(lint, event)
+            for change in (*H3_LINT_TARGETS, "tools/p_h3_image_manifest.json"):
+                with self.subTest(event=event, change=change):
+                    self.assertTrue(
+                        any(PurePosixPath(change).full_match(pattern) for pattern in patterns),
+                        f"H3 change does not trigger {event} lint: {change}",
+                    )
+
+    def test_h3_python_surface_is_included_in_ruff_execution(self):
+        lint = self.workflow("lint.yml")
+        step = lint.split("      - name: Lint the new security and setup surface\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        files = step.split("          files=(\n", 1)[1].split("\n          )", 1)[0].splitlines()
+        patterns = [line.strip() for line in files]
+        self.assertIn('python -m ruff check "${files[@]}"', step)
+        for path in H3_LINT_TARGETS:
+            with self.subTest(path=path):
+                self.assertTrue(
+                    any(PurePosixPath(path).full_match(pattern) for pattern in patterns),
+                    f"H3 file is missing from Ruff execution: {path}",
+                )
 
     def test_moss_changes_trigger_lint_cpu_and_windows_validation(self):
         changes = (
@@ -369,8 +419,6 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
             "tools/tests/test_ci_workflow_boundaries.py",
             "tools/tests/test_gpu_ownership.py",
             "tools/tests/test_minimax_h3_submission.py",
-            "tools/tests/test_sensenova_worker_cleanup.py",
-            "tools/tests/test_sensenova_u15_bridge.py",
             "tools/tests/test_additional_module_identity.py",
             "tools/tests/test_extra_networks_lora_filter.py",
             "tools/tests/test_gradio_chromium_smoke.py",
@@ -392,8 +440,6 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
             "tools.tests.test_ci_workflow_boundaries",
             "tools.tests.test_gpu_ownership",
             "tools.tests.test_minimax_h3_submission",
-            "tools.tests.test_sensenova_worker_cleanup",
-            "tools.tests.test_sensenova_u15_bridge",
             "tools.tests.test_extra_networks_lora_filter",
             "tools.tests.test_gradio_chromium_smoke",
             "tools.tests.test_option_migrations",
@@ -472,13 +518,6 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("scipy==1.18.0", runtime)
         self.assertIn("scipy==1.18.0", assets)
 
-    def test_sensenova_dependency_audit_runs_independently_without_ignores(self):
-        security = self.workflow("security.yml")
-        job = security.split("  sensenova-pip-audit:", 1)[1].split("  gitleaks-full-history:", 1)[0]
-        self.assertIn("inputs: tools/requirements-sensenova.txt", job)
-        self.assertIn("extra-index-urls: https://download.pytorch.org/whl/cu130", job)
-        for bypass in ("ignore-vulns:", "no-deps:", "needs:", "continue-on-error:"):
-            self.assertNotIn(bypass, job)
 
 
 if __name__ == "__main__":

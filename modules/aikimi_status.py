@@ -47,11 +47,9 @@ def _environment_snapshot(feature: str) -> dict[str, Any] | None:
     if feature not in {
         "krea2",
         "anima38",
-        "sensenova",
         "minimax_h3",
         "minimax_h3_image",
         "qwen_image21",
-        "ming_image",
         "yue2",
         "irodori",
     }:

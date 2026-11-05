@@ -8,13 +8,12 @@ import os
 import struct
 import unittest
 from contextlib import nullcontext
-from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
-from modules_forge import local_assets, ming_image_studio, ming_local
+from modules_forge import local_assets
 from modules_forge.qwen_image21 import core, local_source, quantized_cache, style_lora
 from tools.tests.test_additional_module_identity import load_main_entry, stub_modules
 
@@ -206,122 +205,6 @@ class QwenLocalSourceTests(unittest.TestCase):
             self.assertEqual(len(style_lora.validate_installed(root, request)), 1)
 
 
-class MingLocalSourceTests(unittest.TestCase):
-    def test_all_custom_files_need_no_managed_weights_and_graph_chains_two_loras(self):
-        with TemporaryDirectory() as folder:
-            root = Path(folder)
-            model = tensor_file(
-                root / "custom/model.safetensors",
-                {"layers.0.attention.qkv.weight": [3, 1]},
-                metadata={"config": json.dumps({"transformer": {"image_model": "ming_image"}})},
-            )
-            encoder = tensor_file(root / "custom/encoder.safetensors")
-            vae = tensor_file(root / "custom/vae.safetensors")
-            a = tensor_file(root / "a/style.safetensors")
-            b = tensor_file(root / "b/style.safetensors")
-            request = ming_image_studio.MingImageRequest(
-                "poster",
-                model_path=str(model),
-                text_encoder_path=str(encoder),
-                vae_path=str(vae),
-                loras=(
-                    {"name": str(a), "strength": 0.5},
-                    {"name": str(b), "strength": -1},
-                    {"name": "missing", "strength": 0},
-                ),
-            )
-            assets = ming_local.selected_assets(request, root / "empty-runtime")
-            graph = ming_local.apply_graph(ming_image_studio.build_workflow(request, 1), request, assets)
-            self.assertEqual(graph["sampling"]["inputs"]["model"], ["local_lora_1", 0])
-            self.assertEqual(graph["local_lora_1"]["inputs"]["model"], ["local_lora_0", 0])
-            self.assertEqual(graph["local_lora_0"]["inputs"]["strength"], 0.5)
-            self.assertFalse((root / "empty-runtime").exists())
-            self.assertEqual(len(assets["loras"]), 2)
-            with self.assertRaises(ValueError):
-                ming_local.selected_assets(
-                    replace(request, loras=({"name": str(a), "strength": 1}, {"name": str(a), "strength": 0.2})), root
-                )
-
-    def test_setup_modes_do_not_plan_a_default_denoiser(self):
-        from tools import setup_ming_image
-
-        with TemporaryDirectory() as folder, patch.object(setup_ming_image, "runtime_ready", return_value=False):
-            empty = setup_ming_image.run(root=Path(folder), dry_run=True, runtime_only=True)
-            self.assertEqual(empty["plans"], [])
-            shared = setup_ming_image.run(root=Path(folder), dry_run=True, components_only=True)
-            self.assertNotIn("diffusion_models", json.dumps(shared))
-
-    def test_ming_lora_node_refuses_mutated_file(self):
-        location = ming_local.NODE_SOURCE / "__init__.py"
-        spec = importlib.util.spec_from_file_location("ming_local_nodes_test", location)
-        nodes = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(nodes)
-        with TemporaryDirectory() as folder:
-            path = tensor_file(Path(folder) / "lora.safetensors")
-            digest = local_assets.file_identity(path)["sha256"]
-            self.assertEqual(nodes.checked_file(str(path), digest), str(path))
-            tensor_file(path, value=2)
-            with self.assertRaises(ValueError):
-                nodes.checked_file(str(path), digest)
-
-    def test_ming_lora_node_refuses_file_changed_during_load(self):
-        spec = importlib.util.spec_from_file_location("ming_local_load_guard", ming_local.NODE_SOURCE / "__init__.py")
-        nodes = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(nodes)
-        with TemporaryDirectory() as folder:
-            path = tensor_file(Path(folder) / "lora.safetensors")
-            digest = local_assets.file_identity(path)["sha256"]
-
-            def load(*args, **kwargs):
-                tensor_file(path, value=2)
-                return {}
-
-            comfy = ModuleType("comfy")
-            comfy.utils = SimpleNamespace(load_torch_file=load)
-            model = SimpleNamespace(clone=lambda: SimpleNamespace(add_patches=lambda *args: []))
-            with (
-                stub_modules({"comfy": comfy, "comfy.utils": comfy.utils}),
-                patch.object(nodes, "linear_patches", return_value={}) as patches,
-            ):
-                with self.assertRaisesRegex(ValueError, "changed"):
-                    nodes.MingLoRA().load(model, str(path), digest, 1)
-                patches.assert_not_called()
-
-    def test_ming_lora_rejects_partial_pairs_unknown_targets_and_wrong_shapes(self):
-        import torch
-
-        spec = importlib.util.spec_from_file_location("ming_local_math_test", ming_local.NODE_SOURCE / "__init__.py")
-        nodes = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(nodes)
-        comfy = ModuleType("comfy")
-        comfy.lora = SimpleNamespace(
-            model_lora_keys_unet=lambda *_: {},
-            load_lora=lambda weights, mapping: {target: object() for target in mapping.values()},
-        )
-        model = SimpleNamespace(
-            model=SimpleNamespace(
-                state_dict=lambda: {"diffusion_model.layers.0.attention.qkv.weight": torch.ones(4, 3)}
-            )
-        )
-        down = "layers.0.attention.qkv.lora_A.weight"
-        up = "layers.0.attention.qkv.lora_B.weight"
-        good = {down: torch.ones(1, 3), up: torch.ones(4, 1)}
-        with stub_modules({"comfy": comfy, "comfy.lora": comfy.lora}):
-            self.assertEqual(len(nodes.linear_patches(model, good)), 1)
-            for weights in (
-                {down: good[down]},
-                {**good, "unknown.weight": torch.ones(1)},
-                {**good, up: torch.ones(5, 1)},
-                {**good, down: torch.full((1, 3), float("nan"))},
-                {**good, up: torch.full((4, 1), float("inf"))},
-            ):
-                with self.assertRaises(ValueError):
-                    nodes.linear_patches(model, weights)
-            model.model.state_dict = lambda: {"diffusion_model.layers.0.attention.qkv.weight": torch.ones(4, 2)}
-            model.model.get_submodule = lambda _: SimpleNamespace(out_features=4, in_features=3)
-            self.assertEqual(
-                len(nodes.linear_patches(model, good)), 1, "Packed W4A8 storage must use logical layer dimensions"
-            )
 
 
 class ForgeLocalSelectionTests(unittest.TestCase):

@@ -515,6 +515,7 @@ class MiniMaxH3RuntimeTests(unittest.TestCase):
                 "2",
                 "--vram-headroom",
                 "2",
+                "--disable-comfy-compiler",
                 "--whitelist-custom-nodes",
                 "Aikimi-H3-WorkflowBridge",
             ],

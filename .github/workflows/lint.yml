@@ -87,6 +87,18 @@ on:
       - "tools/aikimi_setup.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "tools/setup_p_h3_image.py"
+      - "tools/p_h3_image_manifest.json"
+      - "modules_forge/p_h3_image*.py"
+      - "modules_forge/minimax_h3_bridge.py"
+      - "modules_forge/minimax_h3_acceleration*.py"
+      - "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py"
+      - "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_studio.py"
+      - "tools/tests/test_h3_compiler_default.py"
+      - "tools/tests/test_comfy_image_job_lifecycle.py"
+      - "tools/tests/test_minimax_h3_images.py"
+      - "tools/tests/test_minimax_h3_studio.py"
+      - "tools/tests/test_p_h3*.py"
       - "tools/setup_h3_lightvae.py"
       - "tools/h3_lightvae_convert.py"
       - "tools/tests/test_h3_lightvae_convert.py"
@@ -100,19 +112,11 @@ on:
       - "modules_forge/studio_checkpoint_ui.py"
       - "modules_forge/studio_checkpoints.py"
       - "tools/tests/test_checkpoint_selector_ui.py"
-      - "tools/tests/test_sensenova_checkpoint_selection.py"
       - "tools/tests/test_studio_checkpoint_routes.py"
       - "tools/tests/test_checkpoint_snapshots.py"
       - "tools/tests/test_forge_checkpoint_reload.py"
-      - "modules_forge/ming_local.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
-      - "modules_forge/ming_image_studio.py"
-      - "extensions-builtin/ming-image-studio/**"
-      - "tools/*ming_image*.py"
-      - "tools/ming_image*_manifest.json"
-      - "tools/requirements-ming-image.*"
-      - "tools/tests/test_ming_image_studio.py"
       - "tools/tests/test_minimax_h3_setup.py"
       - "modules_forge/minimax_h3_runtime.py"
       - "modules_forge/minimax_h3_orbit_assets.py"
@@ -140,7 +144,6 @@ on:
       - "tools/tests/test_dependency_patch_versions.py"
       - "tools/tests/test_extension_git.py"
       - "modules/metadata_cache.py"
-      - "modules_forge/sensenova_transformers_compat.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gradio_file_security.py"
       - "tools/tests/test_gradio_file_url_guard.py"
@@ -251,6 +254,18 @@ on:
       - "tools/aikimi_setup.py"
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
+      - "tools/setup_p_h3_image.py"
+      - "tools/p_h3_image_manifest.json"
+      - "modules_forge/p_h3_image*.py"
+      - "modules_forge/minimax_h3_bridge.py"
+      - "modules_forge/minimax_h3_acceleration*.py"
+      - "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py"
+      - "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_studio.py"
+      - "tools/tests/test_h3_compiler_default.py"
+      - "tools/tests/test_comfy_image_job_lifecycle.py"
+      - "tools/tests/test_minimax_h3_images.py"
+      - "tools/tests/test_minimax_h3_studio.py"
+      - "tools/tests/test_p_h3*.py"
       - "tools/setup_h3_lightvae.py"
       - "tools/h3_lightvae_convert.py"
       - "tools/tests/test_h3_lightvae_convert.py"
@@ -264,19 +279,11 @@ on:
       - "modules_forge/studio_checkpoint_ui.py"
       - "modules_forge/studio_checkpoints.py"
       - "tools/tests/test_checkpoint_selector_ui.py"
-      - "tools/tests/test_sensenova_checkpoint_selection.py"
       - "tools/tests/test_studio_checkpoint_routes.py"
       - "tools/tests/test_checkpoint_snapshots.py"
       - "tools/tests/test_forge_checkpoint_reload.py"
-      - "modules_forge/ming_local.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
-      - "modules_forge/ming_image_studio.py"
-      - "extensions-builtin/ming-image-studio/**"
-      - "tools/*ming_image*.py"
-      - "tools/ming_image*_manifest.json"
-      - "tools/requirements-ming-image.*"
-      - "tools/tests/test_ming_image_studio.py"
       - "tools/tests/test_minimax_h3_setup.py"
       - "modules_forge/minimax_h3_runtime.py"
       - "modules_forge/minimax_h3_orbit_assets.py"
@@ -304,7 +311,6 @@ on:
       - "tools/tests/test_dependency_patch_versions.py"
       - "tools/tests/test_extension_git.py"
       - "modules/metadata_cache.py"
-      - "modules_forge/sensenova_transformers_compat.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gradio_file_security.py"
       - "tools/tests/test_gradio_file_url_guard.py"
@@ -437,6 +443,17 @@ jobs:
             tools/aikimi_setup.py
             tools/run_ci_tests.py
             tools/setup_minimax_h3.py
+            tools/setup_p_h3_image.py
+            modules_forge/p_h3_image*.py
+            modules_forge/minimax_h3_bridge.py
+            modules_forge/minimax_h3_acceleration*.py
+            extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py
+            extensions-builtin/minimax-h3-studio/scripts/minimax_h3_studio.py
+            tools/tests/test_h3_compiler_default.py
+            tools/tests/test_comfy_image_job_lifecycle.py
+            tools/tests/test_minimax_h3_images.py
+            tools/tests/test_minimax_h3_studio.py
+            tools/tests/test_p_h3*.py
             tools/setup_h3_lightvae.py
             tools/h3_lightvae_convert.py
             tools/tests/test_h3_lightvae_convert.py
@@ -449,20 +466,11 @@ jobs:
             modules_forge/studio_checkpoint_ui.py
             modules_forge/studio_checkpoints.py
             tools/tests/test_checkpoint_selector_ui.py
-            tools/tests/test_sensenova_checkpoint_selection.py
             tools/tests/test_studio_checkpoint_routes.py
             tools/tests/test_checkpoint_snapshots.py
             tools/tests/test_forge_checkpoint_reload.py
-            modules_forge/ming_local.py
             scripts/local_lora_stack.py
             tools/tests/test_local_model_sources.py
-            extensions-builtin/ming-image-studio/comfyui_nodes/Aikimi-Ming-Local/__init__.py
-            modules_forge/ming_image_studio.py
-            tools/setup_ming_image.py
-            tools/quantize_ming_image.py
-            tools/test_ming_image_live.py
-            tools/tests/test_ming_image_studio.py
-            extensions-builtin/ming-image-studio/scripts/ming_image_studio.py
             tools/tests/test_minimax_h3_setup.py
             modules_forge/minimax_h3_runtime.py
             modules_forge/minimax_h3_orbit_assets.py
@@ -501,7 +509,6 @@ jobs:
             tools/tests/test_dependency_patch_versions.py
             tools/tests/test_extension_git.py
             modules/metadata_cache.py
-            modules_forge/sensenova_transformers_compat.py
             tools/tests/test_ci_workflow_boundaries.py
             tools/tests/test_gradio_file_security.py
             tools/tests/test_gradio_file_url_guard.py

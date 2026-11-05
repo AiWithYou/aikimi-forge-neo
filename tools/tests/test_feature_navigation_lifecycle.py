@@ -136,13 +136,13 @@ class FeatureNavigationLifecycleTests(unittest.TestCase):
         self.assertEqual(self.page.locator("#forge_ui_preset input").input_value(), "krea")
 
     def test_late_native_studios_appear_without_manual_refresh(self):
-        self.assertTrue(self.page.locator("#aikimi-tab-sensenova").is_hidden())
-        self.page.evaluate("addNative('tab_sensenova_u15_studio', 'SenseNova')")
+        self.assertTrue(self.page.locator("#aikimi-tab-minimax-h3").is_hidden())
+        self.page.evaluate("addNative('tab_minimax_h3_studio', 'MiniMax H3')")
         self.page.wait_for_timeout(120)
-        self.assertTrue(self.page.locator("#aikimi-tab-sensenova").is_visible())
-        self.page.locator("#aikimi-tab-sensenova").click()
-        self.page.wait_for_function("AikimiTabs.getActiveFeature() === 'sensenova'")
-        self.assertTrue(self.page.locator("#tab_sensenova_u15_studio").is_visible())
+        self.assertTrue(self.page.locator("#aikimi-tab-minimax-h3").is_visible())
+        self.page.locator("#aikimi-tab-minimax-h3").click()
+        self.page.wait_for_function("AikimiTabs.getActiveFeature() === 'minimax_h3'")
+        self.assertTrue(self.page.locator("#tab_minimax_h3_studio").is_visible())
 
     def test_busy_feedback_clears_on_success_and_cancellation(self):
         self.page.locator("#aikimi-tab-anima38").click()

@@ -76,15 +76,15 @@ Diagnosticsは、Python、PyTorch、CUDA、GPU、RAM、disk、runtime、model、
 計画と空き容量を先に確認します。
 
 ```powershell
-python .\tools\aikimi_setup.py install sensenova --dry-run
-python .\tools\aikimi_setup.py verify sensenova
+python .\tools\aikimi_setup.py install krea2 --dry-run
+python .\tools\aikimi_setup.py verify krea2
 ```
 
 hash mismatch、size mismatch、完成済みの不正partialがある場合は、通常installで上書きしません。
 
 ```powershell
-python .\tools\aikimi_setup.py repair sensenova --dry-run
-python .\tools\aikimi_setup.py repair sensenova
+python .\tools\aikimi_setup.py repair krea2 --dry-run
+python .\tools\aikimi_setup.py repair krea2
 ```
 
 repairは破損fileを`tmp/aikimi-setup/quarantine`へ移します。隔離しても空き容量は増えません。
@@ -104,16 +104,6 @@ Anima 3.8Bの変換には、準備済みForge venv、CUDA、対応GPU、RAM、di
 ```powershell
 python .\tools\aikimi_setup.py repair anima38 --dry-run
 ```
-
-## SenseNovaがmodel準備で止まる
-
-別processがGPUを占有している場合、SenseNova workerはそのprocessのVRAMを解放できません。`nvidia-smi`とTask Managerで別の生成processを確認してください。
-
-```powershell
-nvidia-smi
-```
-
-24GB Safeは、参照2枚以下、各参照約512²、出力2048² pixels以下を基準にします。画像編集にも公式8-Step LoRAを選べます。Qualityの50 Stepsや公式LoRAの8 Stepsは調整の出発点で、Steps・CFG・Shiftは変更できます。
 
 ## MiniMax H3 backendへ接続できない
 

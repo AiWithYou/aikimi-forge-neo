@@ -60,36 +60,15 @@ class CheckpointSnapshots(unittest.TestCase):
                     )
                 validate.assert_not_called()
 
-    def test_nanosaur_start_with_wrong_registered_root_fails_before_node_validation(self):
-        from modules_forge import minimax_h3_bridge as bridge
-        from modules_forge import nanosaur2_studio as nano
-
-        with TemporaryDirectory() as folder:
-            root = Path(folder)
-            selected = root / "nanosaur.safetensors"
-            selected.write_bytes(b"exists")
-            with (
-                patch("tools.setup_nanosaur2.runtime_ready", return_value=True),
-                patch.object(nano, "source_ready", return_value=True),
-                patch.object(nano, "model_ready", return_value=True),
-                patch.object(bridge, "resolve_runtime_root", return_value=root),
-                patch.object(bridge, "inspect_readiness", return_value=SimpleNamespace(connected=False)),
-                patch.object(bridge, "start_runtime", return_value=SimpleNamespace(connected=True, runtime_args=())),
-                patch.object(nano, "check_nodes") as check,
-            ):
-                with self.assertRaisesRegex(bridge.H3BridgeError, "登録"):
-                    nano.ensure_runtime(selected_root=root, checkpoint=str(selected))
-                check.assert_not_called()
 
     def test_late_verification_failure_releases_all_comfy_leases_without_submission(self):
         from contextlib import ExitStack
 
         from modules_forge import minimax_h3_bridge as h3
         from modules_forge import minimax_h3_images as images
-        from modules_forge import nanosaur2_studio as nano
         from tools.tests.test_minimax_h3_images import fake_bridge, readiness
 
-        for family in ("h3", "image", "nano"):
+        for family in ("h3", "image"):
             with self.subTest(family=family), TemporaryDirectory() as folder, ExitStack() as stack:
                 root = Path(folder)
                 bridge, client = fake_bridge()
@@ -119,7 +98,7 @@ class CheckpointSnapshots(unittest.TestCase):
                     )
                 else:
                     stack.enter_context(
-                        patch.object(images if family == "image" else nano, "_bridge", return_value=bridge)
+                        patch.object(images, "_bridge", return_value=bridge)
                     )
                 state = {"changed": False}
 
@@ -142,15 +121,11 @@ class CheckpointSnapshots(unittest.TestCase):
                     events = h3.run_generation(
                         h3.H3Request(mode="text", prompt="test"), root, "http://127.0.0.1:8189", root, root
                     )
-                elif family == "image":
+                else:
                     stack.enter_context(patch.object(images, "build_image_workflow", return_value={}))
                     events = images.run_image_generation(
                         images.H3ImageRequest("test"), root, "http://127.0.0.1:8189", root, root
                     )
-                else:
-                    stack.enter_context(patch.object(nano, "ensure_runtime", return_value=readiness()))
-                    stack.enter_context(patch.object(nano, "build_workflow", return_value={}))
-                    events = nano.run_generation(nano.Nanosaur2Request("test"), output_root=root)
                 with self.assertRaisesRegex(ValueError, "変更"):
                     list(events)
                 client.submit.assert_not_called()
@@ -359,7 +334,6 @@ class CheckpointSnapshots(unittest.TestCase):
 
         from modules_forge import minimax_h3_bridge as bridge
         from modules_forge import minimax_h3_images as images
-        from modules_forge import nanosaur2_studio as nano
         from tools.tests.test_studio_checkpoint_routes import checkpoint
 
         with TemporaryDirectory() as folder:
@@ -380,7 +354,6 @@ class CheckpointSnapshots(unittest.TestCase):
                 mode="text", prompt="test", acceleration=H3Acceleration(checkpoint=selected)
             )
             image_request = images.H3ImageRequest("test", width=256, height=256, checkpoint=selected)
-            nano_request = nano.Nanosaur2Request("test", width=256, height=256, checkpoint=selected)
             with (
                 patch.object(local_assets, "file_identity", side_effect=AssertionError("must retain start identity")),
                 patch.object(bridge, "_validate_video_result", return_value={}),
@@ -391,15 +364,11 @@ class CheckpointSnapshots(unittest.TestCase):
                 image_result = images.save_image_result(
                     [source], [], root / "images", image_request, 42, "job", readiness, checkpoint_snapshot=snapshot
                 )
-                nano_result = nano.save_result(
-                    source, nano_request, 42, "job", readiness, root / "nano", checkpoint_snapshot=snapshot
-                )
             self.assertEqual(
                 json.loads(video_result.with_suffix(".json").read_text(encoding="utf-8"))["checkpoint_identity"],
                 snapshot["identity"],
             )
             self.assertEqual(image_result["metadata"]["checkpoint_identity"], snapshot["identity"])
-            self.assertEqual(nano_result["metadata"]["checkpoint"], snapshot["identity"])
             Path(selected).write_bytes(b"replacement")
             with self.assertRaisesRegex(ValueError, "変更"):
                 images.save_image_result(

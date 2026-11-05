@@ -45,13 +45,14 @@ def setup_updates(shared_models: str, repository_root: Path):
                 gr.update(interactive=False),
             )
             yield from _setup_process(shared_models, root, runtime)
-            if installed_runtime_root(root) is None:
+            installed = installed_runtime_root(root)
+            if installed is None:
                 raise H3BridgeError("H3の導入完了を確認できません。")
     except (H3BridgeError, ValueError, OSError) as error:
         yield str(runtime), str(error), gr.update(interactive=True), gr.update(interactive=True)
         return
     yield (
-        str(runtime),
+        str(installed),
         "準備ができました。画像・動画を生成できます。",
         gr.update(interactive=True),
         gr.update(interactive=True),

@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 from modules_forge import local_assets, studio_checkpoints
 from modules_forge.minimax_h3_acceleration import H3Acceleration
-from modules_forge.nanosaur2_studio import Nanosaur2Request, build_workflow
 from modules_forge.yue2_studio.core import Request, runtime_manifest
 
 
@@ -62,15 +61,6 @@ class SelectedCheckpointRoutes(unittest.TestCase):
                     studio_checkpoints.h3_compatible,
                     ["audio_patch_proj.weight", "video_patch_proj.weight", "adaln_t_table"],
                 ),
-                (
-                    studio_checkpoints.nanosaur_compatible,
-                    [
-                        "s_embedder.proj.weight",
-                        "final_layer.linear.weight",
-                        "blocks.0.attn.q_norm.weight",
-                        "blocks.0.mlp.w12.weight",
-                    ],
-                ),
             ):
                 with (
                     self.subTest(validator=validator.__name__),
@@ -78,36 +68,6 @@ class SelectedCheckpointRoutes(unittest.TestCase):
                 ):
                     self.assertFalse(validator(path))
 
-    def test_nanosaur_standard_metadata_uses_diffusion_manifest_entry_by_path(self):
-        from types import SimpleNamespace
-
-        from PIL import Image
-
-        from modules_forge import nanosaur2_studio as nano
-
-        with TemporaryDirectory() as folder:
-            root = Path(folder)
-            manifest = json.loads(nano.MANIFEST.read_text(encoding="utf-8"))
-            expected = next(
-                entry["sha256"]
-                for entry in manifest["models"]
-                if entry["path"] == "diffusion_models/nanosaur2_diffusion_model.safetensors"
-            )
-            manifest["models"].reverse()
-            manifest_path = root / "manifest.json"
-            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-            source = root / "image.png"
-            Image.new("RGB", (256, 256)).save(source)
-            with patch.object(nano, "MANIFEST", manifest_path):
-                result = nano.save_result(
-                    source,
-                    Nanosaur2Request("test", width=256, height=256),
-                    42,
-                    "job",
-                    SimpleNamespace(core_revision="test", comfy_version="test"),
-                    root / "output",
-                )
-            self.assertEqual(result["metadata"]["checkpoint"]["sha256"], expected)
 
     def test_new_browser_session_restores_latest_library_without_writing(self):
         import gradio as gr
@@ -122,10 +82,10 @@ class SelectedCheckpointRoutes(unittest.TestCase):
             ):
                 with gr.Blocks() as app:
                     checkpoint_ui, _ = studio_checkpoint_ui.create(
-                        "nanosaur2", "Nanosaur2", (), lambda _: False, gradio=gr
+                        "minimax_h3", "MiniMax-H3", (), lambda _: False, gradio=gr
                     )
                 selected = str(root / "missing.safetensors")
-                local_assets.save_selection("nanosaur2", {"checkpoint": selected})
+                local_assets.save_selection("minimax_h3", {"checkpoint": selected})
                 before = local_assets.LIBRARY.read_bytes()
                 restore = [fn for fn in app.fns.values() if fn.fn and fn.fn.__name__ == "restore"]
                 self.assertEqual(len(restore), 1)
@@ -136,7 +96,7 @@ class SelectedCheckpointRoutes(unittest.TestCase):
                 self.assertEqual(local_assets.LIBRARY.read_bytes(), before)
                 app.close()
 
-    def test_h3_and_nanosaur_rescan_only_managed_nested_tree_and_keep_current(self):
+    def test_h3_rescan_only_managed_nested_tree_and_keep_current(self):
         from modules_forge import model_catalog, studio_checkpoint_ui
 
         with TemporaryDirectory() as folder:
@@ -150,16 +110,6 @@ class SelectedCheckpointRoutes(unittest.TestCase):
                         "MiniMax-H3",
                         studio_checkpoints.h3_compatible,
                         ["audio_patch_proj.weight", "video_patch_proj.weight", "adaln_t_table"],
-                    ),
-                    (
-                        "Nanosaur2",
-                        studio_checkpoints.nanosaur_compatible,
-                        [
-                            "s_embedder.proj.weight",
-                            "final_layer.linear.weight",
-                            "blocks.0.attn.q_norm.weight",
-                            "blocks.0.mlp.w12.weight",
-                        ],
                     ),
                 ):
                     with self.subTest(family=family):
@@ -317,19 +267,6 @@ class SelectedCheckpointRoutes(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Ref2VA"):
                 option.checkpoint_for_mode("references")
 
-    def test_nanosaur_workflow_keeps_selected_checkpoint(self):
-        with TemporaryDirectory() as folder:
-            path = checkpoint(
-                Path(folder) / "my_nanosaur.safetensors",
-                [
-                    "s_embedder.proj.weight",
-                    "final_layer.linear.weight",
-                    "blocks.0.attn.q_norm.weight",
-                    "blocks.0.mlp.w12.weight",
-                ],
-            )
-            graph = build_workflow(Nanosaur2Request(prompt="forest", checkpoint=path), 42)
-            self.assertEqual(graph["loader"]["inputs"]["unet_name"], "my_nanosaur.safetensors")
 
     def test_yue2_runtime_selection_reaches_worker_manifest(self):
         with TemporaryDirectory() as folder:

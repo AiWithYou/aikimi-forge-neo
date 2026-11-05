@@ -20,6 +20,9 @@ from modules.aikimi_security.redaction import (  # noqa: E402 -- CLIのimportル
     sanitized_subprocess_environment,
 )
 from modules_forge.minimax_h3_runtime import (  # noqa: E402
+    candidate_runtime_root,
+    configured_model_root,
+    installed_runtime_root,
     local_directory,
     managed_runtime_root,
     model_config,
@@ -30,7 +33,6 @@ from tools.aikimi_setup import ArtifactSpec, Installer, ProfileSpec, SetupError 
 
 MANIFEST_PATH = ROOT / "tools/minimax_h3_runtime_manifest.json"
 LOCK_PATH = ROOT / "tools/requirements-minimax-h3.lock"
-PATCH_PATH = ROOT / "patches/minimax-h3/comfyui-b9b290e4-compiler.patch"
 
 
 def manifest() -> dict:
@@ -58,14 +60,28 @@ def emit(message: str) -> None:
     sys.stdout.flush()
 
 
-def plan(repository_root: Path = ROOT, shared_models: Path | None = None) -> dict:
-    runtime = managed_runtime_root(repository_root)
-    models = local_directory(shared_models) if shared_models else Path(repository_root).resolve() / "models/MiniMax-H3"
-    if shared_models is not None and not models.is_dir():
+def plan(repository_root: Path = ROOT, shared_models: Path | None = None, *, profile: ProfileSpec | None = None) -> dict:
+    repository = Path(repository_root).resolve()
+    runtime = candidate_runtime_root(repository)
+    old_runtime = managed_runtime_root(repository)
+    models = local_directory(shared_models) if shared_models else configured_model_root(repository)
+    config_exists = (old_runtime / "extra_model_paths.yaml").is_file()
+    shared_before = False
+    if config_exists:
+        try:
+            record = json.loads((old_runtime.parent / "setup.json").read_text(encoding="utf-8"))
+            shared_before = record.get("shared_models", True) is not False
+        except (OSError, ValueError, TypeError, AttributeError):
+            # An existing model configuration without a usable ownership record is read-only.
+            shared_before = True
+    shared = shared_models is not None or (config_exists and (
+        shared_before or not models.resolve().is_relative_to(repository)
+    ))
+    if shared and not models.is_dir():
         raise SetupError("共有するモデルフォルダーが見つかりません。")
-    if shared_models is None and not models.resolve().is_relative_to(Path(repository_root).resolve()):
+    if not shared and not models.resolve().is_relative_to(repository):
         raise SetupError("Neo内のモデル保存先が外部へリンクされています。既存モデルの共有先として指定してください。")
-    profile = model_profile()
+    profile = profile or model_profile()
     missing = [
         item
         for item in profile.artifacts
@@ -74,8 +90,8 @@ def plan(repository_root: Path = ROOT, shared_models: Path | None = None) -> dic
     return {
         "runtime": str(runtime),
         "models": str(models),
-        "shared": shared_models is not None,
-        "model_download_bytes": 0 if shared_models else sum(item.size for item in missing),
+        "shared": shared,
+        "model_download_bytes": 0 if shared else sum(item.size for item in missing),
         "missing_models": [item.relative_path for item in missing],
     }
 
@@ -95,7 +111,7 @@ def verify_models(models: Path, *, shared: bool) -> dict:
 class RuntimeInstaller:
     def __init__(self, repository_root: Path = ROOT):
         self.root = local_directory(repository_root)
-        self.runtime = managed_runtime_root(self.root)
+        self.runtime = candidate_runtime_root(self.root)
         self.base = self.runtime.parent
         if not self.base.resolve().is_relative_to(self.root):
             raise SetupError("H3実行環境の保存先がNeoの外にあります。")
@@ -184,41 +200,13 @@ class RuntimeInstaller:
             raise SetupError("H3実行環境の場所に管理対象外のフォルダーがあります。")
         revision = self.run(["git", "rev-parse", "HEAD"], cwd=self.runtime).stdout.strip()
         indexed = (self.runtime / ".git/index").is_file()
-        if indexed:
-            self.prepare_core_update(revision)
-        if not indexed or revision != self.data["comfy_revision"]:
+        if indexed and revision != self.data["comfy_revision"]:
+            raise SetupError("共通ComfyUIの保存先に異なる版があります。内容を確認してください。")
+        if indexed and self.run(["git", "diff", "HEAD", "--name-only"], cwd=self.runtime).stdout.strip():
+            raise SetupError("共通ComfyUIに管理対象外の変更があります。変更を保存してから再実行してください。")
+        if not indexed:
             self.run(["git", "fetch", "--no-tags", "origin", self.data["comfy_revision"]], cwd=self.runtime)
             self.run(["git", "checkout", "--detach", self.data["comfy_revision"]], cwd=self.runtime)
-        patch_arguments = ["git", "apply", "--exclude=requirements.txt"]
-        applied = self.run([*patch_arguments, "--reverse", "--check", PATCH_PATH], cwd=self.runtime, check=False)
-        if applied.returncode:
-            self.run([*patch_arguments, "--check", PATCH_PATH], cwd=self.runtime)
-            self.run([*patch_arguments, PATCH_PATH], cwd=self.runtime)
-
-    def prepare_core_update(self, revision: str) -> None:
-        """Only replace exact installer-owned edits; preserve other changes."""
-        from tools.upgrade_minimax_h3_union2_vae import apply_reviewed_file_patch
-
-        known_patches = {
-            "efa6c8f804bff78b46a0fd458ebd2e47bba07a30": "comfyui-0.34.0-compiler.patch",
-            "912fca4f39b875a0360f2c5170568176ea813ded": "comfyui-h3-compiler-912fca4.patch",
-            "b9b290e43f1eb379946dfeb013faf9bbefa1a618": "comfyui-b9b290e4-compiler.patch",
-        }
-        changed = self.run(["git", "diff", "HEAD", "--name-only"], cwd=self.runtime).stdout.splitlines()
-        for filename in changed:
-            base = self.run(["git", "show", f"HEAD:{filename}"], cwd=self.runtime).stdout
-            allowed = {base}
-            if filename == "requirements.txt":
-                allowed.add(base.replace("comfy-aimdo==0.5.2", "comfy-aimdo==0.5.3"))
-            elif filename == "comfy/ldm/minimax/model.py" and revision in known_patches:
-                source = (ROOT / "patches/minimax-h3" / known_patches[revision]).read_text("utf-8")
-                allowed.add(apply_reviewed_file_patch(base, source, filename))
-            else:
-                raise SetupError("H3 Coreに管理対象外の変更があります。変更を保存してから更新してください。")
-            if (self.runtime / filename).read_text("utf-8") not in allowed:
-                raise SetupError("H3 Coreに管理対象外の変更があります。変更を保存してから更新してください。")
-        if changed:
-            self.run(["git", "restore", "--source=HEAD", "--", *changed], cwd=self.runtime)
 
     def install_python(self, uv: Path) -> Path:
         self.run([uv, "python", "install", self.data["python_version"], "--no-bin", "--no-registry"])
@@ -272,14 +260,28 @@ class RuntimeInstaller:
                     "assert Path(sys.prefix).resolve() == Path(sys.argv[2]).resolve(); "
                     "assert sys.version_info[:3] == (3,12,13); "
                     "assert torch.__version__ == '2.13.0+cu130'; "
-                    "assert m.version('comfy-aimdo') == '0.5.6'; "
-                    "assert m.version('comfy-kitchen') == '0.2.39'; "
+                    "assert m.version('comfy-aimdo') == '0.6.0'; "
+                    "assert m.version('comfy-kitchen') == '0.2.41'; "
                     "assert torch.cuda.is_available(), 'CUDA GPUを利用できません。GPUドライバーを確認してください。'; "
                     "print('H3 Python / CUDA OK')"
                 ),
                 str(self.base / "python"),
                 str(self.base / ".venv"),
             ]
+        )
+        self.run(
+            [
+                python, "-I", "-c",
+                "import sys; sys.path.insert(0, sys.argv.pop()); sys.argv = ['runtime-check']; "
+                "import asyncio, nodes; from pathlib import Path; "
+                "asyncio.run(nodes.init_public_apis()); "
+                "assert all(asyncio.run(nodes.load_custom_node(str(Path(nodes.__file__).parent / 'comfy_extras' / name), "
+                "module_parent='comfy_extras')) for name in ('nodes_minimax_h3.py', 'nodes_textgen.py')); "
+                "assert {'PH3ImageConditioning', 'MiniMaxH3SigmaShift', 'TextGenerate'} "
+                "<= nodes.NODE_CLASS_MAPPINGS.keys(), 'Required H3 / P-H3 nodes are missing'",
+                self.runtime,
+            ],
+            cwd=self.runtime,
         )
         return python
 
@@ -294,14 +296,25 @@ class RuntimeInstaller:
         install_clipcache(self.runtime)
         install_hybrid(self.runtime)
 
-    def install(self, shared_models: Path | None = None) -> Path:
+    def begin_update(self) -> Path:
+        pending = self.base / "runtime-update-in-progress.json"
+        if pending.is_symlink() or not pending.resolve().is_relative_to(self.base.resolve()):
+            raise SetupError("H3更新記録の保存先が不正です。")
+        pending.write_text(json.dumps({"revision": self.data["comfy_revision"]}), encoding="utf-8")
+        return pending
+
+    def install(self, shared_models: Path | None = None, *, profile=None, verify=None, runtime_only=False) -> Path:
         if sys.platform != "win32":
             raise SetupError("H3の自動セットアップはWindowsで実行してください。")
         if shutil.which("git") is None:
             raise SetupError("Gitがありません。Git for Windowsを導入してください。")
-        configuration = plan(self.root, shared_models)
+        profile = profile or model_profile
+        verify = verify or verify_models
+        configuration = plan(self.root, shared_models, profile=profile())
         models = Path(configuration["models"])
+        shared = configuration["shared"]
         with setup_lock(self.runtime):
+            self.base.mkdir(parents=True, exist_ok=True)
             with socket.socket() as connection:
                 connection.settimeout(1)
                 if connection.connect_ex(("127.0.0.1", 8189)) == 0:
@@ -309,15 +322,23 @@ class RuntimeInstaller:
             if shutil.disk_usage(self.base).free < 15 * 1024**3:
                 raise SetupError("H3実行環境の導入に15 GiB以上の空き容量が必要です。")
             # 共有指定では、重い環境の導入前に不足を検出し、モデル側には書き込まない。
-            if shared_models:
+            if shared and not runtime_only:
                 emit("共有モデルを検証しています。モデルのコピーや再取得は行いません。")
-                verify_models(models, shared=True)
+                verify(models, shared=True)
+            if installed_runtime_root(self.root) == self.runtime:
+                if not shared and not runtime_only:
+                    verify(models, shared=False)
+                from modules_forge.minimax_h3_runtime import model_root
+
+                previous = json.loads((self.base / "setup.json").read_text(encoding="utf-8"))
+                if model_root(self.runtime) != models.resolve() or previous.get("shared_models") != shared:
+                    pending = self.begin_update()
+                    self.complete_setup(models, shared=shared)
+                    pending.unlink()
+                emit("共通実行環境の準備ができました。" if runtime_only else "共通実行環境と選択したモデルの準備ができました。")
+                return self.runtime
             (self.base / "setup.json").unlink(missing_ok=True)
-            pending = self.base / "runtime-update-in-progress.json"
-            self.base.mkdir(parents=True, exist_ok=True)
-            if pending.is_symlink() or not pending.resolve().is_relative_to(self.base.resolve()):
-                raise SetupError("H3更新記録の保存先が不正です。")
-            pending.write_text(json.dumps({"revision": self.data["comfy_revision"]}), encoding="utf-8")
+            pending = self.begin_update()
             emit("H3専用のComfyUIを準備しています。")
             self.install_core()
             emit("H3専用のPythonとライブラリを準備しています。")
@@ -325,12 +346,12 @@ class RuntimeInstaller:
             self.install_python(uv)
             emit("H3の追加機能を準備しています。")
             self.install_nodes()
-            if not shared_models:
-                emit("標準H3モデルを準備しています。中断後も同じ操作で再開できます。")
-                verify_models(models, shared=False)
-            self.complete_setup(models, shared=bool(shared_models))
+            if not shared and not runtime_only:
+                emit("選択したモデルを準備しています。中断後も同じ操作で再開できます。")
+                verify(models, shared=False)
+            self.complete_setup(models, shared=shared)
             pending.unlink()
-            emit("準備ができました。H3の画像・動画生成を利用できます。")
+            emit("共通実行環境の準備ができました。" if runtime_only else "共通実行環境と選択したモデルの準備ができました。")
         return self.runtime
 
     def complete_setup(self, models: Path, *, shared: bool) -> None:
@@ -339,7 +360,7 @@ class RuntimeInstaller:
         config_temporary = config.with_suffix(".yaml.tmp")
         config_temporary.write_text(model_config(models), encoding="utf-8", newline="\n")
         config_temporary.replace(config)
-        record = {"schema_version": 1, "fingerprint": setup_fingerprint(), "shared_models": shared}
+        record = {"schema_version": 1, "fingerprint": setup_fingerprint(self.root), "shared_models": shared}
         temporary = self.base / "setup.json.tmp"
         temporary.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8", newline="\n")
         temporary.replace(self.base / "setup.json")
@@ -359,7 +380,7 @@ def main() -> int:
         elif args.models_only:
             configuration = plan()
             emit("標準H3モデルを準備しています。")
-            verify_models(Path(configuration["models"]), shared=False)
+            verify_models(Path(configuration["models"]), shared=configuration["shared"])
             emit("標準H3モデルの準備ができました。")
         else:
             RuntimeInstaller().install(args.share_models)

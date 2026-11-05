@@ -11,7 +11,6 @@
 | Stable Diffusion WebUI Forge - Neo | 現在のupstream | ルート[LICENSE](LICENSE)とupstream notice |
 | Gradio 6.17.3 | WebUI frontend／backend | Apache-2.0。Aikimiは、PR #13509で修正された6.17.3のTabs reactive stormに対し、overflow計測を停止し、初期tab一覧をbatch同期する限定compat workaroundを利用。監査済みのversion、filename、SHA-256をすべて確認できた場合だけ、site-packagesを変更せず配信時に置換 |
 | Accelerate 1.15.0+aikimi.1 | チェックポイント読込・CPUオフロード | [Apache-2.0本文](vendor/accelerate/LICENSE)、[上流ソースの固定ハッシュと修正記録](vendor/accelerate/AIKIMI-PATCH.md) |
-| Transformers 4.57.6のmask構築手順 | SenseNovaのTransformers 5互換処理 | Hugging Face、Apache-2.0。`modules_forge/sensenova_transformers_compat.py`に適用範囲と由来を記載。ライセンス全文は同じApache-2.0の[vendor/accelerate/LICENSE](vendor/accelerate/LICENSE) |
 | ComfyUI由来package | workflowとmodel処理 | [modules_forge/packages/comfy/LICENSE](modules_forge/packages/comfy/LICENSE) |
 | GGUF package | GGUF読込 | [modules_forge/packages/gguf/LICENSE](modules_forge/packages/gguf/LICENSE) |
 | built-in ControlNet／IP-Adapter | built-in extension | 各extension directoryの`LICENSE` |
@@ -32,10 +31,8 @@
 |---|---|---|
 | Krea2 | Comfy-Org/Krea-2、Qwen | 固定revisionのKrea 2 Community License PDFと各Qwen license |
 | Anima 3.8B | lylogummy/Anima-3.8B、circlestone-labs/Anima、Qwen | 各model card、CircleStone Labs license、Qwen license |
-| SenseNova U1.5 | SenseNova、starsFriday、joyfox | 各固定revisionのmodel cardとruntime LICENSE |
 | MiniMax H3 | MiniMaxAI、ComfyUI、[KijaiのUnion 2.0変換済み重み](https://huggingface.co/Kijai/MiniMax-H3-experimental/tree/e042fe480f58806578713532b8ae4e3d47d1bd63/model_patches) | MiniMax H3 Community License、変換モデルの配布ページ、ComfyUI側のnotice。重みはGitに含めません。 |
 | MiniMax H3 360 Orbit LoRA | [Pablo Dawson](https://huggingface.co/pablodawson/MiniMax-H3-360-Orbit-LoRA/tree/5ddbc2dbbe95edbbdaf5017c3e934b1d01791697) | MiniMax H3 Community License Agreement。固定版を必要時に取得し、重みはGitに含めません。 |
-| Nanosaur2 | [well9472/Nanosaur2-670M](https://huggingface.co/well9472/Nanosaur2-670M/tree/dcd61cd6c3f9e2cc62619da620bd86219191c3ed)、[ComfyUI](https://github.com/Comfy-Org/ComfyUI/tree/912fca4f39b875a0360f2c5170568176ea813ded) | モデルページ表示はMIT、ComfyUIはGPL-3.0。作者のノード5ファイルと重み3ファイルを固定版からSHA-256検証付きで利用者のローカル環境へ取得します。Gitには同梱しません。[導入・作例](extensions-builtin/nanosaur2-studio/README.md) |
 | Qwen Image 2.1 | Qwen、Hugging Face Diffusers、bitsandbytes、[Unsloth通常版GGUF](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF)、[Viggle Turbo](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo)、[Abiray Turbo GGUF](https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF) | [Qwen Research License](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/b3179ad355be050328e483a9dfdd9e60cd62adfa/LICENSE)（研究・評価目的の非商用利用。商用は別途許諾）、各変換モデルの配布ページ、Diffusers Apache-2.0、bitsandbytes MIT。重みはGitに含めません。 |
 | Qwen Image 2.1 Fun ControlNet | [Alibaba PAI公式重み](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)、[KijaiのINT8変換](https://huggingface.co/Kijai/QwenImage_experimental/tree/04987755e10002ff33e4ea307a811487dddd79d9/model_patches)、[VideoX-Funの制御実装](https://github.com/aigc-apps/VideoX-Fun/blob/67e3b4b8184ae8ff61ab3e3fbdb68bb817f41515/videox_fun/models/qwenimage21_transformer2d_control.py) | 重みは[Qwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/blob/8a4702014d4dabb5f896fcba917e2ee0a961465f/LICENSE)（非商用）、VideoX-FunのコードはApache-2.0。重みと公式条件画像はGitに含めません。[作例の入力画像はオリジナル](docs/assets/qwen-image21-fun-controlnet/README.md)です。 |
 | Qwen Image 2.1 Fun Acc LoRA | [Alibaba PAI配布](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs/tree/f7545234760e1847cd8e89e52bd951cb0b7e327f) | 重みは[Qwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs/blob/f7545234760e1847cd8e89e52bd951cb0b7e327f/LICENSE)（非商用）。PDDコード2ファイルは配布元のApache-2.0で、[同梱ライセンス](modules_forge/qwen_image21/pdd_vendor/LICENSE)を保持。コードのimportをNeoのpackage向けに変更しました。重みはGitに含めません。 |
@@ -48,7 +45,6 @@ Animaの配布repositoryは、upstream AnimaとNVIDIA由来条件の確認を求
 
 QwenのINT8 ConvRot実行には専用環境の`comfy-kitchen==0.2.31`を利用します。配布元の[Apache-2.0 LICENSE](https://github.com/Comfy-Org/comfy-kitchen/blob/v0.2.31/LICENSE)と[NOTICE](https://github.com/Comfy-Org/comfy-kitchen/blob/v0.2.31/NOTICE)を参照してください。ライブラリとモデル重みはGitに同梱しません。
 
-SenseNova runtimeは、固定commit`e6dfd45762eb46f805067fe079c14bcb643ccccd`から取得します。runtime directoryへApache-2.0の`LICENSE`も配置します。
 
 ## Irodori TTS
 
@@ -72,6 +68,12 @@ SenseNova runtimeは、固定commit`e6dfd45762eb46f805067fe079c14bcb643ccccd`か
 ## Gradioの依存条件調整
 
 [`vendor/gradio`](vendor/gradio/AIKIMI-PATCH.md)は、[Gradio 6.17.3の公式ホイール](https://pypi.org/project/gradio/6.17.3/)をSHA-256で検証し、Pillow 13向けの依存条件と配布版番号を変更するビルドです。Pythonコードと画面資産は公式版と同一です。[Apache-2.0のライセンス本文](vendor/gradio/LICENSE)、配布元と元のメタデータを同ディレクトリーに保持します。
+
+## P-H3 Image
+
+- [PrunaAI/P-H3-Image-Comfy](https://huggingface.co/PrunaAI/P-H3-Image-Comfy/tree/44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543)はMiniMax H3をもとにしたモデルです。モデル重みは本リポジトリに含めず、利用者の操作で配布元から取得します。[MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)には利用地域、商用利用、表示と配布の条件があります。
+- P-H3テキストエンコーダーのQwen3-VL-4B部分と、Qwen3.5-9Bをもとにしたプロンプト補助モデルにはApache License 2.0が適用されます。[配布元NOTICE](https://huggingface.co/PrunaAI/P-H3-Image-Comfy/blob/44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543/NOTICE)と[LICENSE-APACHE](https://huggingface.co/PrunaAI/P-H3-Image-Comfy/blob/44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543/LICENSE-APACHE)を参照してください。
+- H3とP-H3は別途取得する[ComfyUI固定版](https://github.com/Comfy-Org/ComfyUI/tree/4ac1c173afd42f1141dcebace42d8091998d3b8c)（[GPL-3.0](https://github.com/Comfy-Org/ComfyUI/blob/4ac1c173afd42f1141dcebace42d8091998d3b8c/LICENSE)）を共有します。Comfy Kitchen 0.2.41の[LICENSE](https://github.com/Comfy-Org/comfy-kitchen/blob/v0.2.41/LICENSE)・[NOTICE](https://github.com/Comfy-Org/comfy-kitchen/blob/v0.2.41/NOTICE)、comfy-aimdo 0.6.0の[LICENSE](https://github.com/Comfy-Org/comfy-aimdo/blob/v0.6.0/LICENSE)も確認してください。
 
 ## MOSS Image
 
@@ -121,15 +123,6 @@ The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comf
 
 - Reference model patch: [ostris/ComfyUI-MOSS-Image-Ostris-Edit](https://github.com/ostris/ComfyUI-MOSS-Image-Ostris-Edit/tree/8f9b50c0d2b28248ecd48a4d4905c815e726f146), revision `8f9b50c0d2b28248ecd48a4d4905c815e726f146`, MIT, Copyright (c) 2026 Ostris, LLC. The implementation is adapted in `vendor/moss_image_ostris_edit.py` for the pinned native RoPE and fused SiTU interfaces; the original license is retained in `vendor/moss_image_ostris_edit.LICENSE`.
 - Optional DMD adapter: [lodestones/MOSS-Image-SFT-8-steps-dmd](https://huggingface.co/lodestones/MOSS-Image-SFT-8-steps-dmd/tree/f95df83b5e90ae91ea412434b3f9b7f1c8c6314f), Apache-2.0. The current Euler-compatible `lora_latest.safetensors` is downloaded separately at a pinned revision and verified by SHA-256. Model weights are not bundled in Git.
-
-## Ming Image Design
-
-- モデル原作: [inclusionAI/Ming-Image-0.1-Design](https://huggingface.co/inclusionAI/Ming-Image-0.1-Design)、MIT。
-- 量子化・ComfyUI用再梱包: [Comfy-Org/Ming-Image](https://huggingface.co/Comfy-Org/Ming-Image)（Kijaiによる変換）、MIT。重みは同梱せず、固定revision・SHA-256で別途取得します。
-- 推論: [ComfyUI](https://github.com/Comfy-Org/ComfyUI)（GPL-3.0）、専用の外部チェックアウトで利用。Ming対応コミット `3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251` を固定します。
-- ConvRot/W4A8の実行はComfy Kitchenを使用。導入構成と検証範囲は [Mingガイド](extensions-builtin/ming-image-studio/README.md) を参照してください。
-- 本体W4A8の任意変換では、[Comfy-Org/comfy-model-toolsの変換スクリプト](https://github.com/Comfy-Org/comfy-model-tools/blob/d6797787e6bdb1a1fb0094d588a26f8e71a1c757/quant_int8_convrot.py) を固定コミット・SHA-256で別途取得して実行します。スクリプトとモデル重みは同梱しません。生成ファイルには、原本・変換ツール・出力の識別情報を添付します。
-- 変換済み本体W4A8は [Aikimi/Ming-Image-0.1-Design-W4A8](https://huggingface.co/Aikimi/Ming-Image-0.1-Design-W4A8) からも固定revision・SHA-256で取得できます。元のinclusionAI著作権表示を含むMITライセンスと変換記録を配布先に同梱しています。Gitにはモデル重みを含みません。
 
 ## H3 lightweight VAEs
 

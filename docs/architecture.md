@@ -13,7 +13,6 @@ Windows launcher / Docker entrypoint
         -> Krea2 -> UI Preset krea / keep txt2img or img2img / other tabs -> txt2img
         -> Anima -> UI Preset anima / keep txt2img or img2img / other tabs -> txt2img / matching accordion
      -> Aikimi native tabs
-        -> SenseNova bridge -> isolated worker
         -> MiniMax H3 bridge -> local ComfyUI process
      -> scoped Aikimi status
      -> Diagnostics and read-only API
@@ -59,7 +58,7 @@ API routeは共通の認証処理を使います。healthは最小情報、statu
 
 画像生成はモデルごとの能力に合わせた[共通画面](image-workspace.md)を使用します。設定パネルの開閉は機能の有効・無効と独立し、元のコンポーネント・実行サービスを使います。参照画像を使う編集と、Irisの変更強度を使うimg2imgは、それぞれのサンプリングを維持します。
 
-`aikimi_tabs.js`は`window.AikimiTabs`と`aikimi:feature-tab-change`を公開します。feature keyとcapabilities APIは、`krea2`、`anima38`、`sensenova`、`minimax_h3`の識別子を共用します。Krea2はUI Presetの`krea`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持するaliasです。別のタブから開いた場合は`txt2img`へ移動し、`Krea2 2-Stage Upscale`は自動選択しません。AnimaはUI Presetの`anima`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持するaliasです。別のタブから開いた場合は`txt2img`へ移動し、選択したタブの`Anima 3.8B`設定欄を展開します。生成設定、queue、model状態を別のUI stateへ複製しません。
+`aikimi_tabs.js`は`window.AikimiTabs`と`aikimi:feature-tab-change`を公開します。feature keyとcapabilities APIは、`krea2`、`anima38`、`minimax_h3`の識別子を共用します。Krea2はUI Presetの`krea`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持するaliasです。別のタブから開いた場合は`txt2img`へ移動し、`Krea2 2-Stage Upscale`は自動選択しません。AnimaはUI Presetの`anima`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持するaliasです。別のタブから開いた場合は`txt2img`へ移動し、選択したタブの`Anima 3.8B`設定欄を展開します。生成設定、queue、model状態を別のUI stateへ複製しません。
 
 `modules/aikimi_status.py`が生成状態、queue、VRAM、model読込状態を要約し、`aikimiStatus.js`がactiveなAikimi操作領域の先頭へ一つのstatus要素をinline表示します。通常のForgeタブへ移動すると表示とstatus pollingを停止します。従来の全画面共通ヘッダーと固定オーバーレイは使用しません。技術logは残したまま、キャラクター向けmessageと詳細情報を分離しています。
 
@@ -73,19 +72,6 @@ assetは`assets/aikimi`から読みます。assetの読込失敗はUI全体の�
 
 INT8 ConvRot変換では、`tools/convert_anima38_int8_convrot.py`から共通streaming converterを呼び、v1.1のSemantic Connector v2をBF16のまま保持します。出力先は一時ファイルであり、tensor layoutとmetadataの検証を通過した場合だけ正式名へ移す設計です。
 
-## SenseNova U1.5
-
-SenseNovaは通常のForge samplerへ変換しません。境界は次のとおりです。
-
-```text
-extensions-builtin/sensenova-u15-studio
-  -> modules_forge/sensenova_u15_bridge.py
-     -> tools/sensenova_u15_worker.py
-        -> pinned SenseNova runtime and checkpoint
-```
-
-Studioは入力とUI、bridgeはjob、VRAM解放、worker process、保存、cancel、workerは固定runtimeでの推論を担当します。workerを別processにすることで、終了時にweightとactivationをOSへ返します。
-
 ## MiniMax H3
 
 MiniMax H3 Studioは、Aikimi Forge NeoへComfyUI runtime全体を組み込みません。
@@ -97,6 +83,8 @@ extensions-builtin/minimax-h3-studio
 ```
 
 bridgeは、runtime path、process identity、ComfyUI revision、必要node、model一覧を検査します。Forgeが起動したprocessだけを再起動し、外部launcherが所有するprocessを自動停止しません。
+
+H3動画とP-H3 Imageは固定版の実行環境を共有します。生成方式と必要なモデル・ノードは別々に確認します。MOSS Imageは独立した実行環境と固定版を使います。
 
 ## FLUX 3 Image Klein
 
@@ -117,12 +105,11 @@ bridgeは、runtime path、process identity、ComfyUI revision、必要node、mo
 
 `tools/aikimi_setup.py`はstdlibだけで動作し、固定manifest、download、resume、size、SHA-256、path containment、disk preflight、verify、repairを共通化します。Anima conversionだけは、準備済みForge venvとCUDAを使って既存converterを実行します。
 
-既存のKrea2、Anima、SenseNova用batとPowerShell scriptは互換入口として残します。詳しい契約は[model-installation.md](model-installation.md)を参照してください。
+既存のKrea2、Anima用batとPowerShell scriptは互換入口として残します。詳しい契約は[model-installation.md](model-installation.md)を参照してください。
 
 ## 保存先
 
 - 通常画像はForgeの`output`または`outputs`
-- SenseNovaは`outputs/sensenova_u15`
 - MiniMax H3は`outputs/minimax_h3`
 - setup partialは正式ファイルと同じdirectoryの`.part`
 - repairで隔離したファイルは`tmp/aikimi-setup/quarantine`

@@ -51,6 +51,65 @@ class MiniMaxH3StudioCallbackTests(unittest.TestCase):
     def setUpClass(cls):
         cls.studio = load_studio_module()
 
+    def test_runtime_actions_follow_managed_runtime_selected_after_page_load(self):
+        ui = self.studio
+        old, current = Path("old-runtime"), Path("new-runtime")
+        checkpoint = "custom-fl2va.safetensors"
+        controls = ui.H3Acceleration(checkpoint=checkpoint).values()
+        with (
+            mock.patch.object(ui, "managed_runtime_root", return_value=current),
+            mock.patch.object(ui, "resolve_runtime_root", side_effect=Path),
+            mock.patch.object(ui, "ensure_ready") as connect,
+            mock.patch.object(ui, "restart_runtime") as restart,
+            mock.patch.object(ui, "inspect_readiness") as inspect,
+            mock.patch.object(ui, "readiness_html", return_value="ready"),
+        ):
+            ui._connect_runtime(str(old), "http://127.0.0.1:8189", "fast", *controls)
+            ui._restart_runtime(str(old), "http://127.0.0.1:8189", "fast", *controls)
+            ui._rescan_runtime(str(old), "http://127.0.0.1:8189", "fast", *controls)
+        for action in (connect, restart, inspect):
+            self.assertEqual(action.call_args.args[0], current)
+            self.assertEqual(action.call_args.kwargs["acceleration"].checkpoint, checkpoint)
+
+    def test_video_generation_follows_managed_runtime_selected_after_page_load(self):
+        ui = self.studio
+        old, current = Path("old-runtime"), Path("new-runtime")
+        with (
+            mock.patch.object(ui, "managed_runtime_root", return_value=current),
+            mock.patch.object(ui, "resolve_runtime_root", side_effect=Path),
+            mock.patch.object(ui, "_request_from_ui", return_value=object()),
+            mock.patch.object(ui, "validate_request"),
+            mock.patch.object(ui, "run_generation", return_value=iter(())) as run,
+        ):
+            list(ui._generate(str(old), "http://127.0.0.1:8189", "fast", "text", "prompt",
+                              None, None, None, None, None, "16:9", "preview", 5.0, 20, -1,
+                              "simple", "match"))
+        self.assertEqual(run.call_args.args[1], current)
+
+    def test_history_and_workflow_follow_managed_runtime_selected_after_page_load(self):
+        from modules_forge import minimax_h3_handoff as handoff
+
+        ui = self.studio
+        old, current = Path("old-runtime"), Path("new-runtime")
+        with (
+            mock.patch.object(ui, "managed_runtime_root", return_value=current),
+            mock.patch.object(ui, "resolve_runtime_root", side_effect=Path),
+            mock.patch.object(ui, "list_history", return_value=[]) as history,
+            mock.patch.object(ui, "_request_from_ui", return_value=object()),
+            mock.patch.object(ui, "_active_generation_values", return_value=()),
+            mock.patch.object(handoff, "export_current", return_value=(object(), "target")) as export,
+            mock.patch.object(handoff, "export_history", return_value=(object(), "target")) as export_history,
+            mock.patch.object(handoff, "result_html", return_value="ready"),
+        ):
+            ui._history_state(str(old))
+            self.assertEqual(history.call_args.args[0], current)
+            ui._open_current_workflow(str(old), "http://127.0.0.1:8189", "fast")
+            self.assertEqual(export.call_args.args[1], current)
+            ui._open_current_workflow_ui(str(old), "http://127.0.0.1:8189", "fast", None, 1.0, 5.0)
+            self.assertEqual(export.call_args.args[1], current)
+            ui._open_history_workflow("selected", str(old), "http://127.0.0.1:8189")
+            self.assertEqual(export_history.call_args.args[2], current)
+
     def test_manual_setting_update_refreshes_summary_and_marks_custom(self):
         summary, state, validation = self.studio._custom_settings_updates(
             "16:9",

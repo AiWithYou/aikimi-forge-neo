@@ -2,7 +2,7 @@
 
 ## 基本方針
 
-Aikimi Forge Neoは、Windows向けの安全な既定値を保ちながら、Forge Neo由来の画像生成、動画生成、高解像度処理、Anima、SenseNova、MiniMax H3、Aikimi UIを維持します。変更は目的ごとに小さく分け、既存の公開APIとbat入口を理由なく削除しないでください。
+Aikimi Forge Neoは、Windows向けの安全な既定値を保ちながら、Forge Neo由来の画像生成、動画生成、高解像度処理、Anima、MiniMax H3、Aikimi UIを維持します。変更は目的ごとに小さく分け、既存の公開APIとbat入口を理由なく削除しないでください。
 
 ## 開発環境
 
@@ -33,19 +33,22 @@ cd aikimi-forge-neo
 - 必須設定にsilent fallbackを追加しないでください。
 - GPU不要testを通すために、実機能を無効化しないでください。
 - vendored codeやthird-party codeを変更する場合は、由来、固定revision、licenseを残してください。
-- 日本語文書を変更した場合は、文書全体にstyle guardを実行してください。
+- 日本語文書を変更した場合は、文書全体を読み、手順・条件・表現に誤りや矛盾がないか確認してください。
 - Forge由来の上部タブ、Quick Settings、`txt2img`、`img2img`、`Extras`、`Settings`は、Aikimi固有CSSから隠したり移動したりしないでください。
 - Aikimi固有のナビゲーション、ちびあいきみ、status表示は`extensions-builtin/aikimi-ui`へ置き、Forge本体への変更面積を抑えてください。
 - Krea2とAnimaのaliasは既存Forge controlを再利用します。生成設定、queue、model状態を別のUI stateへ複製しないでください。
 
 ## ローカル検証
 
-CPU、offline、外部モデルdownloadなしのtest runnerは次です。
+CPU、offline、外部モデルdownloadなしのtest runnerは次です。Windows PowerShellで設定する`PYTHONUTF8`は、このセッションのPythonとテストが起動する子プロセスに適用されます。
 
 ```powershell
 uv pip install --python .\venv\Scripts\python.exe -r tools\requirements-test.txt
+$env:PYTHONUTF8 = "1"
 .\venv\Scripts\python.exe .\tools\run_ci_tests.py --verbosity 1
 ```
+
+MOSS専用環境がある場合、参照編集のRoPEテストはそのPythonでComfyをCPUモードにして実行します。モデルは読み込まず、専用環境がない場合はスキップします。
 
 統一model setupだけを確認する場合は、次を使います。
 
@@ -53,8 +56,7 @@ uv pip install --python .\venv\Scripts\python.exe -r tools\requirements-test.txt
 .\venv\Scripts\python.exe -m unittest -v tools.tests.test_aikimi_setup
 .\venv\Scripts\python.exe -m unittest -v `
   tools.tests.test_krea2_download_script `
-  tools.tests.test_anima38_download_script `
-  tools.tests.test_sensenova_u15_download_script
+  tools.tests.test_anima38_download_script
 ```
 
 変更したfirst-party codeはRuffで構文・不具合につながる問題を確認します。formatの適用は任意です。
@@ -76,7 +78,7 @@ git remote add upstream https://github.com/Haoming02/sd-webui-forge-classic.git
 git fetch upstream neo
 ```
 
-同期基準を更新する場合は、upstream commit SHAをREADMEへ記録してください。自動rebaseや未確認の一括mergeで、Aikimi固有のsecurity guard、BnB/NF4/GGUF互換、built-in workflowを落とさないでください。`extensions-builtin/aikimi-ui`のfeature key、alias遷移先、SenseNovaとMiniMax H3のtab IDも確認します。
+同期基準を更新する場合は、upstream commit SHAをREADMEへ記録してください。自動rebaseや未確認の一括mergeで、Aikimi固有のsecurity guard、BnB/NF4/GGUF互換、built-in workflowを落とさないでください。`extensions-builtin/aikimi-ui`のfeature key、alias遷移先、MiniMax H3のtab IDも確認します。
 
 ## Pull Request
 

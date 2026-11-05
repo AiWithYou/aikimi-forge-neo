@@ -9,11 +9,6 @@ STUDIO_STYLES = {
         "#h3-studio",
         "h3",
     ),
-    "SenseNova U1.5": (
-        REPOSITORY_ROOT / "extensions-builtin" / "sensenova-u15-studio" / "style.css",
-        "#sensenova-u15-studio",
-        "sn",
-    ),
 }
 
 

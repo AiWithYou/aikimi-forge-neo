@@ -25,8 +25,10 @@ def verify_rope():
 
     sys.path[:0] = [str(ROOT), str(ROOT / "repositories/moss-image/ComfyUI")]
     sys.argv = [sys.argv[0], "--cpu"]
+    import comfy.options
     import torch
 
+    comfy.options.enable_args_parsing()
     from vendor import moss_image_ostris_edit as edit
 
     _image_ids, _pe, _text_ids = edit._image_ids, edit._pe, edit._text_ids

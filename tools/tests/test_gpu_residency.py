@@ -44,7 +44,7 @@ class RetentionTests(unittest.TestCase):
         second = self.enter("yue2")
         release.assert_not_called()
         second.release()
-        third = self.enter("sensenova")
+        third = self.enter("minimax_h3")
         release.assert_called_once()
         third.release()
 
@@ -185,54 +185,6 @@ class ModelCacheTests(unittest.TestCase):
             self.assertIn("input", events)
             self.assertNotIn("change", events)
 
-    def test_sensenova_seed_reuses_profile_and_file_changes_reload(self):
-        from modules_forge import local_assets
-        from tools import sensenova_u15_worker as worker
-
-        with tempfile.TemporaryDirectory() as root:
-            checkpoint = Path(root) / "weights.safetensors"
-            checkpoint.write_bytes(b"fixture")
-            lora = Path(root) / "official-lora.safetensors"
-            lora.write_bytes(b"lora")
-            payload = {
-                "checkpoint": str(checkpoint),
-                "checkpoint_identity": local_assets.file_identity(checkpoint),
-                "generation_profile": "quality",
-                "seed": 1,
-            }
-            api = Mock(effective_attn_backend=Mock(return_value="sdpa"))
-
-            def load_runtime(value):
-                lora_info = {"targets": 294} if value["generation_profile"] == "official_8step" else None
-                return (api, None, Mock(release_variant="final"), 1, 588, lora_info, 12.0, {})
-
-            with (
-                patch.object(worker, "_RESIDENT_MODE", True),
-                patch.object(worker, "_RESIDENT_RUNTIME", None),
-                patch.object(worker, "_RESIDENT_KEY", None),
-                patch.object(worker, "_load_runtime", side_effect=load_runtime) as load,
-                patch.object(worker, "OFFICIAL_LORA_SHA256", local_assets.file_identity(lora)["sha256"]),
-                patch.object(worker.torch.cuda, "empty_cache"),
-                patch.object(worker, "emit") as emitted,
-            ):
-                self.assertEqual(worker._runtime_for_request(payload)[6], 12.0)
-                self.assertEqual(worker._runtime_for_request({**payload, "seed": 2, "steps": 3})[6], 0.0)
-                self.assertEqual(load.call_count, 1)
-                worker._runtime_for_request({**payload, "generation_profile": "official_8step", "lora_path": str(lora)})
-                self.assertEqual(load.call_count, 2)
-                checkpoint.write_bytes(b"changed")
-                with self.assertRaisesRegex(RuntimeError, "changed after the request"):
-                    worker._runtime_for_request(payload)
-                self.assertEqual(load.call_count, 2)
-                worker._runtime_for_request({**payload, "checkpoint_identity": local_assets.file_identity(checkpoint)})
-                self.assertEqual(load.call_count, 3)
-                ready = [call.kwargs for call in emitted.call_args_list if call.args[0] == "loaded"]
-                self.assertEqual(
-                    [(item["generation_profile"], item["lora_targets"]) for item in ready],
-                    [("quality", 0), ("official_8step", 294), ("quality", 0)],
-                )
-                self.assertTrue(all(item["effective_attn_backend"] == "sdpa" for item in ready))
-                self.assertTrue(all(item["release_variant"] == "final" for item in ready))
 
     def test_h3_release_confirms_runtime_exit(self):
         from modules_forge import minimax_h3_bridge as bridge

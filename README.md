@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**[v5.0.4](https://github.com/AiWithYou/aikimi-forge-neo/tree/v5.0.4)** · [変更履歴](CHANGELOG.md)
+**v6.0.0（開発中）** · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
@@ -10,44 +10,16 @@
 
 各Studioの先頭からモデルを選べます。FLUX 3は公式の蒸留版／Baseと保存形式を選択します。追加チェックポイントに対応するStudioでは、`models/<系列>/checkpoints/` と下位フォルダーへ置いて一覧を更新します。Irisでは独自Full FTの通常版・INT8・W4A8を本体として選択できます。[モデル・LoRAの配置と系列ごとの対応条件](docs/local-models.md)
 
-## v5.0.4の主な変更
+## できること
 
-- **[MOSSの参照への注目度](docs/moss-image.md#参照画像から編集)**：編集LoRAによる参照編集で、画像理解側が参照を重視する度合いを調整できます。1が標準で、0でも編集LoRAの参照は残ります。
+- **画像を作る・編集する**：P-H3 Image、MOSS Image、Qwen Image 2.1、Iris、FLUX 3などを目的に合わせて選択できます。P-H3は編集対象と参照画像を合わせて最大8枚まで使えます。
+- **大きな画像を仕上げる**：Krea2の高解像度ワークフローやMOSSのHires.fix、各種アップスケーラーを使えます。
+- **動画・音声を作る**：MiniMax H3で音声付き動画、YuE2で音楽、Irodori TTSで日本語音声を生成できます。
+- **画像を整理する**：Clefで画像や文章の評価・仕分けを行えます。
 
-更新後はWebUIを再起動してください。この更新のためのモデル再取得は不要です。参照編集には対応する編集用LoRAが必要です。[全変更](CHANGELOG.md#v504--2026-10-27)
+P-H3の初回準備はWebUIの **H3 Image → P-H3 Image → 準備を開く → 環境とモデルを準備** から実行します。標準のモデル4ファイルは合計約29.8 GBです。[使い方と利用条件](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)
 
-### v5.0.3の変更
-
-- **[MOSSの参照編集](docs/moss-image.md#高解像度の構図調整)**：RoPEスケールを変えても参照画像の位置表現は標準のまま保ち、生成画像の構図を調整します。
-
-更新後はWebUIを再起動してください。モデルの再取得は不要です。[全変更](CHANGELOG.md#v503--2026-10-27)
-
-### v5.0.2の変更
-
-- **[MOSSの操作画面](docs/moss-image.md)**：img2imgでは使わないHires.fixを非表示にし、CFG 1では負プロンプトと層スキップが不使用であることを表示します。入力済みの値は保持します。
-- **生成中の再接続**：同じブラウザーでページを再読み込みしても、進捗表示と中断操作を復元します。サーバー再起動後のジョブ再開には対応しません。
-- **LoRAと参照画像の修正**：削除した編集LoRAの選択を一覧更新時に解除し、小さすぎる参照画像には最小サイズを案内します。LoRA適用直前の重複したファイル検査も削減しました。
-
-更新後はWebUIを再起動してください。この更新のためのモデル再取得は不要です。[全変更](CHANGELOG.md#v502--2026-10-22)
-
-### v5.0.1の変更
-
-- **[MOSSの高解像度生成](docs/moss-image.md#高解像度の構図調整)**：SDPAとINT8活性化の計算方式を変更しました。S5の長辺2560pxの通常生成を確認しています。4KやHires.fixの完走は、この変更後には確認できていません。
-- **中断待ちを修正**：高解像度で中断の確認に時間がかかっても、待ち時間だけで計算中のワーカーを強制終了しなくなりました。
-- **[GPU異常後の停止](docs/troubleshooting.md#gpu異常後の停止)**：異常や未完了の処理を検出すると、新しい生成と自動GPU処理を停止します。再起動後も停止状態を保持し、状態確認と明示的な解除に対応しました。
-- **依存関係のセキュリティ更新**：画像処理のPillowと通信証明書のcertifiを修正版へ更新しました。
-
-更新後は使用するモデルのセットアップを再実行し、WebUIを再起動してください。取得済みの同じモデルは再利用します。[全変更](CHANGELOG.md#v501--2026-10-21)
-
-[MOSSのRoPE構図調整](docs/moss-image.md#高解像度の構図調整)と[H3のLightVAE](docs/minimax-h3-acceleration.md#lightvae)も引き続き使用できます。
-
-### 引き続き使えるv4.10の機能
-
-- **MOSS Imageの安定性改善**：保存したHires設定の再起動後の表示、APIの変更量の入力検査、中断・失敗時のPNG削除を修正しました。[v4.10.1の変更](CHANGELOG.md#v4101--2026-10-19)
-- **[MOSS ImageのHires.fix](docs/moss-image.md#拡大して仕上げるhiresfix)**：通常サイズで構図を生成し、画像を拡大してから細部を再生成します。倍率・仕上げSteps・変更量を調整でき、最終サイズと両段階の生成条件を確認できます。
-- **[MOSSの参照画像入力](docs/moss-image.md#参照画像から編集)**：元画像からの再描画と、編集用LoRAを使う最大3枚の参照入力に対応しました。
-- **[マージモデル](docs/moss-image.md#マージモデル)と少ステップ生成**：BF16／INT8 ConvRotの本体を選択でき、INT8変換コマンドを追加しました。任意で取得できるEuler対応の蒸留LoRAは、通常のLoRA欄から使用します。
-- **表示と生成情報の修正**：画像生成ワークスペースの数値欄・スライダーのはみ出しを修正。複数バッチの生成情報、動画の保存・後処理、画像の拡大・透過処理も改善しました。[全変更](CHANGELOG.md#v4100--2026-10-19)
+SenseNova U1.5、Nanosaur2、Ming Image Designの画面とセットアップは本版から対象外です。
 
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
 
@@ -72,13 +44,13 @@ git clone --branch neo https://github.com/AiWithYou/aikimi-forge-neo.git
 cd aikimi-forge-neo
 ```
 
-使いたいモデルを選び、対応するセットアップBATを実行します。**最初は使うモデルだけ導入すれば始められます。** モデル本体はリポジトリに含まれません。
+使いたいモデルを選び、下の表の方法で準備します。P-H3は先にWebUIを起動し、画面から準備します。**最初は使うモデルだけ導入すれば始められます。** モデル本体はリポジトリに含まれません。
 
 <a id="model-setup"></a>
 
 ### モデルを選んで導入する
 
-Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニュー番号（1〜6）を選びます。Qwen・YuE2・Irodori TTS・Clef・Iris・FLUX 3・MOSS Imageは表にある専用BATを実行してください。
+Krea2・Anima・H3動画は、次を実行してメニュー番号（1〜3）を選びます。P-H3は起動後の画面から準備できます。Qwen・YuE2・Irodori TTS・Clef・Iris・FLUX 3・MOSS Imageは表にある専用BATを実行してください。
 
 ```powershell
 .\aikimi-setup.bat
@@ -88,10 +60,8 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 |---|---|---|
 | [Krea2](docs/krea2_local_supersample_detail_ja.md) | 画像生成・4K/8K処理。上部 **Krea2** から使用 | `.\aikimi-setup.bat` → **1** |
 | [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | 画像生成。上部 **Anima** から使用 | `.\aikimi-setup.bat` → **2** |
-| [SenseNova U1.5](extensions-builtin/sensenova-u15-studio/README.md) | 画像生成・参照画像編集。専用Studioを使用 | `.\aikimi-setup.bat` → **3** |
-| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | 音声付き動画と写真一枚からの無音360°周回。**H3 Studio** を使用 | `.\aikimi-setup.bat` → **4** |
-| [Nanosaur2](extensions-builtin/nanosaur2-studio/README.md) | イラスト向け画像生成。専用タブを使用 | `.\aikimi-setup.bat` → **5** |
-| [Ming Image Design](extensions-builtin/ming-image-studio/README.md) | ポスター・UI案・透過素材の生成。専用Studioを使用 | `.\aikimi-setup.bat` → **6**（INT8／W4A8選択） |
+| [P-H3 Image](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) | 画像生成・最大8枚の画像を使う編集。**H3 Image** を使用 | 起動後に **P-H3 Image → 準備を開く** |
+| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | 音声付き動画と写真一枚からの無音360°周回。**H3 Studio** を使用 | `.\aikimi-setup.bat` → **3** |
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | 画像生成・編集・透過PNG・拡張。専用画面を使用 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | 作曲・ABC楽譜編集。**YuE2 Music** タブを使用 | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1：公式Python** |
 | [Irodori TTS](docs/irodori-tts.md) | 日本語読み上げ、声の説明によるVoice Design、参照音声からの声の再現。**Irodori TTS** タブを使用 | [`aikimi-irodori-setup.bat`](aikimi-irodori-setup.bat) |
@@ -104,7 +74,7 @@ Krea2・Anima・SenseNova・H3・Nanosaur2・Mingは、次を実行してメニ�
 
 AnimaはGPUでINT8へ変換し、検証成功後にBF16変換元を削除します。残す場合は `.\aikimi-setup.bat -Model anima38 -KeepSource` を実行してください。
 
-モデルの追加や中断後の再開は、WebUIを終了して該当BATを再実行します。Irisは画面の**モデルを準備**から追加・再開できます。取得済みのファイルは検証して再利用します。手元の互換モデルを使う場合は[ローカルモデルの使い方](docs/local-models.md)を参照してください。Qwen・Mingは標準本体を取得せず、実行環境と共通部品だけを準備できます。
+BATで準備したモデルの追加や中断後の再開は、WebUIを終了して該当BATを再実行します。P-H3とIrisは画面から準備を再実行できます。取得済みのファイルは検証して再利用します。手元の互換モデルを使う場合は[ローカルモデルの使い方](docs/local-models.md)を参照してください。Qwenは標準本体を取得せず、実行環境と共通部品だけを準備できます。
 
 <details>
 <summary>モデルの個別取得・コマンド指定・追加設定</summary>
@@ -119,10 +89,9 @@ AnimaはGPUでINT8へ変換し、検証成功後にBF16変換元を削除しま�
 
 - Krea2: [download_krea2_int8_convrot_models.bat](download_krea2_int8_convrot_models.bat)
 - Anima: [download_anima38_v11_int8_convrot_models.bat](download_anima38_v11_int8_convrot_models.bat)（要GPU）
-- SenseNova: [download_sensenova_u15_models.bat](download_sensenova_u15_models.bat)
 - MiniMax H3: [download_minimax_h3_models.bat](download_minimax_h3_models.bat) ／ [W4A8追加版](download_minimax_h3_w4a8_models.bat)
 
-Animaの個別取得・変換には準備済みのNeo環境とNVIDIA GPUが必要です。SenseNovaとH3の個別BATは専用実行環境を導入しません。
+Animaの個別取得・変換には準備済みのNeo環境とNVIDIA GPUが必要です。H3の個別BATは専用実行環境を導入しません。
 
 Qwen公式フルモデル（INT8／W4A8／BF16）は `.\aikimi-qwen-image21-setup.bat --official-full`、任意のプロンプト書き換えは `.\aikimi-qwen-image21-setup.bat --prompt-rewriter-only` で追加します。[Qwenガイド](extensions-builtin/qwen-image21-studio/README.md) · [量子化導入ガイド](docs/w4a8.md) · [モデル導入ガイド](docs/model-installation.md)
 
@@ -134,7 +103,7 @@ Qwen公式フルモデル（INT8／W4A8／BF16）は `.\aikimi-qwen-image21-setu
 
 ### 起動して生成する
 
-1. セットアップ完了後、`aikimi-launch.bat`をダブルクリックします。普段の起動もこのBATを使います。
+1. `aikimi-launch.bat`をダブルクリックします。普段の起動もこのBATを使います。P-H3は起動後に画面から準備します。
 2. ログにURLが表示されたら、ブラウザーで [http://127.0.0.1:7861](http://127.0.0.1:7861) を開きます。
 3. 使いたい画面を開き、生成条件を設定して生成します。詳しい操作や作例は、上の表のモデル名から確認できます。
 
@@ -200,7 +169,6 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 |---|---|---|
 | Forge `txt2img` / `img2img` | `models/Lora/` | **LoRAを組み合わせる** で選択、または `<lora:名前:0.8>` |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → 一覧更新 → 複数選択** |
-| Ming Image | `models/Ming-Image/loras/` | **LoRA** で選択 |
 | Iris（画像生成） | `models/Iris-3B/loras/` | **LoRA → 一覧を更新 → 複数選択**。[対応形式・Turbo](docs/iris-studio.md#任意のloraとコミュニティ製turbo) |
 
 強度は−2〜2で指定します。0は無効、×は選択解除です。同じLoRAを選択欄とプロンプトの両方へ指定しないでください。モデルの世代や形式が異なると使えません。[対応形式と外部モデルの指定方法](docs/local-models.md) · [Qwen追加LoRAガイド](extensions-builtin/qwen-image21-studio/README.md#追加lora)
@@ -222,7 +190,7 @@ git clone https://github.com/DominikDoom/a1111-sd-webui-tagcomplete.git extensio
 - **Qwen拡張**: [Qwen Fun Acc（4-step）](docs/assets/qwen-image21-fun-acc/README.md) · [Fun ControlNet](docs/assets/qwen-image21-fun-controlnet/README.md)
 - **MiniMax H3詳細**: [360°周回](docs/minimax-h3-orbit-lora.md) · [長尺生成](extensions-builtin/minimax-h3-studio/README.md#長尺生成) · [高速化](docs/minimax-h3-acceleration.md) · [CLIPキャッシュ](docs/minimax-h3-clipcache.md) · [ControlNet](docs/minimax-h3-fun-control.md)
 - **量子化比較**: [INT8／W4A8量子化](docs/w4a8.md)
-- **H3 Image（静止画）**：[H3 Imageガイド](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)。実験機能です。実モデルでのGPU画像生成・画質・速度は未検証です。
+- **H3 Image（静止画）**：[P-H3 Imageガイド](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)で画像生成と最大8枚を使う編集を案内しています。従来の[H3画像生成](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)も実験モードとして利用できます。
 
 </details>
 
@@ -239,12 +207,9 @@ git pull --ff-only origin neo
 
 古い取得元を使っている場合は、先に一度だけ `git remote set-url origin https://github.com/AiWithYou/aikimi-forge-neo.git` を実行してください。
 
-**2026-09-24より前のSenseNova・Qwen環境から更新する場合**は、起動前に該当するコマンドを実行して専用環境を更新します。モデルの再取得は不要です。
+**2026-09-24より前のQwen環境から更新する場合**は、起動前に該当するコマンドを実行して専用環境を更新します。モデルの再取得は不要です。
 
 ```powershell
-# SenseNova導入済み環境
-.\download_sensenova_u15_int8.ps1 -RuntimeOnly
-
 # Qwen Image 2.1導入済み環境
 .\aikimi-qwen-image21-setup.bat --runtime-only
 ```

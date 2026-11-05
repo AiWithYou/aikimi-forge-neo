@@ -4,7 +4,7 @@
 
 ## CD Tuner — 通常の画像生成
 
-`txt2img` / `img2img` の **CD Tuner** を開いて有効にします。まず同じモデル・プロンプト・Seedで、1項目ずつ小さい値から比較してください。CD Tunerは生成過程の調整で、Extrasの画像後処理ではありません。H3 / SenseNovaの別プロセスのStudioには作用しません。
+`txt2img` / `img2img` の **CD Tuner** を開いて有効にします。まず同じモデル・プロンプト・Seedで、1項目ずつ小さい値から比較してください。CD Tunerは生成過程の調整で、Extrasの画像後処理ではありません。H3の別プロセスのStudioには作用しません。
 
 - **Detail / Detail 2**: 入出力層の重みを調整。Hires用の値と停止Stepも指定できます。
 - **Contrast / Brightness / Color / Saturation**: 生成中の重み・潜在表現・VAEの調整。項目ごとに作用する場所が異なります。

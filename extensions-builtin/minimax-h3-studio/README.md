@@ -12,7 +12,7 @@ FL2VAとRef2VAの両方を含む曖昧なファイル名は、Turboの結合本�
 
 Aikimi Forge Neo内で映像＋音声、または無音の周回動画を生成する専用GUIです。H3用のComfyUI・Python・モデルは、H3 Studioからまとめて準備できます。完成したMP4と生成条件は`outputs/minimax_h3`へ保存します。
 
-**画像生成・参照画像編集は`H3 Image`タブを使います。** 標準H3の最小5フレームからPNGへ直接出力する実験機能です。追加モデル・追加拡張は不要で、既存の動画タブは変更しません。使い方と検証範囲は[画像生成ガイド](IMAGE_GUIDE.md)を参照してください。
+**画像生成・参照画像編集は`H3 Image`タブを使います。** [P-H3 Image](P_H3_IMAGE_GUIDE.md)と、標準H3の最小5フレームを使う[実験モード](IMAGE_GUIDE.md)を選べます。P-H3には専用のモデルが必要です。
 
 ## 初回セットアップ
 
@@ -20,9 +20,11 @@ Aikimi Forge Neo内で映像＋音声、または無音の周回動画を生成�
 2. 既存モデルを使う場合だけ、`共有するモデルフォルダー`にComfyUIの`models`フォルダーなどを指定します。
 3. `環境とモデルを準備`を押します。完了後は画像・動画の両タブで同じ環境を利用できます。
 
+動画と標準H3画像の接続・生成などは、操作時点の管理対象環境を参照します。画面を開いたままP-H3画面やCLIから共通環境を準備した場合も、次の操作で切り替わります。共有モデルフォルダーと選択したチェックポイントは、それぞれの設定に従います。
+
 Windows・NVIDIA CUDA対応GPU・Git・インターネット接続が必要です。実行環境に15 GiB以上、新規モデルに約59.1 GiBの空き容量を用意してください。ComfyUIを事前に導入する必要はありません。
 
-実行環境は`repositories/minimax-h3/ComfyUI`、専用Pythonは同階層の`python`と`.venv`、新規モデルは`models/MiniMax-H3`に保存します。共有モデルはサイズとSHA-256を検証して参照し、移動・複製・修復しません。既存のComfyUI本体やPythonには依存せず、`forge_neo_model_paths.yaml`もH3の実行環境選択には使用しません。
+実行環境は`repositories/minimax-h3-4ac1c173/ComfyUI`、専用Pythonはその親フォルダーの`python`と`.venv`、新規モデルは`models/MiniMax-H3`に保存します。既存のH3環境は残し、新環境の準備と確認が完了すると切り替わります。共有モデルはサイズとSHA-256を検証して参照し、移動・複製・修復しません。既存のComfyUI本体やPythonには依存せず、`forge_neo_model_paths.yaml`もH3の実行環境選択には使用しません。
 
 導入する版は[manifest](../../tools/minimax_h3_runtime_manifest.json)と[依存ライブラリのlock](../../tools/requirements-minimax-h3.lock)で固定しています。標準のFL2VA・Ref2VA、Qwen3-VL encoder、映像・音声VAEの5ファイルを準備します。Turbo・INT8 VAE・Fun ControlNetなどの任意モデルは別途配置してください。途中で失敗した場合は同じ操作で再開できます。
 
@@ -55,7 +57,7 @@ H3 Studioの「ComfyUIで続きを編集」から「現在の設定をComfyUIで
 
 Fun ControlNetのUnion 1に加えて、Union 2.0のCanny、Gray、前処理済み動画を選べます。Cannyだけなら、重みが小さいUnion 1をまず選んでください（Union 1 INT8は約2.14 GiB、Union 2.0 INT8は約4.22 GiB）。Union 2.0はGrayなど追加の制御方式が必要な場合の任意モデルです。CannyとGrayは入力動画から生成します。Depth・Pose・HED・MLSD・Scribble・Layoutなどは事前に加工した動画を指定してください。映像を24fpsにそろえ、中央切り抜きと短い動画の末尾補完を適用します。元動画の音声は制御に使いません。Union 1の重みを名前だけ変更してUnion 2.0に使うことはできません。
 
-v5.0.0以降は通常のH3セットアップに対応CoreとVAE修正を含みます。H3の「環境とモデルを準備」、またはセットアップメニューの4で更新した後、必要なUnion 2.0の重みを取得してください。
+通常のH3セットアップに対応CoreとVAE修正を含みます。H3の「環境とモデルを準備」、またはセットアップメニューの3で準備した後、必要なUnion 2.0の重みを取得してください。
 
 ```powershell
 venv\Scripts\python.exe tools\prepare_minimax_h3_union2.py --list --precision int8
@@ -66,11 +68,11 @@ venv\Scripts\python.exe tools\prepare_minimax_h3_union2.py --download --precisio
 
 既定のINT8候補は[Kijaiの変換済みUnion 2.0重み](https://huggingface.co/Kijai/MiniMax-H3-experimental/tree/e042fe480f58806578713532b8ae4e3d47d1bd63/model_patches)です。元の[Union 2.0モデル仕様](https://huggingface.co/alibaba-pai/MiniMax-H3-Fun-Controlnet-Union-2.0)とH3の利用条件も確認してください。モデル重みはGitリポジトリに含めません。
 
-更新スクリプトはH3専用ComfyUIを固定コミットへ更新し、旧`.venv`を残して新しい`.venv-union2-vae`を構築します。NeoやH3を停止し、`--check`の事前確認を通してから実行してください。元の状態へ戻す場合は、更新後にH3を停止し、`--rollback`を使います。専用ComfyUIに別の編集がある場合は上書きせず停止します。
+共通実行環境にはUnion 2.0に対応する固定版ComfyUIが含まれます。旧環境向けの更新スクリプトを実行する必要はありません。
 
 VAEの「標準」は更新したCoreの処理を使います。「更新版 ＋ FP16積算」は比較用の明示的な選択で、使用時は起動引数との一致を確認します。既存の外部Fast VAE Decodeとは別の選択です。少数ステップの単発比較を一般的な画質・速度の優劣として扱わないでください。
 
-ControlNet生成が最初のStepで進まない場合は「高速化 > Comfy Compiler」を「OFF」にし、「実行環境とモデル > 選択設定で再起動」を押してください。通常は「ON」のまま使用します。この設定は生成前に実際の起動引数と照合します。
+共通実行環境はComfy Compilerを無効にして起動し、生成前に起動引数を確認します。動画、画像、ControlNet、NegPiPのいずれでも同じ設定です。
 
 ## 長尺生成
 
@@ -83,7 +85,7 @@ ControlNet生成が最初のStepで進まない場合は「高速化 > Comfy Com
 
 導入先のComfyUIに、`python tools/install_minimax_h3_hybrid.py --runtime-root <ComfyUIフォルダー>`で[HybridWindows](https://github.com/Jalen-Brunson/ComfyUI-HybridWindows)の固定版を配置します。標準KSampler Advancedの2段階Euler経路を使い、MMH3Toolsは不要です。モデルやPDD LoRAは自動取得せず、標準モデルでは従来の20 Stepsを維持します。NegPiP、CLIPキャッシュ、Sparse Attention、Fun ControlNet、参照動画・音声との併用は生成前に拒否します。
 
-検証記録（2026-09-10）：CPUスイート1,315件（43件スキップ、既知の失敗扱い1件）と、デスクトップ・390px幅の画面操作を確認しました。RTX 3090では標準FL2VA、608×352、2区間、2 Steps／切替1の動作試験で447フレーム・18.625秒・24fps、32kHzステレオ音声付きMP4を保存できました。省RAM設定でモデル読み込みを含め約22分32秒です。これは少数ステップの動作確認で、通常20 Stepsの画質や順次生成に対する改善量は未測定です。デコード中の状態確認が通常の15秒ではタイムアウトしたため、長尺生成の通信待機だけを120秒にしています。
+長尺生成の処理時間や画質は、GPU、メモリ、区間数と設定により変わります。
 
 ## 高速・省メモリ構成
 

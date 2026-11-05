@@ -103,60 +103,6 @@ class QwenCanvasTests(unittest.TestCase):
         self.assertIn("32", self.ui.generation_summary("w4a8", 40, "custom", 737, 1120))
 
 
-class SenseNovaCanvasTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        from tools.tests.test_sensenova_u15_studio import load_studio_module
-
-        cls.ui = load_studio_module()
-
-    def request(self, resolution="custom", **changes):
-        values = dict(
-            mode=self.ui.MODE_TEXT,
-            prompt="Coast",
-            gallery=[],
-            model_path="model",
-            quantization=self.ui.QUANT_INT8_CONVROT,
-            checkpoint_path="checkpoint",
-            source_path="source",
-            resolution=resolution,
-            input_max_pixels="auto",
-            generation_profile=self.ui.PROFILE_QUALITY,
-            steps=50,
-            cfg_scale=4,
-            img_cfg_scale=1,
-            timestep_shift=3,
-            seed=42,
-            vram_mode="low",
-            attn_backend="auto",
-            dtype="bfloat16",
-            custom_width=736,
-            custom_height=1120,
-            should_validate=False,
-        )
-        values.update(changes)
-        return self.ui._request_from_ui(**values)
-
-    def test_custom_request_uses_dimensions_and_presets_override_them(self):
-        custom = self.request()
-        self.assertEqual((custom.width, custom.height), (736, 1120))
-        preset = self.request("2048x2048")
-        self.assertEqual((preset.width, preset.height), (2048, 2048))
-
-    def test_auto_edit_preserves_auto_size_contract(self):
-        automatic = self.request("auto_1mp", mode=self.ui.MODE_EDIT)
-        self.assertEqual((automatic.width, automatic.height, automatic.target_pixels), (None, None, 1024 * 1024))
-        updates = self.ui._resolution_updates("auto_1mp", self.ui.MODE_EDIT)
-        self.assertTrue(all(not update["interactive"] and "value" not in update for update in updates))
-
-    def test_custom_mode_switch_preserves_size_choice(self):
-        for mode in (self.ui.MODE_EDIT, self.ui.MODE_TEXT):
-            updates = self.ui._mode_updates(mode, "custom", True)
-            self.assertEqual(updates[1]["value"], "custom")
-
-    def test_invalid_custom_request_fails_even_for_summary(self):
-        with self.assertRaises(ValueError):
-            self.request(custom_height=511)
 
 
 if __name__ == "__main__":

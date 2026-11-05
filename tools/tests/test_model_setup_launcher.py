@@ -53,14 +53,12 @@ class ModelSetupLauncherTests(unittest.TestCase):
                 "launch.py",
                 "tools/aikimi_setup.py",
                 "tools/setup_minimax_h3.py",
-                "tools/setup_ming_image.py",
-                "download_sensenova_u15_int8.ps1",
             ):
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
             (root / "requirements.txt").write_text("starlette==1.0.0\n", encoding="utf-8")
-            for model in ("krea2", "anima38", "sensenova", "h3", "ming-image"):
+            for model in ("krea2", "anima38", "h3"):
                 for fail in (False, True):
                     with self.subTest(model=model, fail=fail):
                         result = self.run_ps(f"""
@@ -94,22 +92,20 @@ try {{
                             self.assertEqual(len(calls), 3)
                             continue
                         self.assertEqual(calls[3][-3:], ["--exit", "--uv", "--bnb"])
-                        if model in {"h3", "ming-image"}:
+                        if model == "h3":
                             self.assertEqual(len(calls[4]), 2)
                             self.assertEqual(calls[4][0], "-B")
                             self.assertEqual(
-                                Path(calls[4][1]).resolve(), (root / ("tools/setup_minimax_h3.py" if model == "h3" else "tools/setup_ming_image.py")).resolve()
+                                Path(calls[4][1]).resolve(), (root / "tools/setup_minimax_h3.py").resolve()
                             )
                         else:
                             self.assertEqual(calls[4][2:4], ["install", model])
                         if model == "anima38":
                             self.assertEqual(calls[4][-1], "--keep-source")
-                        self.assertEqual(len(calls), 6 if model == "sensenova" else 5)
-                        if model == "sensenova":
-                            self.assertEqual(calls[-1][-1], "-RuntimeOnly")
+                        self.assertEqual(len(calls), 5)
 
     def test_bat_dry_run_each_profile(self):
-        for model in ("krea2", "anima38", "sensenova", "h3", "ming-image"):
+        for model in ("krea2", "anima38", "h3"):
             with self.subTest(model=model):
                 result = self.run_ps(
                     f"& '{ROOT / 'aikimi-setup.bat'}' -Model {model} -DryRun -NoPause; exit $LASTEXITCODE"
@@ -128,13 +124,6 @@ exit 0
         self.assertEqual(result.returncode, 9)
         self.assertIn("23", result.stdout)
 
-    def test_ming_w4a8_batch_uses_download_profile(self):
-        result = self.run_ps(
-            f"& '{ROOT / 'aikimi-setup.bat'}' -Model ming-image -MingPrecision w4a8 -DryRun -NoPause; exit $LASTEXITCODE"
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("setup_ming_image.py --precision w4a8", result.stdout)
-        self.assertNotIn("quantize_ming_image.py", result.stdout)
 
 
 if __name__ == "__main__":

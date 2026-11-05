@@ -169,20 +169,28 @@ class OrbitUITests(unittest.TestCase):
         self.assertIn("作者推奨から変更:", changed)
         self.assertIn("未検証", changed)
 
-    def test_gate_and_explicit_install_follow_selected_runtime(self):
+    def test_gate_and_explicit_install_follow_current_managed_runtime(self):
         ui = self.ui
-        selected = Path("external-runtime")
-        with mock.patch.object(ui.orbit_assets, "installed", return_value=True) as installed:
-            gate, _ = ui._generation_gate("orbit", photo="photo.png", runtime_value=str(selected))
-        self.assertTrue(gate["interactive"])
-        installed.assert_called_once_with(Path(ui.script_path), runtime_root=selected)
+        old, current = Path("old-runtime"), Path("new-runtime")
         with (
-            mock.patch.object(ui, "resolve_runtime_root", return_value=selected),
+            mock.patch.object(ui, "managed_runtime_root", return_value=current),
+            mock.patch.object(ui.orbit_assets, "installed", return_value=True) as installed,
+        ):
+            gate, _ = ui._generation_gate("orbit", photo="photo.png", runtime_value=str(old))
+        self.assertTrue(gate["interactive"])
+        installed.assert_called_once_with(Path(ui.script_path), runtime_root=current)
+        with (
+            mock.patch.object(ui, "managed_runtime_root", return_value=current),
+            mock.patch.object(ui, "resolve_runtime_root", side_effect=Path),
             mock.patch.object(ui.orbit_assets, "install") as install,
         ):
-            list(ui._install_orbit(str(selected)))
-        install.assert_called_once_with(Path(ui.script_path), runtime_root=selected)
+            list(ui._install_orbit(str(old)))
+        install.assert_called_once_with(Path(ui.script_path), runtime_root=current)
         interface = ui._build_ui()[0][0]
+        runtime_field = next(component for component in interface.blocks.values()
+                             if getattr(component, "elem_id", None) == "h3-runtime-path")
+        self.assertFalse(runtime_field.visible)
+        self.assertFalse(runtime_field.interactive)
         callbacks = [fn for fn in interface.fns.values() if fn.fn and fn.fn.__name__ == "_mode_chrome_ui"]
         self.assertTrue(all(any(component.elem_id == "h3-runtime-path" for component in fn.inputs) for fn in callbacks))
 

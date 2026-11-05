@@ -209,6 +209,7 @@ class NegPiPRuntimeTests(unittest.TestCase):
                         command = bridge._runtime_command(Path("python"), 8188, profile, acceleration=option)
                         self.assertIn("--disable-all-custom-nodes", command)
                         self.assertIn("--disable-api-nodes", command)
+                        self.assertIn("--disable-comfy-compiler", command)
                         self.assertEqual(bridge.runtime_profile_from_args(command[1:], 8188), profile)
                         self.assertEqual(custom_node_whitelist(command), option.runtime_packs())
 
@@ -232,6 +233,7 @@ class NegPiPRuntimeTests(unittest.TestCase):
                 "2",
                 "--vram-headroom",
                 "2",
+                "--disable-comfy-compiler",
                 "--whitelist-custom-nodes",
                 HANDOFF_PACK,
             ],

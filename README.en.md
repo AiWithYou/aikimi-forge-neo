@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**[v5.0.4](https://github.com/AiWithYou/aikimi-forge-neo/tree/v5.0.4)** · [Changelog (Japanese)](CHANGELOG.md)
+**v6.0.0 (in development)** · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
@@ -10,44 +10,16 @@ English · [日本語](README.md)
 
 Choose the model at the top of each Studio. FLUX 3 selects the official distilled or Base variant and precision. In Studios that support additional checkpoints, place them in `models/<family>/checkpoints/` or its subfolders, then refresh the list. Iris can select compatible full fine-tunes in ordinary, INT8, and W4A8 formats. See [model and LoRA layout and compatibility by family (Japanese)](docs/local-models.md).
 
-## What's new in v5.0.4
+## What you can do
 
-- **[MOSS reference attention](docs/moss-image.md#参照画像から編集)**: adjust how much the model attends to image-understanding features from reference images in edit-LoRA workflows. The default is 1; at 0, the edit LoRA still receives its reference latents.
+- **Generate and edit images:** choose P-H3 Image, MOSS Image, Qwen Image 2.1, Iris, FLUX 3, or another supported model. P-H3 accepts up to eight images including the image being edited.
+- **Finish large images:** use Krea2 high-resolution workflows, MOSS Hires.fix, and upscalers.
+- **Create video and audio:** generate video with sound using MiniMax H3, music with YuE2, and Japanese speech with Irodori TTS.
+- **Organize images:** use Clef to evaluate and sort images or text.
 
-Restart the WebUI after updating. This update does not require downloading the model again. Reference editing requires a compatible edit LoRA. [All changes (Japanese)](CHANGELOG.md#v504--2026-10-27)
+To prepare P-H3, open **H3 Image → P-H3 Image → 準備を開く**, then select **環境とモデルを準備** in the WebUI. Its four standard model files total approximately 29.8 GB. See the [guide and license conditions](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md).
 
-### Changes in v5.0.3
-
-- **[MOSS reference editing](docs/moss-image.md#高解像度の構図調整)**: RoPE scaling adjusts the generated image while keeping reference-image positions at their original frequencies.
-
-Restart the WebUI after updating. No model download is required. [All changes (Japanese)](CHANGELOG.md#v503--2026-10-27)
-
-### Changes in v5.0.2
-
-- **[MOSS controls](docs/moss-image.md)**: hide Hires.fix in img2img and mark the negative prompt and layer skip as unused at CFG 1. Existing values are retained.
-- **Reconnect during generation**: reloading the page in the same browser restores progress and cancellation controls. Jobs cannot be resumed after a server restart.
-- **LoRA and reference fixes**: clear deleted edit-LoRA selections on refresh, explain the minimum reference-image size, and remove a duplicate file check immediately before applying LoRAs.
-
-Restart the WebUI after updating. This update does not require downloading models again. [All changes (Japanese)](CHANGELOG.md#v502--2026-10-22)
-
-### Changes in v5.0.1
-
-- **[MOSS high-resolution generation](docs/moss-image.md#高解像度の構図調整)**: changed SDPA and INT8 activation computation. Regular S5 generation with a 2560px long edge has been checked. Completion of 4K and Hires.fix generation has not been verified with these changes.
-- **Cancellation handling**: waiting for a high-resolution step to acknowledge cancellation no longer triggers a timeout-based termination of the active worker.
-- **[Stops after GPU faults](docs/troubleshooting.md#gpu異常後の停止)**: GPU faults and unfinished operations block new generation and automatic GPU operations. The stop persists across restarts and provides status and explicit recovery commands.
-- **Dependency security updates**: updated Pillow image processing and the certifi certificate bundle to fixed versions.
-
-Rerun setup for the models you use, then restart the WebUI. Existing identical model files are reused. See [all changes](CHANGELOG.md#v501--2026-10-21).
-
-[MOSS RoPE composition controls](docs/moss-image.md#高解像度の構図調整) and [H3 LightVAE](docs/minimax-h3-acceleration.md#lightvae) remain available.
-
-### Existing v4.10 features
-
-- **MOSS Image reliability**: restore the Hires controls after restarting, validate API denoising strength before generation, and remove PNGs from cancelled or failed jobs. See [v4.10.1 changes](CHANGELOG.md#v4101--2026-10-19).
-- **[MOSS Image Hires.fix](docs/moss-image.md#拡大して仕上げるhiresfix)**: generate the composition first, enlarge the image, then run a second pass to refine details. Adjust scale, refinement steps, and denoising strength; preview final dimensions and save settings for both passes.
-- **[MOSS reference images](docs/moss-image.md#参照画像から編集)**: redraw an input image or use up to three references with an editing LoRA.
-- **[Merged checkpoints](docs/moss-image.md#マージモデル) and fewer steps**: select BF16 or INT8 ConvRot diffusion checkpoints and convert compatible BF16 checkpoints to INT8. An optional Euler-compatible distilled LoRA uses the regular LoRA controls.
-- **Layout and generation fixes**: keep number fields and sliders inside image workspaces, preserve per-image batch metadata, and improve video saving, postprocessing, image resizing, and transparency. See the [complete changelog](CHANGELOG.md#v4100--2026-10-19).
+SenseNova U1.5, Nanosaur2, and Ming Image Design are no longer included in the interface or setup.
 
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
 
@@ -70,11 +42,11 @@ git clone --branch neo https://github.com/AiWithYou/aikimi-forge-neo.git
 cd aikimi-forge-neo
 ```
 
-Choose a model and run its setup BAT file. **You only need to install the models you plan to use.** Model weights are not included in this repository.
+Choose a model and follow the setup method in the table below. For P-H3, launch the WebUI first and prepare it from the interface. **You only need to install the models you plan to use.** Model weights are not included in this repository.
 
 ### Choose and install models
 
-For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choose a menu entry (1–6). Use the dedicated BAT files in the table for Qwen, YuE2, Irodori TTS, Clef, Iris, FLUX 3, and MOSS Image.
+For Krea2, Anima, or H3 video, run the following and choose a menu entry (1–3). P-H3 is prepared from the WebUI after launch. Use the dedicated BAT files in the table for Qwen, YuE2, Irodori TTS, Clef, Iris, FLUX 3, and MOSS Image.
 
 ```powershell
 .\aikimi-setup.bat
@@ -84,10 +56,8 @@ For Krea2, Anima, SenseNova, H3, Nanosaur2, or Ming, run the following and choos
 |---|---|---|
 | [Krea2](docs/krea2_local_supersample_detail_ja.md) | Image generation and 4K/8K workflows; open **Krea2** in the top navigation | `.\aikimi-setup.bat` → **1** |
 | [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | Image generation; open **Anima** in the top navigation | `.\aikimi-setup.bat` → **2** |
-| [SenseNova U1.5](extensions-builtin/sensenova-u15-studio/README.md) | Image generation and reference-based editing in its Studio | `.\aikimi-setup.bat` → **3** |
-| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | Videos with audio and silent 360° orbits from one photo in **H3 Studio**; see the [Orbit guide](docs/minimax-h3-orbit-lora.md) | `.\aikimi-setup.bat` → **4** |
-| [Nanosaur2](extensions-builtin/nanosaur2-studio/README.md) | Illustration-oriented image generation in its dedicated tab | `.\aikimi-setup.bat` → **5** |
-| [Ming Image Design](extensions-builtin/ming-image-studio/README.md) | Posters, UI concepts, and transparent assets in its Studio | `.\aikimi-setup.bat` → **6** (choose INT8 or W4A8) |
+| [P-H3 Image](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) | Image generation and editing with up to eight images in **H3 Image** | After launch, open **P-H3 Image → 準備を開く** |
+| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | Videos with audio and silent 360° orbits from one photo in **H3 Studio**; see the [Orbit guide](docs/minimax-h3-orbit-lora.md) | `.\aikimi-setup.bat` → **3** |
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | Image generation, editing, transparent PNG, and outpainting | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | Music composition and ABC score editing in **YuE2 Music** | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1: Official Python** |
 | [Irodori TTS](docs/irodori-tts.md) | Japanese speech, caption-based voice design, and reference voice conditioning in **Irodori TTS** | [`aikimi-irodori-setup.bat`](aikimi-irodori-setup.bat) |
@@ -100,7 +70,7 @@ The initial download and runtime setup or conversion can take time. Qwen default
 
 Anima is converted to INT8 on the GPU. After successful validation, the BF16 source is removed. To keep it, run `.\aikimi-setup.bat -Model anima38 -KeepSource`.
 
-To add models or resume interrupted setup, close the WebUI and rerun the corresponding BAT file. Iris also supports setup and resuming through its **Prepare models** control. Existing files are validated and reused. For compatible models you already have, see [Local models](docs/local-models.md). Qwen and Ming can install only the runtime and shared components without downloading the standard transformer.
+To add models or resume an interrupted BAT setup, close the WebUI and rerun the corresponding BAT file. P-H3 and Iris can also resume setup from their interfaces. Existing files are validated and reused. For compatible models you already have, see [Local models](docs/local-models.md). Qwen can install only the runtime and shared components without downloading the standard transformer.
 
 <details>
 <summary>Individual downloads, command-line setup, and additional options</summary>
@@ -117,10 +87,9 @@ If the runtime is already installed, these BAT files download model weights sepa
 
 - Krea2: [download_krea2_int8_convrot_models.bat](download_krea2_int8_convrot_models.bat)
 - Anima: [download_anima38_v11_int8_convrot_models.bat](download_anima38_v11_int8_convrot_models.bat) (requires a GPU)
-- SenseNova: [download_sensenova_u15_models.bat](download_sensenova_u15_models.bat)
 - MiniMax H3: [download_minimax_h3_models.bat](download_minimax_h3_models.bat) / [additional W4A8 models](download_minimax_h3_w4a8_models.bat)
 
-Anima's individual download and conversion require a prepared Neo runtime and an NVIDIA GPU. The individual SenseNova and H3 BAT files do not install their dedicated runtimes.
+Anima's individual download and conversion require a prepared Neo runtime and an NVIDIA GPU. The individual H3 BAT files do not install their dedicated runtimes.
 
 Install the official full Qwen models (INT8 / W4A8 / BF16) with `.\aikimi-qwen-image21-setup.bat --official-full`. Install optional prompt rewriting with `.\aikimi-qwen-image21-setup.bat --prompt-rewriter-only`. See the [Qwen guide](extensions-builtin/qwen-image21-studio/README.md), [quantization guide](docs/w4a8.md), and [model installation guide](docs/model-installation.md).
 
@@ -132,7 +101,7 @@ Preconverted Official Turbo [INT8](https://huggingface.co/Aikimi/Forge-Neo-Image
 
 ### Launch and generate
 
-1. After setup, double-click `aikimi-launch.bat`. Use this file for everyday launches too.
+1. Double-click `aikimi-launch.bat`. Use this file for everyday launches too. Prepare P-H3 from its interface after launch.
 2. When the log displays the URL, open [http://127.0.0.1:7861](http://127.0.0.1:7861) in a browser.
 3. Open the desired interface, set generation parameters, and generate. The model links above lead to instructions and examples.
 
@@ -181,7 +150,7 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 
 ### Everyday controls
 
-- Choose an image model from the top navigation and use the shared `txt2img` / `img2img` layout. Buttons at the top show LoRA, ControlNet, and other model options. Reference-based editors use their own editing controls; Ming and Nanosaur2 offer text generation only. See the [shared image workspace guide (Japanese)](docs/image-workspace.md).
+- Choose an image model from the top navigation and use the shared `txt2img` / `img2img` layout. Buttons at the top show LoRA, ControlNet, and other model options. Reference-based editors use their own editing controls. See the [shared image workspace guide (Japanese)](docs/image-workspace.md).
 - Iris img2img supports compatible full fine-tunes and strength from 0 to 1 with standard sampling. Strength 0 preserves the resized input; strength 1 matches txt2img with the same settings and seed. Turbo LoRAs must be removed for img2img. See the [Iris guide (Japanese)](docs/iris-studio.md#入力画像から描き直すimg2img).
 - Under **GPU / model retention**, choose the option that prioritizes consecutive generation to keep models loaded between jobs. Manual release is also available. See [Model retention](docs/model-retention.md).
 - Click **Chibi Aikimi** to view progress and the queue. Drag it to move it, and use the top menu to toggle its visibility.
@@ -194,7 +163,6 @@ Place compatible LoRAs in the directories below, or enter a full path in the sel
 |---|---|---|
 | Forge `txt2img` / `img2img` | `models/Lora/` | Select in the LoRA combination control, or use `<lora:name:0.8>` |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → Refresh → select multiple** |
-| Ming Image | `models/Ming-Image/loras/` | Select under **Model / LoRA** |
 | Iris (image generation) | `models/Iris-3B/loras/` | **LoRA → Refresh → select multiple**. See [supported formats and Turbo (Japanese)](docs/iris-studio.md#任意のloraとコミュニティ製turbo) |
 
 Strength ranges from −2 to 2. A value of 0 disables the LoRA; × removes the selection. Do not specify the same LoRA in both the selector and prompt. Different model generations or formats may be incompatible. See [Supported formats and external paths](docs/local-models.md) and the [Qwen LoRA guide](extensions-builtin/qwen-image21-studio/README.md#追加lora).
@@ -216,7 +184,7 @@ git clone https://github.com/DominikDoom/a1111-sd-webui-tagcomplete.git extensio
 - **Qwen extensions**: [Qwen Fun Acc (4-step)](docs/assets/qwen-image21-fun-acc/README.md) and [Fun ControlNet](docs/assets/qwen-image21-fun-controlnet/README.md).
 - **MiniMax H3 details**: [Long-form generation](extensions-builtin/minimax-h3-studio/README.md#長尺生成), [acceleration](docs/minimax-h3-acceleration.md), [CLIP cache](docs/minimax-h3-clipcache.md), and [ControlNet](docs/minimax-h3-fun-control.md).
 - **Quantization comparisons**: [INT8 / W4A8](docs/w4a8.md).
-- **H3 Image (still images)**: [H3 Image guide](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md). Experimental; real-model GPU image generation, quality, and speed have not been validated.
+- **H3 Image (still images)**: See the [P-H3 Image guide](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) for generation and editing with up to eight images. The earlier [H3 image mode](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md) remains available as an experiment.
 
 </details>
 
@@ -231,12 +199,9 @@ git pull --ff-only origin neo
 
 If your checkout uses an older repository URL, first run `git remote set-url origin https://github.com/AiWithYou/aikimi-forge-neo.git` once.
 
-**For SenseNova or Qwen runtimes installed before September 24, 2026**, update the corresponding runtime before launching. Model weights do not need to be downloaded again.
+**For Qwen runtimes installed before September 24, 2026**, update the corresponding runtime before launching. Model weights do not need to be downloaded again.
 
 ```powershell
-# Existing SenseNova installation
-.\download_sensenova_u15_int8.ps1 -RuntimeOnly
-
 # Existing Qwen Image 2.1 installation
 .\aikimi-qwen-image21-setup.bat --runtime-only
 ```

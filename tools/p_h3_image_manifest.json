@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "model_repository": "PrunaAI/P-H3-Image-Comfy",
+  "model_revision": "44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543",
+  "model_license": "https://huggingface.co/PrunaAI/P-H3-Image-Comfy/blob/44a0fb73f299da1bb715bdb5ff59ce3fd3c6f543/LICENSE",
+  "models": [
+    {
+      "path": "diffusion_models/p-h3-image_w4a8.safetensors",
+      "size": 13362068864,
+      "sha256": "12ea30d6fde736dd69ef16658ce9438823a06e351ac3fa335cc4a3ce6bb17a43"
+    },
+    {
+      "path": "text_encoders/p-h3-image_text_encoder_w4a8.safetensors",
+      "size": 3575536021,
+      "sha256": "d4ae62d48e1de846dd55fc975623434e9326df3449601c4e15bea8b3ccd67293"
+    },
+    {
+      "path": "vae/p-h3-image_vae_int8_convrot.safetensors",
+      "size": 3146996440,
+      "sha256": "583e0d43354b6b833aa9a0815a5fac831b1ef6d0c19a7eaa0616980a3dab5ffe"
+    },
+    {
+      "path": "text_encoders/p-h3-image_prompt_upsampler_int8_convrot.safetensors",
+      "size": 9748117724,
+      "sha256": "281f9c90230cec3c2029d0761128868c21d1bc5b15fb742bde5a051119ad2f4e"
+    }
+  ]
+}

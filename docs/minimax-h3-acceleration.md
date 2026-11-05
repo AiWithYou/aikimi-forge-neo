@@ -12,7 +12,7 @@ Baseline controls verified against upstream sources on 2026-09-06; the optional 
 | Video decoding | VAEDecode | MiniMax H3 Fast VAE Decode | Batched spatial tiles use more VRAM and can be slower. |
 | Attention | Comfy Kitchen dense | Sol-Attn or SLA via official BlockSparseAttention | Approximate attention can change motion, detail and audio. |
 | CLIP conditioning | Native encoder on each execution | CLIPCached auto / refresh | Stores conditioning and reference metadata on disk; repeated inputs can avoid the encoder. Incompatible with NegPiP. |
-| Comfy Compiler | On | Off | Use off when a ControlNet run remains at its first sampler step. Restart the managed runtime after changing this setting. Initialization time and VRAM use can change. |
+| Comfy Compiler | Off | — | Disabled in the shared H3 runtime, including ControlNet and NegPiP. Initialization time and VRAM use can change. |
 
 See the [CLIPCached integration guide](minimax-h3-clipcache.md) for the pinned installer, cache modes, storage and validation. The managed runtime only permits its selected node pack. The default graph remains unchanged when the cache is off.
 

@@ -25,7 +25,7 @@
 
 実画像では、Grayが人物だけでなく遠景の建物とガラス面も比較的細かく残しました。Lineartは人物の輪郭が明瞭な一方、街の背景を暗い屋内通路のように描き替えています。MLSDでは斜めの手すりが残っても腕の高さがずれ、Poseでは手足の方向が残っても星の大きさと背景が変わりました。**各方式1枚の観察**であり、品質の順位を示す比較ではありません。
 
-Scribbleは最初の極端に疎い手描き案では人物が崩れたため、Canny画像から短い線を落とし、人物の外形・スケート・通路が読める長い線を残して再生成しました。修正版は全身と通路を描きましたが、条件画像中の小さな星は最終画像から消えています。
+ScribbleはCanny画像から短い線を落とし、人物の外形・スケート・通路が読める長い線を条件画像に残しました。全身と通路が描かれましたが、条件画像中の小さな星は最終画像から消えています。
 
 公式作例の条件は[Alibaba PAIのモデルカード](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)の**40 steps・control_context_scale 1.0・Seed 43**です。[公式実行スクリプト](https://github.com/aigc-apps/VideoX-Fun/blob/main/examples/qwenimage21_fun/predict_t2i_control.py)は`FlowMatchEulerDiscreteScheduler`をQwen本体の`scheduler`ディレクトリから読み込みます。以前の作例は同じ40 stepsでも制御強度0.65〜0.8、人物出力768×1024でした。今回の画質評価では設定に加え、別の参照素材・プロンプト・構図も変わるため、改善要因を単独で特定した比較ではありません。
 
@@ -53,7 +53,7 @@ Canny結果を編集元にし、同じユーザー提供人物を再び参照画
 | Lineart | 再利用 | 207.6 | 14,783 MiB |
 | MLSD | 再利用 | 207.0 | 14,783 MiB |
 | Pose | 再利用 | 207.4 | 14,783 MiB |
-| Scribble · 再生成 | 368.9 | 304.6 | 14,786 MiB |
+| Scribble | 368.9 | 304.6 | 14,786 MiB |
 | Inpainting＋Pose | 再利用 | 205.2 | 14,764 MiB |
 
 CannyとScribbleは別プロセスで制御モデルを初回使用したため、生成処理にもウォームアップが含まれます。速度を方式の差として比較しないでください。

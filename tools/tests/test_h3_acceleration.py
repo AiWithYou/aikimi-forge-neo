@@ -156,7 +156,7 @@ class H3AccelerationTests(unittest.TestCase):
         self.assertEqual(self.bridge.runtime_profile_from_args(ready.runtime_args, 8188), "fast")
         self.bridge.validate_readiness(ready)
         with self.assertRaisesRegex(self.bridge.H3BridgeError, "Compiler"):
-            self.bridge.validate_readiness(replace(ready, runtime_args=self.ready().runtime_args))
+            self.bridge.validate_readiness(replace(ready, runtime_args=tuple(arg for arg in ready.runtime_args if arg != "--disable-comfy-compiler")))
         self.assertIsNone(self.bridge.runtime_profile_from_args((*ready.runtime_args, "--disable-comfy-compiler"), 8188))
 
     def test_incompatible_node_kitchen_or_whitelist_is_rejected(self):

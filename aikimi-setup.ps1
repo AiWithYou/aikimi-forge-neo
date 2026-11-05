@@ -1,8 +1,7 @@
 #requires -Version 7.0
 param(
-    [ValidateSet('krea2', 'anima38', 'sensenova', 'h3', 'nanosaur2', 'ming-image')]
+    [ValidateSet('krea2', 'anima38', 'h3')]
     [string]$Model,
-    [ValidateSet('int8', 'w4a8')][string]$MingPrecision = 'int8',
     [switch]$DryRun,
     [switch]$KeepSource,
     [switch]$NoPause
@@ -23,10 +22,7 @@ function Assert-SetupIdle {
     param([string]$RepositoryRoot)
     $prefixes = @(
         (Join-Path $RepositoryRoot 'venv\'),
-        (Join-Path $RepositoryRoot 'models\SenseNova-U1\worker-env\'),
-        (Join-Path $RepositoryRoot 'repositories\minimax-h3\'),
-        (Join-Path $RepositoryRoot 'repositories\nanosaur2\'),
-        (Join-Path $RepositoryRoot 'repositories\ming-image\')
+        (Join-Path $RepositoryRoot 'repositories\minimax-h3\')
     )
     foreach ($process in Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'") {
         if (-not $process.ExecutablePath) { continue }
@@ -41,16 +37,12 @@ function Assert-SetupIdle {
 function Invoke-AikimiModelSetup {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
-        [Parameter(Mandatory)][ValidateSet('krea2', 'anima38', 'sensenova', 'h3', 'nanosaur2', 'ming-image')][string]$SelectedModel,
-        [ValidateSet('int8', 'w4a8')][string]$MingPrecision = 'int8',
+        [Parameter(Mandatory)][ValidateSet('krea2', 'anima38', 'h3')][string]$SelectedModel,
         [switch]$PlanOnly,
         [switch]$PreserveSource
     )
     $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
     $SelectedModel = $SelectedModel.ToLowerInvariant()
-    if ($MingPrecision -ne 'int8' -and $SelectedModel -ne 'ming-image') {
-        throw '-MingPrecisionはMing Imageに指定してください。'
-    }
     if ($PreserveSource -and $SelectedModel -ne 'anima38') {
         throw '-KeepSourceはAnimaの変換元を残す場合に指定してください。'
     }
@@ -69,20 +61,14 @@ function Invoke-AikimiModelSetup {
     $bootstrap = @(Get-Content -LiteralPath $requirements | Where-Object { $_ -match '^starlette==[^\s]+$' })
     if ($bootstrap.Count -ne 1) { throw 'requirements.txtのStarlette固定版を確認できません。' }
 
-    $modelScript = if ($SelectedModel -eq 'h3') { 'tools\setup_minimax_h3.py' } elseif ($SelectedModel -eq 'nanosaur2') { 'tools\setup_nanosaur2.py' } elseif ($SelectedModel -eq 'ming-image') { 'tools\setup_ming_image.py' } else { 'tools\aikimi_setup.py' }
+    $modelScript = if ($SelectedModel -eq 'h3') { 'tools\setup_minimax_h3.py' } else { 'tools\aikimi_setup.py' }
     if (-not (Test-Path -LiteralPath (Join-Path $RepositoryRoot $modelScript))) { throw "導入処理がありません: $modelScript" }
-    if ($SelectedModel -eq 'sensenova' -and -not (Test-Path -LiteralPath (Join-Path $RepositoryRoot 'download_sensenova_u15_int8.ps1'))) {
-        throw 'SenseNovaの環境準備処理がありません。'
-    }
-    $modelArguments = if ($SelectedModel -in @('h3', 'nanosaur2', 'ming-image')) {
+    $modelArguments = if ($SelectedModel -eq 'h3') {
         @('-B', (Join-Path $RepositoryRoot $modelScript))
     } else {
         @('-B', (Join-Path $RepositoryRoot $modelScript), 'install', $SelectedModel)
     }
     if ($PreserveSource) { $modelArguments += '--keep-source' }
-    if ($SelectedModel -eq 'ming-image' -and $MingPrecision -eq 'w4a8') {
-        $modelArguments += @('--precision', 'w4a8')
-    }
 
     Write-Host "Aikimi Forge Neo / $SelectedModel"
     if ($PlanOnly) {
@@ -91,9 +77,7 @@ function Invoke-AikimiModelSetup {
         Write-Host '2. 通常の起動処理でGPUライブラリと本体の依存関係を準備（画面は起動しません）'
         Write-Host "3. $python $($modelArguments -join ' ')"
         if ($SelectedModel -eq 'anima38') { Write-Host '   BF16版からINT8 ConvRotへ自動変換し、検証します。' }
-        if ($SelectedModel -eq 'sensenova') { Write-Host '4. SenseNova専用Pythonと固定版ライブラリを準備' }
         if ($SelectedModel -eq 'h3') { Write-Host '   ComfyUI・専用Python・標準INT8モデルをNeo内に準備します。' }
-        if ($SelectedModel -eq 'nanosaur2') { Write-Host '   固定版ComfyUI・専用Python・Nanosaur2の3モデルをNeo内に準備します。' }
         return
     }
 
@@ -115,12 +99,6 @@ function Invoke-AikimiModelSetup {
 
         Write-Host 'モデルを準備しています。既存ファイルは検証して再利用します。'
         Invoke-SetupCommand $python $modelArguments
-        if ($SelectedModel -eq 'sensenova') {
-            Write-Host 'SenseNova専用環境を準備しています。'
-            Invoke-SetupCommand (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source @(
-                '-NoProfile', '-File', (Join-Path $RepositoryRoot 'download_sensenova_u15_int8.ps1'), '-RuntimeOnly'
-            )
-        }
         Write-Host '準備ができました。aikimi-launch.batからNeoを起動できます。'
     }
     finally {
@@ -134,26 +112,18 @@ if ($MyInvocation.InvocationName -ne '.') {
     try {
         [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
         if (-not $Model) {
-            if ($NoPause) { throw '-Modelにkrea2 / anima38 / sensenova / h3 / nanosaur2 / ming-imageを指定してください。' }
+            if ($NoPause) { throw '-Modelにkrea2 / anima38 / h3を指定してください。' }
             Write-Host 'Aikimi Forge Neo モデルセットアップ'
             Write-Host '1  Krea2                    INT8配布版を取得'
             Write-Host '2  Anima 3.8B v1.1          BF16取得・INT8自動変換'
-            Write-Host '3  SenseNova U1.5           INT8モデル・専用環境'
-            Write-Host '4  MiniMax H3              INT8モデル・専用ComfyUI'
-            Write-Host '5  Nanosaur2               イラスト生成・専用ComfyUI'
-            Write-Host '6  Ming Image              本体INT8 / W4A8配布版'
+            Write-Host '3  MiniMax H3              INT8モデル・専用ComfyUI'
             $selection = Read-Host '番号を選択（Enterで終了）'
             if (-not $selection) { exit 0 }
-            $choices = @{ '1'='krea2'; '2'='anima38'; '3'='sensenova'; '4'='h3'; '5'='nanosaur2'; '6'='ming-image' }
-            if (-not $choices.ContainsKey($selection)) { throw '1〜6の番号を選択してください。' }
+            $choices = @{ '1'='krea2'; '2'='anima38'; '3'='h3' }
+            if (-not $choices.ContainsKey($selection)) { throw '1〜3の番号を選択してください。' }
             $Model = $choices[$selection]
-            if ($Model -eq 'ming-image' -and -not $PSBoundParameters.ContainsKey('MingPrecision')) {
-                $precisionChoice = Read-Host '本体モデル: 1 INT8（標準） / 2 W4A8（省メモリ・試験版） [1]'
-                if ($precisionChoice -eq '2') { $MingPrecision = 'w4a8' }
-                elseif ($precisionChoice -notin @('', '1')) { throw '1 または 2 を選択してください。' }
-            }
         }
-        Invoke-AikimiModelSetup -RepositoryRoot $PSScriptRoot -SelectedModel $Model -MingPrecision $MingPrecision -PlanOnly:$DryRun -PreserveSource:$KeepSource
+        Invoke-AikimiModelSetup -RepositoryRoot $PSScriptRoot -SelectedModel $Model -PlanOnly:$DryRun -PreserveSource:$KeepSource
     }
     catch {
         Write-Host ("準備を完了できませんでした: " + $_.Exception.Message) -ForegroundColor Red

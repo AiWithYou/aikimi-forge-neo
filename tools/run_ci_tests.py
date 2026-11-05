@@ -32,7 +32,6 @@ DISABLED_LIVE_TESTS: dict[str, str] = {
     "KREA2_LIVE_API_TEST": "0",
     "MINIMAX_H3_LIVE_TEST": "0",
     "QWEN_IMAGE21_REWRITER_GPU_TEST": "0",
-    "SENSENOVA_U15_LIVE_TEST": "0",
 }
 
 

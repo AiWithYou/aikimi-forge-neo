@@ -156,10 +156,11 @@ class H3LightVAETests(unittest.TestCase):
         moss = json.loads((ROOT / "tools/moss_image_manifest.json").read_text("utf-8"))
         h3 = json.loads((ROOT / "tools/minimax_h3_runtime_manifest.json").read_text("utf-8"))
         self.assertEqual(moss["runtime"]["comfy_revision"], "b9b290e43f1eb379946dfeb013faf9bbefa1a618")
-        self.assertEqual(h3["comfy_revision"], moss["runtime"]["comfy_revision"])
-        for name in ("moss-image", "minimax-h3"):
-            self.assertIn("comfy-kitchen==0.2.39", (ROOT / f"tools/requirements-{name}.lock").read_text("utf-8"))
+        self.assertEqual(h3["comfy_revision"], "4ac1c173afd42f1141dcebace42d8091998d3b8c")
+        moss_lock = (ROOT / "tools/requirements-moss-image.lock").read_text("utf-8")
+        self.assertIn("comfy-kitchen==0.2.39", moss_lock)
         h3_lock = (ROOT / "tools/requirements-minimax-h3.lock").read_text("utf-8")
+        self.assertIn("comfy-kitchen==0.2.41", h3_lock)
         self.assertIn("torch==2.13.0+cu130", h3_lock)
         self.assertNotIn("\ntorchaudio==", h3_lock)
 

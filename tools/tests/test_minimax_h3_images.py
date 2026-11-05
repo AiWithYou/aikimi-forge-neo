@@ -73,6 +73,22 @@ def fake_bridge():
     return bridge, client
 
 
+def load_image_ui():
+    import modules.aikimi_status  # Real status helper, before replacing the modules package.
+
+    callbacks = SimpleNamespace(on_ui_tabs=Mock())
+    modules = types.ModuleType("modules")
+    modules.script_callbacks = callbacks
+    paths = types.ModuleType("modules.paths")
+    paths.data_path = paths.script_path = str(Path(__file__).resolve().parents[2])
+    filename = Path(__file__).resolve().parents[2] / "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py"
+    spec = importlib.util.spec_from_file_location("h3_image_ui_test", filename)
+    ui = importlib.util.module_from_spec(spec)
+    with patch.dict(sys.modules, {"modules": modules, "modules.paths": paths, "modules.script_callbacks": callbacks}):
+        spec.loader.exec_module(ui)
+    return ui, callbacks
+
+
 class RequestTests(unittest.TestCase):
     def test_default_request(self):
         images.H3ImageRequest("A still photograph.").validate()
@@ -387,26 +403,59 @@ class LifecycleTests(unittest.TestCase):
 
 
 class UITests(unittest.TestCase):
+    def test_generation_follows_managed_runtime_selected_after_page_load(self):
+        ui, _ = load_image_ui()
+        old, current = Path("old-runtime"), Path("new-runtime")
+        checkpoint = "custom-fl2va.safetensors"
+        with (
+            patch.object(ui, "managed_runtime_root", side_effect=[old, current]),
+            patch.object(images, "run_image_generation", return_value=iter(())) as run,
+        ):
+            initial = ui._initial_runtime()
+            list(ui._generate(initial, ui.SERVER_URL, "fast", "text", "photo", [], 768, 768, 20,
+                              "42", "simple", 0, False, *ui.H3NegPiP().values(), checkpoint))
+        self.assertEqual(run.call_args.args[1], current)
+        self.assertEqual(run.call_args.args[0].checkpoint, checkpoint)
+
+    def test_connect_and_restart_follow_managed_runtime_selected_after_page_load(self):
+        ui, _ = load_image_ui()
+        old, current = Path("old-runtime"), Path("new-runtime")
+        bridge, _ = fake_bridge()
+        bridge.resolve_runtime_root = Mock(side_effect=lambda value: Path(value))
+        ready = SimpleNamespace(comfy_version="test", gpu_name="test")
+        bridge.ensure_ready = Mock(return_value=ready)
+        bridge.restart_runtime = Mock(return_value=ready)
+        checkpoint = "custom-fl2va.safetensors"
+        with (
+            patch.object(ui, "managed_runtime_root", side_effect=[old, current, current]),
+            patch.object(images, "_bridge", return_value=bridge),
+            patch.object(images, "check_image_nodes"),
+        ):
+            initial = ui._initial_runtime()
+            values = (*ui.H3NegPiP().values(), checkpoint)
+            ui._runtime_action(initial, ui.SERVER_URL, "fast", *values)
+            ui._restart(initial, ui.SERVER_URL, "fast", *values)
+        for action in (bridge.ensure_ready, bridge.restart_runtime):
+            self.assertEqual(action.call_args.args[0], current)
+            self.assertEqual(action.call_args.kwargs["acceleration"].checkpoint, checkpoint)
+
     def test_real_gradio_component_graph_without_starting_backend(self):
         if importlib.util.find_spec("gradio") is None:
             self.skipTest("Gradio is not installed in this CPU test environment.")
-        import modules.aikimi_status  # Real lightweight status helper, before replacing the modules package.
-        callbacks = SimpleNamespace(on_ui_tabs=Mock())
-        modules = types.ModuleType("modules")
-        modules.script_callbacks = callbacks
-        paths = types.ModuleType("modules.paths")
-        paths.data_path = paths.script_path = str(Path(__file__).resolve().parents[2])
-        filename = Path(__file__).resolve().parents[2] / "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py"
-        spec = importlib.util.spec_from_file_location("h3_image_ui_test", filename)
-        ui = importlib.util.module_from_spec(spec)
-        with patch.dict(sys.modules, {"modules": modules, "modules.paths": paths, "modules.script_callbacks": callbacks}):
-            spec.loader.exec_module(ui)
-        with patch.object(ui, "_initial_runtime", return_value=""), patch.object(images, "_bridge") as bridge:
+        import gradio as gr
+
+        ui, callbacks = load_image_ui()
+        with patch.object(ui, "_initial_runtime", return_value="managed-runtime-sentinel"), patch.object(images, "_bridge") as bridge, gr.Blocks() as app:
             tabs = ui.on_ui_tabs()
             bridge.assert_not_called()
         self.assertEqual(tabs[0][1:], ("H3 Image", "minimax_h3_image_studio"))
-        config = tabs[0][0].get_config_file()
+        config = app.get_config_file()
         self.assertTrue(config["components"])
+        runtime_fields = [component["props"] for component in config["components"]
+                          if component.get("props", {}).get("value") == "managed-runtime-sentinel"]
+        self.assertEqual(len(runtime_fields), 1)
+        self.assertFalse(runtime_fields[0]["visible"])
+        self.assertFalse(runtime_fields[0]["interactive"])
         for dependency in config["dependencies"]:
             if dependency.get("backend_fn"):
                 self.assertEqual(dependency["api_visibility"], "private")

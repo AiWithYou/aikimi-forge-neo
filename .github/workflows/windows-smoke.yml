@@ -17,7 +17,6 @@ on:
       - "extensions-builtin/hyperweave/**"
       - "extensions-builtin/minimax-h3-studio/**"
       - "extensions-builtin/sd_forge_controlnet/**"
-      - "extensions-builtin/sensenova-u15-studio/**"
       - "extensions-builtin/yue2-studio/**"
       - "modules_forge/irodori/**"
       - "extensions-builtin/irodori-studio/**"
@@ -69,7 +68,6 @@ on:
       - "modules/ui_tempdir.py"
       - "modules/ui_settings.py"
       - "modules_forge/minimax_h3_bridge.py"
-      - "modules_forge/sensenova_u15_bridge.py"
       - "modules_forge/forge_canvas/**"
       - "modules_forge/**"
       - "requirements.txt"
@@ -79,16 +77,9 @@ on:
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
       - "modules_forge/local_assets.py"
-      - "modules_forge/ming_local.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
       - "tools/tests/test_forge_lora*.py"
-      - "modules_forge/ming_image_studio.py"
-      - "extensions-builtin/ming-image-studio/**"
-      - "tools/*ming_image*.py"
-      - "tools/ming_image*_manifest.json"
-      - "tools/requirements-ming-image.*"
-      - "tools/tests/test_ming_image_studio.py"
       - "tools/minimax_h3_runtime_manifest.json"
       - "tools/requirements-minimax-h3.*"
       - "tools/tests/test_minimax_h3_setup.py"
@@ -111,14 +102,11 @@ on:
       - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_dependency_remediation.py"
       - "modules/metadata_cache.py"
-      - "modules_forge/sensenova_transformers_compat.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gpu_ownership.py"
       - "tools/tests/test_gpu_residency.py"
       - "tools/tests/resident_fixtures.py"
       - "tools/tests/test_minimax_h3_submission.py"
-      - "tools/tests/test_sensenova_worker_cleanup.py"
-      - "tools/tests/test_sensenova_u15_bridge.py"
       - "tools/tests/test_extra_networks_lora_filter.py"
       - "tools/tests/test_gradio_compatibility.py"
       - "tools/tests/test_gradio_frontend_compat.py"
@@ -142,7 +130,6 @@ on:
       - "tools/tests/test_remote_image_route.py"
       - "tools/tests/dragdrop_security.test.mjs"
       - "tools/tests/test_security_redaction.py"
-      - "tools/tests/test_sensenova_u15_studio.py"
       - "tools/tests/test_studio_css_boundaries.py"
       - "tools/tests/test_sysinfo_security.py"
       - "tools/tests/test_ui_tempdir_security.py"
@@ -166,7 +153,6 @@ on:
       - "extensions-builtin/hyperweave/**"
       - "extensions-builtin/minimax-h3-studio/**"
       - "extensions-builtin/sd_forge_controlnet/**"
-      - "extensions-builtin/sensenova-u15-studio/**"
       - "extensions-builtin/yue2-studio/**"
       - "modules_forge/irodori/**"
       - "extensions-builtin/irodori-studio/**"
@@ -218,7 +204,6 @@ on:
       - "modules/ui_tempdir.py"
       - "modules/ui_settings.py"
       - "modules_forge/minimax_h3_bridge.py"
-      - "modules_forge/sensenova_u15_bridge.py"
       - "modules_forge/forge_canvas/**"
       - "modules_forge/**"
       - "requirements.txt"
@@ -228,16 +213,9 @@ on:
       - "tools/run_ci_tests.py"
       - "tools/setup_minimax_h3.py"
       - "modules_forge/local_assets.py"
-      - "modules_forge/ming_local.py"
       - "scripts/local_lora_stack.py"
       - "tools/tests/test_local_model_sources.py"
       - "tools/tests/test_forge_lora*.py"
-      - "modules_forge/ming_image_studio.py"
-      - "extensions-builtin/ming-image-studio/**"
-      - "tools/*ming_image*.py"
-      - "tools/ming_image*_manifest.json"
-      - "tools/requirements-ming-image.*"
-      - "tools/tests/test_ming_image_studio.py"
       - "tools/minimax_h3_runtime_manifest.json"
       - "tools/requirements-minimax-h3.*"
       - "tools/tests/test_minimax_h3_setup.py"
@@ -260,14 +238,11 @@ on:
       - "tools/tests/test_ci_audit_followup.py"
       - "tools/tests/test_dependency_remediation.py"
       - "modules/metadata_cache.py"
-      - "modules_forge/sensenova_transformers_compat.py"
       - "tools/tests/test_ci_workflow_boundaries.py"
       - "tools/tests/test_gpu_ownership.py"
       - "tools/tests/test_gpu_residency.py"
       - "tools/tests/resident_fixtures.py"
       - "tools/tests/test_minimax_h3_submission.py"
-      - "tools/tests/test_sensenova_worker_cleanup.py"
-      - "tools/tests/test_sensenova_u15_bridge.py"
       - "tools/tests/test_extra_networks_lora_filter.py"
       - "tools/tests/test_gradio_compatibility.py"
       - "tools/tests/test_gradio_frontend_compat.py"
@@ -291,7 +266,6 @@ on:
       - "tools/tests/test_remote_image_route.py"
       - "tools/tests/dragdrop_security.test.mjs"
       - "tools/tests/test_security_redaction.py"
-      - "tools/tests/test_sensenova_u15_studio.py"
       - "tools/tests/test_studio_css_boundaries.py"
       - "tools/tests/test_sysinfo_security.py"
       - "tools/tests/test_ui_tempdir_security.py"
@@ -318,6 +292,7 @@ jobs:
       HF_HUB_DISABLE_TELEMETRY: "1"
       HF_HUB_OFFLINE: "1"
       PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUTF8: "1"
       TRANSFORMERS_OFFLINE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -369,8 +344,7 @@ jobs:
           python -c
           "import modules.aikimi_security;
           import modules.launch_utils;
-          import modules_forge.minimax_h3_bridge;
-          import modules_forge.sensenova_u15_bridge"
+          import modules_forge.minimax_h3_bridge"
       - name: Run launch, security, and UI smoke tests
         id: smoke
         run: >-
@@ -402,8 +376,6 @@ jobs:
           --module tools.tests.test_gpu_ownership
           --module tools.tests.test_gpu_residency
           --module tools.tests.test_minimax_h3_submission
-          --module tools.tests.test_sensenova_worker_cleanup
-          --module tools.tests.test_sensenova_u15_bridge
           --module tools.tests.test_extra_networks_lora_filter
           --module tools.tests.test_extras_usability
           --module tools.tests.test_grain_cleaner
@@ -429,7 +401,6 @@ jobs:
           --module tools.tests.test_local_model_sources
           --module tools.tests.test_forge_lora_selection
           --module tools.tests.test_forge_lora_ui
-          --module tools.tests.test_ming_image_studio
           --module tools.tests.test_option_migrations
           --module tools.tests.test_patcher_cleanup
           --module tools.tests.test_quant_ops_zero_scale
@@ -438,7 +409,6 @@ jobs:
           --module tools.tests.test_run_ci_tests
           --module tools.tests.test_safe_image_fetch
           --module tools.tests.test_security_redaction
-          --module tools.tests.test_sensenova_u15_studio
           --module tools.tests.test_studio_css_boundaries
           --module tools.tests.test_sysinfo_security
           --module tools.tests.test_ui_tempdir_security

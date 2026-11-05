@@ -1,4 +1,4 @@
-"""Real local HTTP regressions for Nanosaur2/Ming submission ownership."""
+"""Real local HTTP regressions for P-H3 submission ownership."""
 
 from __future__ import annotations
 
@@ -14,14 +14,16 @@ from unittest.mock import patch
 import psutil
 
 from modules.fifo_lock import FIFOLock
-from modules_forge import gpu_ownership, gpu_residency, local_assets, ming_image_studio, nanosaur2_studio
+from modules_forge import gpu_ownership, gpu_residency, local_assets
 from modules_forge import minimax_h3_bridge as bridge
 from modules_forge import minimax_h3_pending as pending
+from modules_forge import p_h3_image as studio
 
 
-class ImageSubmissionLifecycle:
+class ImageSubmissionLifecycleTests(unittest.TestCase):
     def setUp(self):
-        self.root = Path(self.enterContext(TemporaryDirectory(prefix="image-job-lifecycle-")))
+        self.root = Path(self.enterContext(TemporaryDirectory(prefix="p-h3-job-lifecycle-")))
+        self.runtime = self.root / "runtime"
         self.lock = FIFOLock()
         self.enterContext(patch.object(gpu_ownership, "queue_lock", self.lock))
         self.enterContext(patch.object(gpu_residency, "register"))
@@ -29,13 +31,12 @@ class ImageSubmissionLifecycle:
         self.enterContext(patch.object(local_assets, "HASH_CACHE", self.root / "assets/hashes.json"))
         self.enterContext(patch.object(pending, "DIRECTORY", self.root / "pending"))
         for name, value in (
-            ("_GPU_OWNERSHIPS", {}),
-            ("_ACTIVE_GENERATION_IDS", set()),
-            ("_CANCELLED_JOB_IDS", set()),
-            ("_CANCEL_ACK_IDS", set()),
+            ("_GPU_OWNERSHIPS", {}), ("_ACTIVE_GENERATION_IDS", set()),
+            ("_CANCELLED_JOB_IDS", set()), ("_CANCEL_ACK_IDS", set()),
         ):
             self.enterContext(patch.object(bridge, name, value))
         self.enterContext(patch.object(bridge, "release_forge_vram"))
+        self.enterContext(patch.object(bridge, "cleanup_stale_prepared_media"))
         self.enterContext(patch.object(bridge, "_loopback_server_process", return_value=psutil.Process()))
         self.deferred = self.enterContext(patch.object(bridge, "_schedule_deferred_cleanup"))
         self.client_class = bridge.ComfyH3Client
@@ -89,9 +90,11 @@ class ImageSubmissionLifecycle:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
-        self.enterContext(patch.object(self.studio, "SERVER_URL", self.url))
-        self.enterContext(patch.object(self.studio, "runtime_root", return_value=self.root / "runtime"))
-        self.enterContext(patch.object(self.studio, "ensure_runtime", return_value=SimpleNamespace()))
+        self.enterContext(patch.object(studio, "ensure_runtime", return_value=SimpleNamespace()))
+        self.enterContext(patch.object(studio, "prepare_images", return_value={"images": []}))
+        self.enterContext(patch.object(studio, "check_nodes"))
+        self.enterContext(patch("modules_forge.studio_checkpoints.snapshot_checkpoint", return_value=None))
+        self.enterContext(patch("modules_forge.studio_checkpoints.verify_snapshot"))
         self.addCleanup(self.close_owned_resources)
 
     def close_owned_resources(self):
@@ -101,16 +104,18 @@ class ImageSubmissionLifecycle:
             client.close()
 
     def generation(self):
-        updates = self.studio.run_generation(self.request(), output_root=self.root / "outputs", poll_seconds=0)
+        request = studio.PH3Request("test", seed=42, use_upsampler=False)
+        updates = studio.run_generation(request, self.runtime, self.url, self.root / "logs", self.root / "outputs", poll_seconds=0)
         self.addCleanup(updates.close)
+        self.assertEqual(next(updates)["stage"], "verifying")
         self.assertEqual(next(updates)["stage"], "runtime")
         return updates
 
     def assert_deferred_then_recovered(self):
         self.assertEqual(len(self.submissions), 1)
         prompt_id = self.submissions[0]
-        self.deferred.assert_called_once_with(self.clients[0], prompt_id, {}, self.root / "runtime")
-        self.assertFalse(self.clients[0]._client.is_closed, "supervisor must inherit a usable client")
+        self.deferred.assert_called_once_with(self.clients[0], prompt_id, {"images": []}, self.runtime)
+        self.assertFalse(self.clients[0]._client.is_closed)
         self.assertFalse(self.lock.acquire(False), "running remote job must retain GPU ownership")
         self.assertEqual(pending.read_all()[0]["state"], "submitting")
         self.status = "completed"
@@ -118,11 +123,11 @@ class ImageSubmissionLifecycle:
         self.assertTrue(self.clients[0]._client.is_closed)
         self.assertEqual(pending.read_all(), [])
         self.assertEqual(bridge._GPU_OWNERSHIPS, {})
-        self.assertTrue(self.lock.acquire(False), "terminal confirmation must return GPU ownership")
+        self.assertTrue(self.lock.acquire(False))
         self.lock.release()
         self.assertEqual(len(self.submissions), 1, "recovery must never resubmit")
 
-    def test_record_update_failure_after_acceptance_transfers_client_and_gpu_to_supervisor(self):
+    def test_record_update_failure_after_acceptance_transfers_gpu_to_supervisor(self):
         updates = self.generation()
         original_update = pending.update
 
@@ -136,7 +141,7 @@ class ImageSubmissionLifecycle:
                 next(updates)
         self.assert_deferred_then_recovered()
 
-    def test_unexpected_submit_failure_after_acceptance_still_transfers_ownership(self):
+    def test_unexpected_failure_after_acceptance_transfers_gpu_to_supervisor(self):
         updates = self.generation()
         original_submit = self.client_class.submit
 
@@ -149,14 +154,14 @@ class ImageSubmissionLifecycle:
                 next(updates)
         self.assert_deferred_then_recovered()
 
-    def test_persistent_record_update_failure_still_reconciles_natural_completion(self):
+    def test_persistent_record_update_failure_still_reconciles_completion(self):
         updates = self.generation()
         with patch.object(pending, "update", side_effect=OSError("injected persistent-record failure")):
             with self.assertRaisesRegex(OSError, "persistent-record failure"):
                 next(updates)
             self.assert_deferred_then_recovered()
 
-    def test_record_failure_before_send_does_not_submit_and_returns_unused_gpu(self):
+    def test_record_failure_before_send_does_not_submit_and_returns_gpu(self):
         updates = self.generation()
         with patch.object(pending, "write", side_effect=OSError("injected write-ahead failure")):
             with self.assertRaisesRegex(OSError, "write-ahead failure"):
@@ -168,7 +173,7 @@ class ImageSubmissionLifecycle:
         self.assertTrue(self.lock.acquire(False))
         self.lock.release()
 
-    def test_explicit_input_rejection_reclaims_record_and_gpu_without_supervisor(self):
+    def test_explicit_rejection_reclaims_record_and_gpu_without_supervisor(self):
         self.reject = True
         updates = self.generation()
         with self.assertRaises(bridge.H3SubmissionRejected):
@@ -179,16 +184,6 @@ class ImageSubmissionLifecycle:
         self.assertEqual(bridge._GPU_OWNERSHIPS, {})
         self.assertTrue(self.lock.acquire(False))
         self.lock.release()
-
-
-class NanosaurSubmissionLifecycleTests(ImageSubmissionLifecycle, unittest.TestCase):
-    studio = nanosaur2_studio
-    request = staticmethod(lambda: nanosaur2_studio.Nanosaur2Request("test", seed=42))
-
-
-class MingSubmissionLifecycleTests(ImageSubmissionLifecycle, unittest.TestCase):
-    studio = ming_image_studio
-    request = staticmethod(lambda: ming_image_studio.MingImageRequest("test", seed=42))
 
 
 if __name__ == "__main__":

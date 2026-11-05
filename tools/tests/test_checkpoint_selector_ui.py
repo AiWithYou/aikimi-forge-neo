@@ -12,7 +12,6 @@ from modules_forge import local_assets, model_catalog
 from tools.tests.test_additional_module_identity import load_main_entry
 from tools.tests.test_iris_selection import artifact, screen_module
 from tools.tests.test_local_model_sources import qwen_fixture, qwen_transformer, tensor_file
-from tools.tests.test_ming_image_studio import load_ui as ming_ui
 from tools.tests.test_qwen_image21_service import load_ui as qwen_ui
 
 
@@ -69,14 +68,6 @@ class CheckpointSelectorUiTests(unittest.TestCase):
         config = tab.get_config_file()
         self.assertFalse(any(item["props"].get("label") == "探索フォルダー" for item in config["components"]))
 
-    def test_ming_checkpoint_is_visible_with_refresh_and_details(self):
-        ui = ming_ui()
-        with patch.object(ui.studio, "runtime_root", return_value=self.root / "runtime"):
-            tab = ui.on_ui_tabs()[0][0]
-        self.addCleanup(tab.close)
-        self.assert_selector_visible(tab, "ming-local-model")
-        config = tab.get_config_file()
-        self.assertFalse(any(item["props"].get("label") == "探索フォルダー" for item in config["components"]))
 
     def test_qwen_catalog_accepts_bundles_and_excludes_their_parts_and_lora(self):
         ui = qwen_ui()
@@ -96,24 +87,6 @@ class CheckpointSelectorUiTests(unittest.TestCase):
         self.assertIn(str(missing.resolve()), values)
         self.assertNotIn(str(self.root), " ".join(label for label, _ in choices))
 
-    def test_ming_catalog_filters_family_without_shared_parts(self):
-        ui = ming_ui()
-        selected = tensor_file(
-            self.root / "models/Ming-Image/checkpoints/新しい FT/model.safetensors",
-            {"layers.0.weight": [1]},
-            metadata={"config": '{"transformer":{"image_model":"ming_image"}}'},
-        )
-        foreign = tensor_file(
-            self.root / "models/Ming-Image/checkpoints/zimage.safetensors",
-            {"layers.0.weight": [1], "cap_pad_token": [1]},
-        )
-        lora = tensor_file(self.root / "models/Ming-Image/checkpoints/lora.safetensors")
-        with patch.object(local_assets, "file_identity", side_effect=AssertionError("discovery must not hash")):
-            choices = ui.model_choices(current=str(selected))
-        self.assertIn(str(selected.resolve()), [value for _, value in choices])
-        self.assertNotIn(str(foreign), [value for _, value in choices])
-        self.assertNotIn(str(lora), [value for _, value in choices])
-        self.assertNotIn(str(self.root), " ".join(label for label, _ in choices))
 
     def test_qwen_input_selection_restores_latest_library_without_writing(self):
         ui = qwen_ui()
@@ -132,7 +105,6 @@ class CheckpointSelectorUiTests(unittest.TestCase):
     def test_managed_discovery_ignores_remembered_models_but_keeps_current_path(self):
         for engine, ui, make in (
             ("qwen21", qwen_ui(), qwen_transformer),
-            ("ming", ming_ui(), lambda path: tensor_file(path / "model.safetensors", {"layers.0.weight": [1]})),
         ):
             with self.subTest(engine=engine):
                 current = make(self.root / engine / "selected")
@@ -142,20 +114,6 @@ class CheckpointSelectorUiTests(unittest.TestCase):
                 self.assertIn(str(current.resolve()), [value for _, value in choices])
                 self.assertNotIn(str(ignored.resolve()), [value for _, value in choices])
 
-    def test_ming_loras_use_family_folder_and_shared_runtime_without_legacy_root(self):
-        ui = ming_ui()
-        managed = tensor_file(self.root / "models/Ming-Image/loras/日本語/style.safetensors")
-        runtime = self.root / "runtime"
-        shared = tensor_file(runtime / "models/loras/style.safetensors")
-        old = tensor_file(self.root / "models/Lora/Ming/old.safetensors")
-        with patch.object(ui.studio, "runtime_root", return_value=runtime):
-            tab = ui.on_ui_tabs()[0][0]
-        self.addCleanup(tab.close)
-        selector = next(item for item in tab.blocks.values() if getattr(item, "elem_id", None) == "ming-loras")
-        values = [value for _, value in selector.choices]
-        self.assertIn(str(managed), values)
-        self.assertIn(str(shared), values)
-        self.assertNotIn(str(old), values)
 
     def test_lora_discovery_ignores_remembered_external_but_keeps_current(self):
         from modules_forge.qwen_image21 import style_lora
@@ -163,16 +121,10 @@ class CheckpointSelectorUiTests(unittest.TestCase):
         current = tensor_file(self.root / "selected/style.safetensors")
         ignored = tensor_file(self.root / "remembered/style.safetensors")
         local_assets.remember("qwen21_lora", [str(ignored)])
-        local_assets.remember("ming_lora", [str(ignored)])
         self.assertNotIn(str(ignored), style_lora.inventory(self.root))
         qwen = qwen_ui()
         with patch.object(qwen, "RUNTIME", self.root):
             choices = qwen.refresh_loras([str(current)])["choices"]
-        self.assertIn(str(current), [value for _, value in choices])
-        ming = ming_ui()
-        with patch.object(ming.studio, "runtime_root", return_value=self.root / "runtime"):
-            choices = ming.lora_choices([str(current)])
-        self.assertNotIn(str(ignored), [value for _, value in choices])
         self.assertIn(str(current), [value for _, value in choices])
 
     def test_qwen_lora_restore_keeps_empty_strength_table_mounted(self):
@@ -184,47 +136,8 @@ class CheckpointSelectorUiTests(unittest.TestCase):
                 self.assertEqual(table["visible"], True if loras else "hidden")
                 self.assertEqual(table["value"], [[item["name"], item["strength"]] for item in loras])
 
-    def test_ming_input_selection_restores_latest_library_without_writing(self):
-        ui = ming_ui()
-        selected = tensor_file(self.root / "FT/model.safetensors", {"layers.0.weight": [1]})
-        local_assets.save_selection("ming", {"directory": "old external root"})
-        ui.save_model_selection("int8", str(selected), "", "", [], [])
-        self.assertEqual(local_assets.selection("ming")["model_path"], str(selected.resolve()))
-        self.assertNotIn("directory", local_assets.selection("ming"))
-        before = local_assets.LIBRARY.read_bytes()
-        with patch.object(local_assets, "save_selection", side_effect=AssertionError("load must be read-only")):
-            view = ui.load_model_selection()
-        self.assertEqual(view[0]["value"], str(selected.resolve()))
-        self.assertEqual(view[3]["value"], "int8")
-        self.assertEqual(local_assets.LIBRARY.read_bytes(), before)
 
-    def test_ming_lora_restore_and_selection_keep_empty_strength_table_mounted(self):
-        ui = ming_ui()
-        with patch.object(ui.studio, "runtime_root", return_value=self.root / "runtime"):
-            tab = ui.on_ui_tabs()[0][0]
-        self.addCleanup(tab.close)
-        table = next(item for item in tab.blocks.values() if getattr(item, "elem_id", None) == "ming-lora-strengths")
-        self.assertEqual(table.visible, "hidden")
-        updates = [function.fn for function in tab.fns.values() if function.outputs == [table]]
-        self.assertEqual(len(updates), 2)
-        for loras in ([], [{"name": "custom.safetensors", "strength": 0.5}]):
-            with self.subTest(loras=loras):
-                local_assets.save_selection("ming", {"loras": loras})
-                expected_rows = [[item["name"], item["strength"]] for item in loras]
-                expected_visibility = True if loras else "hidden"
-                restored = ui.load_model_selection()[-1]
-                self.assertEqual((restored["value"], restored["visible"]), (expected_rows, expected_visibility))
-                for update in updates:
-                    selected = update([item["name"] for item in loras], expected_rows)
-                    self.assertEqual((selected["value"], selected["visible"]), (expected_rows, expected_visibility))
 
-    def test_ming_load_keeps_w4a8_when_only_that_official_model_is_installed(self):
-        ui = ming_ui()
-        with patch.object(
-            ui.studio, "model_ready", side_effect=lambda root, verify_hash=False, precision="int8": precision == "w4a8"
-        ):
-            view = ui.load_model_selection()
-        self.assertEqual(view[3]["value"], "w4a8")
 
     def test_iris_task_specific_official_selection_stays_visible(self):
         ui = screen_module()

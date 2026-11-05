@@ -287,8 +287,6 @@ class OrbitIdentityTests(OrbitFixture):
             patch.object(bridge.time, "sleep"),
             patch.object(bridge, "_server_api_responding", return_value=True),
             patch.object(bridge.workflow_handoff, "install_bundle"),
-            patch("modules_forge.nanosaur2_studio.source_ready", return_value=False),
-            patch("modules_forge.ming_local.source_ready", return_value=False),
             patch.object(bridge.subprocess, "Popen") as spawn,
             patch.object(orbit, "install_node", wraps=orbit.install_node) as install,
         ):
@@ -409,7 +407,7 @@ class OrbitIdentityTests(OrbitFixture):
         (self.root / "models").mkdir()
         disconnected = bridge.RuntimeReadiness(self.root, bridge.H3_SERVER_URL, connected=False)
         connected = bridge.RuntimeReadiness(self.root, bridge.H3_SERVER_URL, connected=True)
-        for prefix, nano, ming in (("nanosaur2", True, False), ("ming-image", False, True)):
+        for prefix in ("other-studio",):
             with (
                 self.subTest(studio=prefix),
                 patch.object(bridge, "inspect_readiness", return_value=connected),
@@ -420,8 +418,6 @@ class OrbitIdentityTests(OrbitFixture):
                 patch.object(bridge.time, "sleep"),
                 patch.object(bridge, "_server_api_responding", return_value=True),
                 patch.object(bridge.workflow_handoff, "install_bundle") as handoff,
-                patch("modules_forge.nanosaur2_studio.source_ready", return_value=nano),
-                patch("modules_forge.ming_local.source_ready", return_value=ming),
                 patch.object(bridge.subprocess, "Popen") as spawn,
                 patch.object(orbit, "install_node") as install,
             ):

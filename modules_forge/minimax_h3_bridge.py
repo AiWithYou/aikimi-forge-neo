@@ -650,9 +650,7 @@ def _runtime_arguments_are_allowed(arguments: Sequence[str]) -> bool:
     except ValueError:
         return False
     whitelist = custom_node_whitelist(arguments)
-    from modules_forge.ming_local import NODE_NAME as MING_LOCAL_PACK
-
-    if whitelist is None or set(whitelist) - {HANDOFF_PACK, FAST_VAE_PACK, NEGPIP_PACK, CLIP_CACHE_PACK, negpip_cache.PACK, hybrid.PACK, MING_LOCAL_PACK, orbit_assets.PACK}:
+    if whitelist is None or set(whitelist) - {HANDOFF_PACK, FAST_VAE_PACK, NEGPIP_PACK, CLIP_CACHE_PACK, negpip_cache.PACK, hybrid.PACK, orbit_assets.PACK}:
         return False
     index = 0
     saw_main = False
@@ -1327,13 +1325,7 @@ def _start_runtime_locked(
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     stdout_path = log_directory / f"{log_prefix}-{stamp}.stdout.log"
     stderr_path = log_directory / f"{log_prefix}-{stamp}.stderr.log"
-    from modules_forge.nanosaur2_studio import NODE_NAME, source_ready
-
-    extra_nodes = (*((orbit_assets.PACK,) if orbit_runtime else ()), *((NODE_NAME,) if source_ready(runtime_root) else ()))
-    from modules_forge import ming_local
-
-    if ming_local.source_ready(runtime_root):
-        extra_nodes += (ming_local.NODE_NAME,)
+    extra_nodes = (orbit_assets.PACK,) if orbit_runtime else ()
     command = _runtime_command(python, port, runtime_profile, acceleration=acceleration,
                                trusted_custom_nodes=extra_nodes)
     if extra_model_configs:

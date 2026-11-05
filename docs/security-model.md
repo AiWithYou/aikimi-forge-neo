@@ -70,7 +70,6 @@ Browser
   -> Gradio / FastAPI authentication
   -> Forge request validation and options policy
   -> GPU model runtime
-     -> SenseNova isolated worker
      -> local MiniMax H3 ComfyUI bridge
   -> managed outputs / temporary files
 ```
@@ -79,7 +78,6 @@ Browser
 - API経由の設定変更: `restrict_api`と型の検査
 - URL画像入力: safe fetch policyによるscheme、DNS、redirect、size、Content-Typeの確認
 - Gradio公開path: 管理されたoutput、temporaryと、activeな静的assetの個別fileへの限定
-- SenseNova: Forge UI、bridge、専用workerの責務分離
 - MiniMax H3: loopback ComfyUIと選択runtime identityの検査
 - model installer: 固定revision、size、SHA-256の確認後に正式名へ移動
 
@@ -131,6 +129,8 @@ CodeQLはGitHub標準の解析を使用します。追加の拡張セキュリ�
 
 ## 2026年10月28日の依存関係修正
 
+この節以降のSenseNovaに関する記述は当時の構成の記録です。現在はSenseNovaの機能と専用監査を含みません。
+
 本体のGitPythonを3.2.1、本体とSenseNova・Qwen・Iris・Clef・MOSS Image・FLUX 3・H3の専用環境のsetuptoolsを84.1.0に更新します。MOSS ImageとFLUX 3の固定環境はfilelockも修正版に更新し、依存関係をハッシュ付きlockとOSV監査で確認します。
 
 既存の専用環境は対象モデルのセットアップを再実行して更新します。MOSS Image・FLUX 3・H3はlockが変わるため、再セットアップ前は既存の専用環境の検証が通りません。
@@ -145,9 +145,9 @@ ForgeのメタデータキャッシュはSQLiteとJSONへ移行しました。Py
 
 期限付き例外と除外IDは撤去しました。CIはOSVの厳格監査を使い、固定Git版DiffusersとCUDA版PyTorchも監査対象に含めます。パッケージを照合できない場合も失敗します。Accelerateの修正は、監査データベースとは別に、実際の読み込みAPIを使う攻撃入力・正常入力の回帰テストで検証します。
 
-既存環境では通常の依存準備で本体の旧既定CUDA版を更新します。`TORCH_COMMAND`または`TORCH_INDEX_URL`を指定している環境は、その指定を維持します。SenseNovaは`download_sensenova_u15_int8.ps1 -RuntimeOnly`、Qwenは専用セットアップで更新してください。旧環境に残るdiskcacheはForgeから使いません。外部拡張の依存関係を確認してからアンインストールできます。
+既存環境では通常の依存準備で本体の旧既定CUDA版を更新します。`TORCH_COMMAND`または`TORCH_INDEX_URL`を指定している環境は、その指定を維持します。Qwenは専用セットアップで更新してください。旧環境に残るdiskcacheはForgeから使いません。外部拡張の依存関係を確認してからアンインストールできます。
 
-以下の2026年9月3日・22日の記録は、修正前の履歴です。現在の依存定義・監査方針はこの節を参照してください。
+以下の2026年9月3日・22日の記録は、修正前の履歴です。SenseNova関連の記述は当時の構成を示します。現在の依存定義・監査方針はこの節を参照してください。
 
 ## 依存関係監査の期限付き例外（修正前の記録）
 

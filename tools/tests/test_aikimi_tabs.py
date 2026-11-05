@@ -11,7 +11,6 @@ EXTRA_NETWORKS_JS = ROOT / "javascript" / "extraNetworks.js"
 CONTROLNET_UNITS_JS = ROOT / "extensions-builtin" / "sd_forge_controlnet" / "javascript" / "active_units.js"
 ANIMA_SCRIPT = ROOT / "extensions-builtin" / "anima-3-8b" / "scripts" / "anima_3_8b.py"
 H3_SCRIPT = ROOT / "extensions-builtin" / "minimax-h3-studio" / "scripts" / "minimax_h3_studio.py"
-SENSENOVA_SCRIPT = ROOT / "extensions-builtin" / "sensenova-u15-studio" / "scripts" / "sensenova_u15_studio.py"
 INPUT_ACCORDION_JS = ROOT / "javascript" / "inputAccordion.js"
 
 
@@ -32,14 +31,13 @@ class AikimiTabsTests(unittest.TestCase):
         expected = (
             'buttonId: "aikimi-tab-krea2"',
             'buttonId: "aikimi-tab-anima38"',
-            'buttonId: "aikimi-tab-sensenova"',
             'buttonId: "aikimi-tab-minimax-h3"',
             'buttonId: "aikimi-tab-qwen-image21"',
         )
         positions = [self.javascript.index(value) for value in expected]
         self.assertEqual(positions, sorted(positions))
         self.assertIn(
-            '"krea2",\n        "anima38",\n        "sensenova",\n        "qwen_image21",\n        "ming_image",\n        "minimax_h3_image",\n        "nanosaur2",\n        "minimax_h3",\n        "yue2"',
+            '"krea2",\n        "anima38",\n        "qwen_image21",\n        "minimax_h3_image",\n        "minimax_h3",\n        "yue2"',
             self.javascript,
         )
 
@@ -202,12 +200,7 @@ class AikimiTabsTests(unittest.TestCase):
 
     def test_native_studio_keeps_config_labels_and_external_row_uses_short_names(self):
         h3 = H3_SCRIPT.read_text(encoding="utf-8")
-        sensenova = SENSENOVA_SCRIPT.read_text(encoding="utf-8")
         self.assertIn('return [(interface, "H3 Studio", "minimax_h3_studio")]', h3)
-        self.assertIn(
-            'return [(interface, "SenseNova U1.5", "sensenova_u15_studio")]',
-            sensenova,
-        )
         self.assertIn("button.textContent = config.label", self.javascript)
         self.assertNotIn("aikimiOriginalLabel", self.javascript)
 

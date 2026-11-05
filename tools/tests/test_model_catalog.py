@@ -51,15 +51,12 @@ class ModelCatalogTests(unittest.TestCase):
         for family in (
             "Iris-3B",
             "Qwen-Image-2.1",
-            "Ming-Image",
             "Clef",
-            "SenseNova-U1",
             "MiniMax-H3",
-            "Nanosaur2",
             "YuE2",
         ):
             self.assertTrue((self.root / "models" / family / "checkpoints").is_dir(), family)
-        for relative in ("Lora", "Qwen-Image-2.1/loras", "Ming-Image/loras", "Iris-3B/loras"):
+        for relative in ("Lora", "Qwen-Image-2.1/loras", "Iris-3B/loras"):
             self.assertTrue((self.root / "models" / relative).is_dir(), relative)
         self.assertEqual(existing.read_bytes(), b"existing model")
         self.assertEqual(adapter.read_bytes(), b"existing adapter")

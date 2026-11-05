@@ -38,31 +38,8 @@ DepthやPoseの自動抽出モデルは、この機能では追加しません�
 
 ## 実行環境と組み合わせ
 
-接続先はComfyUI標準の`ModelPatchLoader`と`MiniMaxH3FunControlNetApply`です。標準ノードやINT8モデルがない場合は、生成要求を送る前に理由を表示して停止します。ComfyUIは`efa6c8f804bff78b46a0fd458ebd2e47bba07a30`（0.34.0）に後述の修正を適用し、Comfy Kitchen 0.2.33を使用しています。
-
-ComfyUI側の`comfy/ldm/minimax/model.py`には、Comfy Compilerの記録範囲を生成本体の内側へ移す修正を適用しています。追加機能の準備が終わってからメモリ記録を開始し、生成本体から戻った時点で記録を終了する構成です。その後に追加機能の片付けを実行するため、VAE前処理やNegPiPの片付けが記録中に入りません。v1.5.0では、ControlNet生成が最初のStepで進まない場合のため、H3 StudioからComfy CompilerをOFFにして専用runtimeを再起動する選択肢を追加しました。従来の既定値はONです。
-
-comfy-aimdo 0.5.2には、メモリ記録中の解放で失敗する不具合がありました。[公式修正 #109](https://github.com/Comfy-Org/comfy-aimdo/pull/109)を含む`f708e317bd2dedfb2d2a8518f7c568fee280bc69`の公式CIビルド、0.5.3.dev13を導入し、ComfyUIの`requirements.txt`も同版に固定しています。この版は検証時点でPyPI未公開です。
-
-修正差分は[ComfyUI 0.34.0用パッチ](../patches/minimax-h3/comfyui-0.34.0-compiler.patch)、基準リビジョンとwheelのSHA-256は[実行環境の記録](../patches/minimax-h3/runtime-provenance.json)に同梱しています。パッチには回帰テストも含みます。モデルやwheel自体はリポジトリに含めません。
-
-現在の[H3初回セットアップ](../extensions-builtin/minimax-h3-studio/README.md#初回セットアップ)は、この修正を含む正式版`comfy-aimdo==0.5.3`をSHA-256付きlockで導入します。新規導入でCI成果物を取得する必要はありません。上記の開発版の記録は、以前の外部ComfyUI環境を検証した際のものです。
-
-基準リビジョンのComfyUIで、次のようにパッチの適用可否を確認してから適用します。パスは自分の配置先へ変更してください。
-
-```powershell
-git -C "H:\path\to\ComfyUI" apply --check "H:\path\to\forge-neo\patches\minimax-h3\comfyui-0.34.0-compiler.patch"
-git -C "H:\path\to\ComfyUI" apply "H:\path\to\forge-neo\patches\minimax-h3\comfyui-0.34.0-compiler.patch"
-```
-
-適用後はComfyUIのPythonで`python -m unittest discover -s tests-unit/comfy_test -p test_minimax_compiler_wrappers.py`を実行します。検証環境では5件が通過しました。
+接続先はComfyUI標準の`ModelPatchLoader`と`MiniMaxH3FunControlNetApply`です。標準ノードやINT8モデルがない場合は、生成要求を送る前に理由を表示して停止します。共通H3実行環境ではComfy Compilerを無効にして起動します。
 
 NegPiPとCLIPキャッシュを同時に選択できます。ControlNetは生成モデルに、CLIPキャッシュはプロンプト・参照由来の条件に作用する構成です。制御動画のVAE処理やControlNet本体の計算は、CLIPキャッシュでは省略されません。ComfyUIやエンコーダーの更新後は、古い条件キャッシュを再計算する場合があります。
 
 生成履歴には入力方式と強さを保存します。履歴から設定を戻す際は、制御動画をもう一度指定してください。
-
-## 実機検証（2026-09-08）
-
-RTX 3090で、Canny制御・強さ1.0・NegPiP・CLIPキャッシュ自動・Comfy Compilerを同時に使用しました。修正後の384×512、124フレーム、20 Stepsの生成は780.299秒で完了し、H.264映像とAAC音声を保存できています。前回のコンパイラ無効時の出力と比較した全フレームのRGB値と音声データは同一でした。単発の測定であり、速度改善を保証する結果ではありません。
-
-この生成では条件キャッシュへのHIT、Fun ControlNet本体のロード、NegPiPの適用、Comfy Compilerの動作をログで確認しています。BF16版との画質比較や、Depth・Poseを使った実生成は今回の検証に含みません。修正後の記録と動画は`outputs/minimax-compiler-fixed-audit/`、比較元は`outputs/minimax-fun-control-audit/`に保存しています。

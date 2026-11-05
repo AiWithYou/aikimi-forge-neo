@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import struct
 import tempfile
 import unittest
 import zlib
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from PIL import Image
 
-from modules_forge import ming_image_studio, nanosaur2_studio, sensenova_u15_bridge
-from modules_forge.minimax_h3_images import H3ImageError, extract_image_outputs
+from modules_forge.minimax_h3_images import H3ImageError, H3ImageRequest, extract_image_outputs
 from modules_forge.qwen_image21 import core
 from tools.tests import test_qwen_image21_mask as mask_tests
 from tools.tests import test_qwen_image21_service as qwen_tests
@@ -33,25 +30,6 @@ def incomplete_pixel_png(path, width=256, height=256):
 
 
 class StudioOutputPixelTests(unittest.TestCase):
-    def test_nanosaur_keeps_rgba_bytes_and_metadata_at_unicode_destination(self):
-        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        source = root / "透過画像.png"
-        Image.new("RGBA", (256, 256), (98, 76, 54, 0)).save(source)
-        request = nanosaur2_studio.Nanosaur2Request("夜の雪", width=256, height=256, seed=42)
-        result = nanosaur2_studio.save_result(
-            source,
-            request,
-            42,
-            "owned-job",
-            SimpleNamespace(core_revision="fixture", comfy_version="fixture"),
-            root / "結果",
-        )
-        self.assertEqual(Path(result["path"]).read_bytes(), source.read_bytes())
-        with Image.open(result["path"]) as image:
-            image.load()
-            self.assertEqual(image.getpixel((0, 0)), (98, 76, 54, 0))
-        metadata = json.loads(Path(result["files"][1]).read_text(encoding="utf-8"))
-        self.assertEqual((metadata["prompt"], metadata["prompt_id"], metadata["seed"]), ("夜の雪", "owned-job", 42))
 
     def test_result_paths_reject_native_symlink_outside_output_directory(self):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -66,33 +44,10 @@ class StudioOutputPixelTests(unittest.TestCase):
             self.skipTest(f"native symlinks unavailable: {error}")
         with self.assertRaises(core.QwenImage21Error):
             core.inside(base, link)
-        self.assertFalse(sensenova_u15_bridge._is_within(link, base))
         history = {"job": {"outputs": {"save": {"images": [{"type": "output", "filename": link.name}]}}}}
-        for request in (nanosaur2_studio.Nanosaur2Request("test"), ming_image_studio.MingImageRequest("test")):
-            with self.subTest(request=type(request).__name__), self.assertRaises(H3ImageError):
-                extract_image_outputs(history, "job", base.parent, request)
+        with self.assertRaises(H3ImageError):
+            extract_image_outputs(history, "job", base.parent, H3ImageRequest("test"))
 
-    def test_nanosaur_does_not_publish_png_with_incomplete_pixel_stream(self):
-        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        source = root / "incomplete.png"
-        incomplete_pixel_png(source)
-        with Image.open(source) as image:
-            self.assertEqual(image.size, (256, 256))
-            image.verify()  # Chunk checksums are intact, but pixels are missing.
-        with Image.open(source) as image, self.assertRaises(OSError):
-            image.load()
-        output = root / "outputs"
-        request = nanosaur2_studio.Nanosaur2Request("test", width=256, height=256)
-        with self.assertRaises(OSError):
-            nanosaur2_studio.save_result(
-                source,
-                request,
-                42,
-                "job",
-                SimpleNamespace(core_revision="fixture", comfy_version="fixture"),
-                output,
-            )
-        self.assertEqual(list(output.iterdir()), [])
 
     def test_qwen_does_not_complete_png_with_incomplete_pixel_stream(self):
         fixture = qwen_tests.QwenServiceTests("test_success_reuses_worker_and_locks_runtime_until_eviction")

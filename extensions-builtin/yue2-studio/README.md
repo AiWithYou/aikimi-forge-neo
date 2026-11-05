@@ -50,7 +50,7 @@ py -3.12 modules_forge/yue2_studio/setup.py --engine cpp --binary "D:\audio.cpp\
 py -3.12 modules_forge/yue2_studio/setup.py --engine cpp --binary "D:\audio.cpp\audiocpp_cli.exe" --models "D:\Models\YuE2-GGUF" --gguf q8_0
 ```
 
-生成設定で **audio.cpp · GGUF** と導入済み形式を選びます。CLIはv0.8.0のYuE2インターフェイスを参照していますが、実バイナリでのGPU完走は未検証です。コード・重みの組み合わせが異なる場合は[実機確認](HARDWARE_TEST.md)を実施してください。
+生成設定で **audio.cpp · GGUF** と導入済み形式を選びます。CLIはv0.8.0のYuE2インターフェイスを参照していますが、実バイナリでのGPU完走は未検証です。コード・重みの組み合わせによって動作が異なる場合があります。
 
 ## 作曲・編集
 
@@ -96,16 +96,6 @@ outputs/yue2/<実行ID>/
 | SheetSage2 | 外部で採譜したYuE2用ABCの入力 | 音源アップロードからの自動採譜は未実装。別Python・PyTorch・FFmpeg環境が必要 |
 
 音源からの自動採譜、MIDI入出力、GUIピアノロール、LoRA学習・適用、音声変換、任意プラグインの自動実行は、このバージョンには含まれません。
-
-## 検証
-
-```powershell
-python -m pytest tests/yue2 -q
-```
-
-2026-09-16、Linux・Python 3.13.5・Gradio 6.5.1で**45件のCPUテストに合格**しました。入力境界、Seed精度、保存、所有者を限定した停止、実worker＋模擬CLIのプロセス連携、後続候補失敗時の保持、親パイプ切断時の終了、公式段階APIの模擬契約、Gradio画面構築・コールバック引数を確認しています。
-
-模擬CLIの音声はテスト用の無音WAVであり、YuE2の実生成成功を示しません。公式段階APIテストもモデルを模擬しています。YuE2のテストはGitHubのCPU／Windowsワークフローでも実行します。
 
 ## 利用条件・出典
 

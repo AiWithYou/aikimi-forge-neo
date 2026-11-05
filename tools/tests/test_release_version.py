@@ -10,27 +10,29 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ReleaseVersionTests(unittest.TestCase):
+    def release_is_in_development(self):
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        latest = re.search(r"^## v(\d+\.\d+\.\d+)\s+—\s+([^\r\n]+)", changelog, re.MULTILINE)
+        self.assertIsNotNone(latest)
+        self.assertEqual(latest.group(1), VERSION)
+        return latest.group(2).strip() == "未リリース"
+
     def test_public_documents_match_the_runtime_version(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-        readme_version = re.search(
-            r"^\*\*\[v(\d+\.\d+\.\d+)\]\(https://github\.com/AiWithYou/aikimi-forge-neo/tree/v(\d+\.\d+\.\d+)\)\*\*",
-            readme,
-            re.MULTILINE,
-        )
-        latest_release = re.search(r"^## v(\d+\.\d+\.\d+)\b", changelog, re.MULTILINE)
-        self.assertIsNotNone(readme_version)
-        self.assertIsNotNone(latest_release)
-        self.assertEqual(readme_version.group(1), VERSION)
-        self.assertEqual(readme_version.group(2), VERSION)
-        self.assertEqual(latest_release.group(1), VERSION)
+        if self.release_is_in_development():
+            self.assertIn(f"**v{VERSION}（開発中）**", readme)
+            self.assertNotIn(f"/tree/v{VERSION}", readme)
+        else:
+            self.assertIn(f"**[v{VERSION}](https://github.com/AiWithYou/aikimi-forge-neo/tree/v{VERSION})**", readme)
 
     def test_english_readme_matches_version_and_language_links(self):
         english = (ROOT / "README.en.md").read_text(encoding="utf-8")
         japanese = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn(
-            f"**[v{VERSION}](https://github.com/AiWithYou/aikimi-forge-neo/tree/v{VERSION})**", english
-        )
+        if self.release_is_in_development():
+            self.assertIn(f"**v{VERSION} (in development)**", english)
+            self.assertNotIn(f"/tree/v{VERSION}", english)
+        else:
+            self.assertIn(f"**[v{VERSION}](https://github.com/AiWithYou/aikimi-forge-neo/tree/v{VERSION})**", english)
         self.assertIn("[English](README.en.md)", japanese.split("\n\n", 2)[1])
         self.assertIn("[日本語](README.md)", english.split("\n\n", 2)[1])
 

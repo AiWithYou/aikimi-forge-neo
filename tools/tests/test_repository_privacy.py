@@ -21,6 +21,7 @@ PRIVATE_DOCUMENTS = (
 PRIVATE_WORKFLOW = re.compile(
     r"editor\.note\.com|相談の採用判断|"
     r"(?:Opus|Astra|Claude|Sonnet|Gemini)[^。\n]*(?:相談|助言|レビュー|整え)|"
+    r"最初の[^。\n]{0,40}(?:案|候補)では[^。\n]{0,40}(?:失敗|崩れ)[^。\n]{0,128}(?:修正|再生成|やり直)|"
     r"note[^。\n]*(?:下書き|ログイン)|"
     r"\]\([^\n)]*(?:docs/)?audits/"
 )
@@ -59,11 +60,43 @@ class RepositoryPrivacyTests(unittest.TestCase):
             if path.endswith(".md")
             and not private_record(path)
             and (path.startswith(("docs/", "extensions-builtin/")) or "/" not in path)
+            and (ROOT / path).is_file()
         ]
 
     def test_private_work_records_are_not_tracked(self):
         findings = [path for path in self.tracked if private_record(path)]
         self.assertEqual(findings, [], "private records must remain outside the published tree")
+
+    def test_private_validation_assets_are_absent(self):
+        private_assets = (
+            "docs/assets/ming-image-v3.2.0",
+            "docs/assets/ming-image-w4a8",
+            "docs/assets/qwen-outpaint-v3.5.0",
+        )
+        for path in private_assets:
+            with self.subTest(path=path):
+                self.assertFalse((ROOT / path).exists(), f"private validation assets must not be published: {path}")
+
+    def test_public_documentation_does_not_reference_private_validation_assets(self):
+        private_names = ("ming-image-v3.2.0", "ming-image-w4a8", "qwen-outpaint-v3.5.0")
+        findings = []
+        for document in self.documents:
+            for line_number, line in enumerate(document.read_text(encoding="utf-8").splitlines(), start=1):
+                if any(name in line for name in private_names):
+                    findings.append(f"{document.relative_to(ROOT)}:{line_number}")
+        self.assertEqual(findings, [], f"private validation assets referenced in: {', '.join(findings)}")
+
+    def test_public_documentation_does_not_link_retired_studio_guides(self):
+        retired_guides = (
+            "extensions-builtin/ming-image-studio/README.md",
+            "extensions-builtin/nanosaur2-studio/README.md",
+        )
+        findings = []
+        for document in self.documents:
+            for line_number, line in enumerate(document.read_text(encoding="utf-8").splitlines(), start=1):
+                if any(path in line for path in retired_guides):
+                    findings.append(f"{document.relative_to(ROOT)}:{line_number}")
+        self.assertEqual(findings, [], f"retired studio guides referenced in: {', '.join(findings)}")
 
     def test_private_work_records_are_ignored(self):
         paths = [
@@ -99,6 +132,10 @@ class RepositoryPrivacyTests(unittest.TestCase):
                 if PRIVATE_WORKFLOW.search(line):
                     findings.append(f"{document.relative_to(ROOT)}:{line_number}")
         self.assertEqual(findings, [], f"private workflow notes found in: {', '.join(findings)}")
+
+    def test_private_workflow_history_is_detected(self):
+        text = "最初のラフ案では人物が崩れたため、条件画像を修正して再生成しました。"
+        self.assertIsNotNone(PRIVATE_WORKFLOW.search(text))
 
     def test_documentation_does_not_publish_local_windows_user_paths(self):
         findings = []

@@ -13,9 +13,8 @@ DIRECT = (
     "tools/requirements-iris.txt",
     "tools/requirements-clef.txt",
     "tools/requirements-qwen-image21.txt",
-    "tools/requirements-sensenova.txt",
 )
-LOCKED = tuple(f"tools/requirements-{name}.lock" for name in ("moss-image", "flux3-klein", "minimax-h3", "ming-image"))
+LOCKED = tuple(f"tools/requirements-{name}.lock" for name in ("moss-image", "flux3-klein", "minimax-h3"))
 
 
 class DependencyPatchVersionsTests(unittest.TestCase):
