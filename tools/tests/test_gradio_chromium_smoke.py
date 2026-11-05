@@ -8,7 +8,9 @@ import threading
 import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
@@ -1078,14 +1080,77 @@ class GradioFullUiChromiumTests(unittest.TestCase):
         self.assertGreater(lazy_count, 0)
         self.assertGreater(mounted_hidden_count, 0)
         self.assertLess(mounted_hidden_count, lazy_count)
-        self.assertTrue(
-            {
-                "aikimi-txt2img-anima38",
-                "h3-generate",
-                "script_krea2_2stage_upscale_quick_4k",
-                "sn-generate",
-            }.issubset(element_ids)
-        )
+        required = {
+            "aikimi-txt2img-anima38",
+            "h3-generate",
+            "h3-image-result",
+            "script_krea2_2stage_upscale_quick_4k",
+        }
+        missing = sorted(required - element_ids)
+        self.assertFalse(missing, f"Missing current UI elements: {missing}")
+
+        retired_prefixes = ("sn-", "sensenova-u15-", "nanosaur2-", "ming-")
+        retired_ids = {"sensenova_u15_studio", "nanosaur2_studio", "ming_image_studio"}
+        retired_labels = {"SenseNova U1.5", "Nanosaur2", "Ming Image", "Ming Image Design"}
+        retired = set()
+        for component in components:
+            props = component.get("props", {})
+            elem_id = props.get("elem_id")
+            if isinstance(elem_id, str) and elem_id.startswith(retired_prefixes):
+                retired.add(elem_id)
+            if component.get("type") == "tabitem":
+                for value in (props.get("id"), props.get("label")):
+                    if value in retired_ids or value in retired_labels:
+                        retired.add(value)
+        self.assertFalse(retired, f"Removed Studio components remain: {sorted(retired)}")
+
+        for identifier, visible in (("txt2img_prompt_image", False), ("h3-keyframes", "hidden")):
+            matches = [c for c in components if c.get("props", {}).get("elem_id") == identifier]
+            self.assertEqual(len(matches), 1, f"Expected one {identifier}")
+            self.assertEqual(matches[0]["props"].get("visible"), visible, f"Unexpected {identifier} visibility")
+
+        by_id = {component["id"]: component for component in components}
+
+        def walk(node, ancestors=()):
+            identifier = node["id"]
+            yield identifier, ancestors
+            for child in node.get("children", ()):
+                yield from walk(child, (*ancestors, identifier))
+
+        layout = list(walk(config["layout"]))
+        parent_tabs = [c for c in components if c.get("type") == "tabitem"
+                       and c.get("props", {}).get("id") == "minimax_h3_image_studio"
+                       and c.get("props", {}).get("label") == "H3 Image"]
+        self.assertEqual(len(parent_tabs), 1, "Expected the H3 Image parent tab")
+        parent_id = parent_tabs[0]["id"]
+        method_tabs = {}
+        for label in ("P-H3 Image", "標準H3（実験）"):
+            found = [identifier for identifier, ancestors in layout if parent_id in ancestors
+                     and by_id.get(identifier, {}).get("type") == "tabitem"
+                     and by_id[identifier].get("props", {}).get("label") == label]
+            self.assertEqual(len(found), 1, f"Expected {label} inside H3 Image")
+            method_tabs[label] = found[0]
+
+        p_h3_id = method_tabs["P-H3 Image"]
+        controls = [(by_id[identifier], ancestors) for identifier, ancestors in layout
+                    if p_h3_id in ancestors and identifier in by_id]
+        modes = [c for c, _ in controls if c.get("type") == "radio" and c["props"].get("label") == "使い方"]
+        self.assertEqual(len(modes), 1, "Expected the P-H3 mode selector")
+        self.assertEqual(modes[0]["props"].get("value"), "text")
+        hidden_groups = []
+        for label, kind in (("編集する画像 · Picture 1", "image"), ("参照画像 · Picture 2〜8", "file")):
+            found = [(c, ancestors) for c, ancestors in controls
+                     if c.get("type") == kind and c["props"].get("label") == label]
+            self.assertEqual(len(found), 1, f"Missing P-H3 input: {label}")
+            component, ancestors = found[0]
+            if kind == "file":
+                self.assertEqual(component["props"].get("file_count"), "multiple")
+            groups = {identifier for identifier in ancestors[ancestors.index(p_h3_id) + 1:]
+                      if by_id.get(identifier, {}).get("type") == "group"
+                      and by_id[identifier].get("props", {}).get("visible") is False}
+            self.assertTrue(groups, f"P-H3 input must start in a lazy group: {label}")
+            hidden_groups.append(groups)
+        self.assertTrue(hidden_groups[0] & hidden_groups[1], "P-H3 edit inputs must share a lazy group")
 
     def test_full_page_reaches_navigation_within_sixty_seconds(self):
         blocked_urls = tuple(
@@ -1108,6 +1173,102 @@ class GradioFullUiChromiumTests(unittest.TestCase):
         self.assertGreater(state["navCount"], 0)
         self.assertIn("txt2img", state["labels"])
         self.assertLess(state["elapsed_seconds"], 60)
+
+
+class GradioFullUiConfigContractTests(unittest.TestCase):
+    @staticmethod
+    def current_config():
+        def component(identifier, kind, **props):
+            return {"id": identifier, "type": kind, "props": props}
+
+        return {
+            "components": [
+                component(1, "button", elem_id="aikimi-txt2img-anima38", visible=True),
+                component(2, "button", elem_id="h3-generate", visible=True),
+                component(3, "button", elem_id="script_krea2_2stage_upscale_quick_4k", visible=True),
+                component(4, "image", elem_id="h3-image-result", visible=True),
+                component(5, "file", elem_id="txt2img_prompt_image", visible=False),
+                component(6, "group", elem_id="h3-keyframes", visible="hidden"),
+                component(7, "group", visible="hidden"),
+                component(8, "group", visible=False),
+                component(9, "group", visible=False),
+                component(10, "group", visible=False),
+                component(100, "tabs", visible=True),
+                component(101, "tabitem", id="minimax_h3_image_studio", label="H3 Image", visible=True),
+                component(102, "tabs", visible=True),
+                component(103, "tabitem", label="P-H3 Image", visible=True),
+                component(104, "tabitem", label="標準H3（実験）", visible=True),
+                component(105, "radio", label="使い方", value="text", visible=True),
+                component(106, "group", visible=False),
+                component(107, "image", label="編集する画像 · Picture 1", visible=True),
+                component(108, "file", label="参照画像 · Picture 2〜8", file_count="multiple", visible=True),
+            ],
+            "layout": {"id": 0, "children": [
+                {"id": 100, "children": [
+                    {"id": 101, "children": [
+                        {"id": 102, "children": [
+                            {"id": 103, "children": [
+                                {"id": 105},
+                                {"id": 106, "children": [{"id": 107}, {"id": 108}]},
+                            ]},
+                            {"id": 104},
+                        ]},
+                    ]},
+                ]},
+            ]},
+        }
+
+    def check(self, config):
+        probe = GradioFullUiChromiumTests("test_full_config_keeps_lazy_components_unmounted")
+        probe.url = "http://127.0.0.1:1/"
+        data = json.dumps(config, ensure_ascii=False).encode("utf-8")
+        with patch(f"{__name__}.urlopen", return_value=BytesIO(data)):
+            probe.test_full_config_keeps_lazy_components_unmounted()
+
+    def test_current_features_and_lazy_groups_are_accepted(self):
+        self.check(self.current_config())
+
+    def test_missing_current_feature_reports_its_id(self):
+        config = self.current_config()
+        config["components"] = [c for c in config["components"] if c["props"].get("elem_id") != "h3-generate"]
+        with self.assertRaisesRegex(AssertionError, "h3-generate"):
+            self.check(config)
+
+    def test_removed_studio_elements_and_tabs_are_rejected(self):
+        for identifier in ("sn-generate", "nanosaur2-status", "ming-generate"):
+            with self.subTest(element=identifier):
+                config = self.current_config()
+                config["components"].append({"id": 1000, "type": "button", "props": {"elem_id": identifier}})
+                with self.assertRaisesRegex(AssertionError, identifier):
+                    self.check(config)
+        for identifier in ("sensenova_u15_studio", "nanosaur2_studio", "ming_image_studio"):
+            with self.subTest(tab=identifier):
+                config = self.current_config()
+                config["components"].append({"id": 1000, "type": "tabitem", "props": {"id": identifier}})
+                with self.assertRaisesRegex(AssertionError, identifier):
+                    self.check(config)
+
+    def test_p_h3_must_belong_to_h3_image_tab(self):
+        config = self.current_config()
+        methods = config["layout"]["children"][0]["children"][0]["children"][0]["children"]
+        p_h3 = methods.pop(0)
+        config["layout"]["children"].append(p_h3)
+        with self.assertRaisesRegex(AssertionError, "P-H3 Image"):
+            self.check(config)
+
+    def test_p_h3_edit_controls_must_remain_lazy(self):
+        config = self.current_config()
+        next(c for c in config["components"] if c["id"] == 106)["props"]["visible"] = "hidden"
+        with self.assertRaisesRegex(AssertionError, "Picture 1"):
+            self.check(config)
+
+    def test_representative_lazy_and_mounted_hidden_stay_distinct(self):
+        for identifier, incorrect in (("txt2img_prompt_image", "hidden"), ("h3-keyframes", False)):
+            with self.subTest(element=identifier):
+                config = self.current_config()
+                next(c for c in config["components"] if c["props"].get("elem_id") == identifier)["props"]["visible"] = incorrect
+                with self.assertRaisesRegex(AssertionError, identifier):
+                    self.check(config)
 
 
 if __name__ == "__main__":

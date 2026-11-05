@@ -87,7 +87,7 @@ GradioまたはFastAPI関連の固定版を変更する場合は、少なくと�
 6. root／subpath mountでの相対`gradio_api/file=`解決、個別静的assetの取得、Python／HTML／設定file／modelのHTTP 403拒否
 7. unnamed callbackのprivate既定と、明示したnamed／public API contractの維持
 8. constructorと通常callbackのlazy `visible=False`と、`settings_json`、InputAccordion、H3、HyperWeave、ControlNetだけが使うmounted hiddenの分離
-9. Krea2、Anima、MiniMax H3のUI構築と上部タブ順序
+9. Krea2、Anima、MiniMax H3のUI構築と上部タブ順序、H3 Image内のP-H3 Image・標準H3（実験）の配置。撤去したSenseNova U1.5・Nanosaur2・Ming Image Designのタブは表示しない
 10. Aikimi aliasの移動契約
     - Krea2はUI Presetの`krea`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持する。別のタブから開いた場合は`txt2img`へ移動し、`Krea2 2-Stage Upscale`は自動選択しない
     - AnimaはUI Presetの`anima`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持する。別のタブから開いた場合は`txt2img`へ移動し、選択したタブのAnima設定欄を展開する
