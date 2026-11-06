@@ -79,6 +79,8 @@ class PH3Request:
     seed: int = -1
     use_upsampler: bool = True
     checkpoint: str = ""
+    lora: str = ""
+    lora_strength: float = 1.0
     save_candidates: bool = False  # Shared output-path validator expects this field.
 
     def validate(self) -> None:
@@ -109,6 +111,15 @@ class PH3Request:
             raise PH3Error("チェックポイントの指定が不正です。")
         if self.checkpoint and not Path(self.checkpoint).is_absolute():
             raise PH3Error("チェックポイントはこのPCの絶対パスで指定してください。")
+        if not isinstance(self.lora, str):
+            raise PH3Error("LoRAの指定が不正です。")
+        if self.lora:
+            name = PurePosixPath(self.lora.replace("\\", "/"))
+            if name.is_absolute() or ".." in name.parts or ":" in str(name) or name.suffix.lower() != ".safetensors":
+                raise PH3Error("LoRAは共有モデル保存先のlorasフォルダーから選択してください。")
+        if (isinstance(self.lora_strength, bool) or not isinstance(self.lora_strength, (int, float))
+                or not math.isfinite(self.lora_strength) or not -2 <= self.lora_strength <= 2):
+            raise PH3Error("LoRAの強度は−2〜2で指定してください。")
 
     @property
     def images(self) -> tuple[str, ...]:
@@ -162,6 +173,10 @@ def build_workflow(
         "decode": node("VAEDecode", samples=["sample", 0], vae=["vae", 0]),
         "save": node("SaveImage", images=["decode", 0], filename_prefix="image/Aikimi_P_H3"),
     }
+    if request.lora and request.lora_strength:
+        graph["lora"] = node("LoraLoaderBypassModelOnly", model=["model", 0], lora_name=request.lora,
+                             strength_model=request.lora_strength)
+        graph["shift"]["inputs"]["model"] = ["lora", 0]
     condition = {"clip": ["clip", 0], "prompt": request.prompt.strip(), "width": request.width, "height": request.height}
     if images:
         condition["vae"] = ["vae", 0]
@@ -289,6 +304,8 @@ def check_nodes(client: Any, request: PH3Request) -> None:
               ("CLIPLoader", "clip_name", TEXT_ENCODER), ("VAELoader", "vae_name", VAE)]
     if request.use_upsampler:
         checks.append(("CLIPLoader", "clip_name", UPSAMPLER))
+    if request.lora and request.lora_strength:
+        checks.append(("LoraLoaderBypassModelOnly", "lora_name", request.lora))
     for kind, field, filename in checks:
         try:
             choices = schemas[kind]["input"]["required"][field][0]
@@ -386,6 +403,7 @@ def save_result(
         "seed": seed, "steps": 8, "sampler": "euler", "sigmas": SIGMAS,
         "reference_count": len(request.reference_images), "has_edit_image": bool(request.target_image),
         "use_upsampler": request.use_upsampler,
+        "lora": {"name": request.lora, "strength": request.lora_strength} if request.lora else None,
         "models": {"diffusion_model": Path(request.checkpoint).name if request.checkpoint else MODEL,
                    "text_encoder": TEXT_ENCODER, "vae": VAE, "upsampler": UPSAMPLER if request.use_upsampler else None},
         "checkpoint_sha256": identity.get("sha256") if identity else None,

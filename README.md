@@ -163,11 +163,12 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 
 ### 手元のLoRAを使う
 
-対応LoRAを下記フォルダーに配置するか、選択欄にフルパスを入力してEnterを押します。
+対応LoRAを下記フォルダーに配置します。画面によっては選択欄へのフルパス入力も使えます。
 
 | 画面 | 本体フォルダー内の保存先 | 適用方法 |
 |---|---|---|
 | Forge `txt2img` / `img2img` | `models/Lora/` | **LoRAを組み合わせる** で選択、または `<lora:名前:0.8>` |
+| P-H3 Image | `models/MiniMax-H3/loras/` | **LoRA → 一覧を更新 → 選択**。共有モデル保存先を変更した場合はその中の `loras/` を使用 |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → 一覧更新 → 複数選択** |
 | Iris（画像生成） | `models/Iris-3B/loras/` | **LoRA → 一覧を更新 → 複数選択**。[対応形式・Turbo](docs/iris-studio.md#任意のloraとコミュニティ製turbo) |
 

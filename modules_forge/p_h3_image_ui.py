@@ -36,7 +36,8 @@ PRESETS = {
 }
 
 
-def make_request(mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint):
+def make_request(mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint,
+                 lora="", lora_strength=1.0):
     selected = tuple(str(path) for path in (references or [])) if mode == "edit" else ()
     request = ph3.PH3Request(
         prompt=prompt or "", mode=mode,
@@ -44,6 +45,7 @@ def make_request(mode, prompt, target, references, width, height, seed, use_upsa
         width=integer(width, "幅", 32, 16384), height=integer(height, "高さ", 32, 16384),
         seed=integer(seed, "Seed", -1, 2**63 - 1), use_upsampler=use_upsampler,
         checkpoint=checkpoint or "",
+        lora=lora or "", lora_strength=lora_strength,
     )
     request.validate()
     return request
@@ -97,6 +99,21 @@ def mode_updates(mode, preset, width, height, target, references, state):
 
 def reuse_result(value):
     return value, [], "edit"
+
+
+def lora_choices():
+    from modules_forge.minimax_h3_runtime import model_root
+
+    folder = model_root(managed_runtime_root(ROOT)) / "loras"
+    names = sorted((str(path.relative_to(folder)) for path in folder.rglob("*.safetensors") if path.is_file()),
+                   key=str.casefold)
+    return [("使用しない", ""), *((name, name) for name in names)]
+
+
+def refresh_loras(selected):
+    choices = lora_choices()
+    values = {value for _, value in choices}
+    return gr.update(choices=choices, value=selected if selected in values else "")
 
 
 def initial_status(checkpoint=None):
@@ -177,10 +194,12 @@ def _setup(runtime):
                 process.stdout.close()
 
 
-def _generate(runtime, profile, mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint, *, data_directory=ROOT):
+def _generate(runtime, profile, mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint,
+              lora="", lora_strength=1.0, *, data_directory=ROOT):
     yield "入力を確認しています。", gr.update(), gr.update(), gr.update(), gr.update(), {}, gr.update(interactive=False), gr.update(interactive=False)
     try:
-        request = make_request(mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint)
+        request = make_request(mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint,
+                               lora, lora_strength)
         data = Path(data_directory)
         for event in ph3.run_generation(request, managed_runtime_root(ROOT), SERVER_URL, data / "logs/minimax_h3",
                                          data / "outputs/minimax_h3/p_h3_images", runtime_profile=profile):
@@ -251,6 +270,10 @@ def render(root=None, *, data_directory=ROOT):
                     target = gr.Image(label="編集する画像 · Picture 1", type="filepath", height=155, min_width=150)
                     references = gr.File(label="参照画像 · Picture 2〜8", file_count="multiple", file_types=[".png", ".jpg", ".jpeg", ".webp"], type="filepath", height=155, min_width=150, allow_reordering=True)
                 gr.Markdown("対象は必須です。参照は表示順にPicture 2〜8となり、並べ替えできます。対象は入力時に約4 MPへ拡縮します。元のファイルは変わりません。")
+            with gr.Row():
+                lora = gr.Dropdown(lora_choices(), value="", label="LoRA", scale=5)
+                refresh_lora = gr.Button("一覧を更新", scale=0, min_width=105)
+            lora_strength = gr.Slider(-2, 2, value=1.0, step=0.05, label="LoRAの強度")
             preset = gr.Dropdown([*PRESETS, "カスタム"], value="推奨 8 MP · 正方形", label="画像サイズ")
             with gr.Accordion("サイズ・Seed・プロンプト補助", open=False):
                 with gr.Row():
@@ -294,7 +317,8 @@ def render(root=None, *, data_directory=ROOT):
                       [width, height, mode, target, references], [preset, summary], queue=False, **private)
     for control in (target, references):
         control.change(size_summary, [width, height, mode, target, references], [summary], queue=False, **private)
-    generate.click(partial(_generate, data_directory=data_directory), [runtime, profile, mode, prompt, target, references, width, height, seed, upsampler, checkpoint],
+    refresh_lora.click(refresh_loras, [lora], [lora], queue=False, **private)
+    generate.click(partial(_generate, data_directory=data_directory), [runtime, profile, mode, prompt, target, references, width, height, seed, upsampler, checkpoint, lora, lora_strength],
                    [status, result, files, actual_prompt, metadata, job, generate, cancel],
                    concurrency_limit=1, concurrency_id="minimax-h3-generation", trigger_mode="once", **private)
     cancel.click(_cancel, [job], [status, cancel], queue=False, **private)

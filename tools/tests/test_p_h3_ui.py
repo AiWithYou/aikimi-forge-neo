@@ -22,6 +22,30 @@ def test_edit_target_and_references_are_not_promoted_or_silently_reordered():
     assert text.images == ()
 
 
+def test_lora_selector_lists_the_current_shared_model_directory(tmp_path):
+    runtime = tmp_path / "runtime"
+    folder = runtime / "models/loras/styles"
+    folder.mkdir(parents=True)
+    (folder / "pastel.safetensors").touch()
+    (folder / "notes.txt").touch()
+    with patch.object(ui, "managed_runtime_root", return_value=runtime):
+        choices = ui.lora_choices()
+        selection = str(Path("styles") / "pastel.safetensors")
+        assert choices == [("使用しない", ""), (selection, selection)]
+        assert ui.refresh_loras(selection)["value"] == selection
+        assert ui.refresh_loras("missing.safetensors")["value"] == ""
+
+
+def test_lora_controls_forward_selection_and_strength():
+    request = ui.make_request("edit", "Change the hat", "target.png", [], 512, 512, "42", False, "",
+                              "pastel.safetensors", 0.7)
+    assert (request.lora, request.lora_strength) == ("pastel.safetensors", 0.7)
+    with gr.Blocks() as app:
+        ui.render(app)
+    labels = {component.get("props", {}).get("label") for component in app.get_config_file()["components"]}
+    assert {"LoRA", "LoRAの強度"} <= labels
+
+
 def test_size_summary_distinguishes_high_load_and_official_examples():
     assert "8.48 MP" in ui.size_summary(2912, 2912, "text", None, [])
     assert "高解像度" not in ui.size_summary(2912, 2912, "text", None, [])

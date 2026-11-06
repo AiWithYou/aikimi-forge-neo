@@ -157,11 +157,12 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 
 ### Using local LoRAs
 
-Place compatible LoRAs in the directories below, or enter a full path in the selector and press Enter.
+Place compatible LoRAs in the directories below. Some interfaces also accept a full path in the selector.
 
 | Interface | Directory inside the project | How to apply |
 |---|---|---|
 | Forge `txt2img` / `img2img` | `models/Lora/` | Select in the LoRA combination control, or use `<lora:name:0.8>` |
+| P-H3 Image | `models/MiniMax-H3/loras/` | **LoRA → 一覧を更新 → select**. Use `loras/` in the configured shared model directory if changed |
 | Qwen Image 2.1 | `models/Qwen-Image-2.1/loras/` | **LoRA → Refresh → select multiple** |
 | Iris (image generation) | `models/Iris-3B/loras/` | **LoRA → Refresh → select multiple**. See [supported formats and Turbo (Japanese)](docs/iris-studio.md#任意のloraとコミュニティ製turbo) |
 

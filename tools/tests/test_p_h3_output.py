@@ -40,3 +40,13 @@ def test_save_validates_pixels_before_publishing_and_keeps_prompt_metadata(tmp_p
         ph3.save_result(source, bad, 42, "job", ready, tmp_path / "results", None, None)
     assert len(list((tmp_path / "results").glob("P_H3_Image_*"))) == 1
     assert not list((tmp_path / "results").glob(".p-h3-*"))
+
+
+def test_saved_generation_conditions_include_the_selected_lora_and_strength(tmp_path):
+    source = tmp_path / "source.png"
+    Image.new("RGB", (32, 32), "red").save(source)
+    ready = SimpleNamespace(core_revision="abc", comfy_version="test", package_versions={}, runtime_profile="fast")
+    request = ph3.PH3Request("original", width=32, height=32, use_upsampler=False,
+                             lora="styles/pastel.safetensors", lora_strength=0.7)
+    result = ph3.save_result(source, request, 42, "job", ready, tmp_path / "results", None, None)
+    assert result["metadata"]["lora"] == {"name": "styles/pastel.safetensors", "strength": 0.7}

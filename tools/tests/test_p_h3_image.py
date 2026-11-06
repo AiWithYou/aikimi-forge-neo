@@ -89,6 +89,30 @@ def test_text_workflow_uses_the_official_p_h3_sampler_and_no_image_inputs():
     assert all("upsampler" not in key for key in graph)
 
 
+@pytest.mark.parametrize("mode,target", [("text", ""), ("edit", "source.png")])
+def test_selected_lora_is_applied_to_the_model_in_both_modes(mode, target):
+    request = ph3.PH3Request("A photograph", mode=mode, target_image=target, use_upsampler=False,
+                             lora="styles/pastel.safetensors", lora_strength=0.7)
+    graph = ph3.build_workflow(request, {"images": ["source.png"] if target else []}, 42)
+    assert graph["lora"] == {
+        "class_type": "LoraLoaderBypassModelOnly",
+        "inputs": {"model": ["model", 0], "lora_name": "styles/pastel.safetensors", "strength_model": 0.7},
+    }
+    assert graph["shift"]["inputs"]["model"] == ["lora", 0]
+    for disabled in (replace(request, lora=""), replace(request, lora_strength=0)):
+        without = ph3.build_workflow(disabled, {"images": ["source.png"] if target else []}, 42)
+        assert "lora" not in without
+        assert without["shift"]["inputs"]["model"] == ["model", 0]
+
+
+def test_lora_strength_is_finite_and_within_the_gui_range():
+    for strength in (-2, 0, 1, 2):
+        ph3.PH3Request("test", lora="style.safetensors", lora_strength=strength).validate()
+    for strength in (-2.1, 2.1, float("nan"), float("inf"), True, "1"):
+        with pytest.raises(ph3.PH3Error):
+            ph3.PH3Request("test", lora="style.safetensors", lora_strength=strength).validate()
+
+
 def test_edit_workflow_preserves_eight_image_order_in_both_branches():
     request = ph3.PH3Request(
         "Arrange the subjects together", mode="edit", target_image="target.png",
