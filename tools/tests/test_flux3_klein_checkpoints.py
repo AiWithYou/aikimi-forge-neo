@@ -168,10 +168,12 @@ class CheckpointTests(unittest.TestCase):
         for name in ("../custom.safetensors", "C:/private.safetensors", "/absolute.safetensors"):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 checkpoints.resolve(self.root, name)
+        # The resolver expands Windows short names in the checkpoint directory.
+        canonical = self.path.resolve()
         original = Path.lstat
 
         def redirected(path):
-            return SimpleNamespace(st_mode=stat.S_IFLNK) if path == self.path else original(path)
+            return SimpleNamespace(st_mode=stat.S_IFLNK) if path == canonical else original(path)
 
         with patch.object(Path, "lstat", redirected), self.assertRaises(ValueError):
             checkpoints.resolve(self.root, "sub/custom.safetensors")
