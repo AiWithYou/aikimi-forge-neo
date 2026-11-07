@@ -1,6 +1,6 @@
 # 変更履歴
 
-## v6.1.0 — 未リリース
+## v6.1.0 — 2026-11-07
 
 - P-H3 Imageの画像生成と画像編集で、互換LoRAを1件選んで使えるようにしました。強度は−2〜2で、初期値は1です。0では適用せず、LoRA名と強度は生成条件に保存されます。
 - LoRAは共有モデル保存先の `loras/`（標準は `models/MiniMax-H3/loras/`）に置き、P-H3 ImageのLoRA欄で一覧を更新して選びます。[P-H3 Imageの使い方](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md#loraを使う)

@@ -2,7 +2,7 @@
 
 English · [日本語](README.md)
 
-**v6.1.0 (in development)** · [Latest release v6.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v6.0.0) · [Changelog (Japanese)](CHANGELOG.md)
+**[v6.1.0](https://github.com/AiWithYou/aikimi-forge-neo/tree/v6.1.0)** · [Latest release v6.1.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v6.1.0) · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 

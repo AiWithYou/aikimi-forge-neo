@@ -2,7 +2,7 @@
 
 [English](README.en.md) · 日本語
 
-**v6.1.0（開発中）** · [最新リリース v6.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v6.0.0) · [変更履歴](CHANGELOG.md)
+**[v6.1.0](https://github.com/AiWithYou/aikimi-forge-neo/tree/v6.1.0)** · [最新リリース v6.1.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v6.1.0) · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
