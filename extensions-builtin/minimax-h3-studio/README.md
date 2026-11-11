@@ -20,7 +20,7 @@ Aikimi Forge Neo内で映像＋音声、または無音の周回動画を生成�
 
 モデルと生成物には[MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)の利用条件が適用されます。EU・英国・韓国・米国は適用地域から除外され、これらの地域でのモデルや生成物の利用・配布・表示などは、この契約では許諾されません。商用利用や配布にも条件があります。[主な条件](P_H3_IMAGE_GUIDE.md#はじめに)とライセンス原文を確認してください。
 
-**画像生成・参照画像編集は`H3 Image`タブを使います。** [P-H3 Image](P_H3_IMAGE_GUIDE.md)と、標準H3の最小5フレームを使う[実験モード](IMAGE_GUIDE.md)を選べます。P-H3には専用のモデルが必要です。
+**画像生成・参照画像編集は`H3 Image`タブを使います。** [MiniMax-H3-Image](OFFICIAL_IMAGE_GUIDE.md)、[P-H3 Image](P_H3_IMAGE_GUIDE.md)、標準H3の最小5フレームを使う[実験モード](IMAGE_GUIDE.md)を選べます。MiniMax-H3-ImageとP-H3にはそれぞれ専用のモデルが必要です。
 
 ## 初回セットアップ
 
@@ -32,7 +32,7 @@ Aikimi Forge Neo内で映像＋音声、または無音の周回動画を生成�
 
 Windows・NVIDIA CUDA対応GPU・Git・インターネット接続が必要です。実行環境に15 GiB以上、新規モデルに約59.1 GiBの空き容量を用意してください。ComfyUIを事前に導入する必要はありません。
 
-実行環境は`repositories/minimax-h3-4ac1c173/ComfyUI`、専用Pythonはその親フォルダーの`python`と`.venv`、新規モデルは`models/MiniMax-H3`に保存します。既存のH3環境は残し、新環境の準備と確認が完了すると切り替わります。共有モデルはサイズとSHA-256を検証して参照し、移動・複製・修復しません。既存のComfyUI本体やPythonには依存せず、`forge_neo_model_paths.yaml`もH3の実行環境選択には使用しません。
+実行環境は`repositories/minimax-h3-989d93d0/ComfyUI`、専用Pythonはその親フォルダーの`python`と`.venv`、新規モデルは`models/MiniMax-H3`に保存します。既存のH3環境は残し、新環境の準備と確認が完了すると切り替わります。共有モデルはサイズとSHA-256を検証して参照し、移動・複製・修復しません。既存のComfyUI本体やPythonには依存せず、`forge_neo_model_paths.yaml`もH3の実行環境選択には使用しません。
 
 導入する版は[manifest](../../tools/minimax_h3_runtime_manifest.json)と[依存ライブラリのlock](../../tools/requirements-minimax-h3.lock)で固定しています。標準のFL2VA・Ref2VA、Qwen3-VL encoder、映像・音声VAEの5ファイルを準備します。Turbo・INT8 VAE・Fun ControlNetなどの任意モデルは別途配置してください。途中で失敗した場合は同じ操作で再開できます。
 

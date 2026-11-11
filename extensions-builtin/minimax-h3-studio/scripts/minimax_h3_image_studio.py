@@ -218,6 +218,12 @@ def on_ui_tabs():
 
                 for component in descendants(p_h3_tab):
                     component.custom_script_source = "p_h3_image"
+            with gr.Tab("MiniMax-H3-Image") as official_tab:
+                from modules_forge.minimax_h3_image_ui import render
+
+                render(data_directory=data_path)
+                for component in descendants(official_tab):
+                    component.custom_script_source = "minimax_h3_image_official"
             with gr.Tab("標準H3（実験）") as legacy_tab:
                 gr.Markdown(
                     "## MiniMax H3 Image\n"

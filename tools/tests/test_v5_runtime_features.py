@@ -174,7 +174,7 @@ class H3LightVAETests(unittest.TestCase):
         moss = json.loads((ROOT / "tools/moss_image_manifest.json").read_text("utf-8"))
         h3 = json.loads((ROOT / "tools/minimax_h3_runtime_manifest.json").read_text("utf-8"))
         self.assertEqual(moss["runtime"]["comfy_revision"], "b9b290e43f1eb379946dfeb013faf9bbefa1a618")
-        self.assertEqual(h3["comfy_revision"], "4ac1c173afd42f1141dcebace42d8091998d3b8c")
+        self.assertEqual(h3["comfy_revision"], "989d93d0d968e704c589ce0146bb18c77f6b50cc")
         moss_lock = (ROOT / "tools/requirements-moss-image.lock").read_text("utf-8")
         self.assertIn("comfy-kitchen==0.2.39", moss_lock)
         h3_lock = (ROOT / "tools/requirements-minimax-h3.lock").read_text("utf-8")

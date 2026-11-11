@@ -45,6 +45,7 @@ models/
 | MOSS Image | 互換の画像生成本体のsafetensors | BF16・INT8 ConvRot・対応するComfy形式のW4A8。テキストエンコーダーとVAEは共通部品を使用。[詳細](moss-image.md) |
 | Clef | 互換のモデル一式のフォルダー | Clef-FlashのBF16／INT8、ClefのBF16／NF4。設定・tokenizer・画像処理設定・判断ヘッド・語彙行列・重みが必要です。[詳細](clef-studio.md#独自full-ftモデルの選択) |
 | MiniMax H3・H3 Image（実験） | 互換の生成本体のsafetensors | FL2VA用とRef2VA用を別々に選択。FP16／BF16／FP32、INT8 Tensorwise、対応W4A8。用途は配布元で確認し、encoder・VAE・音声部品は共有します。[詳細](../extensions-builtin/minimax-h3-studio/README.md) |
+| MiniMax-H3-Image | Comfy-Org配布のINT8画像本体 | 画像専用VAEとH3共通NVFP4テキストエンコーダーを使用します。[準備と使い方](../extensions-builtin/minimax-h3-studio/OFFICIAL_IMAGE_GUIDE.md) |
 | P-H3 Image | P-H3互換構造のBF16／INT8／W4A8本体 | 同じ `MiniMax-H3/checkpoints/` の下位フォルダーまたは画面で指定した絶対パスから選択。P-H3用のテキストエンコーダーとVAEが必要です。構造の一致は画質や互換性の保証ではありません。 |
 | Irodori TTS | v4-Large互換の単一safetensors | 通常版と対応するtorchaoのINT8・INT4・FP8。公式tokenizer・codecを共有し、形式ごとにGPU条件が異なります。INT4 weight-onlyはW4A8ではありません。[詳細](irodori-tts.md) |
 | YuE2 | officialのモデルフォルダー、またはGGUF一式のフォルダー | 選択エンジンに対応するモデル・tokenizer／sidecars・VAEが必要 |

@@ -98,6 +98,29 @@ class ManagedH3RuntimeTests(unittest.TestCase):
                 record.write_text(json.dumps({"schema_version": 1, "fingerprint": "current"}), encoding="utf-8")
                 self.assertEqual(runtime.installed_runtime_root(root), managed)
 
+    def test_previous_runtime_remains_active_until_the_candidate_is_complete(self):
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(
+            runtime, "setup_fingerprint", return_value="current"
+        ):
+            root = Path(temporary)
+            previous = root / runtime.PREVIOUS_RUNTIME_DIRECTORY
+            candidate = runtime.candidate_runtime_root(root)
+            for path, fingerprint in ((previous, runtime.PREVIOUS_FINGERPRINT), (candidate, "current")):
+                path.mkdir(parents=True)
+                python = path.parent / ".venv/Scripts/python.exe"
+                python.parent.mkdir(parents=True)
+                python.touch()
+                (path / "main.py").touch()
+                (path / "extra_model_paths.yaml").write_text(runtime.model_config(root / "models"), encoding="utf-8")
+                (path.parent / "setup.json").write_text(
+                    json.dumps({"schema_version": 1, "fingerprint": fingerprint}), encoding="utf-8"
+                )
+            pending = candidate.parent / "runtime-update-in-progress.json"
+            pending.touch()
+            self.assertEqual(runtime.installed_runtime_root(root), previous)
+            pending.unlink()
+            self.assertEqual(runtime.installed_runtime_root(root), candidate)
+
     def test_shared_model_settings_are_used_without_links(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

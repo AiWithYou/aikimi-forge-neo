@@ -1,6 +1,6 @@
 # MiniMax H3 Image（実験モード）
 
-P-H3 Imageの生成・編集は[P-H3 Imageガイド](P_H3_IMAGE_GUIDE.md)を参照してください。このページは従来のH3動画本体を使う実験モードの説明です。
+MiniMaxの静止画専用モデルは[MiniMax-H3-Imageガイド](OFFICIAL_IMAGE_GUIDE.md)を参照してください。P-H3 Imageの生成・編集は[P-H3 Imageガイド](P_H3_IMAGE_GUIDE.md)を参照してください。このページは従来のH3動画本体を使う実験モードの説明です。
 
 `H3 Image`タブで、MiniMax H3を使ったテキストからの画像生成と参照画像による編集を行います。
 

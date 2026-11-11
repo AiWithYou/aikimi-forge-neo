@@ -10,7 +10,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_DIRECTORY = Path("repositories/minimax-h3-4ac1c173/ComfyUI")
+RUNTIME_DIRECTORY = Path("repositories/minimax-h3-989d93d0/ComfyUI")
+PREVIOUS_RUNTIME_DIRECTORY = Path("repositories/minimax-h3-4ac1c173/ComfyUI")
+PREVIOUS_FINGERPRINT = "db550eba9baa9b4a4faa2b937ad85f8584c96032cc37240b00c72bc200d8b396"
 LEGACY_RUNTIME_DIRECTORY = Path("repositories/minimax-h3/ComfyUI")
 LEGACY_FINGERPRINT = "22fc8c18d7bdf71018964277b246539b99f0861e0d115c7d6bcad9f75b420941"
 MODEL_DIRECTORIES = ("diffusion_models", "text_encoders", "vae", "loras", "model_patches")
@@ -27,6 +29,9 @@ def managed_runtime_root(repository_root: Path = REPOSITORY_ROOT) -> Path:
     candidate = candidate_runtime_root(root)
     if _runtime_complete(candidate, root):
         return candidate
+    previous = root / PREVIOUS_RUNTIME_DIRECTORY
+    if _runtime_complete(previous, root, fingerprint=PREVIOUS_FINGERPRINT):
+        return previous
     legacy = root / LEGACY_RUNTIME_DIRECTORY
     return legacy if (legacy / "main.py").is_file() else candidate
 
@@ -51,7 +56,7 @@ def local_directory(value: str | Path) -> Path:
     return resolved
 
 
-def _runtime_complete(root: Path, repository_root: Path, *, legacy: bool = False) -> bool:
+def _runtime_complete(root: Path, repository_root: Path, *, fingerprint: str | None = None) -> bool:
     pending = root.parent / "runtime-update-in-progress.json"
     if pending.exists() or pending.is_symlink():
         return False
@@ -63,7 +68,7 @@ def _runtime_complete(root: Path, repository_root: Path, *, legacy: bool = False
         return False
     try:
         record = json.loads((root.parent / "setup.json").read_text(encoding="utf-8"))
-        expected = LEGACY_FINGERPRINT if legacy else setup_fingerprint(repository_root)
+        expected = fingerprint or setup_fingerprint(repository_root)
         if record.get("schema_version") != 1 or record.get("fingerprint") != expected:
             return False
         model_root(root)
@@ -75,8 +80,11 @@ def _runtime_complete(root: Path, repository_root: Path, *, legacy: bool = False
 def installed_runtime_root(repository_root: Path = REPOSITORY_ROOT) -> Path | None:
     repository = Path(repository_root).resolve()
     root = managed_runtime_root(repository)
-    legacy = root == repository / LEGACY_RUNTIME_DIRECTORY
-    return root if _runtime_complete(root, repository, legacy=legacy) else None
+    fingerprint = {
+        LEGACY_RUNTIME_DIRECTORY: LEGACY_FINGERPRINT,
+        PREVIOUS_RUNTIME_DIRECTORY: PREVIOUS_FINGERPRINT,
+    }.get(root.relative_to(repository))
+    return root if _runtime_complete(root, repository, fingerprint=fingerprint) else None
 
 
 def setup_fingerprint(repository_root: Path = REPOSITORY_ROOT) -> str:
@@ -123,6 +131,7 @@ def setup_lock(runtime_root: Path):
     base = Path(runtime_root).parent
     if Path(runtime_root).name == "ComfyUI" and base.name in {
         LEGACY_RUNTIME_DIRECTORY.parent.name,
+        PREVIOUS_RUNTIME_DIRECTORY.parent.name,
         RUNTIME_DIRECTORY.parent.name,
     }:
         lock = base.parent / ".minimax-h3-setup.lock"

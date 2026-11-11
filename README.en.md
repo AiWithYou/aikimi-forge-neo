@@ -12,7 +12,7 @@ You can select a compatible full fine-tuned model in the shared Forge workspace 
 
 ## What you can do
 
-- **Generate and edit images:** choose P-H3 Image, MOSS Image, Qwen Image 2.1, Iris, FLUX 3, or another supported model. P-H3 accepts up to eight images including the image being edited.
+- **Generate and edit images:** choose MiniMax-H3-Image, P-H3 Image, MOSS Image, Qwen Image 2.1, Iris, FLUX 3, or another supported model. P-H3 accepts up to eight images including the image being edited.
 - **Finish large images:** use Krea2 high-resolution workflows, MOSS Hires.fix, and upscalers.
 - **Create video and audio:** generate video with sound using MiniMax H3, music with YuE2, and Japanese speech with Irodori TTS.
 - **Organize images:** use Clef to evaluate and sort images or text.
@@ -56,6 +56,7 @@ For Krea2, Anima, or H3 video, run the following and choose a menu entry (1–3)
 |---|---|---|
 | [Krea2](docs/krea2_local_supersample_detail_ja.md) | Image generation and 4K/8K workflows; open **Krea2** in the top navigation | `.\aikimi-setup.bat` → **1** |
 | [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | Image generation; open **Anima** in the top navigation | `.\aikimi-setup.bat` → **2** |
+| [MiniMax-H3-Image](extensions-builtin/minimax-h3-studio/OFFICIAL_IMAGE_GUIDE.md) | Native generation at about 16 MP and editing with up to 16 input images | **H3 Image → MiniMax-H3-Image → 環境とモデルを準備** |
 | [P-H3 Image](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) | Image generation and editing with up to eight images in **H3 Image** | After launch, open **P-H3 Image → 準備を開く** |
 | [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | Videos with audio and silent 360° orbits from one photo in **H3 Studio**; see the [Orbit guide](docs/minimax-h3-orbit-lora.md) | `.\aikimi-setup.bat` → **3** |
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | Image generation, editing, transparent PNG, and outpainting | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
@@ -185,7 +186,7 @@ git clone https://github.com/DominikDoom/a1111-sd-webui-tagcomplete.git extensio
 - **Qwen extensions**: [Qwen Fun Acc (4-step)](docs/assets/qwen-image21-fun-acc/README.md) and [Fun ControlNet](docs/assets/qwen-image21-fun-controlnet/README.md).
 - **MiniMax H3 details**: [Long-form generation](extensions-builtin/minimax-h3-studio/README.md#長尺生成), [acceleration](docs/minimax-h3-acceleration.md), [CLIP cache](docs/minimax-h3-clipcache.md), and [ControlNet](docs/minimax-h3-fun-control.md).
 - **Quantization comparisons**: [INT8 / W4A8](docs/w4a8.md).
-- **H3 Image (still images)**: See the [P-H3 Image guide](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) for generation and editing with up to eight images. The earlier [H3 image mode](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md) remains available as an experiment.
+- **H3 Image (still images)**: See the [MiniMax-H3-Image guide](extensions-builtin/minimax-h3-studio/OFFICIAL_IMAGE_GUIDE.md) for native generation at about 16 MP and editing with up to 16 input images. See the [P-H3 Image guide](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) for generation and editing with up to eight images. The earlier [H3 image mode](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md) remains available as an experiment.
 
 </details>
 

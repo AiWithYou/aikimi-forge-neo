@@ -37,7 +37,7 @@ PRESETS = {
 
 
 def make_request(mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint,
-                 lora="", lora_strength=1.0):
+                 lora="", lora_strength=1.0, *, official=False):
     selected = tuple(str(path) for path in (references or [])) if mode == "edit" else ()
     request = ph3.PH3Request(
         prompt=prompt or "", mode=mode,
@@ -45,7 +45,7 @@ def make_request(mode, prompt, target, references, width, height, seed, use_upsa
         width=integer(width, "幅", 32, 16384), height=integer(height, "高さ", 32, 16384),
         seed=integer(seed, "Seed", -1, 2**63 - 1), use_upsampler=use_upsampler,
         checkpoint=checkpoint or "",
-        lora=lora or "", lora_strength=lora_strength,
+        lora=lora or "", lora_strength=lora_strength, official=official,
     )
     request.validate()
     return request
@@ -151,7 +151,7 @@ def _add_checkpoint(value):
         return gr.update(), "確認が必要です: " + html.escape(str(exc))
 
 
-def _setup(runtime):
+def _setup(runtime, *, script="setup_p_h3_image.py"):
     bridge = ph3._bridge()
     runtime = str(managed_runtime_root(ROOT))
     process = None
@@ -161,7 +161,7 @@ def _setup(runtime):
             environment = sanitized_subprocess_environment(os.environ)
             environment.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
             process = subprocess.Popen(  # noqa: S603 -- fixed repository script and argument list.
-                [sys.executable, "-u", str(ROOT / "tools/setup_p_h3_image.py")], cwd=ROOT,
+                [sys.executable, "-u", str(ROOT / "tools" / script)], cwd=ROOT,
                 env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
@@ -171,7 +171,7 @@ def _setup(runtime):
                     last = line.strip()
                     yield runtime, html.escape(last), gr.update(interactive=False)
             if process.wait() != 0:
-                raise ph3.PH3Error(last or "P-H3の準備が完了しませんでした。")
+                raise ph3.PH3Error(last or "画像モデルの準備が完了しませんでした。")
             selected = installed_runtime_root(ROOT)
             if selected is None:
                 raise ph3.PH3Error("共通実行環境の準備完了を確認できません。")
@@ -195,14 +195,15 @@ def _setup(runtime):
 
 
 def _generate(runtime, profile, mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint,
-              lora="", lora_strength=1.0, *, data_directory=ROOT):
+              lora="", lora_strength=1.0, *, data_directory=ROOT, official=False):
     yield "入力を確認しています。", gr.update(), gr.update(), gr.update(), gr.update(), {}, gr.update(interactive=False), gr.update(interactive=False)
     try:
         request = make_request(mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint,
-                               lora, lora_strength)
+                               lora, lora_strength, official=official)
+        output_name = "official_h3_images" if official else "p_h3_images"
         data = Path(data_directory)
         for event in ph3.run_generation(request, managed_runtime_root(ROOT), SERVER_URL, data / "logs/minimax_h3",
-                                         data / "outputs/minimax_h3/p_h3_images", runtime_profile=profile):
+                                         data / "outputs/minimax_h3" / output_name, runtime_profile=profile):
             complete = event["stage"] == "complete"
             job = {"prompt_id": event["prompt_id"], "server_url": SERVER_URL} if event.get("prompt_id") and not complete else {}
             message = event["message"]

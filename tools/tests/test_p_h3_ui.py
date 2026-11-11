@@ -226,6 +226,8 @@ def test_h3_methods_have_separate_saved_input_keys(tmp_path, existing_settings):
     default = "minimax_h3_image_studio"
     separate = "customscript/p_h3_image/" + default
     assert loadsave.ui_settings[f"{separate}/幅 px/value"] == 2912
+    official = "customscript/minimax_h3_image_official/" + default
+    assert loadsave.ui_settings[f"{official}/幅 px/value"] == 2048
     assert loadsave.ui_settings[f"{default}/幅 px/value"] == 768
     assert loadsave.ui_settings[f"{separate}/高さ px/value"] == 2912
     assert loadsave.ui_settings[f"{default}/高さ px/value"] == 768

@@ -12,7 +12,7 @@
 
 ## できること
 
-- **画像を作る・編集する**：P-H3 Image、MOSS Image、Qwen Image 2.1、Iris、FLUX 3などを目的に合わせて選択できます。P-H3は編集対象と参照画像を合わせて最大8枚まで使えます。
+- **画像を作る・編集する**：MiniMax-H3-Image、P-H3 Image、MOSS Image、Qwen Image 2.1、Iris、FLUX 3などを目的に合わせて選択できます。P-H3は編集対象と参照画像を合わせて最大8枚まで使えます。
 - **大きな画像を仕上げる**：Krea2の高解像度ワークフローやMOSSのHires.fix、各種アップスケーラーを使えます。
 - **動画・音声を作る**：MiniMax H3で音声付き動画、YuE2で音楽、Irodori TTSで日本語音声を生成できます。
 - **画像を整理する**：Clefで画像や文章の評価・仕分けを行えます。
@@ -60,6 +60,7 @@ Krea2・Anima・H3動画は、次を実行してメニュー番号（1〜3）を
 |---|---|---|
 | [Krea2](docs/krea2_local_supersample_detail_ja.md) | 画像生成・4K/8K処理。上部 **Krea2** から使用 | `.\aikimi-setup.bat` → **1** |
 | [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | 画像生成。上部 **Anima** から使用 | `.\aikimi-setup.bat` → **2** |
+| [MiniMax-H3-Image](extensions-builtin/minimax-h3-studio/OFFICIAL_IMAGE_GUIDE.md) | 約16 MPの直接生成と最大16枚の入力を使う画像編集 | **H3 Image → MiniMax-H3-Image → 環境とモデルを準備** |
 | [P-H3 Image](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) | 画像生成・最大8枚の画像を使う編集。**H3 Image** を使用 | 起動後に **P-H3 Image → 準備を開く** |
 | [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | 音声付き動画と写真一枚からの無音360°周回。**H3 Studio** を使用 | `.\aikimi-setup.bat` → **3** |
 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | 画像生成・編集・透過PNG・拡張。専用画面を使用 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
@@ -191,7 +192,7 @@ git clone https://github.com/DominikDoom/a1111-sd-webui-tagcomplete.git extensio
 - **Qwen拡張**: [Qwen Fun Acc（4-step）](docs/assets/qwen-image21-fun-acc/README.md) · [Fun ControlNet](docs/assets/qwen-image21-fun-controlnet/README.md)
 - **MiniMax H3詳細**: [360°周回](docs/minimax-h3-orbit-lora.md) · [長尺生成](extensions-builtin/minimax-h3-studio/README.md#長尺生成) · [高速化](docs/minimax-h3-acceleration.md) · [CLIPキャッシュ](docs/minimax-h3-clipcache.md) · [ControlNet](docs/minimax-h3-fun-control.md)
 - **量子化比較**: [INT8／W4A8量子化](docs/w4a8.md)
-- **H3 Image（静止画）**：[P-H3 Imageガイド](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)で画像生成と最大8枚を使う編集を案内しています。従来の[H3画像生成](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)も実験モードとして利用できます。
+- **H3 Image（静止画）**：[MiniMax-H3-Imageガイド](extensions-builtin/minimax-h3-studio/OFFICIAL_IMAGE_GUIDE.md)で約16 MPの直接生成と最大16枚の入力を使う編集を案内しています。[P-H3 Imageガイド](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)で画像生成と最大8枚を使う編集を案内しています。従来の[H3画像生成](extensions-builtin/minimax-h3-studio/IMAGE_GUIDE.md)も実験モードとして利用できます。
 
 </details>
 

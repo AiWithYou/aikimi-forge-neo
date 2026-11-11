@@ -1,6 +1,6 @@
-# Pinned H3 / P-H3 ComfyUI 4ac1c173. Python 3.12 / Windows / CUDA 13.0.
+# Pinned H3 / P-H3 ComfyUI 989d93d0. Python 3.12 / Windows / CUDA 13.0.
 comfyui-frontend-package==1.58.5
-comfyui-workflow-templates==0.11.102
+comfyui-workflow-templates==0.11.105
 comfyui-embedded-docs==0.5.16
 torch==2.13.0+cu130
 torchsde

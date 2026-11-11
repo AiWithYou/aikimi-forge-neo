@@ -279,7 +279,7 @@ class RuntimeInstaller:
                 "asyncio.run(nodes.init_public_apis()); "
                 "assert all(asyncio.run(nodes.load_custom_node(str(Path(nodes.__file__).parent / 'comfy_extras' / name), "
                 "module_parent='comfy_extras')) for name in ('nodes_minimax_h3.py', 'nodes_textgen.py')); "
-                "assert {'PH3ImageConditioning', 'MiniMaxH3SigmaShift', 'TextGenerate'} "
+                "assert {'PH3ImageConditioning', 'MiniMaxH3ImageConditioning', 'MiniMaxH3SigmaShift', 'TextGenerate'} "
                 "<= nodes.NODE_CLASS_MAPPINGS.keys(), 'Required H3 / P-H3 nodes are missing'",
                 self.runtime,
             ],

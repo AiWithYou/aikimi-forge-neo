@@ -26,6 +26,9 @@ MODEL = "p-h3-image_w4a8.safetensors"
 TEXT_ENCODER = "p-h3-image_text_encoder_w4a8.safetensors"
 VAE = "p-h3-image_vae_int8_convrot.safetensors"
 UPSAMPLER = "p-h3-image_prompt_upsampler_int8_convrot.safetensors"
+OFFICIAL_MODEL = "minimax_h3_image_pruned_int8_convrot.safetensors"
+OFFICIAL_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+OFFICIAL_VAE = "minimax_h3_image_vae_fp16.safetensors"
 _LOG = logging.getLogger(__name__)
 
 
@@ -82,6 +85,17 @@ class PH3Request:
     lora: str = ""
     lora_strength: float = 1.0
     save_candidates: bool = False  # Shared output-path validator expects this field.
+    official: bool = False
+
+    @property
+    def family(self) -> str:
+        return "MiniMax-H3-Image" if self.official else "P-H3 Image"
+
+    @property
+    def model_names(self) -> dict[str, str]:
+        if self.official:
+            return {"model": OFFICIAL_MODEL, "text_encoder": OFFICIAL_TEXT_ENCODER, "vae": OFFICIAL_VAE}
+        return {"model": MODEL, "text_encoder": TEXT_ENCODER, "vae": VAE, "upsampler": UPSAMPLER}
 
     def validate(self) -> None:
         if not isinstance(self.prompt, str) or not self.prompt.strip() or len(self.prompt) > 20_000:
@@ -94,8 +108,9 @@ class PH3Request:
             not isinstance(value, str) or not value for value in self.reference_images
         ):
             raise PH3Error("参照画像の指定が不正です。")
-        if len(self.reference_images) > 7:
-            raise PH3Error("参照画像は7枚までです。")
+        max_references = 15 if self.official else 7
+        if len(self.reference_images) > max_references:
+            raise PH3Error(f"追加の参照画像は{max_references}枚までです。")
         if self.mode == "text" and (self.target_image or self.reference_images):
             raise PH3Error("画像を使う場合は画像編集を選択してください。")
         if self.mode == "edit" and not self.target_image:
@@ -107,6 +122,11 @@ class PH3Request:
             raise PH3Error("Seedは-1以上の整数で指定してください。")
         if not isinstance(self.use_upsampler, bool) or self.save_candidates is not False:
             raise PH3Error("画像生成の設定が不正です。")
+        if self.official:
+            if self.width * self.height > 20 * 1024**2:
+                raise PH3Error("MiniMax-H3-Imageは約20 MPまでです。")
+            if self.use_upsampler or self.lora or self.checkpoint:
+                raise PH3Error("MiniMax-H3-Imageでは固定の本体と入力プロンプトを使用します。")
         if not isinstance(self.checkpoint, str):
             raise PH3Error("チェックポイントの指定が不正です。")
         if self.checkpoint and not Path(self.checkpoint).is_absolute():
@@ -145,7 +165,7 @@ def build_workflow(
     request.validate()
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= 2**63 - 1:
         raise PH3Error("生成Seedが不正です。")
-    names = {"model": MODEL, "text_encoder": TEXT_ENCODER, "vae": VAE, "upsampler": UPSAMPLER}
+    names = request.model_names
     if models:
         names.update(models)
     if request.checkpoint:
@@ -158,6 +178,29 @@ def build_workflow(
 
     def node(kind: str, **inputs: Any) -> dict[str, Any]:
         return {"class_type": kind, "inputs": inputs}
+
+    if request.official:
+        condition = {"clip": ["clip", 0], "prompt": request.prompt.strip(),
+                     "width": request.width, "height": request.height}
+        graph = {
+            "model": node("UNETLoader", unet_name=names["model"], weight_dtype="default"),
+            "clip": node("CLIPLoader", clip_name=names["text_encoder"], type="minimax", device="default"),
+            "vae": node("VAELoader", vae_name=names["vae"]),
+            "negative": node("ConditioningZeroOut", conditioning=["condition", 0]),
+            "sample": node("KSampler", model=["model", 0], positive=["condition", 0],
+                           negative=["negative", 0], latent_image=["condition", 1], seed=seed,
+                           steps=6, cfg=1.0, sampler_name="euler", scheduler="simple", denoise=1.0),
+            "decode": node("VAEDecode", samples=["sample", 0], vae=["vae", 0]),
+            "save": node("SaveImage", images=["decode", 0], filename_prefix="image/MiniMax_H3_Image"),
+        }
+        if images:
+            condition["vae"] = ["vae", 0]
+            for index, image in enumerate(images, 1):
+                key = f"image_{index}"
+                graph[key] = node("LoadImage", image=image)
+                condition[f"images.{key}"] = [key, 0]
+        graph["condition"] = node("MiniMaxH3ImageConditioning", **condition)
+        return graph
 
     graph = {
         "model": node("UNETLoader", unet_name=names["model"], weight_dtype="default"),
@@ -289,7 +332,7 @@ def _checkpoint_path(request: PH3Request, runtime_root: Path) -> Path:
         return Path(request.checkpoint).resolve()
     from modules_forge.minimax_h3_runtime import model_root
 
-    return model_root(runtime_root) / "diffusion_models" / MODEL
+    return model_root(runtime_root) / "diffusion_models" / request.model_names["model"]
 
 
 def check_nodes(client: Any, request: PH3Request) -> None:
@@ -299,9 +342,10 @@ def check_nodes(client: Any, request: PH3Request) -> None:
     schemas = client.object_info(required, timeout=12.0)
     missing = required - schemas.keys()
     if missing:
-        raise PH3Error("P-H3用ノードがありません。共通実行環境を更新してください: " + ", ".join(sorted(missing)))
-    checks = [("UNETLoader", "unet_name", Path(request.checkpoint).name if request.checkpoint else MODEL),
-              ("CLIPLoader", "clip_name", TEXT_ENCODER), ("VAELoader", "vae_name", VAE)]
+        raise PH3Error(f"{request.family}用ノードがありません。共通実行環境を更新してください: " + ", ".join(sorted(missing)))
+    names = request.model_names
+    checks = [("UNETLoader", "unet_name", Path(request.checkpoint).name if request.checkpoint else names["model"]),
+              ("CLIPLoader", "clip_name", names["text_encoder"]), ("VAELoader", "vae_name", names["vae"])]
     if request.use_upsampler:
         checks.append(("CLIPLoader", "clip_name", UPSAMPLER))
     if request.lora and request.lora_strength:
@@ -313,10 +357,10 @@ def check_nodes(client: Any, request: PH3Request) -> None:
                 raise ValueError("model not registered")
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise PH3Error(f"ComfyUIからモデルを確認できません: {filename}") from exc
-    inputs = schemas["PH3ImageConditioning"].get("input", {})
+    inputs = schemas[graph["condition"]["class_type"]].get("input", {})
     fields = set(inputs.get("required", {})) | set(inputs.get("optional", {}))
     if not {"clip", "prompt", "width", "height"} <= fields or (request.images and "vae" not in fields):
-        raise PH3Error("P-H3用ノードの入力仕様が一致しません。")
+        raise PH3Error(f"{request.family}用ノードの入力仕様が一致しません。")
 
 
 def ensure_runtime(
@@ -330,15 +374,18 @@ def ensure_runtime(
     root = bridge.resolve_runtime_root(runtime_root)
     url = bridge.normalize_loopback_url(server_url)
     selected = _checkpoint_path(request, root)
-    if not compatible_checkpoint(selected):
+    if request.official and not selected.is_file():
+        raise PH3Error(f"MiniMax-H3-Imageのモデルが不足しています: {selected.name}")
+    if not request.official and not compatible_checkpoint(selected):
         raise PH3Error("P-H3互換構造の本体がありません。モデルを準備するか、対応本体を選択してください。")
     model_directory = model_root(root)
-    needed = [("text_encoders", TEXT_ENCODER), ("vae", VAE)]
+    names = request.model_names
+    needed = [("text_encoders", names["text_encoder"]), ("vae", names["vae"])]
     if request.use_upsampler:
         needed.append(("text_encoders", UPSAMPLER))
     for folder, name in needed:
         if not (model_directory / folder / name).is_file():
-            raise PH3Error(f"P-H3のモデルが不足しています: {name}")
+            raise PH3Error(f"{request.family}のモデルが不足しています: {name}")
     acceleration = H3Acceleration(compiler_mode="off", model_path=request.checkpoint)
     with bridge._RUNTIME_LIFECYCLE_LOCK:
         if bridge._RUNTIME_SETUP_ACTIVE:
@@ -362,7 +409,9 @@ def ensure_runtime(
             )
         bridge.require_checkpoint_registration(readiness, root, acceleration)
         if not readiness.connected:
-            raise PH3Error(readiness.error or "P-H3の実行環境に接続できません。")
+            raise PH3Error(readiness.error or f"{request.family}の実行環境に接続できません。")
+        if request.official and bridge._version_tuple(readiness.comfy_version or "") < (0, 45, 0):
+            raise PH3Error("MiniMax-H3-Imageのセットアップで共通実行環境を更新してください。")
         client = bridge.ComfyH3Client(url)
         try:
             check_nodes(client, request)
@@ -393,24 +442,30 @@ def save_result(
     identity = verify_snapshot(snapshot)
     output_directory.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    target = output_directory / f"P_H3_Image_{stamp}_{uuid.uuid4().hex[:12]}"
+    prefix = "MiniMax_H3_Image" if request.official else "P_H3_Image"
+    target = output_directory / f"{prefix}_{stamp}_{uuid.uuid4().hex[:12]}"
     stage = Path(tempfile.mkdtemp(prefix=".p-h3-", dir=output_directory))
+    names = request.model_names
     metadata = {
-        "schema_version": 1, "model_family": "P-H3 Image", "output_kind": "image",
+        "schema_version": 1, "model_family": request.family, "output_kind": "image",
         "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "prompt_id": prompt_id, "prompt": request.prompt.strip(), "upsampled_prompt": upsampled_prompt,
         "mode": request.mode, "width": request.width, "height": request.height,
-        "seed": seed, "steps": 8, "sampler": "euler", "sigmas": SIGMAS,
+        "seed": seed, "steps": 6 if request.official else 8, "sampler": "euler",
         "reference_count": len(request.reference_images), "has_edit_image": bool(request.target_image),
         "use_upsampler": request.use_upsampler,
         "lora": {"name": request.lora, "strength": request.lora_strength} if request.lora else None,
-        "models": {"diffusion_model": Path(request.checkpoint).name if request.checkpoint else MODEL,
-                   "text_encoder": TEXT_ENCODER, "vae": VAE, "upsampler": UPSAMPLER if request.use_upsampler else None},
+        "models": {"diffusion_model": Path(request.checkpoint).name if request.checkpoint else names["model"],
+                   "text_encoder": names["text_encoder"], "vae": names["vae"], "upsampler": UPSAMPLER if request.use_upsampler else None},
         "checkpoint_sha256": identity.get("sha256") if identity else None,
         "comfyui_revision": readiness.core_revision, "comfyui_version": readiness.comfy_version,
         "comfy_kitchen_version": readiness.package_versions.get("comfy-kitchen"),
         "runtime_profile": readiness.runtime_profile,
     }
+    if request.official:
+        metadata.update(scheduler="simple", cfg=1.0, denoise=1.0)
+    else:
+        metadata["sigmas"] = SIGMAS
     try:
         destination = stage / "image.png"
         shutil.copyfile(source, destination)
@@ -438,7 +493,9 @@ def run_generation(
     bridge = _bridge()
     root = Path(runtime_root)
     original_model_root = model_root(root).resolve()
-    request = replace(request, checkpoint=str(_checkpoint_path(request, root).resolve()))
+    checkpoint = str(_checkpoint_path(request, root).resolve())
+    if not request.official:
+        request = replace(request, checkpoint=checkpoint)
 
     def verify_model_root():
         if model_root(root).resolve() != original_model_root:
@@ -459,7 +516,9 @@ def run_generation(
 
         yield {"stage": "verifying", "message": "モデル本体を確認しています。初回は時間がかかります。", "prompt_id": job_id}
         check_cancel()
-        snapshot = snapshot_checkpoint(request.checkpoint, check_cancel=check_cancel)
+        if request.official and not Path(checkpoint).is_file():
+            raise PH3Error("MiniMax-H3-Imageの本体がありません。「環境とモデルを準備」を実行してください。")
+        snapshot = snapshot_checkpoint(checkpoint, check_cancel=check_cancel)
         check_cancel()
         while not ownership.acquire():
             if bridge._is_cancelled_job(job_id):
@@ -469,7 +528,7 @@ def run_generation(
         if bridge._is_cancelled_job(job_id):
             raise PH3Cancelled("画像生成を停止しました。")
         bridge.release_forge_vram()
-        yield {"stage": "runtime", "message": "P-H3の実行環境を確認しています。", "prompt_id": job_id}
+        yield {"stage": "runtime", "message": f"{request.family}の実行環境を確認しています。", "prompt_id": job_id}
         verify_model_root()
         verify_snapshot(snapshot)
         readiness = ensure_runtime(request, root, server_url, log_directory, runtime_profile)
