@@ -71,6 +71,14 @@ Krea2・Anima・H3動画は、次を実行してメニュー番号（1〜3）を
 | [FLUX 3 Image Klein](docs/flux3-klein.md) | 蒸留版／Baseの画像生成、最大10枚の参照編集、配置ボックス。PUPは任意の追加機能。**FLUX 3** タブを使用 | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
 | [MOSS-Image-SFT](docs/moss-image.md) | 自然文・タグ・JSONレイアウトから画像生成、Hires.fix、元画像からの再描画、編集用LoRAによる最大3枚の参照入力。**MOSS Image** タブを使用 | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
 
+### MiniMax-H3-Image の参照編集作例
+
+同じ参照画像1枚を使い、光・構図・画材をそれぞれ変更しました。RTX 3090、INT8本体、Euler / simple、6ステップ、CFG 1で生成しています。
+
+| 夜景化 | 縦長への再構成 | 水彩風 |
+| --- | --- | --- |
+| [![夜景化](docs/assets/minimax-h3-image/night.webp)](docs/assets/minimax-h3-image/night.webp) | [![縦長への再構成](docs/assets/minimax-h3-image/portrait.webp)](docs/assets/minimax-h3-image/portrait.webp) | [![水彩風](docs/assets/minimax-h3-image/watercolor.webp)](docs/assets/minimax-h3-image/watercolor.webp) |
+
 初回はモデルと必要な実行環境のダウンロード・変換に時間がかかります。Qwenの既定モデルは通常版Q4_K_Mです。Irisは選択した用途の重みを取得し、INT8・W4A8はHugging Faceの変換済み配布を使います。W4A8は画像生成用のテキストエンコーダーも圧縮します。[Irisの導入・検証](docs/iris-studio.md)
 
 AnimaはGPUでINT8へ変換し、検証成功後にBF16変換元を削除します。残す場合は `.\aikimi-setup.bat -Model anima38 -KeepSource` を実行してください。
