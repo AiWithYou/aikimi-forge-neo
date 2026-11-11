@@ -90,8 +90,10 @@ jobs:
           tools/tests/test_h3_compiler_default.py
           tools/tests/test_h3_union2_vae.py
           tools/tests/test_h3_union2_installers.py -q
-      - name: Run P-H3 image contracts without model downloads
-        run: python tools/run_ci_tests.py --pytest tools/tests/test_p_h3*.py -q
+      - name: Run H3 still-image contracts without model downloads
+        run: >-
+          python tools/run_ci_tests.py --pytest
+          tools/tests/test_p_h3*.py tools/tests/test_official_h3_image.py -q
       - name: Run local checkpoint and uv bootstrap CPU contracts
         run: >-
           python tools/run_ci_tests.py --pytest

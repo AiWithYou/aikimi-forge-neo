@@ -102,7 +102,7 @@ class ManagedH3RuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, mock.patch.object(
             runtime, "setup_fingerprint", return_value="current"
         ):
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             previous = root / runtime.PREVIOUS_RUNTIME_DIRECTORY
             candidate = runtime.candidate_runtime_root(root)
             for path, fingerprint in ((previous, runtime.PREVIOUS_FINGERPRINT), (candidate, "current")):

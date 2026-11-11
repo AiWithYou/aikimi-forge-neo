@@ -332,11 +332,14 @@ class StudioSurfaceTests(unittest.TestCase):
                     self.assertEqual(mode_tabs[1]["props"]["interactive"], editable)
                     if path.startswith("minimax-h3-studio/"):
                         methods = [item for item in tabs if item not in mode_tabs]
-                        self.assertEqual([item["props"]["label"] for item in methods], ["P-H3 Image", "標準H3（実験）"])
-                        legacy = layout_subtree(config["layout"], methods[1]["id"])
-                        p_h3 = layout_subtree(config["layout"], methods[0]["id"])
-                        self.assertTrue({item["id"] for item in mode_tabs} <= legacy)
-                        self.assertFalse({item["id"] for item in mode_tabs} & p_h3)
+                        self.assertEqual(
+                            [item["props"]["label"] for item in methods],
+                            ["P-H3 Image", "MiniMax-H3-Image", "標準H3（実験）"],
+                        )
+                        mode_ids = {item["id"] for item in mode_tabs}
+                        for method in methods[:2]:
+                            self.assertFalse(mode_ids & layout_subtree(config["layout"], method["id"]))
+                        self.assertTrue(mode_ids <= layout_subtree(config["layout"], methods[2]["id"]))
                     else:
                         self.assertEqual(tabs, mode_tabs)
                     status = next(item for item in blocks.blocks.values() if item.elem_id == status_id)
