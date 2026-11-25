@@ -7,7 +7,7 @@ import gradio as gr
 from modules_forge.minimax_h3_negpip import H3NegPiP
 
 
-def create_negpip_controls(*, prefix: str, interactive: bool = True, image_mode: bool = False) -> list:
+def create_negpip_controls(*, prefix: str, interactive: bool = True) -> list:
     defaults = H3NegPiP()
     with gr.Accordion("NegPiP · プロンプト内の負の重み", open=False, elem_id=f"{prefix}-negpip"):
         enabled = gr.Checkbox(
@@ -47,12 +47,9 @@ def create_negpip_controls(*, prefix: str, interactive: bool = True, image_mode:
             value=False, label="テキスト行を保護（強い負の重みで逆効果になる場合）", interactive=interactive
         )
         measure = gr.Checkbox(value=False, label="Attention量を診断ログへ出力（追加負荷あり）", interactive=interactive)
-        if image_mode:
-            gr.Markdown("静止画は内部5フレームです。時間指定は使わず、通常の負の重みで比較してください。")
-        else:
-            gr.Markdown(
-                "時間指定例: `(neon lights:-1.5@v2.5-4.0)`。`@v`は映像、`@a`は音声、指定なしは両方です。時間指定の効きは実験的です。"
-            )
+        gr.Markdown(
+            "時間指定例: `(neon lights:-1.5@v2.5-4.0)`。`@v`は映像、`@a`は音声、指定なしは両方です。時間指定の効きは実験的です。"
+        )
         gr.Markdown(
             "[原作者の説明](https://github.com/hako-mikan/comfyui-minimax-h3-negpip/blob/f725718b4c597fab92cdb1fe981dfe3544a75665/README_jp.md)"
         )

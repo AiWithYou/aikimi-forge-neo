@@ -10,7 +10,6 @@ import pytest
 from modules_forge import local_assets, studio_checkpoints
 from modules_forge.minimax_h3_acceleration import H3Acceleration
 from modules_forge.minimax_h3_bridge import MODEL_FILES, H3Request, build_workflow, model_file_status
-from modules_forge.minimax_h3_images import H3ImageRequest, build_image_workflow
 
 
 @pytest.fixture(autouse=True)
@@ -445,8 +444,6 @@ def test_missing_unused_official_or_inactive_custom_does_not_block_active_mode(t
     fl.checkpoint_for_mode("text")
     assert model_file_status(tmp_path, fl)["FL2VA"]
     assert not model_file_status(tmp_path, fl)["Ref2VA"]
-    request = H3ImageRequest(mode="text", prompt="test", checkpoint=first)
-    assert build_image_workflow(request, {}, 1)["model"]["inputs"]["unet_name"] == "custom.safetensors"
     with pytest.raises(ValueError):
         H3Acceleration.from_values(values, mode="references").checkpoint_for_mode("references")
 
@@ -502,15 +499,6 @@ def test_video_ui_passes_both_slots_and_resolves_the_current_mode(tmp_path):
         app.close()
 
 
-def test_image_ui_uses_slot_corresponding_to_mode(tmp_path):
-    from tools.tests.test_minimax_h3_images import load_image_ui
-
-    ui, _ = load_image_ui()
-    fl = checkpoint(tmp_path / "fl.safetensors")
-    ref = checkpoint(tmp_path / "ref.safetensors")
-    values = (*ui.H3NegPiP().values(), fl, ref)
-    request = ui._request("references", "<Picture 1>", ["photo.png"], 768, 768, 20, "1", "simple", 0, False, *values)
-    assert request.checkpoint == ref
 
 
 def test_turbo_button_does_not_replace_local_checkpoint(tmp_path):
@@ -534,8 +522,7 @@ def test_history_restore_preserves_the_other_mode_selection(tmp_path):
     assert ref_update["value"] == "chosen.safetensors"
 
 
-@pytest.mark.parametrize("feature", ["minimax_h3", "minimax_h3_image"])
-def test_launcher_status_considers_both_selected_slots_independently(tmp_path, feature):
+def test_video_status_considers_both_selected_slots_independently(tmp_path):
     from unittest.mock import patch
 
     from modules import aikimi_capabilities as capabilities
@@ -558,5 +545,5 @@ def test_launcher_status_considers_both_selected_slots_independently(tmp_path, f
           patch("modules_forge.minimax_h3_runtime.candidate_runtime_root", return_value=tmp_path),
           patch("modules_forge.minimax_h3_bridge.model_file_status", side_effect=status),
           patch("modules_forge.local_assets.selection", side_effect=lambda engine: {"checkpoint": chosen} if engine == "h3_ref2va" else {})):
-        result = capabilities.feature_check(feature, paths)
+        result = capabilities.feature_check("minimax_h3", paths)
     assert result.available

@@ -2,7 +2,6 @@
 
 import importlib.util
 import io
-import json
 import sys
 import types
 from contextlib import nullcontext
@@ -174,7 +173,7 @@ def test_p_h3_controls_build_inside_the_existing_blocks_context():
     assert any(function.fn is ui.initial_size_state for function in app.fns.values())
 
 
-def test_h3_image_tab_exposes_p_h3_and_legacy_methods():
+def test_h3_image_tab_exposes_both_native_methods():
     import modules.aikimi_status  # noqa: F401 -- initialize before replacing the modules package.
 
     root = Path(__file__).resolve().parents[2]
@@ -191,11 +190,10 @@ def test_h3_image_tab_exposes_p_h3_and_legacy_methods():
     assert tab is not None
     labels = {component.get("props", {}).get("label") for component in app.get_config_file()["components"]}
     assert "P-H3 Image" in labels
-    assert "標準H3（実験）" in labels
+    assert "MiniMax-H3-Image" in labels
 
 
-@pytest.mark.parametrize("existing_settings", [False, True])
-def test_h3_methods_have_separate_saved_input_keys(tmp_path, existing_settings):
+def test_h3_methods_have_separate_saved_input_keys(tmp_path):
     import modules.aikimi_status  # noqa: F401 -- initialize before replacing the modules package.
 
     root = Path(__file__).resolve().parents[2]
@@ -217,10 +215,6 @@ def test_h3_methods_have_separate_saved_input_keys(tmp_path, existing_settings):
         with gr.Blocks():
             tab = script.on_ui_tabs()[0][0]
     config = tmp_path / "ui-config.json"
-    if existing_settings:
-        config.write_text(json.dumps({"minimax_h3_image_studio/幅 px/value": 768,
-                                      "minimax_h3_image_studio/高さ px/value": 768,
-                                      "minimax_h3_image_studio/プロンプト/value": "legacy"}), encoding="utf-8")
     loadsave = loadsave_module.UiLoadsave(str(config))
     loadsave.add_block(tab, "minimax_h3_image_studio")
     default = "minimax_h3_image_studio"
@@ -228,16 +222,9 @@ def test_h3_methods_have_separate_saved_input_keys(tmp_path, existing_settings):
     assert loadsave.ui_settings[f"{separate}/幅 px/value"] == 2912
     official = "customscript/minimax_h3_image_official/" + default
     assert loadsave.ui_settings[f"{official}/幅 px/value"] == 2048
-    assert loadsave.ui_settings[f"{default}/幅 px/value"] == 768
     assert loadsave.ui_settings[f"{separate}/高さ px/value"] == 2912
-    assert loadsave.ui_settings[f"{default}/高さ px/value"] == 768
     assert f"{separate}/プロンプト/value" in loadsave.ui_settings
-    assert f"{default}/プロンプト/value" in loadsave.ui_settings
     # Checkpoints use the independent local-asset selection store, not ui-config.
     assert f"{separate}/チェックポイント/value" not in loadsave.ui_settings
-    assert f"{default}/チェックポイント/value" not in loadsave.ui_settings
     assert loadsave.component_mapping[f"{separate}/幅 px/value"].value == 2912
-    assert loadsave.component_mapping[f"{default}/幅 px/value"].value == 768
-    if existing_settings:
-        assert loadsave.component_mapping[f"{default}/プロンプト/value"].value == "legacy"
-        assert loadsave.component_mapping[f"{separate}/プロンプト/value"].value != "legacy"
+    assert loadsave.component_mapping[f"{official}/幅 px/value"].value == 2048

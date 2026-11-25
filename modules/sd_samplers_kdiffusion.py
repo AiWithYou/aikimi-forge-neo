@@ -79,12 +79,7 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
 
         scheduler_name = (p.hr_scheduler if p.is_hr_pass else p.scheduler) or "Automatic"
         if scheduler_name == "Automatic":
-            from backend.args import dynamic_args
-
-            if dynamic_args.klein:
-                scheduler_name = "Flux2"
-            else:
-                scheduler_name = self.config.options.get("scheduler", None)
+            scheduler_name = self.config.options.get("scheduler", None)
 
             if scheduler_name is None and not p.sd_model.is_webui_legacy_model():
                 scheduler_name = "Normal"

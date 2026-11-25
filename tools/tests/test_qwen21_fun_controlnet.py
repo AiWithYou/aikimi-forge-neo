@@ -39,7 +39,6 @@ def test_control_image_is_snapshotted_without_changing_the_reference_list(tmp_pa
     "fields",
     [
         {"control_kind": "pose", "control_image": ""},
-        {"control_kind": "pose", "sparse_mode": "static"},
         {"control_kind": "pose", "control_strength": float("nan")},
         {"control_kind": "pose", "control_strength": float("inf")},
         {"control_kind": "unknown"},
@@ -53,7 +52,7 @@ def test_invalid_control_requests_stop_before_gpu_or_download(tmp_path, fields):
         core.Request("A dancer", **fields).resolved()
 
 
-def test_worker_rejects_missing_control_and_accepts_fixed_sparse_with_any_base(tmp_path):
+def test_worker_rejects_missing_control_and_accepts_control_with_any_base(tmp_path):
     model = tmp_path / "model"
     model.mkdir()
     (model / "model_index.json").write_text(json.dumps({"_class_name": "QwenImage21Pipeline"}))
@@ -82,10 +81,6 @@ def test_worker_rejects_missing_control_and_accepts_fixed_sparse_with_any_base(t
     (job / "request.json").write_text(json.dumps(request))
     assert worker._read_request(payload)[2]["precision"] == "bf16"
     request["precision"] = "int8"
-    request["sparse_mode"] = "fixed"
-    (job / "request.json").write_text(json.dumps(request))
-    resolved = worker._read_request(payload)[2]
-    assert resolved["sparse_mode"] == "fixed"
     request["control_strength"] = 2.1
     (job / "request.json").write_text(json.dumps(request))
     assert worker._read_request(payload)[2]["control_strength"] == 2.1

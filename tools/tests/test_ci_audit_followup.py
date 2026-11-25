@@ -229,7 +229,7 @@ class WorkflowCoverageTests(unittest.TestCase):
         self.assertNotIn("python -m pytest", source)
         self.assertIn("python tools/run_ci_tests.py --pytest\n", source)
         self.assertIn("python tools/run_ci_tests.py --pytest tests/yue2 -q", source)
-        self.assertIn("python tools/run_ci_tests.py --pytest tests/jev_sparse -q", source)
+        self.assertNotIn("tests/jev_sparse", source)
         self.assertIn("node --test tools/tests/h3_handoff_core.test.mjs", source)
 
     def test_qwen_audit_is_independent_resolved_and_strict(self):

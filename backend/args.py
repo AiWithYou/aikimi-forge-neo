@@ -67,7 +67,6 @@ parser.add_argument("--force-upcast-attention", action="store_true", help="Alway
 parser.add_argument("--sage", action="store_true", help="install sageattention")
 parser.add_argument("--flash", action="store_true", help="install flash_attn")
 parser.add_argument("--xformers", action="store_true", help="install xformers")
-parser.add_argument("--nunchaku", action="store_true", help="install nunchaku for SVDQ inference")
 parser.add_argument("--bnb", action="store_true", help="install bitsandbytes for 4-bit inference")
 parser.add_argument("--use-ck-attention", action="store_true", help="use Comfy-Kitchen attention")
 parser.add_argument("--onnxruntime-gpu", action="store_true", help="install nightly onnxruntime-gpu with cu130 support")
@@ -154,26 +153,12 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
     """set in modules/sd_models/forge_model_reload"""
     online_lora: bool = False
     """patch LoRAs on-the-fly"""
-    kontext: bool = False
-    """Flux Kontext"""
-    edit: bool = False
-    """Qwen-Image-Edit"""
-    nunchaku: bool = False
-    """Nunchaku (SVDQ) Models"""
-    klein: bool = False
-    """Flux.2 Klein"""
-    wan: bool = False
-    """Wan 2.2"""
-    pid: bool = False
-    """PiD"""
     anima: bool = False
     """Anima"""
     krea2: bool = False
     """Krea 2"""
     ref_latents: list["torch.Tensor"] = []
-    """Reference Latent(s) for Flux Kontext / Qwen-Image-Edit / Flux.2 Klein"""
-    concat_latent: "torch.Tensor" = None
-    """Input Latent for Wan 2.2 I2V"""
+    """Reference Latent(s) for Anima and Krea2"""
     lq_latent: list["torch.Tensor", "torch.Tensor"] = [None, None]
     """lq_latent & degrade_sigma for PiD"""
     context_handler: "IndexListContextHandler" = None
@@ -193,6 +178,5 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
             return
 
         cls.ref_latents.clear()
-        cls.concat_latent = None
         cls.lq_latent = [None, None]
         cls.context_handler = None

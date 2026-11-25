@@ -22,13 +22,13 @@ class ModelCatalogTests(unittest.TestCase):
         return path
 
     def test_managed_subfolders_do_not_enable_the_unneeded_legacy_search(self):
-        legacy = self.root / "model/Iris-3B"
+        legacy = self.root / "model/MOSS-Image"
         legacy.mkdir(parents=True)
-        managed = self.root / "models/Iris-3B/checkpoints"
-        nested = self.touch("models/Iris-3B/checkpoints/FT/int8/model.safetensors")
-        self.touch("model/Iris-3B/not-selected.safetensors")
+        managed = self.root / "models/MOSS-Image/checkpoints"
+        nested = self.touch("models/MOSS-Image/checkpoints/FT/int8/model.safetensors")
+        self.touch("model/MOSS-Image/not-selected.safetensors")
         with patch.object(model_catalog, "ROOT", self.root):
-            roots = model_catalog.checkpoint_roots("Iris-3B")
+            roots = model_catalog.checkpoint_roots("MOSS-Image")
         self.assertEqual(roots, (managed,))
         self.assertEqual(model_catalog.discover_files(roots), [str(nested)])
         with patch.object(model_catalog, "ROOT", self.root), self.assertRaises(ValueError):
@@ -37,11 +37,11 @@ class ModelCatalogTests(unittest.TestCase):
     def test_explicit_official_storage_roots_are_canonical_and_unique(self):
         official = self.root / "runtime/checkpoints"
         with patch.object(model_catalog, "ROOT", self.root):
-            roots = model_catalog.checkpoint_roots("Iris-3B", (official, official))
-        self.assertEqual(roots, (self.root / "models/Iris-3B/checkpoints", official))
+            roots = model_catalog.checkpoint_roots("MOSS-Image", (official, official))
+        self.assertEqual(roots, (self.root / "models/MOSS-Image/checkpoints", official))
 
     def test_startup_prepares_managed_folders_without_touching_existing_weights(self):
-        existing = self.touch("models/Iris-3B/checkpoints/FT/model.safetensors")
+        existing = self.touch("models/MOSS-Image/checkpoints/FT/model.safetensors")
         existing.write_bytes(b"existing model")
         adapter = self.touch("models/Qwen-Image-2.1/loras/styles/model.safetensors")
         adapter.write_bytes(b"existing adapter")
@@ -49,14 +49,14 @@ class ModelCatalogTests(unittest.TestCase):
             model_catalog.prepare_directories()
             model_catalog.prepare_directories()
         for family in (
-            "Iris-3B",
+            "MOSS-Image",
             "Qwen-Image-2.1",
             "Clef",
             "MiniMax-H3",
             "YuE2",
         ):
             self.assertTrue((self.root / "models" / family / "checkpoints").is_dir(), family)
-        for relative in ("Lora", "Qwen-Image-2.1/loras", "Iris-3B/loras"):
+        for relative in ("Lora", "Qwen-Image-2.1/loras", "MOSS-Image/loras"):
             self.assertTrue((self.root / "models" / relative).is_dir(), relative)
         self.assertEqual(existing.read_bytes(), b"existing model")
         self.assertEqual(adapter.read_bytes(), b"existing adapter")

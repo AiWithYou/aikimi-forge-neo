@@ -56,10 +56,6 @@ class H3Acceleration:
     negpip: H3NegPiP = field(default_factory=H3NegPiP)
     clip_cache: str = "off"
     hybrid: hybrid.H3Hybrid = field(default_factory=hybrid.H3Hybrid)
-    jev_cadence: str = "once"
-    jev_interval: int = 2
-    jev_max_calls: int = 0
-    jev_max_wait_seconds: float = 0.0
     compiler_mode: str = "off"
     checkpoint: str = ""
     checkpoint_mode: str = "FL2VA"
@@ -73,18 +69,10 @@ class H3Acceleration:
         return "w4a8" if self.model_variant == "w4a8" else "base"
 
     def validate(self) -> None:
-        from modules_forge.jev_sparse.common import JevBudget
-
-        JevBudget(self.jev_max_calls, self.jev_max_wait_seconds)
         if not isinstance(self.checkpoint, str) or not isinstance(self.model_path, str):
             raise ValueError("チェックポイントの指定が不正です。")
         if self.checkpoint_mode not in {"FL2VA", "Ref2VA"}:
             raise ValueError("チェックポイントの用途が不正です。")
-        if not isinstance(self.jev_cadence, str) or self.jev_cadence not in {"once", "interval", "step"}:
-            raise ValueError("Jevの再判定頻度が不正です。")
-        interval = self.jev_interval
-        if isinstance(interval, bool) or not isinstance(interval, (int, float)) or not math.isfinite(interval) or interval != int(interval) or not 1 <= interval <= 100:
-            raise ValueError("Jevの再判定間隔は1〜100の整数で指定してください。")
         if not isinstance(self.hybrid, hybrid.H3Hybrid):
             raise ValueError("長尺設定の形式が不正です。")
         self.hybrid.validate()
@@ -138,22 +126,18 @@ class H3Acceleration:
         if not values:
             return cls()
         previous_count = 8 + len(H3NegPiP().values())
-        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6, previous_count + 8, previous_count + 10, previous_count + 11, previous_count + 12, previous_count + 13):
+        if len(values) not in (8, previous_count, previous_count + 1, previous_count + 6, previous_count + 7, previous_count + 8, previous_count + 9):
             raise ValueError("H3 追加設定の項目数が一致しません。UIを再読み込みしてください。")
         checkpoint = ""
-        if len(values) >= previous_count + 13:
-            checkpoint = values[previous_count + (12 if mode == "references" else 11)] or ""
-        elif len(values) >= previous_count + 12:
-            checkpoint = values[previous_count + 11] or ""
+        if len(values) >= previous_count + 9:
+            checkpoint = values[previous_count + (8 if mode == "references" else 7)] or ""
+        elif len(values) >= previous_count + 8:
+            checkpoint = values[previous_count + 7] or ""
         result = cls(
             *values[:8], negpip=H3NegPiP.from_values(values[8:previous_count]),
             clip_cache=values[previous_count] if len(values) > previous_count else "off",
             hybrid=hybrid.H3Hybrid(*values[previous_count + 1:previous_count + 6]) if len(values) >= previous_count + 6 else hybrid.H3Hybrid(),
-            jev_cadence=values[previous_count + 6] if len(values) >= previous_count + 8 else "once",
-            jev_interval=values[previous_count + 7] if len(values) >= previous_count + 8 else 2,
-            jev_max_calls=values[previous_count + 8] if len(values) >= previous_count + 10 else 0,
-            jev_max_wait_seconds=values[previous_count + 9] if len(values) >= previous_count + 10 else 0.0,
-            compiler_mode=values[previous_count + 10] if len(values) >= previous_count + 11 else "off",
+            compiler_mode=values[previous_count + 6] if len(values) >= previous_count + 7 else "off",
             checkpoint=checkpoint,
             checkpoint_mode="Ref2VA" if mode == "references" else "FL2VA",
         )
@@ -164,7 +148,7 @@ class H3Acceleration:
         return asdict(self)
 
     def values(self) -> tuple:
-        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid", "jev_cadence", "jev_interval", "jev_max_calls", "jev_max_wait_seconds", "compiler_mode", "checkpoint", "checkpoint_mode", "model_path"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values() + (self.jev_cadence, self.jev_interval, self.jev_max_calls, self.jev_max_wait_seconds, self.compiler_mode, self.checkpoint if self.checkpoint_mode == "FL2VA" else "", self.checkpoint if self.checkpoint_mode == "Ref2VA" else "")
+        return tuple(getattr(self, f.name) for f in fields(self) if f.name not in {"negpip", "clip_cache", "hybrid", "compiler_mode", "checkpoint", "checkpoint_mode", "model_path"}) + self.negpip.values() + (self.clip_cache,) + self.hybrid.values() + (self.compiler_mode, self.checkpoint if self.checkpoint_mode == "FL2VA" else "", self.checkpoint if self.checkpoint_mode == "Ref2VA" else "")
 
 
     def runtime_packs(self) -> tuple[str, ...]:

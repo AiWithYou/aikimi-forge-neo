@@ -163,46 +163,12 @@ def clear_references():
     dynamic_args.ref_latents.clear()
 
 
-def migrate_renamed_options() -> bool:
-    from modules import shared
-
-    old_key = "klein_no_reference"
-    new_key = "klein_do_reference"
-    if old_key not in shared.opts.data:
-        return False
-
-    old_value = shared.opts.data[old_key]
-    new_key_existed = new_key in shared.opts.data
-    new_value = shared.opts.data.get(new_key)
-    if new_key not in shared.opts.data:
-        shared.opts.data[new_key] = not bool(shared.opts.data[old_key])
-    del shared.opts.data[old_key]
-    if not shared.cmd_opts.freeze_settings:
-        try:
-            shared.opts.save(shared.config_filename)
-        except Exception:
-            shared.opts.data[old_key] = old_value
-            if new_key_existed:
-                shared.opts.data[new_key] = new_value
-            else:
-                shared.opts.data.pop(new_key, None)
-            import logging
-
-            logging.getLogger("startup").exception(
-                "Could not save the Klein reference option migration; continuing with the original setting"
-            )
-            return False
-    return True
-
-
 def configure_opts_onchange():
     from modules import shared, ui_tempdir
 
-    migrate_renamed_options()
     shared.opts.onchange("temp_dir", ui_tempdir.on_tmpdir_changed)
     shared.opts.onchange("gradio_theme", shared.reload_gradio_theme)
     shared.opts.onchange("setting_allocated_vram", reserve_memory)
-    shared.opts.onchange("klein_do_reference", clear_references)
     shared.opts.onchange("anima_do_reference", clear_references)
     shared.opts.onchange("krea2_do_reference", clear_references)
     startup_timer.record("opts onchange")

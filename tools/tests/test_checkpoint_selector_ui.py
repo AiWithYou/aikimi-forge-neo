@@ -10,7 +10,6 @@ import gradio as gr
 
 from modules_forge import local_assets, model_catalog
 from tools.tests.test_additional_module_identity import load_main_entry
-from tools.tests.test_iris_selection import artifact, screen_module
 from tools.tests.test_local_model_sources import qwen_fixture, qwen_transformer, tensor_file
 from tools.tests.test_qwen_image21_service import load_ui as qwen_ui
 
@@ -139,31 +138,7 @@ class CheckpointSelectorUiTests(unittest.TestCase):
 
 
 
-    def test_iris_task_specific_official_selection_stays_visible(self):
-        ui = screen_module()
-        selected = str(artifact(self.root / "FT"))
-        local_assets.save_selection(
-            "iris", {"checkpoint": selected, "precision": "normal", "directory": str(self.root)}
-        )
-        view = ui.switch({}, "depth", "int8", selected, persist=False)
-        self.assertTrue(view[11]["visible"])
-        self.assertEqual(view[13]["value"], "base")
-        self.assertFalse(view[13]["interactive"])
-        self.assertFalse(view[13]["allow_custom_value"])
-        self.assertEqual(view[13]["choices"], [("公式 · 深度推定", "base")])
-        self.assertEqual(local_assets.selection("iris")["checkpoint"], selected)
-        restored = ui.switch(view[14], "generate", "int8", "base", persist=False)
-        self.assertEqual(restored[13]["value"], selected)
 
-    def test_iris_terminal_job_keeps_dedicated_task_checkpoint_read_only(self):
-        ui = screen_module()
-        state = {"job": "test-job", "kind": "run", "task": "depth", "precision": "int8", "checkpoint": "base"}
-        with (
-            patch.object(ui.SERVICE, "poll", return_value={"status": "error", "error": "test error"}),
-            patch.object(ui, "button", return_value={}),
-        ):
-            view = ui.poll(state)
-        self.assertFalse(view[12]["interactive"])
 
     def test_forge_library_selection_uses_exact_path_and_restores_without_writing(self):
         ui, opts, _ = load_main_entry()
@@ -202,9 +177,9 @@ class CheckpointSelectorUiTests(unittest.TestCase):
             info = SimpleNamespace(filename=str(selected), name="selected/model.safetensors")
             ui.sd_models.get_closet_checkpoint_match = lambda value, info=info: info if value == str(selected) else None
             with patch.object(ui, "refresh_model_loading_parameters") as refresh:
-                self.assertTrue(ui.checkpoint_change(str(selected), "sd"))
+                self.assertTrue(ui.checkpoint_change(str(selected), "xl"))
             self.assertEqual(opts.data["sd_model_checkpoint"], str(selected))
-            self.assertEqual(local_assets.selection("forge")["checkpoints"]["sd"], str(selected))
+            self.assertEqual(local_assets.selection("forge")["checkpoints"]["xl"], str(selected))
             refresh.assert_called_once()
 
     def test_forge_checkpoint_ui_is_visible_and_excludes_config_defaults(self):

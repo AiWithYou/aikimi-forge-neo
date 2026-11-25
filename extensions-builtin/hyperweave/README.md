@@ -6,7 +6,7 @@ HyperWeave は、通常の補間型超解像ではなく、現在 Forge に読�
 
 ## Forge への統合
 
-本機能は `extensions-builtin/hyperweave` の独立 Extension です。Forge 本体、通常 img2img、txt2img、Extras、既存 upscaler、VRAM Canvas、DetailWeave、ControlNet のコードパスへモード分岐を追加していません。
+本機能は `extensions-builtin/hyperweave` の独立 Extension です。Forge 本体、通常 img2img、txt2img、Extras、既存 upscaler、ControlNet のコードパスへモード分岐を追加していません。
 
 Forge の img2img を開き、ページ下部の `Script` から `HyperWeave 4K/8K` を選択します。画面上部で納品サイズ、再作画Preset、内容Profileを選ぶと、Exact Steps、lock、tile、accumulatorをライブプランで確認できます。Custom長辺またはCustom幅・高さは、そのtarget modeを選んだときだけ表示されます。8K、Max Overdraw、未入力のCustomサイズは注意表示へ切り替わります。低レベルのpass、mask、quality constraint、prompt suffix、debug値は折りたたみ内にあります。
 
@@ -286,39 +286,6 @@ RGB と RGBA を受け付けます。RGBA は次のように扱います。
 
 ProofWeave 1.2.0 の manifest には、`scoring_version`、`candidate_score_margin`、local round-trip gate、semantic face ownership、face protection、symmetric edge metrics の有効状態、意味的 pass 順、人物別 `final_face_metrics` を追加します。各 stage の最終 face metrics は Material / Micro / Hair / Face / seam / back projection / exact resize 後の実際に返す 8-bit 出力 crop から計算し、round-trip SSIM、対称 edge displacement、edge precision / recall / F1、低周波 MSE、color drift を記録します。旧 candidate 選択時の score と既存 key は残します。
 
-## 比較ツール
-
-`tools/compare_hyperweave.py` は同じ入力に対する Lanczos と任意候補を比較します。
-
-```powershell
-.\venv\Scripts\python.exe .\tools\compare_hyperweave.py `
-  --source H:\dl\image-cropped.png `
-  --candidate "HyperWeave=H:\path\result.png" `
-  --crop "left_face=280,500,760,980" `
-  --crop "right_face=900,560,1420,1080" `
-  --output H:\path\comparison
-```
-
-出力:
-
-- contact sheet
-- 同一座標 crop strip
-- absolute difference
-- HIGH / MID / MID_LOW frequency map
-- structure map
-- source round-trip confidence map
-- HyperWeave の最終 stage tile 境界に沿った seam map
-- round-trip SSIM / PSNR
-- low-frequency error / color drift / symmetric edge displacement
-- edge precision / recall / F1
-- MID / MID_HIGH / HIGH energy
-- coherent-line / face structure / hair-flow / noise penalty / seam ratio
-- manifest が持つ processing time / peak VRAM / RAM・disk estimate / memmap
-
-HyperWeave 1.2.0 manifest に最終 face metrics があれば、その最終出力 SSIM を `face_structure_score` の主値にし、選択時の Face candidate SSIM は `selected_face_candidate_roundtrip_ssim` として残します。manifest に最終値がない旧出力だけ candidate 選択時の値へ fallback します。`face` または `head` を名前に含む crop が与えられた場合、manifest 最終値がない方式について全方式を同じ領域で縮小比較します。HyperWeave manifest を持たない任意候補では、処理時間・VRAM・RAM・disk・tile seam ratio は推測せず `null` にします。
-
-単純な「高周波量が多いほど高品質」という判定にはしません。
-
 ## テスト
 
 CPU unit / stub integration:
@@ -326,7 +293,7 @@ CPU unit / stub integration:
 ```powershell
 .\venv\Scripts\python.exe -m compileall extensions-builtin\hyperweave
 .\venv\Scripts\ruff.exe check extensions-builtin\hyperweave `
-  tools\compare_hyperweave.py tools\tests\test_hyperweave_*.py
+  tools\tests\test_hyperweave_*.py
 .\venv\Scripts\python.exe -m unittest discover -s tools\tests `
   -p "test_hyperweave_*.py" -v
 ```

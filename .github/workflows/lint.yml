@@ -30,28 +30,17 @@ on:
       - "tools/tests/test_moss_image*.py"
       - "tools/moss_image_manifest.json"
       - "tools/requirements-moss-image.*"
-      - "modules_forge/iris/**"
       - "modules_forge/irodori/**"
       - "extensions-builtin/irodori-studio/**"
       - "tools/*irodori*.py"
       - "tools/tests/test_irodori*.py"
-      - "extensions-builtin/iris-studio/**"
-      - "tools/*iris*.py"
-      - "tools/tests/test_iris*.py"
       - "tools/prepare_qwen21_consistency_lora.py"
       - "tools/tests/test_qwen21_consistency*.py"
       - "tools/tests/test_qwen_int8_convrot.py"
       - "tools/tests/test_qwen_gguf_normalization.py"
       - "tools/tests/test_resident_worker_logging.py"
-      - "modules_forge/jev_sparse/**"
-      - "extensions-builtin/jev-sparse-experiments/**"
-      - "tests/jev_sparse/**"
-      - "tools/*jev_sparse*.py"
-      - "tools/benchmark_*sparse.py"
       - "modules/aikimi_version.py"
       - "tools/prepare_qwen21_quantized.py"
-      - "tools/benchmark_qwen21_attention.py"
-      - "tools/sparse_benchmark.py"
       - "tools/tests/test_qwen_quantized_cache.py"
       - "tools/tests/test_controllllite_tiling.py"
       - "tools/tests/test_h3_ram_profile.py"
@@ -96,7 +85,6 @@ on:
       - "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_studio.py"
       - "tools/tests/test_h3_compiler_default.py"
       - "tools/tests/test_comfy_image_job_lifecycle.py"
-      - "tools/tests/test_minimax_h3_images.py"
       - "tools/tests/test_minimax_h3_studio.py"
       - "tools/tests/test_p_h3*.py"
       - "tools/setup_h3_lightvae.py"
@@ -156,7 +144,6 @@ on:
       - "tools/tests/test_gradio_frontend_compat.py"
       - "tools/tests/test_gradio_frontend_compat_chromium.py"
       - "tools/tests/test_gradio_chromium_smoke.py"
-      - "tools/tests/test_option_migrations.py"
       - "tools/tests/test_patcher_cleanup.py"
       - "tools/tests/test_quant_ops_zero_scale.py"
       - "tools/tests/test_remote_auth_middleware.py"
@@ -201,28 +188,17 @@ on:
       - "tools/tests/test_moss_image*.py"
       - "tools/moss_image_manifest.json"
       - "tools/requirements-moss-image.*"
-      - "modules_forge/iris/**"
       - "modules_forge/irodori/**"
       - "extensions-builtin/irodori-studio/**"
       - "tools/*irodori*.py"
       - "tools/tests/test_irodori*.py"
-      - "extensions-builtin/iris-studio/**"
-      - "tools/*iris*.py"
-      - "tools/tests/test_iris*.py"
       - "tools/prepare_qwen21_consistency_lora.py"
       - "tools/tests/test_qwen21_consistency*.py"
       - "tools/tests/test_qwen_int8_convrot.py"
       - "tools/tests/test_qwen_gguf_normalization.py"
       - "tools/tests/test_resident_worker_logging.py"
-      - "modules_forge/jev_sparse/**"
-      - "extensions-builtin/jev-sparse-experiments/**"
-      - "tests/jev_sparse/**"
-      - "tools/*jev_sparse*.py"
-      - "tools/benchmark_*sparse.py"
       - "modules/aikimi_version.py"
       - "tools/prepare_qwen21_quantized.py"
-      - "tools/benchmark_qwen21_attention.py"
-      - "tools/sparse_benchmark.py"
       - "tools/tests/test_qwen_quantized_cache.py"
       - "tools/tests/test_controllllite_tiling.py"
       - "tools/tests/test_h3_ram_profile.py"
@@ -267,7 +243,6 @@ on:
       - "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_studio.py"
       - "tools/tests/test_h3_compiler_default.py"
       - "tools/tests/test_comfy_image_job_lifecycle.py"
-      - "tools/tests/test_minimax_h3_images.py"
       - "tools/tests/test_minimax_h3_studio.py"
       - "tools/tests/test_p_h3*.py"
       - "tools/setup_h3_lightvae.py"
@@ -327,7 +302,6 @@ on:
       - "tools/tests/test_gradio_frontend_compat.py"
       - "tools/tests/test_gradio_frontend_compat_chromium.py"
       - "tools/tests/test_gradio_chromium_smoke.py"
-      - "tools/tests/test_option_migrations.py"
       - "tools/tests/test_patcher_cleanup.py"
       - "tools/tests/test_quant_ops_zero_scale.py"
       - "tools/tests/test_remote_auth_middleware.py"
@@ -386,37 +360,19 @@ jobs:
             extensions-builtin/moss-image-studio/scripts
             tools/*moss_image*.py
             tools/tests/test_moss_image*.py
-            modules_forge/iris
             modules_forge/irodori
             extensions-builtin/irodori-studio/scripts
             tools/*irodori*.py
             tools/tests/test_irodori*.py
-            extensions-builtin/iris-studio/scripts
-            tools/*iris*.py
-            tools/tests/test_iris*.py
             tools/prepare_qwen21_consistency_lora.py
             tools/tests/test_qwen21_consistency*.py
             tools/tests/test_qwen_int8_convrot.py
             tools/tests/test_qwen_gguf_normalization.py
             tools/tests/test_resident_worker_logging.py
-            modules_forge/jev_sparse
-            extensions-builtin/jev-sparse-experiments/scripts
-            tools/qwen_image21_sparse_worker.py
-            tools/benchmark_qwen21_sparse.py
-            tools/benchmark_anima_sparse.py
-            tools/benchmark_h3_sparse.py
-            tools/benchmark_krea2_sparse.py
             modules/aikimi_version.py
             tools/prepare_qwen21_quantized.py
-            tools/benchmark_qwen21_attention.py
-            tools/sparse_benchmark.py
             tools/tests/test_qwen_quantized_cache.py
             tools/tests/test_controllllite_tiling.py
-            tools/tests/test_krea2_sparse_model_hook.py
-            tools/tests/test_krea2_tile_allocation_gui.py
-            tools/setup_jev_sparse.py
-            tools/report_jev_sparse.py
-            tests/jev_sparse
             tools/tests/test_h3_ram_profile.py
             modules_forge/forge_canvas/canvas.py
             tools/tests/test_forge_canvas_transport.py
@@ -459,7 +415,6 @@ jobs:
             extensions-builtin/minimax-h3-studio/scripts/minimax_h3_studio.py
             tools/tests/test_h3_compiler_default.py
             tools/tests/test_comfy_image_job_lifecycle.py
-            tools/tests/test_minimax_h3_images.py
             tools/tests/test_minimax_h3_studio.py
             tools/tests/test_p_h3*.py
             tools/setup_h3_lightvae.py
@@ -529,7 +484,6 @@ jobs:
             tools/tests/test_gradio_frontend_compat.py
             tools/tests/test_gradio_frontend_compat_chromium.py
             tools/tests/test_gradio_chromium_smoke.py
-            tools/tests/test_option_migrations.py
             tools/tests/test_patcher_cleanup.py
             tools/tests/test_quant_ops_zero_scale.py
             tools/tests/test_remote_auth_middleware.py
@@ -550,6 +504,7 @@ jobs:
         run: |
           node --check javascript/dragdrop.js
           node --check extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js
+          node --check extensions-builtin/aikimi-ui/javascript/aikimi_image_workspace.js
           node --check extensions-builtin/aikimi-ui/javascript/aikimiStatus.js
           node --check modules_forge/forge_canvas/canvas.js
           node --check extensions-builtin/clef-studio/assets/clipboard.js

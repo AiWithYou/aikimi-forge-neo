@@ -8,24 +8,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 _IGNORED = {".cache", ".git", "__pycache__", "worker-env", "venv", ".venv"}
-FORGE_FAMILIES = (
-    "Anima",
-    "Krea2",
-    "SDXL",
-    "SD",
-    "Flux",
-    "Flux.2",
-    "Qwen-Image",
-    "Qwen-Image-Edit",
-    "Lumina-Image-2.0",
-    "Z-Image",
-    "Wan",
-    "Ernie-Image",
-    "PiD",
-)
+FORGE_FAMILIES = ("Anima", "Krea2", "SDXL")
 STUDIO_FAMILIES = (
     "Qwen-Image-2.1",
-    "Iris-3B",
     "Flux-3-Klein",
     "MOSS-Image",
     "Clef",
@@ -38,7 +23,7 @@ def prepare_directories():
     """Prepare empty user-facing storage once during app startup; leave all weights in place."""
     for family in ("Stable-diffusion", *FORGE_FAMILIES, *STUDIO_FAMILIES):
         (ROOT / "models" / family / "checkpoints").mkdir(parents=True, exist_ok=True)
-    for relative in ("Lora", "Qwen-Image-2.1/loras", "Iris-3B/loras", "MOSS-Image/loras",
+    for relative in ("Lora", "Qwen-Image-2.1/loras", "MOSS-Image/loras",
                      "Irodori-TTS/v4-Large/checkpoints"):
         (ROOT / "models" / relative).mkdir(parents=True, exist_ok=True)
 

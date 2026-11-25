@@ -588,7 +588,7 @@ class WorkerJobTests(unittest.TestCase):
     def test_controlnet_and_sparse_can_share_reference_images(self):
         reference = self.root / "reference.png"
         Image.new("RGB", (256, 320)).save(reference)
-        self.request.update(control_image=str(reference), input_images=[str(reference)], sparse_mode="auto")
+        self.request.update(control_image=str(reference), input_images=[str(reference)])
         self.write_request()
         _, _, request = worker._read_request(self.payload)
         self.assertEqual(request["input_images"], [str(reference)])

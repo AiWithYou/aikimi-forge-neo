@@ -16,7 +16,10 @@ for directory in (ROOT / "modules_forge" / "packages", ROOT / "extensions-builti
 from anima3b.runtime import Anima3BRuntime
 
 from backend.args import dynamic_args
-from backend.diffusion_engine.anima import Anima as AnimaEngine
+
+# Forge initializes its CLI parser when the diffusion engine imports shared options.
+with patch.object(sys, "argv", [sys.argv[0], "--cpu"]):
+    from backend.diffusion_engine.anima import Anima as AnimaEngine
 from backend.nn.anima import Anima as AnimaModel
 
 

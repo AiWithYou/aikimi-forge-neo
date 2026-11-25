@@ -21,7 +21,7 @@ from modules import (
     shared_items,
 )
 from modules_forge import local_assets, model_catalog
-from modules_forge.presets import DEFAULT_CHECKPOINTS, PresetArch, is_video, use_distill, use_shift
+from modules_forge.presets import DEFAULT_CHECKPOINTS, PresetArch, use_shift
 
 logger = logging.getLogger("ui_models")
 setup_logger(logger)
@@ -445,6 +445,8 @@ def make_checkpoint_manager_ui():
             shared.opts.set("sd_model_checkpoint", next(iter(sd_models.checkpoints_list.values())).name)
 
     _, vae_list = refresh_models()
+    if shared.opts.forge_preset not in PresetArch.choices():
+        shared.opts.set("forge_preset", "xl")
     current_preset = shared.opts.forge_preset
     checkpoint_selection = preset_checkpoint_selection(current_preset)
     module_value = module_values_to_ui_selectors(
@@ -743,15 +745,10 @@ def on_preset_change(preset: str):
 
     if use_shift(preset):
         d_args = {"visible": getattr(shared.opts, f"{preset}_show_shift", True), "label": "Shift"}
-    elif use_distill(preset):
-        d_args = {"visible": True, "label": "Distilled CFG Scale"}
     else:
         d_args = {"visible": False}
 
-    if (fps := is_video(preset)) > 1:
-        batch_args_t2i = {"minimum": 1, "maximum": fps * 15 + 1, "step": fps, "label": "Frames", "value": getattr(shared.opts, f"{preset}_t2i_batch_size", 1)}
-    else:
-        batch_args_t2i = {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": getattr(shared.opts, f"{preset}_t2i_batch_size", 1)}
+    batch_args_t2i = {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": getattr(shared.opts, f"{preset}_t2i_batch_size", 1)}
 
     batch_args_i2i = batch_args_t2i.copy()
     batch_args_i2i["value"] = getattr(shared.opts, f"{preset}_i2i_batch_size", 1)

@@ -9,8 +9,8 @@ from modules.aikimi_diagnostics import DiagnosticPaths
 from modules_forge import p_h3_image as ph3
 
 
-@pytest.mark.parametrize("ph3_present,legacy_present", [(True, False), (False, True), (True, True), (False, False)])
-def test_image_status_does_not_require_video_models_for_p_h3(tmp_path, ph3_present, legacy_present):
+@pytest.mark.parametrize("ph3_present,official_present", [(True, False), (False, True), (True, True), (False, False)])
+def test_image_status_does_not_require_video_models_for_p_h3(tmp_path, ph3_present, official_present):
     for relative in ("modules_forge/minimax_h3_bridge.py", "modules_forge/p_h3_image.py",
                      "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_studio.py",
                      "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py"):
@@ -23,18 +23,19 @@ def test_image_status_does_not_require_video_models_for_p_h3(tmp_path, ph3_prese
             file = runtime / "models" / relative
             file.parent.mkdir(parents=True, exist_ok=True)
             file.touch()
+    if official_present:
+        for relative in (f"diffusion_models/{ph3.OFFICIAL_MODEL}", f"text_encoders/{ph3.OFFICIAL_TEXT_ENCODER}", f"vae/{ph3.OFFICIAL_VAE}"):
+            file = runtime / "models" / relative
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.touch()
     paths = DiagnosticPaths(root=tmp_path, models_root=tmp_path / "models", output_root=tmp_path / "output")
     with (patch("modules_forge.minimax_h3_runtime.installed_runtime_root", return_value=runtime),
           patch("modules_forge.minimax_h3_runtime.candidate_runtime_root", return_value=runtime),
-          patch("modules_forge.minimax_h3_bridge.model_file_status", return_value={
-              "FL2VA": legacy_present, "Ref2VA": False, "Qwen3-VL 32B": legacy_present,
-              "Video VAE": legacy_present, "Audio VAE": legacy_present,
-          }),
           patch("modules_forge.local_assets.selection", return_value={})):
         check = capabilities.feature_check("minimax_h3_image", paths)
-    assert check.available is (ph3_present or legacy_present)
+    assert check.available is (ph3_present or official_present)
     assert "P-H3" in check.summary
-    assert "標準H3" in check.summary
+    assert "MiniMax-H3-Image" in check.summary
     if ph3_present:
         assert "補助" in check.summary
 

@@ -125,7 +125,6 @@ on:
       - "tools/tests/test_minimax_h3_studio.py"
       - "tools/tests/test_h3_orbit*.py"
       - "tools/tests/test_comfy_startup_cleanup.py"
-      - "tools/tests/test_option_migrations.py"
       - "tools/tests/test_patcher_cleanup.py"
       - "tools/tests/test_quant_ops_zero_scale.py"
       - "tools/tests/test_remote_auth_middleware.py"
@@ -267,7 +266,6 @@ on:
       - "tools/tests/test_minimax_h3_studio.py"
       - "tools/tests/test_h3_orbit*.py"
       - "tools/tests/test_comfy_startup_cleanup.py"
-      - "tools/tests/test_option_migrations.py"
       - "tools/tests/test_patcher_cleanup.py"
       - "tools/tests/test_quant_ops_zero_scale.py"
       - "tools/tests/test_remote_auth_middleware.py"
@@ -330,9 +328,7 @@ jobs:
         run: python -m pip install -r tools/requirements-test.txt
       - name: Run YuE2 Windows process and UI contracts
         run: python -m pytest tests/yue2 -q
-      - name: Run Jev Windows credential and worker contracts
-        run: python -m pytest tests/jev_sparse -q
-      - name: Run H3 RAM profile and cached Jev contracts
+      - name: Run H3 RAM profile contracts
         run: python tools/run_ci_tests.py --module tools.tests.test_h3_ram_profile --verbosity 1
       - name: Locate Chromium
         shell: pwsh
@@ -414,7 +410,6 @@ jobs:
           --module tools.tests.test_local_model_sources
           --module tools.tests.test_forge_lora_selection
           --module tools.tests.test_forge_lora_ui
-          --module tools.tests.test_option_migrations
           --module tools.tests.test_patcher_cleanup
           --module tools.tests.test_quant_ops_zero_scale
           --module tools.tests.test_remote_auth_middleware

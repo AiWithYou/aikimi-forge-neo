@@ -1124,7 +1124,7 @@ class GradioFullUiChromiumTests(unittest.TestCase):
         self.assertEqual(len(parent_tabs), 1, "Expected the H3 Image parent tab")
         parent_id = parent_tabs[0]["id"]
         method_tabs = {}
-        for label in ("P-H3 Image", "標準H3（実験）"):
+        for label in ("P-H3 Image", "MiniMax-H3-Image"):
             found = [identifier for identifier, ancestors in layout if parent_id in ancestors
                      and by_id.get(identifier, {}).get("type") == "tabitem"
                      and by_id[identifier].get("props", {}).get("label") == label]
@@ -1197,7 +1197,7 @@ class GradioFullUiConfigContractTests(unittest.TestCase):
                 component(101, "tabitem", id="minimax_h3_image_studio", label="H3 Image", visible=True),
                 component(102, "tabs", visible=True),
                 component(103, "tabitem", label="P-H3 Image", visible=True),
-                component(104, "tabitem", label="標準H3（実験）", visible=True),
+                component(104, "tabitem", label="MiniMax-H3-Image", visible=True),
                 component(105, "radio", label="使い方", value="text", visible=True),
                 component(106, "group", visible=False),
                 component(107, "image", label="編集する画像 · Picture 1", visible=True),

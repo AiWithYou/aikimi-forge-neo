@@ -12,12 +12,6 @@ FIELDS = (
     "style_loras",
     "lora_strengths",
     "fun_acc",
-    "sparse_mode",
-    "sparse_keep_percent",
-    "sparse_jev_cadence",
-    "sparse_jev_interval",
-    "sparse_jev_max_calls",
-    "sparse_jev_max_wait_seconds",
     "control_kind",
     "control_image",
     "control_strength",
@@ -64,11 +58,6 @@ def summary(profile, version):
     ]
     if profile["fun_acc"]:
         parts.append("Fun Acc")
-    if profile["sparse_mode"] != "off":
-        sparse = "Sparse " + profile["sparse_mode"]
-        if profile["sparse_mode"] == "fixed":
-            sparse += f" {profile['sparse_keep_percent']:g}%"
-        parts.append(sparse)
     if profile["control_kind"] != "off":
         parts.append(
             "ControlNet "

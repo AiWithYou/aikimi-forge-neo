@@ -126,17 +126,11 @@ class Request:
     annotation_reference: int = -1
     annotation_layers: tuple[str, ...] = ()
     rewrite_prompt: bool = False
-    sparse_mode: str = "off"
-    sparse_keep_percent: float = 75.0
-    sparse_jev_cadence: str = "legacy"
-    sparse_jev_interval: int = 2
     rewrite_edit_prompt: bool = False
     preserve_unmasked: bool = False
     edit_mask_reference: int = -1
     edit_mask_path: str = ""
     mask_feather: float = 0.0
-    sparse_jev_max_calls: int = 0
-    sparse_jev_max_wait_seconds: float = 0.0
     control_kind: str = "off"
     control_image: str = ""
     control_strength: float = 1.0
@@ -215,19 +209,6 @@ class Request:
             if not self.control_image:
                 raise QwenImage21Error("前処理済みの制御画像を追加してください。")
             control_image = validate_images((self.control_image,))[0]
-        from modules_forge.jev_sparse.qwen21 import Options
-
-        try:
-            Options(
-                mode=self.sparse_mode,
-                keep_percent=self.sparse_keep_percent,
-                decision_cadence=self.sparse_jev_cadence,
-                update_interval=integer(self.sparse_jev_interval, "Jevの再判定間隔", 1, 100),
-                job_max_calls=integer(self.sparse_jev_max_calls, "Jevのジョブ内呼出上限", 0, 1000),
-                job_max_wait_seconds=self.sparse_jev_max_wait_seconds,
-            ).validate()
-        except ValueError as exc:
-            raise QwenImage21Error(str(exc)) from None
         inputs = validate_images(self.input_images)
         from .outpaint_native import source_plan, validate_options
 
@@ -281,12 +262,9 @@ class Request:
             input_images=inputs,
             annotation_reference=reference,
             annotation_layers=layers,
-            sparse_jev_interval=int(self.sparse_jev_interval),
             edit_mask_reference=mask_reference,
             edit_mask_path=mask_path,
             mask_feather=feather,
-            sparse_jev_max_calls=int(self.sparse_jev_max_calls),
-            sparse_jev_max_wait_seconds=float(self.sparse_jev_max_wait_seconds),
             control_image=control_image,
             control_strength=float(self.control_strength),
         )

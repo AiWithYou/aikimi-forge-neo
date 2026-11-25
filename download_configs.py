@@ -6,7 +6,6 @@ import shutil
 from huggingface_hub import snapshot_download
 
 PIPELINE_PATHS = (
-    # "baidu/ERNIE-Image",
     "krea/Krea-2-Raw",
 )
 

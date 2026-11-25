@@ -135,17 +135,12 @@ ControlNetの初回推論には各プロセスのウォームアップが含ま�
 
 ## 素材と再現条件
 
-以下は掲載作例の比較条件です。40 steps・制御強度1.0は推奨の参考値で、UIでは別のStepsやTurbo／Fun Accとの併用も指定できます。Sparseを同時に選ぶと、KVキャッシュを無効にしてdense Attentionで実行し、開始時に案内します。掲載画像はその組み合わせの画質評価を含みません。
+以下は掲載作例の比較条件です。40 steps・制御強度1.0は推奨の参考値で、UIでは別のStepsやTurbo／Fun Accとの併用も指定できます。掲載画像はその組み合わせの画質評価を含みません。
 
 - [人物参照](anime-character-reference.jpg)はユーザーがこの作例用に提供した画像です。[人物Lineart](anime-pose-lineart.png)はそれを参照してImageGenで新たな片足立ちの構図を生成しました。[建築Lineart](ring-observatory-lineart.png)と[3D原画](ring-observatory-render-source.png)もImageGenで新規生成しました。Scribble・Canny・Gray・Pose・Inpaintingマスクは元画像から抽出または手作業で作成し、Depth・HED・MLSDは各前処理モデルを適用しました。
 - Windows 11、RTX 3090 24GB、Qwen Image 2.1通常版INT8、CPU退避、Sparse OFF、プロンプト書き換えOFF。制御重みはKijaiのINT8 ConvRot（SHA-256 `07aa961570ac0e03d4ca936aecd76854d077a33cde69b5092399afba01b3715d`）。
 - 数値は各条件1回の測定で、平均や画質保証ではありません。PyTorch割当量はデスクトップやCUDAコンテキストを含むGPU全体の使用量ではありません。
-- 条件画像はあらかじめ作成します。Qwenタブ内では条件画像の自動抽出を行いません。条件画像は出力の縦横比へ中央切り抜き・リサイズして使用します。[前処理スクリプト](../../../tools/prepare_qwen21_fun_example_controls.py)はHED・MLSD・Depth Anything V2 Smallの重みを指定revisionから取得しますが、重みはGitへ追加しません。
-- 導入とUI操作は[Qwenガイド](../../../extensions-builtin/qwen-image21-studio/README.md#fun-controlnet-union--int8)を参照。2Dは人物参照を「参照画像」へ、制御マップを「前処理済みの制御画像」へ入れます。Inpaintingでは編集元、白黒マスク、制御画像を追加します。下のコマンドはv2.2.1の人物作例を再生成します。以前の人物・3D作例も再生成する場合は、旧[制御画像の前処理](../../../tools/prepare_qwen21_fun_example_controls.py)と[手描きScribbleの準備](../../../tools/prepare_qwen21_fun_example_scribble.py)を実行してから、生成コマンドに`--all`を付けます。
-
-```powershell
-.\venv\Scripts\python.exe tools\prepare_qwen21_fun_anime_controls.py
-.\models\Qwen-Image-2.1\worker-env\Scripts\python.exe tools\generate_qwen21_fun_examples.py
-```
+- 条件画像はあらかじめ作成します。Qwenタブ内では条件画像の自動抽出を行いません。条件画像は出力の縦横比へ中央切り抜き・リサイズして使用します。HED・MLSD・Depth Anything V2 Smallの重みは別途必要です。
+- 導入とUI操作は[Qwenガイド](../../../extensions-builtin/qwen-image21-studio/README.md#fun-controlnet-union--int8)を参照。2Dは人物参照を「参照画像」へ、制御マップを「前処理済みの制御画像」へ入れます。Inpaintingでは編集元、白黒マスク、制御画像を追加します。
 
 Qwen本体とControlNet重みの利用条件は[Qwen Research License](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/blob/8a4702014d4dabb5f896fcba917e2ee0a961465f/LICENSE)を確認してください。

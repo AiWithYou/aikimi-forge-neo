@@ -962,19 +962,6 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
 def process_images_inner(p: StableDiffusionProcessing) -> Processed:
     """this is the main loop that both txt2img and img2img use; it calls func_init once inside all the scopes and func_sample once per batch"""
 
-    _times = 1
-    _is_video = False
-    video_path = None
-    if shared.sd_model.is_wan and args.dynamic_args.wan:
-        _times = ((getattr(p, "batch_size", 1) - 1) // 4) + 1  # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy_extras/nodes_wan.py#L41
-        p.batch_size = (_times - 1) * 4 + 1
-        _is_video: bool = _times > 1
-        if _is_video:
-            p.do_not_save_grid = True
-
-    if args.dynamic_args.pid and isinstance(p, StableDiffusionProcessingTxt2Img):
-        raise RuntimeError("PiD does not support txt2img")
-
     if isinstance(p.prompt, list):
         assert len(p.prompt) > 0
     else:
@@ -1058,11 +1045,8 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
             p.seeds = p.all_seeds[n * p.batch_size : (n + 1) * p.batch_size]
             p.subseeds = p.all_subseeds[n * p.batch_size : (n + 1) * p.batch_size]
 
-            if args.dynamic_args.pid:
-                _shape = (3, p.height, p.width)
-            else:
-                latent_channels = shared.sd_model.forge_objects.vae.latent_channels
-                _shape = (latent_channels, _times, p.height // opt_f, p.width // opt_f) if shared.sd_model.is_wan else (latent_channels, p.height // opt_f, p.width // opt_f)
+            latent_channels = shared.sd_model.forge_objects.vae.latent_channels
+            _shape = (latent_channels, 1, p.height // opt_f, p.width // opt_f) if shared.sd_model.is_wan else (latent_channels, p.height // opt_f, p.width // opt_f)
 
             p.rng = rng.ImageRNG(_shape, p.seeds, subseeds=p.subseeds, subseed_strength=p.subseed_strength, seed_resize_from_h=p.seed_resize_from_h, seed_resize_from_w=p.seed_resize_from_w)
 
@@ -1170,9 +1154,7 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                     index=0 if use_main_prompt else start + index, all_negative_prompts=_negative_prompts,
                 )
 
-            save_samples = p.save_samples(is_video=_is_video)
-            if _is_video:
-                frames = []
+            save_samples = p.save_samples()
 
             for i, x_sample in enumerate(x_samples_ddim):
                 p.batch_index = i
@@ -1236,8 +1218,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                 if opts.enable_pnginfo:
                     image.info["parameters"] = text
                 output_images.append(image)
-                if _is_video:
-                    frames.append(np.asarray(image.convert("RGB")))
 
                 if mask_for_overlay is not None:
                     if opts.return_mask or opts.save_mask:
@@ -1254,10 +1234,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                         if opts.return_mask_composite:
                             output_images.append(image_mask_composite)
 
-            if _is_video:
-                if not p.do_not_save_samples:
-                    video_path = images.save_video(p, frames, info=infotext(0))
-                del frames
 
             del x_samples_ddim
 
@@ -1304,7 +1280,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
         extra_images_list=p.extra_result_images,
     )
 
-    res.video_path = video_path
 
     if p.scripts is not None:
         p.scripts.postprocess(p, res)
@@ -1500,9 +1475,6 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             # here we generate an image normally
 
             x = self.rng.next()
-            if shared.sd_model.is_wan and args.dynamic_args.wan:  # enforce batch_size of 1
-                x = x[0].unsqueeze(0)
-
             self.sd_model.forge_objects = self.sd_model.forge_objects_after_applying_lora.shallow_copy()
             apply_token_merging(self.sd_model, self.get_token_merging_ratio())
 
@@ -1831,20 +1803,6 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
         self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
 
-        if (args.dynamic_args.kontext or args.dynamic_args.edit) and self.denoising_strength < 0.9:
-            logger.warning("Edit Models require High Denoising Strength")
-        if args.dynamic_args.wan and self.denoising_strength < 1.0:
-            logger.warning("Video Models require High Denoising Strength")
-
-        if args.dynamic_args.pid:
-            assert self.image_mask is None
-            args.dynamic_args.lq_latent[1] = torch.tensor([self.denoising_strength], dtype=torch.float32)
-            self.denoising_strength = 1.0
-            self.resize_mode = 3  # skip resize image
-            if self.init_latent is not None:
-                args.dynamic_args.lq_latent[0] = self.init_latent.squeeze(2)
-                return
-
         crop_region = None
 
         image_mask = self.image_mask
@@ -2048,13 +2006,6 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
         x = self.rng.next()
         self.sd_model.set_shift(shift=self.distilled_cfg_scale)
-
-        if shared.sd_model.is_wan and args.dynamic_args.wan:  # enforce batch_size of 1
-            x = x[0].unsqueeze(0)
-
-        if args.dynamic_args.pid:
-            self.init_latent = x.detach().clone()
-            args.dynamic_args.context_handler.orig_lq_latent = args.dynamic_args.lq_latent[0].clone()
 
         if self.initial_noise_multiplier != 1.0:
             self.extra_generation_params["Noise multiplier"] = self.initial_noise_multiplier

@@ -8,18 +8,16 @@ from unittest.mock import patch
 import pytest
 
 from modules_forge.qwen_image21 import core, fun_acc_lora, turbo
-from modules_forge.qwen_image21.capabilities import PRECISIONS, sampling_recommendations
+from modules_forge.qwen_image21.capabilities import PRECISIONS
 from tools import qwen_image21_worker as worker
 
 
-def test_request_keeps_selected_model_and_accepts_sparse_fallback_with_four_steps():
+def test_request_keeps_selected_model_with_four_steps():
     for precision in sorted(PRECISIONS):
-        request = core.Request("a bird", precision=precision, steps=4, fun_acc=True, sparse_mode="fixed").resolved()
+        request = core.Request("a bird", precision=precision, steps=4, fun_acc=True).resolved()
         assert request.precision == precision
         assert request.fun_acc is True
         assert request.steps == 4
-        assert request.sparse_mode == "fixed"
-        assert any("通常Attention" in notice for notice in sampling_recommendations(request.to_dict()))
     for fields in (
         {"steps": 40},
         {"fun_acc": "true"},
@@ -74,7 +72,7 @@ def test_installed_requires_pinned_receipt_and_pdd_grid(tmp_path, monkeypatch):
         fun_acc_lora.installed(tmp_path)
 
 
-def test_worker_accepts_turbo_and_sparse_fallback_but_keeps_pdd_steps_and_cache(tmp_path):
+def test_worker_accepts_turbo_but_keeps_pdd_steps_and_cache(tmp_path):
     model = tmp_path / "model"
     model.mkdir()
     (model / "model_index.json").write_text(json.dumps({"_class_name": "QwenImage21Pipeline"}), encoding="utf-8")
@@ -115,14 +113,12 @@ def test_worker_accepts_turbo_and_sparse_fallback_but_keeps_pdd_steps_and_cache(
         assert regular != accelerated
         assert any(isinstance(part, tuple) and part and part[0] == str(adapter) for part in accelerated)
         for precision in ("int8", "turbo_bf16", "turbo_q4_k_m"):
-            selected = request | {"precision": precision, "sparse_mode": "fixed"}
+            selected = request | {"precision": precision}
             (job / "request.json").write_text(json.dumps(selected), encoding="utf-8")
             restored = worker._read_request(payload)[2]
             assert restored["precision"] == precision
             assert restored["steps"] == 4
             assert restored["fun_acc"] is True
-            assert restored["sparse_mode"] == "fixed"
-            assert any("通常Attention" in notice for notice in sampling_recommendations(restored))
         for invalid in ({"steps": 40}, {"fun_acc": "true"}):
             (job / "request.json").write_text(json.dumps(request | invalid), encoding="utf-8")
             with pytest.raises(ValueError, match="Fun Acc"):

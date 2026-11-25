@@ -4,7 +4,6 @@ import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 from tools.tests.test_infotext_prompt_restore import RestoreFixture
 
@@ -50,32 +49,6 @@ class GridCommentInfotextTests(unittest.TestCase):
                 self.assertEqual(parsed["Per image"], "first extra" if main else "second extra")
                 self.assertEqual(parsed["Hires prompt"], "first hires" if main else "second hires")
 
-        video_call = next(
-            n for n in ast.walk(tree) if isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
-            and isinstance(n.value.func, ast.Attribute) and n.value.func.attr == "save_video"
-        )
-        for save_comments in (False, True):
-            with self.subTest(video=True, save_comments=save_comments):
-                fixture.opts.save_prompt_comments = save_comments
-                images = SimpleNamespace(save_video=Mock(return_value="fixture.mp4"))
-                scope.update(images=images, frames=[])
-                exec(compile(ast.Module(body=[video_call], type_ignores=[]), str(path), "exec"), scope)  # noqa: S102
-                parsed = fixture.info.parse_generation_parameters(images.save_video.call_args.kwargs["info"])
-                self.assertEqual(parsed["Prompt"], p._all_prompts_c[1] if save_comments else "second")
-                self.assertEqual(parsed["Seed"], "202")
-                self.assertEqual(parsed["Variation seed"], "404")
-                self.assertEqual(parsed["Per image"], "second extra")
-                self.assertEqual(parsed["Hires prompt"], "second hires")
-
-        fixture.opts.save_prompt_comments = False
-        p.prompts, p.negative_prompts = ["effective prompt"], ["effective negative"]
-        p.seeds, p.subseeds = [999], [888]
-        parsed = fixture.info.parse_generation_parameters(scope["infotext"]())
-        self.assertEqual(parsed["Prompt"], "effective prompt")
-        self.assertEqual(parsed["Negative prompt"], "effective negative")
-        self.assertEqual(parsed["Seed"], "999")
-        self.assertEqual(parsed["Variation seed"], "888")
-        self.assertEqual(parsed["Per image"], "second extra")
         self.assertEqual(p.all_prompts, ["first", "second"])
         self.assertEqual(p.all_seeds, [101, 202])
 

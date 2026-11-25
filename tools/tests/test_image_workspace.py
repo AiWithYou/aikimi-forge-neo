@@ -274,39 +274,9 @@ def studio_ui(path):
     return module
 
 
-class ReferenceAdapterTests(unittest.TestCase):
-
-    def test_h3_excludes_hidden_references_in_txt2img(self):
-        ui = studio_ui("extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py")
-        with patch.object(ui.images, "_bridge", side_effect=AssertionError("must not read retained images")):
-            request = ui._request(
-                "text",
-                "a fox",
-                ["retained.png"],
-                768,
-                768,
-                20,
-                123,
-                "simple",
-                0,
-                False,
-                False,
-                1,
-                True,
-                0,
-                999,
-                1,
-                False,
-                False,
-                "",
-            )
-        self.assertEqual(request.reference_images, ())
-
-
 class StudioSurfaceTests(unittest.TestCase):
     def test_all_image_studios_use_one_mode_pair_and_keep_job_status_visible(self):
         models = [
-            ("iris-studio/scripts/iris_studio.py", "on_ui_tabs", True, "iris-status"),
             ("qwen-image21-studio/scripts/qwen_image21_studio.py", "on_ui_tabs", True, "qwen21-status"),
             ("minimax-h3-studio/scripts/minimax_h3_image_studio.py", "on_ui_tabs", True, "h3-image-status"),
         ]
@@ -328,27 +298,18 @@ class StudioSurfaceTests(unittest.TestCase):
                     )
                     tabs = [item for item in config["components"] if item["type"] == "tabitem"]
                     mode_tabs = [item for item in tabs if item["props"]["label"] in {"txt2img", "img2img"}]
-                    self.assertEqual([item["props"]["label"] for item in mode_tabs], ["txt2img", "img2img"])
-                    self.assertEqual(mode_tabs[1]["props"]["interactive"], editable)
                     if path.startswith("minimax-h3-studio/"):
-                        methods = [item for item in tabs if item not in mode_tabs]
-                        self.assertEqual(
-                            [item["props"]["label"] for item in methods],
-                            ["P-H3 Image", "MiniMax-H3-Image", "標準H3（実験）"],
-                        )
-                        mode_ids = {item["id"] for item in mode_tabs}
-                        for method in methods[:2]:
-                            self.assertFalse(mode_ids & layout_subtree(config["layout"], method["id"]))
-                        self.assertTrue(mode_ids <= layout_subtree(config["layout"], methods[2]["id"]))
+                        self.assertEqual([item["props"]["label"] for item in tabs], ["P-H3 Image", "MiniMax-H3-Image"])
                     else:
-                        self.assertEqual(tabs, mode_tabs)
-                    status = next(item for item in blocks.blocks.values() if item.elem_id == status_id)
-                    ancestors = list()
-                    while status is not None:
-                        ancestors.extend(getattr(status, "elem_classes", None) or [])
-                        status = getattr(status, "parent", None)
-                    self.assertIn("aikimi-image-actions", ancestors)
-                    self.assertNotIn("aikimi-image-panel", ancestors)
+                        self.assertEqual([item["props"]["label"] for item in mode_tabs], ["txt2img", "img2img"])
+                        self.assertEqual(mode_tabs[1]["props"]["interactive"], editable)
+                        status = next(item for item in blocks.blocks.values() if item.elem_id == status_id)
+                        ancestors = list()
+                        while status is not None:
+                            ancestors.extend(getattr(status, "elem_classes", None) or [])
+                            status = getattr(status, "parent", None)
+                        self.assertIn("aikimi-image-actions", ancestors)
+                        self.assertNotIn("aikimi-image-panel", ancestors)
                     for dependency in config["dependencies"]:
                         for identifier in [*dependency["inputs"], *dependency["outputs"]]:
                             self.assertIn(identifier, mounted)

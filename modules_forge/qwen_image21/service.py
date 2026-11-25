@@ -294,20 +294,16 @@ class Studio:
             if self._resident is None:
                 self._resident = self._worker_factory(ENGINE, self.runtime / "sessions")
             resident = self._resident
-            from modules_forge.jev_sparse.qwen21_integration import worker_launch
-
-            worker, environment, sparse_payload = worker_launch(request, WORKER, safe_environment())
             reused = resident.start(
                 entry["python"],
-                worker,
-                environment,
+                WORKER,
+                safe_environment(),
                 {
                     "model_path": entry["model"],
                     "runtime_root": str(self.runtime.resolve()),
                     "precision": request.precision,
                     "memory_mode": request.memory_mode,
                     "job_dir": str(job.directory.resolve()),
-                    **sparse_payload,
                 },
                 job.directory / "worker.log",
             )

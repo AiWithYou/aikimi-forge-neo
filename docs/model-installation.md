@@ -116,10 +116,8 @@ v1.1用PowerShell installerの一時peakは約17.82 GiBで、この値はAnima�
 ```text
 download_krea2_int8_convrot_models.bat
 download_anima38_v11_int8_convrot_models.bat
-download_anima38_int8_convrot_models.bat
 ```
 
-Animaの旧ファイル名はv1専用の互換入口です。新規導入では`download_anima38_v11_int8_convrot_models.bat`を使います。
 
 既存の自動化がPowerShell switchを使う場合も、`-KeepSource`、`-RuntimeOnly`、`-ModelOnly`を維持します。新しい導入では統一CLIを推奨します。
 

@@ -9,7 +9,6 @@ on:
       - "tools/tests/test_fifo_lock_handoff.py"
       - "tools/tests/test_persistence_reliability.py"
       - "tools/tests/test_video_writer_ffmpeg.py"
-      - "tools/tests/test_option_migrations.py"
       - "pyproject.toml"
       - ".github/workflows/persistence-reliability.yml"
   push:
@@ -21,7 +20,6 @@ on:
       - "tools/tests/test_fifo_lock_handoff.py"
       - "tools/tests/test_persistence_reliability.py"
       - "tools/tests/test_video_writer_ffmpeg.py"
-      - "tools/tests/test_option_migrations.py"
       - "pyproject.toml"
       - ".github/workflows/persistence-reliability.yml"
   workflow_dispatch:
@@ -72,5 +70,4 @@ jobs:
           python -m unittest -v
           tools.tests.test_persistence_reliability
           tools.tests.test_video_writer_ffmpeg
-          tools.tests.test_option_migrations
           tools.tests.test_fifo_lock_handoff

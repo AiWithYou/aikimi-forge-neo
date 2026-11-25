@@ -8,12 +8,14 @@ Aikimi Forge Neoは、Forge Neo本体へすべてのruntimeを埋め込まず、
 Windows launcher / Docker entrypoint
   -> startup security policy
   -> Forge WebUI and FastAPI
-     -> standard txt2img / img2img / Extras
+     -> txt2img / img2img (SDXL, Anima 3.8B, Krea2) / Extras
      -> Aikimi tab aliases
         -> Krea2 -> UI Preset krea / keep txt2img or img2img / other tabs -> txt2img
         -> Anima -> UI Preset anima / keep txt2img or img2img / other tabs -> txt2img / matching accordion
      -> Aikimi native tabs
-        -> MiniMax H3 bridge -> local ComfyUI process
+        -> H3 Image (P-H3 Image, MiniMax-H3-Image) / MiniMax H3 video -> local ComfyUI process
+        -> Qwen Image 2.1 / FLUX 3 / MOSS Image
+        -> Irodori TTS / YuE2 Music / Clef
      -> scoped Aikimi status
      -> Diagnostics and read-only API
   -> managed output and temporary directories
@@ -54,9 +56,9 @@ API routeは共通の認証処理を使います。healthは最小情報、statu
 
 ## Aikimi UIとStatus
 
-`extensions-builtin/aikimi-ui`は、Aikimi固有の小型ナビゲーション、ちびあいきみ、status用CSSを所有します。AikimiナビゲーションはGradioのタブ列へbuttonを挿入せず、`#tabs`直前の独立した1行として配置します。Forge由来の上部タブ、Quick Settings、`txt2img`、`img2img`、`Extras`、`Settings`は維持します。専用の画像Studioを開いている間はForge側のtxt2img／img2imgボタンを隠し、そのStudio内で切り替えます。IrisとFLUX 3では用途のないCheckpoint・VAEのQuick Settingsも隠します。
+`extensions-builtin/aikimi-ui`は、Aikimi固有の小型ナビゲーション、ちびあいきみ、status用CSSを所有します。AikimiナビゲーションはGradioのタブ列へbuttonを挿入せず、`#tabs`直前の独立した1行として配置します。Forge由来の上部タブ、Quick Settings、`txt2img`、`img2img`、`Extras`、`Settings`は維持します。専用の画像Studioを開いている間はForge側のtxt2img／img2imgボタンを隠し、そのStudio内で切り替えます。FLUX 3では用途のないCheckpoint・VAEのQuick Settingsも隠します。
 
-画像生成はモデルごとの能力に合わせた[共通画面](image-workspace.md)を使用します。設定パネルの開閉は機能の有効・無効と独立し、元のコンポーネント・実行サービスを使います。参照画像を使う編集と、Irisの変更強度を使うimg2imgは、それぞれのサンプリングを維持します。
+画像生成はモデルごとの能力に合わせた[共通画面](image-workspace.md)を使用します。設定パネルの開閉は機能の有効・無効と独立し、元のコンポーネント・実行サービスを使います。Forge共通画面はSDXL、Anima 3.8B、Krea2を扱います。
 
 `aikimi_tabs.js`は`window.AikimiTabs`と`aikimi:feature-tab-change`を公開します。feature keyとcapabilities APIは、`krea2`、`anima38`、`minimax_h3`の識別子を共用します。Krea2はUI Presetの`krea`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持するaliasです。別のタブから開いた場合は`txt2img`へ移動し、`Krea2 2-Stage Upscale`は自動選択しません。AnimaはUI Presetの`anima`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持するaliasです。別のタブから開いた場合は`txt2img`へ移動し、選択したタブの`Anima 3.8B`設定欄を展開します。生成設定、queue、model状態を別のUI stateへ複製しません。
 

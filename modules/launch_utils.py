@@ -381,10 +381,8 @@ assert cuda or xpu or mps
     ver_SAGE = "2.2.0"
     ver_FLASH = "2.8.3"
     ver_TRITON = "3.6.0"
-    ver_NUNCHAKU = "1.2.1"
     ver_TORCH, ver_CUDA = _torch_version()
     v_TORCH = ver_TORCH.rsplit(".", 1)[0]
-    v_CUDA = f"{ver_CUDA[0:-1]}.{ver_CUDA[-1]}"
 
     if os.name == "nt":
         ver_TRITON += ".post26"
@@ -392,27 +390,11 @@ assert cuda or xpu or mps
         sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post4/sageattention-{ver_SAGE}+{ver_CUDA}torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl")
         flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.6/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows=={ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
 
     else:
         sage_package = os.environ.get("SAGE_PACKAGE", f"sageattention=={ver_SAGE}")
         flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton=={ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
-
-    def _verify_nunchaku() -> bool:
-        if not is_installed("nunchaku"):
-            return False
-
-        import importlib.metadata
-
-        import packaging.version
-
-        ver_installed: str = importlib.metadata.version("nunchaku")
-        current: tuple[int] = packaging.version.parse(ver_installed)
-        target: tuple[int] = packaging.version.parse(ver_NUNCHAKU)
-
-        return current >= target
 
     if args.xformers and (not is_installed("xformers") or args.reinstall_xformers):
         run_pip(f"install -U -I --no-deps {xformers_package}", "xformers")
@@ -442,13 +424,6 @@ assert cuda or xpu or mps
         else:
             startup_timer.record("install flash_attn")
 
-    if args.nunchaku and not _verify_nunchaku():
-        try:
-            run_pip(f"install {nunchaku_package}", "nunchaku")
-        except RuntimeError:
-            print("Failed to install nunchaku; Please manually install it")
-        else:
-            startup_timer.record("install nunchaku")
 
     if args.bnb and not is_installed("bitsandbytes"):
         try:

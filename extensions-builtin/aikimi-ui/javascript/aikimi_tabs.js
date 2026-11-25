@@ -66,12 +66,6 @@
             label: "Irodori TTS",
             kind: "native",
         }),
-        iris: Object.freeze({
-            buttonId: "aikimi-tab-iris",
-            containerId: "tab_iris_studio",
-            label: "Iris",
-            kind: "native",
-        }),
         flux3: Object.freeze({
             buttonId: "aikimi-tab-flux3",
             containerId: "tab_flux3_klein_studio",
@@ -94,7 +88,6 @@
         "yue2",
         "irodori",
         "clef",
-        "iris",
         "flux3",
         "moss_image",
     ]);

@@ -50,12 +50,6 @@ QwenのINT8 ConvRot実行には専用環境の`comfy-kitchen==0.2.31`を利用�
 
 [公式推論コード](https://github.com/Aratako/Irodori-TTS/tree/89f9d8fbd4d51ea019867ee1197725ede1df13c5)はMITライセンスです。[Irodori-TTS-v4-Large](https://huggingface.co/Aratako/Irodori-TTS-v4-Large/tree/2e0c55428ce97268a507f1feeb2478f8d9148e8b)にはGemma利用規約とモデル配布元の追加条件が適用されます。[DACVAE](https://huggingface.co/Aratako/Semantic-DACVAE-Japanese-32dim)と[SilentCipher](https://huggingface.co/Sony/SilentCipher)は各配布元の条件も参照してください。コード・重みはGitへ同梱せず、専用セットアップが固定revisionを利用者のローカル環境へ取得します。[使い方と制限](docs/irodori-tts.md)
 
-## Iris-3B Turbo sampler
-
-`modules_forge/iris/turbo.py`は、pentaCoxianの[Iris-3B Turbo Spaceの`iris3b/distill.py`](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo/blob/5243039779e896b9dc884433e76b33cbe9f4f5e7/iris3b/distill.py)、commit `5243039779e896b9dc884433e76b33cbe9f4f5e7`のsamplerを基にしています。NeoのIris推論へ統合し、任意の手動CFG・Negative Prompt指定を追加しました。
-
-配布元の[Apache-2.0 LICENSE](https://huggingface.co/spaces/pentacoxian-dev/iris-3b-turbo/blob/5243039779e896b9dc884433e76b33cbe9f4f5e7/LICENSE)全文を[modules_forge/iris/LICENSE.turbo](modules_forge/iris/LICENSE.turbo)へ同梱します。TurboのLoRA重みは固定revision・SHA-256で別途取得し、Gitには含めません。[使い方・導入](docs/iris-studio.md#任意のloraとturbo)
-
 ## FLUX 3 Image Klein
 
 - 画像モデルの原作・公式Comfy形式: [Black Forest Labs](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/tree/bfec4ea10ad389929f0f483d54508fc21e6c2ede)。蒸留版・Baseの重みには[FLUX Kommunity License v.1.0](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/blob/bfec4ea10ad389929f0f483d54508fc21e6c2ede/LICENSE.md)が適用されます。モデルの使用・出力の利用・再配布は、その全文の条件に従います。

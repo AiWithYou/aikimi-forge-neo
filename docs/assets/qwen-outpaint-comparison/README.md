@@ -10,10 +10,4 @@
 
 ファイル名の`street`は青いティーポットのケースを指します。各ケースの`source`が元画像、`reference`が余白付き参照、`raw`が元画像を合成する前の生成結果です。元画像領域のPSNRは合成前の保持具合を測る値で、描き足した領域の画質順位を示しません。3作例で全般的な優劣は断定できません。
 
-同じ条件の再生成には、Qwen本体・専用環境・v2 LoRAを準備してから以下を実行します。成功済みのジョブは照合して再利用します。
-
-```powershell
-models/Qwen-Image-2.1/worker-env/Scripts/python.exe tools/compare_qwen21_outpaint.py
-```
-
 ![青いティーポットの比較](street-comparison.png)

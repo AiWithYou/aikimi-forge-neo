@@ -65,74 +65,60 @@ class CheckpointSnapshots(unittest.TestCase):
         from contextlib import ExitStack
 
         from modules_forge import minimax_h3_bridge as h3
-        from modules_forge import minimax_h3_images as images
-        from tools.tests.test_minimax_h3_images import fake_bridge, readiness
+        with TemporaryDirectory() as folder, ExitStack() as stack:
+            root = Path(folder)
+            client = Mock()
+            bridge = h3
+            stack.enter_context(patch.object(bridge, "_GPU_OWNERSHIPS", {}))
+            for name, value in {
+                "ensure_ready": SimpleNamespace(ready_for_fl2va=True, ready_for_ref2va=True, ram_free_gib=32, commit_free_gib=32, node_schemas={}, runtime_profile="fast"),
+                "prepare_media": {},
+                "build_workflow": {},
+                "ComfyH3Client": client,
+                "_is_cancelled_job": False,
+            }.items():
+                stack.enter_context(patch.object(bridge, name, return_value=value))
+            for name in (
+                "release_forge_vram",
+                "_validate_request_runtime_constraints",
+                "cleanup_stale_prepared_media",
+                "cleanup_prepared_media",
+                "_schedule_deferred_cleanup",
+                "_clear_cancelled_job",
+            ):
+                stack.enter_context(patch.object(bridge, name))
+            stack.enter_context(patch.object(bridge, "pending_jobs", Mock()))
+            stack.enter_context(
+                patch.object(bridge.workflow_handoff, "capture_generation", return_value=(None, ""))
+            )
+            state = {"changed": False}
 
-        for family in ("h3", "image"):
-            with self.subTest(family=family), TemporaryDirectory() as folder, ExitStack() as stack:
-                root = Path(folder)
-                bridge, client = fake_bridge()
-                if family == "h3":
-                    bridge = h3
-                    stack.enter_context(patch.object(bridge, "_GPU_OWNERSHIPS", {}))
-                    for name, value in {
-                        "ensure_ready": readiness(),
-                        "prepare_media": {},
-                        "build_workflow": {},
-                        "ComfyH3Client": client,
-                        "_is_cancelled_job": False,
-                    }.items():
-                        stack.enter_context(patch.object(bridge, name, return_value=value))
-                    for name in (
-                        "release_forge_vram",
-                        "_validate_request_runtime_constraints",
-                        "cleanup_stale_prepared_media",
-                        "cleanup_prepared_media",
-                        "_schedule_deferred_cleanup",
-                        "_clear_cancelled_job",
-                    ):
-                        stack.enter_context(patch.object(bridge, name))
-                    stack.enter_context(patch.object(bridge, "pending_jobs", Mock()))
-                    stack.enter_context(
-                        patch.object(bridge.workflow_handoff, "capture_generation", return_value=(None, ""))
-                    )
-                else:
-                    stack.enter_context(
-                        patch.object(images, "_bridge", return_value=bridge)
-                    )
-                state = {"changed": False}
+            def process(_, state=state):
+                state["changed"] = True
+                return SimpleNamespace(pid=1, create_time=lambda: 1.0)
 
-                def process(_, state=state):
-                    state["changed"] = True
-                    return SimpleNamespace(pid=1, create_time=lambda: 1.0)
+            def verify(_, state=state):
+                if state["changed"]:
+                    raise ValueError("選択したチェックポイントが変更されました。")
 
-                def verify(_, state=state):
-                    if state["changed"]:
-                        raise ValueError("選択したチェックポイントが変更されました。")
+            stack.enter_context(patch.object(bridge, "_loopback_server_process", side_effect=process))
+            stack.enter_context(patch.object(studio_checkpoints, "verify_snapshot", side_effect=verify))
+            stack.enter_context(patch("modules_forge.gpu_residency.register"))
+            ownership = Mock()
+            ownership.acquire.return_value = True
+            stack.enter_context(patch.object(h3, "GPUOwnership", return_value=ownership))
+            stack.enter_context(patch("modules_forge.gpu_ownership.GPUOwnership", return_value=ownership))
+            events = h3.run_generation(
+                h3.H3Request(mode="text", prompt="test"), root, "http://127.0.0.1:8189", root, root
+            )
+            with self.assertRaisesRegex(ValueError, "変更"):
+                list(events)
+            client.submit.assert_not_called()
+            bridge.pending_jobs.write.assert_not_called()
+            bridge._schedule_deferred_cleanup.assert_not_called()
+            self.assertEqual(bridge._GPU_OWNERSHIPS, {})
+            ownership.release.assert_called_once()
 
-                stack.enter_context(patch.object(bridge, "_loopback_server_process", side_effect=process))
-                stack.enter_context(patch.object(studio_checkpoints, "verify_snapshot", side_effect=verify))
-                stack.enter_context(patch("modules_forge.gpu_residency.register"))
-                ownership = Mock()
-                ownership.acquire.return_value = True
-                stack.enter_context(patch.object(h3, "GPUOwnership", return_value=ownership))
-                stack.enter_context(patch("modules_forge.gpu_ownership.GPUOwnership", return_value=ownership))
-                if family == "h3":
-                    events = h3.run_generation(
-                        h3.H3Request(mode="text", prompt="test"), root, "http://127.0.0.1:8189", root, root
-                    )
-                else:
-                    stack.enter_context(patch.object(images, "build_image_workflow", return_value={}))
-                    events = images.run_image_generation(
-                        images.H3ImageRequest("test"), root, "http://127.0.0.1:8189", root, root
-                    )
-                with self.assertRaisesRegex(ValueError, "変更"):
-                    list(events)
-                client.submit.assert_not_called()
-                bridge.pending_jobs.write.assert_not_called()
-                bridge._schedule_deferred_cleanup.assert_not_called()
-                self.assertEqual(bridge._GPU_OWNERSHIPS, {})
-                ownership.release.assert_called_once()
 
     def test_h3_profile_accepts_selected_checkpoint_registration(self):
         from modules_forge import minimax_h3_bridge as bridge
@@ -335,7 +321,6 @@ class CheckpointSnapshots(unittest.TestCase):
         from PIL import Image
 
         from modules_forge import minimax_h3_bridge as bridge
-        from modules_forge import minimax_h3_images as images
         from tools.tests.test_studio_checkpoint_routes import checkpoint
 
         with TemporaryDirectory() as folder:
@@ -355,7 +340,6 @@ class CheckpointSnapshots(unittest.TestCase):
             video_request = bridge.H3Request(
                 mode="text", prompt="test", acceleration=H3Acceleration(checkpoint=selected)
             )
-            image_request = images.H3ImageRequest("test", width=256, height=256, checkpoint=selected)
             with (
                 patch.object(local_assets, "file_identity", side_effect=AssertionError("must retain start identity")),
                 patch.object(bridge, "_validate_video_result", return_value={}),
@@ -363,20 +347,10 @@ class CheckpointSnapshots(unittest.TestCase):
                 video_result = bridge.mirror_result(
                     video, root / "videos", video_request, "job", 42, readiness, checkpoint_snapshot=snapshot
                 )
-                image_result = images.save_image_result(
-                    [source], [], root / "images", image_request, 42, "job", readiness, checkpoint_snapshot=snapshot
-                )
             self.assertEqual(
                 json.loads(video_result.with_suffix(".json").read_text(encoding="utf-8"))["checkpoint_identity"],
                 snapshot["identity"],
             )
-            self.assertEqual(image_result["metadata"]["checkpoint_identity"], snapshot["identity"])
-            Path(selected).write_bytes(b"replacement")
-            with self.assertRaisesRegex(ValueError, "変更"):
-                images.save_image_result(
-                    [source], [], root / "rejected", image_request, 42, "job", readiness, checkpoint_snapshot=snapshot
-                )
-            self.assertFalse((root / "rejected").exists())
 
     def test_yue_native_rejects_package_overwrite_during_load(self):
         from modules_forge.yue2_studio import worker

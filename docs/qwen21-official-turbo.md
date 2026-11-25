@@ -37,7 +37,7 @@ Neoを終了してルートで実行します。W4A8はrepo名・精度・取得
 
 BF16は本体だけで約14.23 GBです。テキストエンコーダーなども必要なため、モデル全体のGPU常駐にはさらに容量が必要です。GPU常駐を選んで容量が足りない場合は、読み込み前にCPU退避または量子化モデルを案内します。
 
-**画像を広げる**にも公式Turboを引き継ぎ、Outpaint側のStepsを使います。画風LoRA・Outpaint LoRA・Fun ControlNetは既存のQwen経路を使いますが、通常版と同じ画質や編集特性は保証しません。Fun Accも試せますが、配布元の推奨組み合わせではなく、Fun Accの専用PDDスケジューラと4 stepsを優先します。SparseとFun ControlNetの併用条件は[Qwenガイド](../extensions-builtin/qwen-image21-studio/README.md)と同じです。
+**画像を広げる**にも公式Turboを引き継ぎ、Outpaint側のStepsを使います。画風LoRA・Outpaint LoRA・Fun ControlNetは既存のQwen経路を使いますが、通常版と同じ画質や編集特性は保証しません。Fun Accも試せますが、配布元の推奨組み合わせではなく、Fun Accの専用PDDスケジューラと4 stepsを優先します。Fun ControlNetの利用条件は[Qwenガイド](../extensions-builtin/qwen-image21-studio/README.md)と同じです。
 
 ## 固定モデルとサンプリング
 

@@ -32,8 +32,6 @@ def sampling_recommendations(values):
         notices.append("TurboとFun Accの併用は画質実験です。Fun Accの4 steps samplerで実行します。")
     elif control and recommended_steps(precision) is not None:
         notices.append("TurboとControlNetの併用は画質実験です。指定した設定で実行します。")
-    if values.get("sparse_mode", "off") != "off" and (fun_acc or control):
-        notices.append("ControlNet・Fun Accとの併用ではSparseが働かず、通常Attentionで実行します。")
     if control and not 0 <= values.get("control_strength", 1.0) <= 2:
         notices.append("ControlNetの強度の目安は0〜2です。指定した強度で実行します。")
     return notices

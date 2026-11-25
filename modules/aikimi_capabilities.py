@@ -311,7 +311,7 @@ def _qwen_image21_check(paths: DiagnosticPaths) -> DiagnosticCheck:
 
 def _minimax_h3_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     implementation = all((paths.root / name).is_file() for name in (
-        "modules_forge/minimax_h3_bridge.py",
+        "modules_forge/p_h3_image.py",
         "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py",
     ))
     if not implementation:
@@ -320,16 +320,20 @@ def _minimax_h3_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
             "H3 Imageの画面または実行部品が見つかりません。", "H3 Imageの組み込みファイルを復元してください。", available=False,
         )
 
-    ph3_ready = legacy_ready = upsampler_ready = False
+    ph3_ready = official_ready = upsampler_ready = False
     try:
         from modules_forge import local_assets, p_h3_image
         from modules_forge.minimax_h3_runtime import candidate_runtime_root, installed_runtime_root, model_root
 
         runtime = installed_runtime_root(paths.root)
         if runtime is not None:
-            legacy_ready = _h3_selected_model_status(runtime)
             if (paths.root / "modules_forge/p_h3_image.py").is_file() and runtime.resolve() == candidate_runtime_root(paths.root).resolve():
                 models = model_root(runtime)
+                official_ready = all((models / folder / name).is_file() for folder, name in (
+                    ("diffusion_models", p_h3_image.OFFICIAL_MODEL),
+                    ("text_encoders", p_h3_image.OFFICIAL_TEXT_ENCODER),
+                    ("vae", p_h3_image.OFFICIAL_VAE),
+                ))
                 selected = local_assets.selection("p-h3-image").get("checkpoint", "")
                 checkpoint = Path(selected) if selected else models / "diffusion_models" / p_h3_image.MODEL
                 ph3_ready = (
@@ -341,12 +345,12 @@ def _minimax_h3_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     except (OSError, ValueError, TypeError, ImportError):
         pass
 
-    summary = f"P-H3: {'必要ファイルあり' if ph3_ready else '未確認'} / 標準H3: {'必要ファイルあり' if legacy_ready else '未確認'}。"
+    summary = f"P-H3: {'必要ファイルあり' if ph3_ready else '未確認'} / MiniMax-H3-Image: {'必要ファイルあり' if official_ready else '未確認'}。"
     if ph3_ready and not upsampler_ready:
         summary += "プロンプト補助はオフで使用できます。"
-    action = "ファイルの存在による簡易確認です。生成時にモデルと実行環境を確認します。" if ph3_ready or legacy_ready else "H3 Imageの使いたい方式で実行環境とモデルを準備してください。"
+    action = "ファイルの存在による簡易確認です。生成時にモデルと実行環境を確認します。" if ph3_ready or official_ready else "H3 Imageの使いたい方式で実行環境とモデルを準備してください。"
     return DiagnosticCheck("minimax_h3_image", "MiniMax H3 Image", CheckState.WARNING, summary, action,
-                           available=ph3_ready or legacy_ready)
+                           available=ph3_ready or official_ready)
 
 
 def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | None:

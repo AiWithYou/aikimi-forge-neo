@@ -13,10 +13,32 @@ from modules_forge import model_catalog
 from tools.aikimi_setup import PROFILES
 
 ROOT = Path(__file__).resolve().parents[2]
-RETIRED = ("sensenova", "nanosaur2", "ming_image")
+RETIRED = ("sensenova", "nanosaur2", "ming_image", "iris", "jev_sparse", "jev")
 
 
 class RetiredImageFeaturesTests(unittest.TestCase):
+    def test_forge_families_and_presets(self):
+        from modules_forge.presets import PresetArch
+
+        self.assertEqual(set(PresetArch.choices()), {"xl", "anima", "krea"})
+        self.assertEqual(set(model_catalog.FORGE_FAMILIES), {"SDXL", "Anima", "Krea2"})
+
+    def test_retired_controls_are_absent(self):
+        for filename in (
+            "extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js",
+            "extensions-builtin/aikimi-ui/javascript/aikimi_image_workspace.js",
+            "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py",
+            "modules/aikimi_capabilities.py",
+            "modules_forge/model_catalog.py",
+            "modules_forge/main_entry.py",
+            "backend/args.py",
+            "tools/aikimi_setup.py",
+        ):
+            source = (ROOT / filename).read_text(encoding="utf-8").lower()
+            for token in ("iris", "jev", "標準h3（実験）", "nunchaku", "svdq"):
+                with self.subTest(filename=filename, token=token):
+                    self.assertFalse(token in source)
+
     def test_old_capabilities_and_profiles_are_not_exposed(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -49,13 +71,14 @@ class RetiredImageFeaturesTests(unittest.TestCase):
                 model_catalog.prepare_directories()
             self.assertEqual(old_model.read_bytes(), b"existing model")
             self.assertFalse((root / "models/Nanosaur2").exists())
-            self.assertFalse((root / "models/Ming-Image").exists())
+            for family in ("Ming-Image", "Iris-3B", "SD", "Flux", "Flux.2", "Wan", "PiD"):
+                self.assertFalse((root / "models" / family).exists(), family)
             self.assertTrue((root / "models/MiniMax-H3/checkpoints").is_dir())
 
     @unittest.skipUnless(os.name == "nt" and shutil.which("pwsh"), "PowerShell 7 required")
     def test_launcher_rejects_retired_profiles_and_keeps_h3_dry_run(self):
         launcher = str(ROOT / "aikimi-setup.ps1")
-        for model in ("sensenova", "nanosaur2", "ming-image"):
+        for model in ("sensenova", "nanosaur2", "ming-image", "iris", "jev"):
             with self.subTest(model=model):
                 result = subprocess.run(  # noqa: S603 - fixed launcher and fixed profile names
                     [shutil.which("pwsh"), "-NoProfile", "-File", launcher, "-Model", model, "-DryRun", "-NoPause"],

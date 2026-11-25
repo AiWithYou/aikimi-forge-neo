@@ -11,7 +11,6 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from modules_forge.minimax_h3_images import H3ImageError, H3ImageRequest, extract_image_outputs
 from modules_forge.qwen_image21 import core
 from tools.tests import test_qwen_image21_mask as mask_tests
 from tools.tests import test_qwen_image21_service as qwen_tests
@@ -44,9 +43,6 @@ class StudioOutputPixelTests(unittest.TestCase):
             self.skipTest(f"native symlinks unavailable: {error}")
         with self.assertRaises(core.QwenImage21Error):
             core.inside(base, link)
-        history = {"job": {"outputs": {"save": {"images": [{"type": "output", "filename": link.name}]}}}}
-        with self.assertRaises(H3ImageError):
-            extract_image_outputs(history, "job", base.parent, H3ImageRequest("test"))
 
 
     def test_qwen_does_not_complete_png_with_incomplete_pixel_stream(self):

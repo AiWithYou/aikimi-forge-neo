@@ -98,7 +98,6 @@ class PrepareEnvironmentTests(unittest.TestCase):
             "reinstall_xformers": False,
             "sage": False,
             "flash": False,
-            "nunchaku": False,
             "bnb": False,
             "ngrok": None,
             "onnxruntime_gpu": False,

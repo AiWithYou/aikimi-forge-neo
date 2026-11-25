@@ -58,7 +58,6 @@ class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
             ("minimax_h3_studio", "H3 Studio"),
             ("qwen_image21_studio", "Qwen Image 2.1"),
             ("clef_studio", "Clef"),
-            ("iris_studio", "Iris"),
             ("irodori_studio", "Irodori TTS"),
             ("flux3_klein_studio", "FLUX 3"),
             ("moss_image_studio", "MOSS Image"),
@@ -456,7 +455,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 11
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 10
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -853,7 +852,6 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "YuE2 Music",
                 "Irodori TTS",
                 "Clef",
-                "Iris",
                 "FLUX 3",
                 "MOSS Image",
             ],
@@ -1061,7 +1059,6 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "YuE2 Music",
                 "Irodori TTS",
                 "Clef",
-                "Iris",
                 "FLUX 3",
                 "MOSS Image",
             ],

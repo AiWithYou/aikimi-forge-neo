@@ -93,7 +93,7 @@ class ImageWorkspaceJavascriptTests(unittest.TestCase):
         script = r"""
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 let loaded, updated, modules = null, token = false;
-const preset = {value: 'sd'};
+const preset = {value: 'xl'};
 const titles = [];
 function mount() {
     const title = {links: [], appendChild(link) { this.links.push(link); link.isConnected = true; }};
@@ -125,7 +125,7 @@ assert.equal(first.links[0].style.visibility, 'hidden');
 first.links[0].isConnected = false;
 const second = mount(); updated(); updated();
 assert.equal(second.links.length, 1);
-assert.ok(second.links[0].href.endsWith('/wiki/Download-Models'));
+assert.ok(second.links[0].href.endsWith('/docs/local-models.md'));
 """
         result = subprocess.run(  # noqa: S603 -- Fixed local lifecycle fixture and repository JavaScript.
             [shutil.which("node"), "-e", script, str(ROOT / "javascript/modelHelp.js")],

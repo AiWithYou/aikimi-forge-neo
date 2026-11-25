@@ -137,7 +137,10 @@ class ImageWorkspaceLayoutChromiumTests(unittest.TestCase):
             self.assertTrue(page.evaluate("document.querySelector('#moss-image-hires-enabled input').checked"))
             self.assertTrue(page.wait_for("#moss-image-hires-settings", "element.getBoundingClientRect().height > 0"))
             self.assertTrue(page.wait_for("#moss-image-hires-size", "element.textContent.includes('1536×1152')"))
-            page.evaluate("[...document.querySelectorAll('button')].find(e => e.textContent.trim() === '生成').click()")
+            # Restoring the checkpoint enables generation in a separate load callback.
+            generate = "[...document.querySelectorAll('button')].find(e => e.textContent.trim() === '生成')"
+            self.assertTrue(page.wait_for("#workspace-test-ready", f"({generate})?.disabled === false"))
+            page.evaluate(f"({generate}).click()")
             self.assertTrue(submitted.wait(10), "Restored controls did not submit a generation request")
             self.assertEqual((captured[0]["width"], captured[0]["height"]), (1536, 1152))
             self.assertEqual(captured[0]["hires"]["base_height"], 768)

@@ -65,10 +65,6 @@ def process_anima(lora: dict[str, torch.Tensor], target_blocks: int, filename: s
 
 
 def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, torch.Tensor], strength_model: float, strength_clip: float, filename: str = "default", online_mode: bool = False):
-    if dynamic_args.nunchaku:
-        model.model.diffusion_model.loras.append((filename, strength_model))
-        return model, clip
-
     model_flag: str = type(model.model).__name__ if model is not None else "default"
 
     unet_keys = model_lora_keys_unet(model.model) if model is not None else {}
@@ -187,9 +183,6 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
     current_sd.current_lora_hash = None
     current_sd.forge_objects.unet = current_sd.forge_objects_original.unet
     current_sd.forge_objects.clip = current_sd.forge_objects_original.clip
-
-    if dynamic_args.nunchaku:
-        current_sd.forge_objects.unet.model.diffusion_model.loras.clear()
 
     for filename, strength_model, strength_clip, online_mode in compiled_lora_targets:
         lora_sd = load_lora_state_dict(filename)

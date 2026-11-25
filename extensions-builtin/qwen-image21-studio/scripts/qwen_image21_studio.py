@@ -183,17 +183,11 @@ def start(
     annotation_editor=None,
     previous_output=None,
     rewrite_prompt=False,
-    sparse_mode="off",
-    sparse_keep_percent=75,
-    sparse_jev_cadence="legacy",
-    sparse_jev_interval=2,
     rewrite_edit_prompt=False,
     preserve_unmasked=False,
     edit_mask_reference=-1,
     edit_mask_path="",
     mask_feather=0,
-    sparse_jev_max_calls=0,
-    sparse_jev_max_wait_seconds=0,
     control_kind="off",
     control_image=None,
     control_strength=1.0,
@@ -240,17 +234,11 @@ def start(
             annotation_reference=annotation_reference,
             annotation_layers=annotation_layers,
             rewrite_prompt=rewrite_prompt,
-            sparse_mode=sparse_mode,
-            sparse_keep_percent=sparse_keep_percent,
-            sparse_jev_cadence=sparse_jev_cadence,
-            sparse_jev_interval=sparse_jev_interval,
             rewrite_edit_prompt=rewrite_edit_prompt,
             preserve_unmasked=preserve_unmasked,
             edit_mask_reference=edit_mask_reference,
             edit_mask_path=edit_mask_path,
             mask_feather=mask_feather,
-            sparse_jev_max_calls=sparse_jev_max_calls,
-            sparse_jev_max_wait_seconds=sparse_jev_max_wait_seconds,
             control_kind=control_kind,
             control_image=control_image or "",
             control_strength=control_strength,
@@ -450,7 +438,6 @@ def profile_settings(precision, previous_precision, fun_acc=False):
     if fun_acc:
         return (
             gr.update(value=4, interactive=False),
-            gr.update(interactive=True),
             precision,
             gr.update(interactive=True),
         )
@@ -462,14 +449,13 @@ def profile_settings(precision, previous_precision, fun_acc=False):
         steps = gr.update(value=40, interactive=True)
     else:
         steps = gr.update(interactive=True)
-    return steps, gr.update(interactive=True), precision, gr.update(interactive=True)
+    return steps, precision, gr.update(interactive=True)
 
 
 def fun_acc_settings(enabled, precision="int8", normal_steps=40):
     return (
         gr.update(interactive=True),
         gr.update(value=4 if enabled else normal_steps, interactive=not enabled),
-        gr.update(interactive=True),
         gr.update(interactive=True),
         gr.update(interactive=True),
         gr.update(interactive=True),
@@ -573,10 +559,6 @@ def start_canvas(
     foreground=None,
     previous_output=None,
     rewrite_prompt=False,
-    sparse_mode="off",
-    sparse_keep_percent=75,
-    sparse_jev_cadence="legacy",
-    sparse_jev_interval=2,
     rewrite_edit_prompt=False,
     preserve_unmasked=False,
     mask_target="",
@@ -585,8 +567,6 @@ def start_canvas(
     mask_upload=None,
     mask_source="paint",
     mask_feather=0,
-    sparse_jev_max_calls=0,
-    sparse_jev_max_wait_seconds=0,
     control_kind="off",
     control_image=None,
     control_strength=1.0,
@@ -668,17 +648,11 @@ def start_canvas(
                 editor,
                 previous_output,
                 rewrite_prompt,
-                sparse_mode,
-                sparse_keep_percent,
-                sparse_jev_cadence,
-                sparse_jev_interval,
                 rewrite_edit_prompt,
                 preserve_unmasked,
                 mask_reference,
                 mask_path,
                 mask_feather,
-                sparse_jev_max_calls,
-                sparse_jev_max_wait_seconds,
                 control_kind,
                 control_image,
                 control_strength,
@@ -1384,45 +1358,6 @@ def on_ui_tabs():
                             label="モデルの配置",
                         )
                         seed = gr.Textbox(value="-1", label="Seed（-1: 毎回ランダム）")
-                        from modules_forge.jev_sparse.qwen21_integration import launch_defaults
-
-                        sparse_defaults = launch_defaults()
-                        sparse_mode = gr.Dropdown(
-                            [
-                                ("OFF · 通常生成", "off"),
-                                ("Dense · 速度計測", "dense"),
-                                ("固定Sparse · 通信なし", "fixed"),
-                                ("数値ルール · 通信なし", "rules"),
-                                ("Jev速度優先 · 集約統計を外部送信", "jev"),
-                            ],
-                            value=sparse_defaults.mode,
-                            label="Sparse Attention",
-                            elem_id="qwen21-sparse-mode",
-                            info="Jevは保存済みのキーを使用します。画像・プロンプトは送信しません。方式の変更は次の生成から適用します。",
-                        )
-                        sparse_keep = gr.Slider(
-                            1,
-                            100,
-                            value=sparse_defaults.keep_percent,
-                            step=1,
-                            label="固定Sparseの保持率 %",
-                            visible=True if sparse_defaults.mode == "fixed" else "hidden",
-                        )
-                        sparse_mode.change(
-                            lambda mode: gr.update(visible=True if mode == "fixed" else "hidden"),
-                            inputs=sparse_mode,
-                            outputs=sparse_keep,
-                            **PRIVATE,
-                        )
-                        from modules_forge.jev_sparse.ui import budget_controls, decision_controls
-
-                        sparse_cadence, sparse_interval = decision_controls("qwen21", sparse_mode)
-                        sparse_max_calls, sparse_max_wait = budget_controls(
-                            "qwen21", sparse_mode, steps=steps, cadence=sparse_cadence, interval=sparse_interval
-                        )
-                        gr.Markdown(
-                            "Jevのstepはモデル評価単位です。最初の判定に必要な統計を集めた後、指定した頻度で更新します。"
-                        )
                         gr.Markdown("2K・複数参照・BF16は必要メモリが増えます。最初は1024px程度で確認してください。")
                     with gr.Accordion("実行環境・初回準備", open=False, elem_id="qwen21-environment"):
                         gr.Markdown(
@@ -1447,9 +1382,6 @@ def on_ui_tabs():
                             lines=2,
                             elem_id="qwen21-save-status",
                         )
-                        from modules_forge.jev_sparse.ui import credential_controls
-
-                        credential_controls("qwen21")
                         gr.Markdown("初回は `aikimi-qwen-image21-setup.bat` で専用環境とモデルを準備します。")
                         gr.Markdown("公式フル版 (INT8 / W4A8 / BF16): `aikimi-qwen-image21-setup.bat --official-full`")
                         gr.Markdown("公式Turbo: `aikimi-qwen-image21-setup.bat --official-turbo-only`")
@@ -1589,13 +1521,13 @@ def on_ui_tabs():
         precision.change(
             profile_settings,
             inputs=[precision, profile_state, fun_acc],
-            outputs=[steps, sparse_mode, profile_state, fun_acc],
+            outputs=[steps, profile_state, fun_acc],
             **PRIVATE,
         )
         fun_acc.change(
             fun_acc_settings,
             inputs=[fun_acc, precision, normal_steps],
-            outputs=[precision, steps, sparse_mode, control_kind, control_image, control_inpaint],
+            outputs=[precision, steps, control_kind, control_image, control_inpaint],
             **PRIVATE,
         )
         steps.change(
@@ -1699,10 +1631,6 @@ def on_ui_tabs():
                 annotation_canvas.foreground,
                 output,
                 rewrite_prompt,
-                sparse_mode,
-                sparse_keep,
-                sparse_cadence,
-                sparse_interval,
                 rewrite_edit_prompt,
                 preserve_unmasked,
                 mask_target,
@@ -1711,8 +1639,6 @@ def on_ui_tabs():
                 mask_upload,
                 mask_source,
                 mask_feather,
-                sparse_max_calls,
-                sparse_max_wait,
                 control_kind,
                 control_image,
                 control_strength,
@@ -1867,12 +1793,6 @@ def on_ui_tabs():
         "style_loras": style_loras,
         "lora_strengths": lora_strengths,
         "fun_acc": fun_acc,
-        "sparse_mode": sparse_mode,
-        "sparse_keep_percent": sparse_keep,
-        "sparse_jev_cadence": sparse_cadence,
-        "sparse_jev_interval": sparse_interval,
-        "sparse_jev_max_calls": sparse_max_calls,
-        "sparse_jev_max_wait_seconds": sparse_max_wait,
         "control_kind": control_kind,
         "control_image": control_image,
         "control_strength": control_strength,

@@ -12,7 +12,7 @@
 
 通常版はQwen本体の`FlowMatchEulerDiscreteScheduler`で既定の40 steps、Fun Accは配布元指定の`QwenImage21PDDScheduler`で4 stepsです。モデル本体とテキストエンコーダーは両方ともbitsandbytes INT8、Fun AccのLoRA差分とPDD出力ヘッドは浮動小数点です。
 
-通常版とTurboのStepsはUIで変更できます。現在のFun Accサンプラーは4 steps専用です。Turboとの併用も試せますが推奨外として案内し、専用PDD・4 stepsを優先します。Sparseを選んだ場合はKVキャッシュを無効にしてdense Attentionで実行します。この比較はTurboやControlNetとの併用の画質評価を含みません。
+通常版とTurboのStepsはUIで変更できます。現在のFun Accサンプラーは4 steps専用です。Turboとの併用も試せますが推奨外として案内し、専用PDD・4 stepsを優先します。この比較はTurboやControlNetとの併用の画質評価を含みません。
 
 | 用途 | LoRA | Seed | Steps・スケジューラ | 生成処理 | モデル読込 | 原寸 |
 | --- | --- | ---: | --- | ---: | ---: | --- |

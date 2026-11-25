@@ -1,5 +1,10 @@
 # 変更履歴
 
+## v7.0.0 — 未リリース
+
+- Forge共通画面の対応系列をSDXL、Anima 3.8B、Krea2に絞りました。SD 1.x、FLUX.1／2、旧Qwen Image、Ernie、Lumina、Chroma、Z-Image、Wan、PiD、MugenとNunchaku／SVDQの読み込みを廃止します。
+- Iris-3B Studio、Jev Sparse Experiments、旧実験アップスケールツールを廃止します。H3 ImageはP-H3 ImageとMiniMax-H3-Imageを使用します。
+
 ## v6.1.0 — 2026-11-07
 
 - P-H3 Imageの画像生成と画像編集で、互換LoRAを1件選んで使えるようにしました。強度は−2〜2で、初期値は1です。0では適用せず、LoRA名と強度は生成条件に保存されます。

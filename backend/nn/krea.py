@@ -1,6 +1,7 @@
 # https://github.com/Comfy-Org/ComfyUI/blob/v0.26.1/comfy/ldm/krea2/model.py
 # https://github.com/lbouaraba/comfyui-krea2edit/blob/main/__init__.py
 
+import math
 from contextlib import contextmanager
 from typing import Optional
 
@@ -9,13 +10,60 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
+from backend import memory_management
 from backend.args import dynamic_args
 from backend.attention import attention_function
 from backend.memory_management import cast_to
 from backend.misc.image_resize import adaptive_resize
-from backend.nn.flux import EmbedND, timestep_embedding
 from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
+
+
+# Positional embeddings from ComfyUI comfy/ldm/flux.
+def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
+    if dim % 2:
+        raise ValueError("Rotary embedding dimensions must be even")
+    if memory_management.is_device_mps(pos.device) or memory_management.is_intel_xpu() or memory_management.is_directml_enabled():
+        device = torch.device("cpu")
+    else:
+        device = pos.device
+
+    scale = torch.linspace(0, (dim - 2) / dim, steps=dim // 2, dtype=torch.float64, device=device)
+    omega = 1.0 / (theta**scale)
+    out = torch.einsum("...n,d->...nd", pos.to(dtype=torch.float32, device=device), omega)
+    out = torch.stack([torch.cos(out), -torch.sin(out), torch.sin(out), torch.cos(out)], dim=-1)
+    out = rearrange(out, "b n d (i j) -> b n d i j", i=2, j=2)
+    return out.to(dtype=torch.float32, device=pos.device)
+
+
+def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 10000, time_factor: float = 1000.0) -> torch.Tensor:
+    t = time_factor * t
+    half = dim // 2
+    freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32, device=t.device) / half)
+
+    args = t[:, None].float() * freqs[None]
+    embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+    if dim % 2:
+        embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+    if torch.is_floating_point(t):
+        embedding = embedding.to(t)
+    return embedding
+
+
+class EmbedND(nn.Module):
+    def __init__(self, dim: int, theta: int, axes_dim: list):
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+        self.axes_dim = axes_dim
+
+    def forward(self, ids: torch.Tensor) -> torch.Tensor:
+        n_axes = ids.shape[-1]
+        emb = torch.cat(
+            [rope(ids[..., i], self.axes_dim[i], self.theta) for i in range(n_axes)],
+            dim=-3,
+        )
+        return emb.unsqueeze(1)
 
 
 class _TextConditioningCache:

@@ -10,7 +10,6 @@ from PIL import Image, PngImagePlugin
 ROOT = Path(__file__).resolve().parents[2]
 DIRECT = (
     "requirements.txt",
-    "tools/requirements-iris.txt",
     "tools/requirements-clef.txt",
     "tools/requirements-qwen-image21.txt",
 )

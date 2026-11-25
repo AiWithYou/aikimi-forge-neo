@@ -114,5 +114,3 @@ jobs:
         run: python tools/run_ci_tests.py --pytest tools/tests/test_clef*.py -q
       - name: Run YuE2 contracts without model downloads
         run: python tools/run_ci_tests.py --pytest tests/yue2 -q
-      - name: Run Jev contracts without API calls or models
-        run: python tools/run_ci_tests.py --pytest tests/jev_sparse -q

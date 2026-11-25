@@ -99,8 +99,8 @@ Aikimi画像assetの権利noticeを確認できないreleaseは、配布条件�
 
 - [ ] Local SafeでWebUIとAPIを起動した
 - [ ] browserから`127.0.0.1`だけで開ける
-- [ ] Forge由来の上部タブが表示され、Iris・FLUX 3・Irodori TTSなどの専用Studioでは使用しないCheckpoint・VAE設定を隠し、GPU解放と機能切替を残す
-- [ ] MOSS Imageを含むAikimiの14入口が`#tabs`直前にあり、Gradio所有tablistのchild、順序、label、ARIAを変更しない
+- [ ] Forge由来の上部タブが表示され、FLUX 3・Irodori TTSなどの専用Studioでは使用しないCheckpoint・VAE設定を隠し、GPU解放と機能切替を残す
+- [ ] Krea2・Animaと専用Studioを合わせた10個のナビゲーションボタンが`#tabs`直前にあり、Gradio所有tablistのchild、順序、label、ARIAを変更しない
 - [ ] `Krea2`がUI Presetの`krea`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持する
 - [ ] `Krea2`を別のタブから開くと`txt2img`へ移動し、`Krea2 2-Stage Upscale`を自動選択しない
 - [ ] `Anima`がUI Presetの`anima`を選択し、現在のForgeタブが`txt2img`または`img2img`ならそのタブを維持する

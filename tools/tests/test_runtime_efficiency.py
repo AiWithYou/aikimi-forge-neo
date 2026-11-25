@@ -90,7 +90,7 @@ class LoraTests(unittest.TestCase):
             "loaded_networks": [], "forbidden_network_aliases": set(),
             "available_networks": {"a": entry}, "available_network_aliases": {"a": entry},
             "load_network": lambda *_: Objects(), "logger": Mock(),
-            "dynamic_args": Objects(online_lora=False, nunchaku=False),
+            "dynamic_args": Objects(online_lora=False),
             "load_lora_state_dict": self.reader, "load_lora_for_models": self.patcher,
         })
 
@@ -152,7 +152,7 @@ class LoraTests(unittest.TestCase):
             return result
 
         ns = load_definitions("extensions-builtin/sd_forge_lora/networks.py", {"load_lora_for_models"}, {
-            "os": os, "dynamic_args": Objects(nunchaku=False), "logger": Mock(),
+            "os": os, "dynamic_args": Objects(), "logger": Mock(),
             "model_lora_keys_unet": lambda _: {}, "model_lora_keys_clip": lambda _: {},
             "load_lora": Mock(side_effect=[({"a": 1, "b": 2}, {}), ({"a": 1, "b": 2}, {})]),
         })

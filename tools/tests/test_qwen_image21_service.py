@@ -211,9 +211,6 @@ class QwenCoreTests(unittest.TestCase):
                     self.assertEqual(core.Request("test", precision=precision, steps=steps).resolved().steps, steps)
         self.assertEqual(core.Request("test", precision="int8", steps=40).resolved().steps, 40)
         self.assertEqual(core.Request("test", precision="base_q4_k_m", steps=40).resolved().steps, 40)
-        self.assertEqual(
-            core.Request("test", precision="base_q4_k_m", sparse_mode="fixed").resolved().sparse_mode, "fixed"
-        )
 
     def test_regular_gguf_uses_shared_assets_without_teacher_transformer(self):
         from modules_forge.qwen_image21 import regular_gguf
@@ -711,16 +708,16 @@ class QwenUiTests(unittest.TestCase):
         self.assertIn("Viggle Turbo", labels["turbo_bf16"])
         self.assertIn("Viggle Turbo", labels["turbo_q4_k_m"])
         self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8")[0]["value"], 4)
-        self.assertTrue(self.ui.profile_settings("turbo_q4_k_m", "int8")[1]["interactive"])
+        self.assertTrue(self.ui.profile_settings("turbo_q4_k_m", "int8")[2]["interactive"])
         self.assertEqual(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[0]["value"], 4)
-        self.assertNotIn("value", self.ui.profile_settings("turbo_q4_k_m", "int8", True)[3])
-        self.assertTrue(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[3]["interactive"])
+        self.assertNotIn("value", self.ui.profile_settings("turbo_q4_k_m", "int8", True)[2])
+        self.assertTrue(self.ui.profile_settings("turbo_q4_k_m", "int8", True)[2]["interactive"])
         self.assertEqual(self.ui.fun_acc_settings(False, "turbo_q4_k_m", 31)[1]["value"], 31)
         self.assertTrue(self.ui.fun_acc_settings(False, "turbo_q4_k_m", 31)[1]["interactive"])
         self.assertNotIn("value", self.ui.profile_settings("bf16", "int8")[0])
         self.assertEqual(self.ui.profile_settings("int8", "turbo_q4_k_m")[0]["value"], 40)
         self.assertEqual(self.ui.profile_settings("base_q4_k_m", "turbo_q4_k_m")[0]["value"], 40)
-        self.assertTrue(self.ui.profile_settings("base_q4_k_m", "turbo_q4_k_m")[1]["interactive"])
+        self.assertTrue(self.ui.profile_settings("base_q4_k_m", "turbo_q4_k_m")[2]["interactive"])
         links = "\n".join(item["props"].get("value", "") for item in config["components"] if item["type"] == "markdown")
         self.assertIn("https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo", links)
         self.assertIn("https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF", links)
@@ -735,17 +732,15 @@ class QwenUiTests(unittest.TestCase):
         for quantization in ("int8", "w4a8", "bf16"):
             precision = f"turbo_official_{quantization}"
             with self.subTest(precision=precision):
-                steps, _, _, fun_acc = self.ui.profile_settings(precision, "int8", False)
+                steps, _, fun_acc = self.ui.profile_settings(precision, "int8", False)
                 self.assertEqual(steps["value"], 8)
                 self.assertTrue(steps["interactive"])
                 self.assertNotIn("value", fun_acc)
                 self.assertTrue(fun_acc["interactive"])
                 self.assertNotIn("value", self.ui.profile_settings(precision, precision)[0])
                 self.assertEqual(self.ui.fun_acc_settings(False, precision, 31)[1]["value"], 31)
-                accelerated, sparse, _, fun_acc = self.ui.profile_settings(precision, "int8", True)
+                accelerated, _, fun_acc = self.ui.profile_settings(precision, "int8", True)
                 self.assertEqual((accelerated["value"], accelerated["interactive"]), (4, False))
-                self.assertTrue(sparse["interactive"])
-                self.assertNotIn("value", sparse)
                 self.assertTrue(fun_acc["interactive"])
                 self.assertEqual(self.ui.profile_settings("int8", precision)[0]["value"], 40)
                 with patch.object(self.ui, "saved_status", return_value="saved"):

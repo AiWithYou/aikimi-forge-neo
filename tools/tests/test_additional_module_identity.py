@@ -16,7 +16,6 @@ ROOT = Path(__file__).resolve().parents[2]
 MAIN_ENTRY = ROOT / "modules_forge" / "main_entry.py"
 INFOTEXT_UTILS = ROOT / "modules" / "infotext_utils.py"
 PROCESSING = ROOT / "modules" / "processing.py"
-PID_SCRIPT = ROOT / "extensions-builtin" / "sd_forge_pid" / "scripts" / "pid.py"
 CHECKPOINT_METADATA = ROOT / "modules" / "ui_extra_networks_checkpoints_user_metadata.py"
 
 
@@ -40,13 +39,13 @@ class FakeOptions:
     def __init__(self):
         self.data = {
             "forge_additional_modules": [],
-            "forge_additional_modules_sd": [],
+            "forge_additional_modules_xl": [],
             "forge_additional_modules_krea": [],
         }
         self.set_calls = []
         self.save_calls = []
         self.sd_model_checkpoint = "model.safetensors"
-        self.forge_preset = "sd"
+        self.forge_preset = "xl"
         self.sd_checkpoint_dropdown_use_short = False
 
     def __getattr__(self, name):
@@ -127,12 +126,10 @@ def load_main_entry():
 
         @staticmethod
         def choices():
-            return ["sd", "krea"]
+            return ["xl", "krea"]
 
     presets.PresetArch = PresetArch
     presets.DEFAULT_CHECKPOINTS = {}
-    presets.is_video = lambda _preset: 0
-    presets.use_distill = lambda _preset: False
     presets.use_shift = lambda _preset: False
 
     stubs = {
@@ -231,13 +228,13 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
         self.enterContext(mock.patch.object(local_assets, "LIBRARY", Path(directory) / "library.json"))
         self.opts.data = {
             "forge_additional_modules": [],
-            "forge_additional_modules_sd": [],
+            "forge_additional_modules_xl": [],
             "forge_additional_modules_krea": [],
         }
         self.opts.set_calls.clear()
         self.opts.save_calls.clear()
         self.opts.sd_model_checkpoint = "model.safetensors"
-        self.opts.forge_preset = "sd"
+        self.opts.forge_preset = "xl"
         self.opts.sd_checkpoint_dropdown_use_short = False
         self.main_entry.module_list.clear()
         self.main_entry._module_path_to_selector.clear()
@@ -645,7 +642,7 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
         self.assertEqual(self.opts.set_calls, [])
 
     def test_switching_preset_still_displays_its_saved_checkpoint(self):
-        self.opts.forge_preset = "sd"
+        self.opts.forge_preset = "xl"
         self.opts.data["forge_checkpoint_krea"] = "other.safetensors"
 
         update = self.main_entry.on_preset_change("krea")[0]
@@ -694,7 +691,7 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
             (encoder / "shared.safetensors").touch()
             self.build_registry(vae, encoder)
             self.opts.data["forge_additional_modules_krea"] = ["unique.safetensors"]
-            self.opts.data["forge_additional_modules_sd"] = ["shared.safetensors"]
+            self.opts.data["forge_additional_modules_xl"] = ["shared.safetensors"]
 
             self.main_entry._migrate_legacy_module_options_once()
             self.main_entry._migrate_legacy_module_options_once()
@@ -704,7 +701,7 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
                 [str(unique.resolve())],
             )
             self.assertEqual(
-                self.opts.data["forge_additional_modules_sd"],
+                self.opts.data["forge_additional_modules_xl"],
                 ["shared.safetensors"],
             )
             self.assertEqual(self.opts.save_calls, ["config.json"])
@@ -738,12 +735,12 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
             (encoder / "shared.safetensors").touch()
             self.build_registry(vae, encoder)
             self.opts.data["forge_additional_modules"] = [str(active.resolve())]
-            self.opts.data["forge_additional_modules_sd"] = ["shared.safetensors"]
+            self.opts.data["forge_additional_modules_xl"] = ["shared.safetensors"]
 
             self.main_entry._migrate_legacy_module_options_once()
 
             self.assertEqual(
-                self.opts.data["forge_additional_modules_sd"],
+                self.opts.data["forge_additional_modules_xl"],
                 [str(active.resolve())],
             )
             self.assertEqual(self.opts.save_calls, ["config.json"])
@@ -854,11 +851,8 @@ class AdditionalModuleIdentityTests(unittest.TestCase):
         )
 
     def test_downstream_selectors_preserve_module_kind_and_metadata_paths(self):
-        pid_source = PID_SCRIPT.read_text(encoding="utf-8")
         metadata_source = CHECKPOINT_METADATA.read_text(encoding="utf-8")
 
-        self.assertIn('module_kind(m) == "text_encoder"', pid_source)
-        self.assertIn("distilled_cfg_scale=1.5", pid_source)
         self.assertIn("main_entry.resolve_module_values(vae)", metadata_source)
         self.assertIn("main_entry.module_values_to_ui_selectors(vae)", metadata_source)
         self.assertIn("main_entry.module_dropdown_choices()", metadata_source)

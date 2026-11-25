@@ -29,16 +29,14 @@
 /* Show one mode selector for the active image model. */
 body:has(#aikimi-feature-nav:is(
     [data-active-feature="qwen_image21"],
-    [data-active-feature="minimax_h3_image"], [data-active-feature="iris"], [data-active-feature="flux3"], [data-active-feature="moss_image"]
+    [data-active-feature="minimax_h3_image"], [data-active-feature="flux3"], [data-active-feature="moss_image"]
 )) #tabs > :is(.tab-nav, .tab-wrapper) [role="tablist"] > button:is(
     [aria-controls="tab_txt2img"], [aria-controls="tab_img2img"]
 ) { display: none !important; }
 body:has(#aikimi-feature-nav:is(
     [data-active-feature="qwen_image21"],
-    [data-active-feature="minimax_h3_image"], [data-active-feature="iris"], [data-active-feature="flux3"], [data-active-feature="moss_image"]
+    [data-active-feature="minimax_h3_image"], [data-active-feature="flux3"], [data-active-feature="moss_image"]
 )) #tabs > .tab-nav > button:is([aria-controls="tab_txt2img"], [aria-controls="tab_img2img"]) { display: none !important; }
-#aikimi-feature-nav + #tabs > :is(.tab-nav, .tab-wrapper) [role="tablist"] > button[aria-controls="tab_iris_studio"],
-#aikimi-feature-nav + #tabs > .tab-nav > button[aria-controls="tab_iris_studio"] { display: none !important; }
 
 @media (max-width: 760px) {
     #moss-image-model { flex-direction: column; align-items: stretch; }

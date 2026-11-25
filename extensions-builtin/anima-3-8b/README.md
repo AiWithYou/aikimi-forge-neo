@@ -21,7 +21,6 @@ download_anima38_v11_int8_convrot_models.bat
 | Anima標準encoder | `models/text_encoder/qwen_3_06b_base.safetensors` | Anima共通 |
 | VAE | `models/VAE/qwen_image_vae.safetensors` | Anima共通 |
 
-旧v1を使う場合は、従来の`download_anima38_int8_convrot_models.bat`で`Anima-3.8B-int8-convrot.safetensors`と`Anima-3.8B-expanded_adapter.safetensors`を用意します。
 
 Qwen3.5 tokenizerはextension内に同梱しています。生成時にHugging Face cacheや外部ネットワークへ接続しません。
 

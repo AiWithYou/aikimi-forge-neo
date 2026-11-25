@@ -16,22 +16,6 @@ class H3RamProfileTests(unittest.TestCase):
                 request, SimpleNamespace(acceleration=request.acceleration), bridge.RUNTIME_PROFILE_RAM
             )
 
-    def test_sparse_workflow_can_reuse_cached_conditioning(self):
-        from modules_forge.jev_sparse import h3_integration
-        from modules_forge.minimax_h3_acceleration import H3Acceleration
-
-        h3_integration.install()
-        try:
-            options = H3Acceleration(model_variant="fused_turbo", attention="h3_fixed5", clip_cache="auto")
-            request = bridge.H3Request(mode="text", prompt="a red paper boat", steps=4, acceleration=options)
-            graph = bridge.build_workflow(request, {}, seed=42)
-            self.assertEqual(graph["5"]["class_type"], "MiniMaxH3CLIPCachedFL2VA")
-            self.assertNotIn("2", graph)
-            guider = next(node for node in graph.values() if node["class_type"] == "BasicGuider")
-            self.assertEqual(guider["inputs"]["model"], ["aikimi_h3_sparse", 0])
-        finally:
-            h3_integration.uninstall()
-
     def test_profile_roundtrip_and_other_flags_remain_rejected(self):
         command = bridge._runtime_command(Path("python"), 8192, bridge.RUNTIME_PROFILE_RAM)
         self.assertEqual(bridge.runtime_profile_from_args(command[1:], 8192), bridge.RUNTIME_PROFILE_RAM)

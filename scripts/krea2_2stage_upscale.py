@@ -6,7 +6,6 @@ from modules import devices, images, processing
 from modules.krea2_quality import smart_finish_image, smart_finish_summary
 from modules.processing import Processed
 from modules.shared import opts, state
-from modules_forge.jev_sparse.krea2_jobs import whole_image_job
 from modules_forge.krea2_upscale import (
     KREA2_DEFAULT_DENOISE,
     KREA2_STAGE1_DENOISE,
@@ -576,7 +575,6 @@ class KreaTwoStageUpscale(scripts.Script):
             int(tile_batch_size),
         )
 
-    @whole_image_job
     def run(
         self,
         p,

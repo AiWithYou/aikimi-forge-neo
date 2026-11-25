@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import os
+import re
 import subprocess
 import sys
 from functools import partial
@@ -13,7 +14,6 @@ import gradio as gr
 
 from modules.aikimi_security.redaction import sanitized_subprocess_environment
 from modules_forge import p_h3_image as ph3
-from modules_forge.minimax_h3_images import integer
 from modules_forge.minimax_h3_runtime import SERVER_URL, installed_runtime_root, managed_runtime_root
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +34,25 @@ PRESETS = {
     "軽量 4 MP · 縦長 9:16": (1536, 2720),
     "動作確認 · 512×512": (512, 512),
 }
+
+
+def integer(value, label: str, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{label}は整数で指定してください。")
+    if isinstance(value, str):
+        if not re.fullmatch(r"-?[0-9]+", value.strip()):
+            raise ValueError(f"{label}は整数で指定してください。")
+    elif not isinstance(value, (int, float)):
+        raise ValueError(f"{label}は整数で指定してください。")
+    try:
+        number = int(value)
+        if not isinstance(value, str) and number != value:
+            raise ValueError("fractional number")
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise ValueError(f"{label}は有限の整数で指定してください。") from exc
+    if not minimum <= number <= maximum:
+        raise ValueError(f"{label}は{minimum}〜{maximum}で指定してください。")
+    return number
 
 
 def make_request(mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint,

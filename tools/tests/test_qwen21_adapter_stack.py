@@ -63,14 +63,12 @@ def test_pdd_outpaint_and_multiple_style_residuals_add_without_changing_base(tmp
 @pytest.mark.parametrize("precision", sorted(PRECISIONS))
 @pytest.mark.parametrize("fun_acc", [False, True])
 @pytest.mark.parametrize("control", [False, True])
-@pytest.mark.parametrize("sparse", [False, True])
-def test_sampling_matrix_accepts_executable_combinations(precision, fun_acc, control, sparse):
+def test_sampling_matrix_accepts_executable_combinations(precision, fun_acc, control):
     values = {
         "precision": precision,
         "steps": 4 if fun_acc else 17,
         "fun_acc": fun_acc,
         "control_kind": "canny" if control else "off",
-        "sparse_mode": "fixed" if sparse else "off",
     }
     validate_sampling(values)
 
@@ -84,14 +82,12 @@ def test_requests_preserve_steps_and_control_strength_outside_recommendations(tm
         "generate",
         precision=precision,
         steps=120,
-        sparse_mode="fixed",
         control_kind="canny",
         control_image=str(control),
         control_strength=strength,
     ).resolved()
     assert request.steps == 120
     assert request.control_strength == strength
-    assert request.sparse_mode == "fixed"
 
 
 @pytest.mark.parametrize("steps", [0, -1, 4.5, True, float("inf")])
@@ -120,13 +116,11 @@ def test_recommendations_are_nonblocking_and_only_describe_selected_options():
         {
             "precision": "turbo_official_int8",
             "steps": 12,
-            "sparse_mode": "fixed",
             "control_kind": "canny",
             "control_strength": 2.5,
         }
     )
     assert any("8 steps" in notice for notice in notices)
-    assert any("通常Attention" in notice for notice in notices)
     assert any("0〜2" in notice for notice in notices)
 
 
@@ -197,9 +191,8 @@ def test_local_model_sampling_contract_preserves_selected_file_and_rejects_turbo
             Request("extend", local_model=model, precision=precision, steps=recommended_steps(precision)).resolved()
 
 
-def test_turning_control_off_does_not_keep_a_hidden_upload_active_for_sparse(tmp_path):
+def test_turning_control_off_does_not_keep_a_hidden_upload_active(tmp_path):
     source = tmp_path / "old-control.png"
     Image.new("RGB", (256, 256), "white").save(source)
-    request = Request("generate", sparse_mode="fixed", control_kind="off", control_image=str(source)).resolved()
+    request = Request("generate", control_kind="off", control_image=str(source)).resolved()
     assert request.control_image == ""
-    assert request.sparse_mode == "fixed"

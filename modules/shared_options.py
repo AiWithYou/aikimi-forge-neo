@@ -45,7 +45,6 @@ categories.register_category("ui", "User Interface")
 categories.register_category("presets", "Presets")
 categories.register_category("system", "System")
 categories.register_category("postprocessing", "Postprocessing")
-categories.register_category("svdq", "Nunchaku")
 
 options_templates.update(
     options_section(
@@ -253,22 +252,7 @@ options_templates.update(
             "sdxl_refiner_high_aesthetic_score": OptionInfo(6.0, "[SDXL] High Aesthetic Score", gr.Number),
             "sdxl_10": OptionRow(),
             "sdxl_zero_neg": OptionInfo(False, "[SDXL] Zero out the conditioning when negative prompt is empty").info("old behavior ; causes NaN when using SageAttention").needs_reload_ui(),
-            "divlumina": OptionDiv(),
-            "neta_template_positive": OptionInfo(
-                "You are an assistant designed to generate anime images with the highest degree of image-text alignment based on danbooru tags. <Prompt Start>",
-                "[Lumina] Positive Template",
-                gr.Textbox,
-                {"lines": 3, "max_lines": 6, "placeholder": "<Prompt Start>"},
-            ),
-            "neta_template_negative": OptionInfo(
-                "You are an assistant designed to generate low-quality images based on textual prompts. <Prompt Start>",
-                "[Lumina] Negative Template",
-                gr.Textbox,
-                {"lines": 3, "max_lines": 6, "placeholder": "<Prompt Start>"},
-            ),
             "divmisc": OptionDiv(),
-            "qwen_vae_resize": OptionInfo(False, "[Qwen-Image-Edit] Resize input image to 1 megapixel for ref_latent"),
-            "klein_do_reference": OptionInfo(True, "[Klein] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often"),
             "anima_do_reference": OptionInfo(False, "[Anima] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often").info("requires specfic Edit LoRA"),
             "krea2_do_reference": OptionInfo(False, "[Krea2] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often").info("requires specfic Edit LoRA"),
             "reference_explanation": OptionHTML("<b>Note:</b> Remember to change the setting before txt2img to clear the references"),
@@ -389,9 +373,9 @@ options_templates.update(
     options_section(
         ("refiner", "Refiner", "sd"),
         {
-            "show_refiner": OptionInfo(True, "Display the Refiner Accordion").info("Refiner swaps the model in the middle of generation; useful for Wan 2.2 <b>High Noise</b> to <b>Low Noise</b> switching").needs_reload_ui(),
+            "show_refiner": OptionInfo(True, "Display the Refiner Accordion").info("Switch to a second SDXL checkpoint during generation").needs_reload_ui(),
             "refiner_fast_sd": OptionInfo(False, 'Reload "state_dict" Only').info("EXPERIMENTAL").needs_reload_ui(),
-            "refiner_use_steps": OptionInfo(False, 'Switch based on "steps" instead').info('by default, Refiner swaps the model based on "sigmas" to match <a href="https://www.reddit.com/r/StableDiffusion/comments/1n3qns1/wan_22_how_many_highsteps_are_needed_a_simple/">Wan 2.2</a> \'s behavior'),
+            "refiner_use_steps": OptionInfo(False, 'Switch based on "steps" instead').info("Use step numbers to select the switch point"),
         },
     )
 )
@@ -620,20 +604,6 @@ options_templates.update(
     )
 )
 
-options_templates.update(
-    options_section(
-        ("svdq", "Nunchaku", "svdq"),
-        {
-            "svdq_cpu_offload": OptionInfo(True, "CPU Offload").info("recommended if the VRAM is less than 16 GB"),
-            "svdq_flux_exp": OptionHTML("Flux"),
-            "svdq_cache_threshold": OptionInfo(0.0, "Cache Threshold", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.01}).info("increasing the value enhances speed at the cost of quality; a typical value is 0.12; setting it to 0 disables the effect"),
-            "svdq_attention": OptionInfo("nunchaku-fp16", "Attention", gr.Radio, {"choices": ["nunchaku-fp16", "flashattn2"]}).info("RTX 20s GPUs can only use nunchaku-fp16"),
-            "svdq_qwen_exp": OptionHTML("Qwen"),
-            "svdq_use_pin_memory": OptionInfo(False, "Use Pinned Memory").info("improve load speed at the cost of higher RAM usage"),
-            "svdq_num_blocks_on_gpu": OptionInfo(1, "Blocks on GPU", gr.Slider, {"minimum": 1, "maximum": 60, "step": 1}).info("higher = more VRAM usage ; lower = more RAM usage"),
-        },
-    )
-)
 
 forge_shared_options.register(options_templates, options_section, OptionInfo)
 forge_presets.register(options_templates)

@@ -8,7 +8,7 @@
 
         if (link == null || !link.isConnected) {
             link = document.createElement("a");
-            link.href = "https://github.com/Haoming02/sd-webui-forge-classic/wiki/Download-Models";
+            link.href = "https://github.com/AiWithYou/aikimi-forge-neo/blob/neo/docs/local-models.md";
             link.title = "Where to get the modules?";
             link.textContent = "?";
 
@@ -24,7 +24,7 @@
 
         const preset = document.getElementById("forge_ui_preset")?.querySelector("input");
         if (preset == null) return;
-        if (["sd", "xl"].includes(preset.value)) {
+        if (preset.value === "xl") {
             link.style.visibility = "hidden";
             return;
         }

@@ -23,10 +23,8 @@ import torch
 from modules_forge.packages.comfy import weight_adapter
 
 from .utils import (
-    flux_to_diffusers,
     krea2_to_diffusers,
     unet_to_diffusers,
-    z_image_to_diffusers,
 )
 
 LORA_CLIP_MAP = {
@@ -216,47 +214,6 @@ def model_lora_keys_unet(model, key_map=None):
                 key_map[diffusers_lora_key] = unet_key
 
     _model_name: str = model.config.huggingface_repo.lower()
-
-    if "flux" in _model_name or "chroma" in _model_name:  # Diffusers lora Flux
-        diffusers_keys = flux_to_diffusers(model.diffusion_model.config, output_prefix="diffusion_model.")
-        for k in diffusers_keys:
-            if k.endswith(".weight"):
-                to = diffusers_keys[k]
-                key_map["transformer.{}".format(k[: -len(".weight")])] = to  # simpletrainer and probably regular diffusers flux lora format
-                key_map["lycoris_{}".format(k[: -len(".weight")].replace(".", "_"))] = to  # simpletrainer lycoris
-                key_map["lora_transformer_{}".format(k[: -len(".weight")].replace(".", "_"))] = to  # onetrainer
-                key_map[k[: -len(".weight")]] = to  # DiffSynth lora format
-        for k in sdk:
-            hidden_size = model.diffusion_model.config.get("hidden_size", 0)
-            if k.endswith(".weight") and ".linear1." in k:
-                key_map["{}".format(k.replace(".linear1.weight", ".linear1_qkv"))] = (k, (0, 0, hidden_size * 3))
-
-    if "qwen" in _model_name:
-        for k in sdk:
-            if k.startswith("diffusion_model.") and k.endswith(".weight"):  # QwenImage lora format
-                key_lora = k[len("diffusion_model.") : -len(".weight")]
-                # Direct mapping for transformer_blocks format (QwenImage LoRA format)
-                key_map["{}".format(key_lora)] = k
-                # Support transformer prefix format
-                key_map["transformer.{}".format(key_lora)] = k
-                key_map["lycoris_{}".format(key_lora.replace(".", "_"))] = k  # SimpleTuner lycoris format
-
-    if "lumina" in _model_name or "z-image" in _model_name:
-        diffusers_keys = z_image_to_diffusers(model.diffusion_model.config, output_prefix="diffusion_model.")
-        for k in diffusers_keys:
-            if k.endswith(".weight"):
-                to = diffusers_keys[k]
-                key_lora = k[: -len(".weight")]
-                key_map["diffusion_model.{}".format(key_lora)] = to
-                key_map["transformer.{}".format(key_lora)] = to
-                key_map["lycoris_{}".format(key_lora.replace(".", "_"))] = to
-                key_map[key_lora] = to
-
-    if "ernie" in _model_name:
-        for k in sdk:
-            if k.startswith("diffusion_model.") and k.endswith(".weight"):
-                key_lora = k[len("diffusion_model.") : -len(".weight")]
-                key_map["transformer.{}".format(key_lora)] = k
 
     if "krea-2" in _model_name:
         diffusers_keys = krea2_to_diffusers(model.diffusion_model.config, output_prefix="diffusion_model.")
