@@ -33,7 +33,6 @@ from modules.processing import (
     StableDiffusionProcessingTxt2Img,
     process_images,
 )
-from modules.sd_models import model_data, select_checkpoint
 from modules.shared import cmd_opts, opts, state
 from modules.ui_components import ToolButton
 
@@ -92,20 +91,6 @@ def apply_order(p: StableDiffusionProcessing, x: list[str], _):
     p.prompt = prompt_tmp + p.prompt
 
 
-def apply_checkpoint(p: StableDiffusionProcessing, x: str, _):
-    if (info := modules.sd_models.get_closet_checkpoint_match(x)) is None:
-        raise ValueError(f'Unknown Checkpoint: "{x}"')
-
-    if info.name == p.override_settings.get("sd_model_checkpoint", None):
-        return
-
-    orig_ckpt = getattr(opts, "sd_model_checkpoint", None)
-
-    opts.set("sd_model_checkpoint", info.name)
-    refresh_loading_params_for_xyz_grid()
-    opts.set("sd_model_checkpoint", orig_ckpt)
-
-
 def apply_size(p: StableDiffusionProcessing, x: str, _):
     try:
         width, height = x.split("x")
@@ -115,8 +100,30 @@ def apply_size(p: StableDiffusionProcessing, x: str, _):
         logger.error(f'Invalid Size "{x}" for X/Y/Z Plot')
 
 
-def apply_vae(p: StableDiffusionProcessing, x: str, _):
+def apply_checkpoint(p: StableDiffusionProcessing, x: str, _):
+    p.override_settings["sd_model_checkpoint"] = modules.sd_models.get_closet_checkpoint_match(x).name
+
+
+def apply_vae_fast(p: StableDiffusionProcessing, x: str, _):
     p.override_settings["sd_vae"] = find_vae(x)
+
+
+def apply_module(p: StableDiffusionProcessing, x: str, xs: list[str]):
+    from modules_forge.main_entry import module_values_to_ui_selectors, resolve_module_value
+
+    alternatives = {resolve_module_value(name) for name in xs if name != "None"}
+    current = p.override_settings.get("forge_additional_modules", shared.opts.forge_additional_modules)
+    modules = [resolve_module_value(value) for value in current if resolve_module_value(value) not in alternatives]
+    if x != "None":
+        modules.append(resolve_module_value(x))
+    p.override_settings["forge_additional_modules"] = module_values_to_ui_selectors(modules)
+
+
+def module_choices(kind):
+    from modules_forge import main_entry
+
+    return ["None", *(key for key in main_entry.module_list if main_entry.module_kind(key) == kind)]
+
 
 
 def apply_styles(p: StableDiffusionProcessing, x: str, _):
@@ -191,9 +198,9 @@ def refresh_loading_params_for_xyz_grid():
     Refreshes the loading parameters for the model,
     causes a reload in sd_models.forge_model_reload()
     """
-    checkpoint_info = select_checkpoint()
+    from modules_forge.main_entry import refresh_model_loading_parameters
 
-    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=shared.opts.forge_additional_modules, unet_storage_dtype=model_data.forge_loading_parameters.get("unet_storage_dtype", None))
+    refresh_model_loading_parameters()
 
 
 def find_vae(name: str) -> str:
@@ -211,16 +218,33 @@ def boolean_choice(reverse: bool = False):
 
 
 def format_value_add_label(p: StableDiffusionProcessing, opt: "AxisOption", x: T) -> str:
-    if type(x) == float:
+    if type(x) is float:
         x = round(x, 8)
 
     return f"{opt.label}: {x}"
 
 
 def format_value(p: StableDiffusionProcessing, opt: "AxisOption", x: T) -> T:
-    if type(x) == float:
+    if type(x) is float:
         x = round(x, 8)
     return x
+
+
+def format_lora_label(p: StableDiffusionProcessing, opt: "AxisOption", x: str) -> str:
+    if not (found := re.findall(r"<lora:([^>]+)>", x)):
+        return x
+
+    labels = []
+    for tag in found:
+        name, *weights = tag.split(":")
+        parts = [name.strip()]
+        for weight in weights:
+            try:
+                parts.append(str(round(float(weight), 3)))
+            except ValueError:
+                parts.append(weight.strip())
+        labels.append(":".join(parts))
+    return ", ".join(labels)
 
 
 def format_value_join_list(p: StableDiffusionProcessing, opt: "AxisOption", x: str) -> str:
@@ -292,20 +316,23 @@ axis_options = [
     AxisOption("Shift", float, apply_field("distilled_cfg_scale")),
     AxisOption("Rescale CFG", float, apply_field("rescale_cfg")),
     AxisOption("MaHiRo", str, apply_field("mahiro"), choices=boolean_choice(reverse=True)),
-    AxisOption("Prompt S/R", str, apply_prompt, format_value=format_value),
-    AxisOption("Prompt order", str_permutations, apply_order, format_value=format_value_join_list),
+    AxisOption("Prompt S/R", str, apply_prompt, cost=0.1, format_value=format_value),
+    AxisOption("Prompt S/R (LoRA)", str, apply_prompt, cost=0.1, format_value=format_lora_label),
+    AxisOption("Prompt order", str_permutations, apply_order, cost=0.1, format_value=format_value_join_list),
     AxisOptionTxt2Img("Sampler", str, apply_field("sampler_name"), format_value=format_value, confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers if x.name not in opts.hide_samplers]),
     AxisOptionTxt2Img("Hires sampler", str, apply_field("hr_sampler_name"), confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers_for_img2img if x.name not in opts.hide_samplers]),
     AxisOptionImg2Img("Sampler", str, apply_field("sampler_name"), format_value=format_value, confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers_for_img2img if x.name not in opts.hide_samplers]),
     AxisOption("Schedule type", str, apply_field("scheduler"), choices=lambda: [x.label for x in sd_schedulers.schedulers]),
-    AxisOption("Checkpoint name", str, apply_checkpoint, format_value=format_remove_path, confirm=confirm_checkpoints, cost=1.0, choices=lambda: sorted(sd_models.checkpoints_list, key=str.casefold)),
-    AxisOption("VAE", str, apply_vae, cost=0.7, choices=lambda: ["None", *sorted(sd_vae.vae_dict.keys())]),
+    AxisOption("Checkpoint name", str, apply_checkpoint, format_value=format_remove_path, confirm=confirm_checkpoints, cost=2.0, choices=lambda: sorted(sd_models.checkpoints_list, key=str.casefold)),
+    AxisOption("VAE", str, apply_module, cost=0.7, choices=lambda: module_choices("VAE")),
+    AxisOption("Text Encoder", str, apply_module, cost=0.7, choices=lambda: module_choices("text_encoder")),
+    AxisOption('VAE ("state_dict" only)', str, apply_vae_fast, cost=0.3, choices=lambda: ["None", *sorted(sd_vae.vae_dict.keys())]),
     AxisOption("Clip skip", int, apply_override("CLIP_stop_at_last_layers")),
     AxisOption("Denoising", float, apply_field("denoising_strength")),
     AxisOption("Initial noise multiplier", float, apply_field("initial_noise_multiplier")),
     AxisOption("Extra noise", float, apply_override("img2img_extra_noise")),
     AxisOptionTxt2Img("Hires upscaler", str, apply_field("hr_upscaler"), choices=lambda: [*shared.latent_upscale_modes, *[x.name for x in shared.sd_upscalers]]),
-    AxisOption("Styles", str, apply_styles, choices=lambda: list(shared.prompt_styles.styles)),
+    AxisOption("Styles", str, apply_styles, cost=0.1, choices=lambda: list(shared.prompt_styles.styles)),
     AxisOption("Face restore", str, apply_face_restore, format_value=format_value),
     AxisOption("Negative Guidance minimum sigma", float, apply_field("s_min_uncond")),
     AxisOption("Token merging ratio", float, apply_override("token_merging_ratio")),
@@ -332,7 +359,7 @@ if cmd_opts.adv_samplers:
             AxisOption("Beta schedule beta", float, apply_override("beta_dist_beta")),
             AxisOption("Eta", float, apply_field("eta")),
             AxisOptionImg2Img("Cond. Image Mask Weight", float, apply_field("inpainting_mask_weight")),
-            AxisOption("UniPC Order", int, apply_uni_pc_order, cost=0.5),
+            AxisOption("UniPC Order", int, apply_uni_pc_order),
             AxisOption("Always discard next-to-last sigma", str, apply_override("always_discard_next_to_last_sigma", boolean=True), choices=boolean_choice(reverse=True)),
             AxisOption("SGM noise multiplier", str, apply_override("sgm_noise_multiplier", boolean=True), choices=boolean_choice(reverse=True)),
         ]
@@ -477,7 +504,7 @@ class Script(scripts.Script):
         return "X/Y/Z plot"
 
     def ui(self, is_img2img):
-        self.current_axis_options = [x for x in axis_options if type(x) == AxisOption or x.is_img2img == is_img2img]
+        self.current_axis_options = [x for x in axis_options if type(x) is AxisOption or x.is_img2img == is_img2img]
 
         with gr.Group(elem_classes=["xyz_entries"]):
             with gr.Row():
@@ -591,6 +618,23 @@ class Script(scripts.Script):
             (z_values_dropdown, lambda params: get_dropdown_update_from_params("Z", params)),
         )
 
+        def refresh_xyz_dropdowns(x_idx: int, y_idx: int, z_idx: int):
+
+            def get_choices(axis_idx: int):
+                if (axis := self.current_axis_options[axis_idx]).choices is not None:
+                    return gr.update(choices=axis.choices())
+                return gr.skip()
+
+            return [get_choices(x_idx), get_choices(y_idx), get_choices(z_idx)]
+
+        from modules_forge import main_entry
+
+        main_entry.on_refresh_checkpoint(
+            callback=refresh_xyz_dropdowns,
+            inputs=[x_type, y_type, z_type],
+            outputs=[x_values_dropdown, y_values_dropdown, z_values_dropdown],
+        )
+
         return [x_type, x_values, x_values_dropdown, y_type, y_values, y_values_dropdown, z_type, z_values, z_values_dropdown, draw_legend, include_lone_images, include_sub_grids, no_fixed_seeds, vary_seeds_x, vary_seeds_y, vary_seeds_z, row_count, margin_size, csv_mode]
 
     def run(self, p, x_type, x_values, x_values_dropdown, y_type, y_values, y_values_dropdown, z_type, z_values, z_values_dropdown, draw_legend, include_lone_images, include_sub_grids, no_fixed_seeds, vary_seeds_x, vary_seeds_y, vary_seeds_z, row_count, margin_size, csv_mode):
@@ -613,7 +657,7 @@ class Script(scripts.Script):
             else:
                 valslist = csv_string_to_list_strip(vals)
 
-            if opt.type == int:
+            if opt.type is int:
                 valslist_ext = []
 
                 for val in valslist:
@@ -637,7 +681,7 @@ class Script(scripts.Script):
                         valslist_ext.append(val)
 
                 valslist = valslist_ext
-            elif opt.type == float:
+            elif opt.type is float:
                 valslist_ext = []
 
                 for val in valslist:
@@ -768,6 +812,7 @@ class Script(scripts.Script):
 
             pc = copy(p)
             pc.styles = pc.styles[:]
+            pc.override_settings = p.override_settings.copy()
             x_opt.apply(pc, x, xs)
             y_opt.apply(pc, y, ys)
             z_opt.apply(pc, z, zs)

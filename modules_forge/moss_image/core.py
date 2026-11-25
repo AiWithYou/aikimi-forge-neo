@@ -31,6 +31,7 @@ _KEYS = {
     "shift",
     "seed",
     "skip_layer",
+    "slg",
     "precision",
     "text_precision",
     "loras",
@@ -171,6 +172,17 @@ def validate_request(value, *, internal=False) -> dict:
         "kv_cache": kv_cache,
         "image_strength": image_strength,
     }
+    if "slg" in value:
+        slg = value["slg"]
+        if not isinstance(slg, dict) or set(slg) != {"layers", "start", "end"}:
+            raise MossImageError("SLGには対象層、開始、終了を指定してください。")
+        layers = slg["layers"]
+        if not isinstance(layers, list) or not 1 <= len(layers) <= 42:
+            raise MossImageError("SLGの対象層を1〜42個指定してください。")
+        layers = list(dict.fromkeys(_integer(layer, "SLGの層", 0, 41) for layer in layers))
+        start = _number(slg["start"], "SLGの開始", 0, 1, inclusive=True)
+        end = _number(slg["end"], "SLGの終了", start, 1)
+        result["slg"] = {"layers": layers, "start": start, "end": end}
     if "hires" in value:
         if mode != "txt2img":
             raise MossImageError("Hires.fixはtxt2imgで使用してください。")

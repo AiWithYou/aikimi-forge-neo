@@ -371,12 +371,13 @@ class ComfyRuntime:
         if any(value != 1 for value in rope.values()):
             model.model_options.setdefault("transformer_options", {})["rope_options"] = dict(rope)
         if request["skip_layer"]:
+            slg = request.get("slg", {"layers": [22], "start": 0.0, "end": 1.0})
             model = self.slg.SkipLayerGuidanceDiTSimple.execute(
                 model,
-                start_percent=0.0,
-                end_percent=1.0,
+                start_percent=slg["start"],
+                end_percent=slg["end"],
                 double_layers="",
-                single_layers="22",
+                single_layers=", ".join(map(str, slg["layers"])),
             )[0]
         sigmas = self.sampling_sigmas(model, request)
         self.last_metadata.update({"actual_steps": len(sigmas) - 1, "sampler": "euler", "scheduler": "sgm_uniform"})
@@ -466,6 +467,7 @@ class ComfyRuntime:
         return {
             **{key: request[key] for key in ("width", "height", "steps", "denoise", "seed", "cfg", "shift", "skip_layer")},
             **{key: self.last_metadata[key] for key in ("actual_steps", "sampler", "scheduler")},
+            **({"slg": request["slg"]} if request.get("skip_layer") and "slg" in request else {}),
             "rope": dict(request.get("rope", {"scale_x": 1.0, "scale_y": 1.0})),
         }
 

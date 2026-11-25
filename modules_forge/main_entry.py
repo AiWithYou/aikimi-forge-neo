@@ -433,8 +433,19 @@ def preset_checkpoint_selection(preset: str, *, warn: bool = False) -> dict:
     return {"choices": sd_models.checkpoint_choices(value or ""), "value": value}
 
 
+_refresh_callbacks = []
+
+
+def on_refresh_checkpoint(callback, inputs=None, outputs=None):
+    _refresh_callbacks.append((callback, inputs, outputs))
+
+
+def capture_callbacks():
+    _refresh_callbacks.clear()
+
+
 def make_checkpoint_manager_ui():
-    global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype
+    global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype, _event_refresh
 
     model_catalog.prepare_directories()
 
@@ -445,8 +456,13 @@ def make_checkpoint_manager_ui():
             shared.opts.set("sd_model_checkpoint", next(iter(sd_models.checkpoints_list.values())).name)
 
     _, vae_list = refresh_models()
-    if shared.opts.forge_preset not in PresetArch.choices():
-        shared.opts.set("forge_preset", "xl")
+    disabled = getattr(shared.cmd_opts, "disable_preset", [])
+    sort = getattr(shared.cmd_opts, "sort_preset", False)
+    choices = PresetArch.choices(disabled, sort) if disabled or sort else PresetArch.choices()
+    if not choices:
+        raise ValueError("--disable-preset must leave at least one preset enabled")
+    if shared.opts.forge_preset not in choices:
+        shared.opts.set("forge_preset", choices[0])
     current_preset = shared.opts.forge_preset
     checkpoint_selection = preset_checkpoint_selection(current_preset)
     module_value = module_values_to_ui_selectors(
@@ -457,7 +473,7 @@ def make_checkpoint_manager_ui():
         )
     )
 
-    ui_forge_preset = gr.Dropdown(label="UI Preset", value=shared.opts.forge_preset, choices=PresetArch.choices(), elem_id="forge_ui_preset")
+    ui_forge_preset = gr.Dropdown(label="UI Preset", value=shared.opts.forge_preset, choices=choices, elem_id="forge_ui_preset")
 
     with gr.Row(elem_id="forge_checkpoint_selector"):
         ui_checkpoint = model_catalog.configure_component(gr.Dropdown(label="チェックポイント", **checkpoint_selection, allow_custom_value=True, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"], scale=4))
@@ -481,7 +497,7 @@ def make_checkpoint_manager_ui():
             gr.update(choices=vae_list, value=module_value),
         ]
 
-    refresh_button.click(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
+    _event_refresh = refresh_button.click(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
     Context.root_block.load(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False, show_progress="hidden")
 
     value = checkpoint_selection["value"]
@@ -641,6 +657,10 @@ def get_a1111_ui_component(tab: str, label: str) -> gr.components.Component:
 
 
 def forge_main_entry():
+    event = _event_refresh
+    for callback, inputs, outputs in _refresh_callbacks:
+        event = event.then(fn=callback, inputs=inputs, outputs=outputs, queue=False, show_progress='hidden')
+
     ui_txt2img_steps = get_a1111_ui_component("txt2img", "Steps")
     ui_txt2img_hr_steps = get_a1111_ui_component("txt2img", "Hires steps")
     ui_img2img_steps = get_a1111_ui_component("img2img", "Steps")

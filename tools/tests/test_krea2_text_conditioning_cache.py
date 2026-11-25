@@ -2,6 +2,7 @@
 
 import ast
 import collections
+import contextlib
 import unittest
 from contextlib import nullcontext
 from pathlib import Path
@@ -52,6 +53,8 @@ def load_calc_batch(batch_cfg):
     namespace = {
         "torch": torch,
         "collections": collections,
+        "contextlib": contextlib,
+        "dynamic_args": dynamic_args,
         "args": SimpleNamespace(disable_gpu_warning=True),
         "shared": SimpleNamespace(batch_cond_uncond=batch_cfg),
         "memory_management": SimpleNamespace(signal_empty_cache=False, get_free_memory=lambda _device: float("inf")),

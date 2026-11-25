@@ -6,6 +6,8 @@
 
 Forge共通画面で選べる系列はSDXL、Anima 3.8B、Krea2です。専用Studioでは各画面のモデル選択欄を使います。
 
+AnimaのRGBA出力、JSON BuilderからMOSS Imageへの転送、LoRAのステップ別制御、SolAttn、DeGrid、Spectrum、SLG、X/Y/Z plotの追加軸を利用できます。プリセットの表示は `--disable-preset` と `--sort-preset` で指定できます。[操作と対応条件](docs/upstream-sync.md)
+
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
 **画像の生成・編集、音声付き動画の作成、作曲、画像や文章の評価をひとつのWebUIで扱える、Windows向けのForge Neo派生版です。** モデルの導入や高解像度化、画像の仕上げ機能も備えています。

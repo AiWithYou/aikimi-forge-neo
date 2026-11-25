@@ -30,6 +30,7 @@ def public_result(value):
         "shift",
         "seed",
         "skip_layer",
+        "slg",
         "model_id",
         "model_revision",
         "elapsed_seconds",
@@ -96,14 +97,18 @@ def public_result(value):
         result["inference_policy"] = cleaned
     if "rope" in result:
         result["rope"] = {key: item for key, item in result["rope"].items() if key in {"scale_x", "scale_y"}}
+    if "slg" in result:
+        result["slg"] = {key: item for key, item in result["slg"].items() if key in {"layers", "start", "end"}}
     if "hires" in result:
         result["hires"] = {
             key: item for key, item in result["hires"].items() if key in {"base_width", "base_height", "steps", "denoise"}
         }
     if "sampling_passes" in result:
-        fields = {"width", "height", "steps", "denoise", "seed", "cfg", "shift", "skip_layer", "actual_steps", "sampler", "scheduler", "rope"}
+        fields = {"width", "height", "steps", "denoise", "seed", "cfg", "shift", "skip_layer", "slg", "actual_steps", "sampler", "scheduler", "rope"}
         result["sampling_passes"] = [{key: item for key, item in stage.items() if key in fields} for stage in result["sampling_passes"]]
         for stage in result["sampling_passes"]:
+            if "slg" in stage:
+                stage["slg"] = {key: item for key, item in stage["slg"].items() if key in {"layers", "start", "end"}}
             if "rope" in stage:
                 stage["rope"] = {key: item for key, item in stage["rope"].items() if key in {"scale_x", "scale_y"}}
     if "weight_sources" in result:

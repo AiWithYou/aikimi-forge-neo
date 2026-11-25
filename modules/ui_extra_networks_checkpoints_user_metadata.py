@@ -2,7 +2,7 @@ import gradio as gr
 
 from modules import ui_extra_networks_user_metadata
 from modules.ui_components import ToolButton
-from modules_forge import main_entry
+from modules_forge import main_entry, presets
 
 refresh_symbol = '\U0001f504'  # 🔄
 
@@ -22,7 +22,7 @@ class CheckpointUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataE
         if vae and "Built in" not in vae:
             vae = main_entry.resolve_module_values(vae)
         user_metadata["vae_te"] = vae
-        user_metadata["sd_version_str"] = 'SdVersion.' + sd_version
+        user_metadata["sd_arch"] = sd_version
 
         self.write_user_metadata(name, user_metadata)
 
@@ -43,11 +43,7 @@ class CheckpointUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataE
             choices=["Built in", *main_entry.module_dropdown_choices()],
         )
 
-        version = user_metadata.get('sd_version_str', '')
-        if version == '':
-            version = 'Unknown'
-        else:
-            version = version.replace('SdVersion.', '')
+        version = user_metadata.get("sd_arch", "Unknown")
 
         return [
             *values[0:5],
@@ -69,7 +65,7 @@ class CheckpointUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataE
 
         self.create_default_editor_elems()
 
-        self.sd_version = gr.Radio(['SD1', 'SDXL', 'Flux', 'Unknown'], value='Unknown', label='Base model', interactive=True)
+        self.sd_version = gr.Radio(["Unknown", *presets.PresetArch.choices()], value='Unknown', label='Base model', interactive=True)
 
         with gr.Row():
             self.select_vae = gr.Dropdown(choices=modules_list, value=None, label="Preferred VAE / Text encoder(s)", elem_id="checpoint_edit_user_metadata_preferred_vae", multiselect=True)

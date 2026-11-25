@@ -536,14 +536,15 @@ class Anima(nn.Module):
             "rope_emb_L_1_1_D": rope_emb_L_1_1_D.unsqueeze(1).unsqueeze(0),
             "adaln_lora_B_T_3D": adaln_lora_B_T_3D,
             "extra_per_block_pos_emb": extra_pos_emb_None,
-            "transformer_options": kwargs.get("transformer_options", {}),
+            "transformer_options": dict(kwargs.get("transformer_options") or {}),
         }
 
         # To make fp16 compute_dtype work, we keep the residual stream in fp32 but run attention and MLP modules in fp16.
         if x_B_T_H_W_D.dtype is torch.float16:
             x_B_T_H_W_D = x_B_T_H_W_D.float()
 
-        for block in self.blocks:
+        for index, block in enumerate(self.blocks):
+            block_kwargs["transformer_options"]["block_index"] = index
             x_B_T_H_W_D = block(
                 x_B_T_H_W_D,
                 t_embedding_B_T_D,
@@ -717,7 +718,7 @@ class LLMAdapter(nn.Module):
                 source_attention_mask = source_attention_mask.unsqueeze(1).unsqueeze(1)
 
         x = self.in_proj(self.embed(target_input_ids))
-        context = source_hidden_states
+        context = source_hidden_states.to(dtype=x.dtype)
         position_ids = torch.arange(x.shape[1], device=x.device).unsqueeze(0)
         position_ids_context = torch.arange(context.shape[1], device=x.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(x, position_ids)

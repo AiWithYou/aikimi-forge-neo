@@ -64,6 +64,16 @@ def start(
             loras=list(local_assets.lora_settings(loras, lora_rows)),
             rope={"scale_x": rope_x, "scale_y": rope_y},
         )
+        if skip_layer:
+            from modules import shared
+
+            opts = getattr(shared, "opts", None)
+            if opts is not None:
+                request["slg"] = {
+                    "layers": [int(i.strip()) for i in opts.slg_single_layers.split(",") if i.strip()],
+                    "start": opts.slg_start_percent,
+                    "end": opts.slg_end_percent,
+                }
         if checkpoint != "official":
             request["checkpoint"] = checkpoint
         if mode == "txt2img" and hires_enabled:
@@ -372,7 +382,7 @@ def on_ui_tabs():
             )
             loras.do_not_save_to_config = True
             lora_rows.do_not_save_to_config = True
-        prompt = gr.Textbox(label="プロンプト", lines=4, placeholder="生成したい画像を自然文、タグ列、JSONで記述")
+        prompt = gr.Textbox(elem_id="moss-image-prompt", label="プロンプト", lines=4, placeholder="生成したい画像を自然文、タグ列、JSONで記述")
         negative = gr.Textbox(label="ネガティブプロンプト", lines=2)
         with gr.Column() as reference_controls:
             images = gr.Gallery(
@@ -413,8 +423,8 @@ def on_ui_tabs():
         cancel = gr.Button("中断", interactive=False)
         with gr.Column() as settings:
             with gr.Row():
-                width = gr.Number(value=1024, precision=0, minimum=512, maximum=4096, step=16, label="幅")
-                height = gr.Number(value=1024, precision=0, minimum=512, maximum=4096, step=16, label="高さ")
+                width = gr.Number(elem_id="moss-image-width", value=1024, precision=0, minimum=512, maximum=4096, step=16, label="幅")
+                height = gr.Number(elem_id="moss-image-height", value=1024, precision=0, minimum=512, maximum=4096, step=16, label="高さ")
             with gr.Group(elem_id="moss-image-hires-controls") as hires_group:
                 hires_enabled = gr.Checkbox(
                     value=False, label="拡大して仕上げる（Hires.fix）", elem_id="moss-image-hires-enabled"
@@ -434,7 +444,9 @@ def on_ui_tabs():
             cfg = gr.Slider(0, 100, value=3, step=0.1, label="CFG")
             shift = gr.Slider(0.1, 100, value=5, step=0.1, label="Shift")
             seed = gr.Number(value=-1, precision=0, label="Seed")
-            skip_layer = gr.Checkbox(value=True, label="負条件の22層をスキップ", elem_id="moss-image-skip-layer")
+            from modules import shared
+
+            skip_layer = gr.Checkbox(value=getattr(getattr(shared, "opts", None), "slg_enable", True), label="負条件の指定層をスキップ", elem_id="moss-image-skip-layer")
             with gr.Accordion("高解像度の構図調整（RoPE）", open=False):
                 rope_x = gr.Slider(0.25, 4, value=1, step=0.05, label="横スケール · 1で標準", elem_id="moss-image-rope-x")
                 rope_y = gr.Slider(0.25, 4, value=1, step=0.05, label="縦スケール · 1で標準", elem_id="moss-image-rope-y")

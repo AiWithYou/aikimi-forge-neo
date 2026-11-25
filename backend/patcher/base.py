@@ -99,7 +99,8 @@ class LowVramPatch:
 
 
 class OnlineLoRAPatch:
-    def __init__(self, key, patch):
+    def __init__(self, key: str, patch, *, name: str = None):
+        self.name = name
         self.key = key
         self.patch = [patch]
 
@@ -417,12 +418,12 @@ class ModelPatcher:
 
             if key in model_sd:
                 p.add(k)
-                _lora = (strength_patch, patches[k], strength_model, offset, function)
+
                 if online_mode:
-                    self.add_weight_wrapper(key, OnlineLoRAPatch(k, _lora))
+                    self.add_weight_wrapper(key, OnlineLoRAPatch(k, [strength_patch, patches[k], strength_model, offset, function], name=filename))
                 else:
                     current_patches = self.patches.pop(key, [])
-                    current_patches.append(_lora)
+                    current_patches.append((strength_patch, patches[k], strength_model, offset, function))
                     self.patches[key] = current_patches
 
         self.patches_uuid = uuid.uuid4()

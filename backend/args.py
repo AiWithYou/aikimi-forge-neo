@@ -62,6 +62,7 @@ parser.add_argument("--cpu-text-enc", action="store_true", help="Run the text en
 
 parser.add_argument("--use-pytorch-cross-attention", action="store_true", help="Use the PyTorch cross attention (override sageattention/flash_attn/xformers)")
 parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention (meant to use with PyTorch cross attention)")
+parser.add_argument("--force-w4a8", action="store_true", help="Use int8 activations for ConvRot W4A4 layers")
 parser.add_argument("--force-upcast-attention", action="store_true", help="Always upcast to fp32 during attention")
 
 parser.add_argument("--sage", action="store_true", help="install sageattention")
@@ -102,7 +103,7 @@ parser.add_argument("--mmap-torch-files", action="store_true", help="Use mmap wh
 parser.add_argument("--disable-mmap", action="store_true", help="Don't use mmap when loading safetensors")
 
 parser.add_argument("--tiled-conv2d", type=int, default=0, metavar="TILE_SIZE", choices=[0, 64, 128, 256, 512], help="reduce VAE memory usage ; increase processing time")
-parser.add_argument("--enable-triton-backend", action="store_true", help="Enable the use of Triton backend in comfy-kitchen")
+parser.add_argument("--enable-triton-backend", action="store_true", help="Enable Triton in comfy-kitchen and supported GGUF K-quant layers")
 
 
 class SageAttentionFuncs(enum.Enum):

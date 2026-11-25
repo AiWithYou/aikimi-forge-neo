@@ -91,35 +91,63 @@ class ConditionConstant(Condition):
         return self.cond
 
 
+def conditioning_shape(row):
+    return tuple((k, v.shape) for k, v in row.items()) if isinstance(row, dict) else row.shape
+
+
 def compile_conditions(cond):
     if cond is None:
         return None
+    if isinstance(cond, list):
+        from modules.prompt_parser import stack_conditioning
+
+        groups = {}
+        for i, row in enumerate(cond):
+            groups.setdefault(conditioning_shape(row), []).append(i)
+        result = []
+        for indices in groups.values():
+            compiled = compile_conditions(stack_conditioning([cond[i] for i in indices]))[0]
+            compiled["batch_indices"] = indices
+            result.append(compiled)
+        return result
 
     if isinstance(cond, torch.Tensor):
         result = dict(
             cross_attn=cond,
-            model_conds=dict(
-                c_crossattn=ConditionCrossAttn(cond),
-            ),
+            model_conds=dict(c_crossattn=ConditionCrossAttn(cond)),
         )
-        return [
-            result,
-        ]
+        return [result]
 
     cross_attn = cond["crossattn"]
     pooled_output = cond["vector"]
 
-    result = dict(cross_attn=cross_attn, pooled_output=pooled_output, model_conds=dict(c_crossattn=ConditionCrossAttn(cross_attn), y=Condition(pooled_output)))
+    result = dict(
+        cross_attn=cross_attn,
+        pooled_output=pooled_output,
+        model_conds=dict(c_crossattn=ConditionCrossAttn(cross_attn), y=Condition(pooled_output)),
+    )
 
     if "guidance" in cond:
         result["model_conds"]["guidance"] = Condition(cond["guidance"])
 
-    return [
-        result,
-    ]
+    return [result]
 
 
 def compile_weighted_conditions(cond, weights):
+    if isinstance(cond, list):
+        from modules.prompt_parser import stack_conditioning
+
+        groups = {}
+        for image, composition in enumerate(weights):
+            for term, (index, weight) in enumerate(composition):
+                key = (term, conditioning_shape(cond[index]), weight)
+                groups.setdefault(key, []).append((image, index))
+        results = []
+        for (_, _, weight), rows in groups.items():
+            compiled = compile_conditions(stack_conditioning([cond[index] for _, index in rows]))[0]
+            compiled.update(batch_indices=[image for image, _ in rows], strength=weight)
+            results.append(compiled)
+        return results
     results = []
 
     for cond_pre in zip_longest(*weights):

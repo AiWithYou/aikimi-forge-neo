@@ -3,7 +3,7 @@ import torch
 
 from modules import scripts, sd_models, shared
 from modules.infotext_utils import PasteField
-from modules.ui_common import create_refresh_button
+from modules_forge.main_entry import on_refresh_checkpoint
 from modules.ui_components import InputAccordion
 
 
@@ -20,10 +20,11 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
 
     @classmethod
     def refresh_checkpoints(cls):
-        from modules_forge.main_entry import refresh_models
+        from modules.shared_items import list_checkpoint_tiles
 
-        ckpt_list, _ = refresh_models()
+        ckpt_list = list_checkpoint_tiles(shared.opts.sd_checkpoint_dropdown_use_short)
         cls.ckpts = ["None"] + ckpt_list
+        return gr.update(choices=cls.ckpts)
 
     def ui(self, is_img2img):
         self.refresh_checkpoints()
@@ -36,7 +37,7 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
                     elem_id=self.elem_id("checkpoint"),
                     choices=self.ckpts,
                 )
-                create_refresh_button(refiner_checkpoint, self.refresh_checkpoints, lambda: {"choices": self.ckpts}, self.elem_id("checkpoint_refresh"))
+                on_refresh_checkpoint(self.refresh_checkpoints, outputs=[refiner_checkpoint])
             with gr.Row():
                 refiner_switch_at = gr.Slider(
                     value=0.875,

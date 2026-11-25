@@ -94,6 +94,8 @@ jobs:
         run: >-
           python tools/run_ci_tests.py --pytest
           tools/tests/test_p_h3*.py tools/tests/test_official_h3_image.py -q
+      - name: Test resolution rounding and JSON Builder
+        run: node --test tools/tests/stage2.test.mjs
       - name: Run local checkpoint and uv bootstrap CPU contracts
         run: >-
           python tools/run_ci_tests.py --pytest

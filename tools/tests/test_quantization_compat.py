@@ -36,8 +36,9 @@ class QuantizationCompatibilityTests(unittest.TestCase):
                 self.assertEqual(utils.weight_dtype(state_dict), quant_type)
 
     def test_gguf_import_and_operation_picker(self):
+        import gguf
+
         from backend.operations_gguf import ParameterGGUF
-        from modules_forge.packages import gguf
 
         self.assertTrue(callable(gguf.GGUFReader))
         self.assertTrue(issubclass(ParameterGGUF, torch.nn.Parameter))

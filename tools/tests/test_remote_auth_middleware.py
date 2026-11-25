@@ -23,6 +23,7 @@ from modules.aikimi_security.auth import (
 )
 
 DIRECT_ROUTES = (
+    ("GET", "/internal/json_builder_prompt_styles"),
     ("GET", "/internal/sysinfo"),
     ("GET", "/internal/profile-startup"),
     ("GET", "/internal/pending-tasks"),

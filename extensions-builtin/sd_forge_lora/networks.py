@@ -119,9 +119,10 @@ def load_network(name: str, network_on_disk: network.NetworkOnDisk):
 
 
 def load_networks(names: list[str], te_multipliers: list[float] = None, unet_multipliers: list[float] = None):
+    failed_networks = {}
     current_sd = sd_models.model_data.get_sd_model()
     if current_sd is None:
-        return
+        return failed_networks
 
     te_multipliers = [1.0] * len(names) if te_multipliers is None else te_multipliers
     unet_multipliers = [1.0] * len(names) if unet_multipliers is None else unet_multipliers
@@ -150,23 +151,22 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
     if missing:
         raise ValueError("LoRAが見つかりません。一覧を更新して選び直してください: " + ", ".join(missing))
 
-    for network_on_disk, name in zip(networks_on_disk, names):
+    ready = []
+    for network_on_disk, name, u, t in zip(networks_on_disk, names, unet_multipliers, te_multipliers, strict=True):
         try:
             net = load_network(name, network_on_disk)
             net.mentioned_name = name
             network_on_disk.read_hash()
             loaded_networks.append(net)
+            ready.append((network_on_disk.filename, u, t))
         except Exception:
+            failed_networks[name] = "could not load network"
             logger.error(f'Failed to load LoRA: "{name}"')
             continue
 
     online_mode = dynamic_args.online_lora or False
 
-    compiled_lora_targets = []
-    for n, u, t in zip(networks_on_disk, unet_multipliers, te_multipliers):
-        if n is None:
-            continue
-        compiled_lora_targets.append([n.filename, u, t, online_mode])
+    compiled_lora_targets = [(filename, u, t, online_mode) for filename, u, t in ready]
 
     # Reuse an applied LoRA only while its file and strengths are unchanged.
     file_versions = []
@@ -176,7 +176,7 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
         file_versions.append(file_identity(filename)["sha256"])
     compiled_lora_targets_hash = str((compiled_lora_targets, file_versions))
     if current_sd.current_lora_hash == compiled_lora_targets_hash:
-        return
+        return failed_networks
 
     # Invalidate before mutating models; publish the key only after success.
     # A failed read/patch must be retried, even when reverting to the old choice.
@@ -192,6 +192,7 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
 
     current_sd.forge_objects_after_applying_lora = current_sd.forge_objects.shallow_copy()
     current_sd.current_lora_hash = compiled_lora_targets_hash
+    return failed_networks
 
 
 def process_network_files(names: Optional[list[str]] = None):

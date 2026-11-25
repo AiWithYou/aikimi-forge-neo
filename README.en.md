@@ -6,6 +6,8 @@ English · [日本語](README.md)
 
 The Forge checkpoint selector supports SDXL, Anima 3.8B and Krea2. Dedicated Studios provide their own model selectors.
 
+Anima supports RGBA output with a four-channel VAE. JSON Builder sends regional prompts to MOSS Image. Generation controls include step-wise LoRA, SolAttn, Spectrum and model-specific SLG. Use DeGrid in Extras and compare LoRAs or additional modules in X/Y/Z plot. Use `--disable-preset` and `--sort-preset` to customize the preset selector.
+
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
 **A Windows-focused Forge Neo fork for image generation and editing, video with audio, music composition, and image or text evaluation in one WebUI.** It also provides model setup, high-resolution workflows, and image finishing tools.

@@ -161,31 +161,36 @@ class ImageStitch(scripts.Script):
         references = self.extract_images(references)
 
         # cache is based on reference inputs & model
-        cache: list[str | int | bool] = [str(sd_models.model_data.forge_loading_parameters), *(self.hash_image(ref) for ref in references)]
+        cache: list[str | int | bool] = [opts.img2img_background_color, getattr(opts, "anima_do_reference", False), getattr(opts, "krea2_do_reference", False), str(sd_models.model_data.forge_loading_parameters), *(self.hash_image(ref) for ref in references)]
         if dynamic_args.anima:
             cache.extend([p.width, p.height])
+        else:
+            cache.extend([max_dim, getattr(opts, "reference_max_side", 0)])
         if ImageStitch.cached_parameters == cache:
             return
 
-        ImageStitch.cached_parameters = cache
+        ImageStitch.cached_parameters = None
         self.reset_references(p)
 
         dynamic_args.is_referencing = True
 
-        for reference in references:
-            if dynamic_args.anima:
-                reference = images.resize_image(1, reference, p.width, p.height)
-            else:
-                reference = self.preprocess(reference, max_dim)
-            image = images.flatten(reference, opts.img2img_background_color)
-            image = np.array(image, dtype=np.float32) / 255.0
-            image = np.moveaxis(image, 2, 0)
-            image = torch.from_numpy(image).to(device=device).unsqueeze(0)
+        try:
+            for reference in references:
+                if dynamic_args.anima:
+                    reference = images.resize_image(1, reference, p.width, p.height)
+                else:
+                    reference = self.preprocess(reference, max_dim)
+                image = images.flatten(reference, opts.img2img_background_color)
+                image = np.array(image, dtype=np.float32) / 255.0
+                image = np.moveaxis(image, 2, 0)
+                image = torch.from_numpy(image).to(device=device).unsqueeze(0)
 
 
-            images_tensor_to_samples(image, 0, p.sd_model)  # calls encode_first_stage
+                images_tensor_to_samples(image, 0, p.sd_model)  # calls encode_first_stage
+        finally:
+            dynamic_args.is_referencing = False
+        ImageStitch.cached_parameters = cache
 
-        dynamic_args.is_referencing = False
 
     @staticmethod
     def extract_images(gallery: list[str | tuple[Image.Image, str]]) -> list[Image.Image]:
@@ -204,8 +209,8 @@ class ImageStitch(scripts.Script):
             _w, _h = w, h
 
         if _w % 64 != 0 or _h % 64 != 0:
-            _w = round(_w / 64) * 64
-            _h = round(_h / 64) * 64
+            _w = max(64, round(_w / 64) * 64)
+            _h = max(64, round(_h / 64) * 64)
 
         if w != _w or h != _h:
             return images.resize_image(1, img, _w, _h)
@@ -214,6 +219,4 @@ class ImageStitch(scripts.Script):
 
     @staticmethod
     def hash_image(img: Image.Image) -> int:
-        img = img.resize((64, 64), Image.Resampling.LANCZOS)
-        img = img.convert("L")
-        return hash(str(list(img.getdata())))
+        return hash((img.size, img.mode, img.convert("RGBA").tobytes()))

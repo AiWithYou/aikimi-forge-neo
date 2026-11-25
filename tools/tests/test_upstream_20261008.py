@@ -1,6 +1,7 @@
 """CPU regressions for the selected October 8 Forge Neo updates."""
 
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,10 +21,11 @@ from tools.tests.test_controllllite_tiling import anima as lllite
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
-    "_test_october_spectrum", ROOT / "extensions-builtin/sd_forge_spectrum/lib_spectrum/forecaster.py"
+    "_test_october_spectrum", ROOT / "extensions-builtin/sd_forge_spectrum/lib_spectrum/__init__.py"
 )
 spectrum = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(spectrum)
+with patch.dict(sys.modules, {spec.name: spectrum}):
+    spec.loader.exec_module(spectrum)
 
 
 class AnimaControlMappingTests(unittest.TestCase):
@@ -313,7 +315,7 @@ class SpectrumConditionTests(unittest.TestCase):
         wrapper = self.wrapper()
         model = Mock(side_effect=lambda x, t, **c: torch.ones_like(x))
         wrapper(model, self.args(torch.zeros(1, 2), 100))
-        with patch.object(spectrum.FastChebyshevForecaster, "predict", side_effect=AssertionError("old shape")):
+        with patch.object(spectrum.ChebyshevForecaster, "predict", side_effect=AssertionError("old shape")):
             out = wrapper(model, self.args(torch.zeros(2, 2), 99))
         self.assertEqual(model.call_count, 2)
         torch.testing.assert_close(out, torch.ones(2, 2))

@@ -161,7 +161,7 @@ def list_models():
     model_list.update(path for path in library().get("forge_checkpoint", []) if os.path.isfile(path))
     model_list.update(path for path in selection("forge").get("checkpoints", {}).values() if os.path.isfile(path))
 
-    for filename in model_list:
+    for filename in sorted(model_list, key=shared.natural_sort_key):
         checkpoint_info = CheckpointInfo(filename)
         checkpoint_info.register()
 

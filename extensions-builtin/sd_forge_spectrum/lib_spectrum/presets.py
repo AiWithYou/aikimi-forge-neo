@@ -1,10 +1,11 @@
+import logging
 import os.path
 from json import dump, load
 from typing import Final
 
 import gradio as gr
 
-from lib_spectrum import logger
+logger = logging.getLogger("Spectrum")
 
 PRESET_FILE: Final[os.PathLike] = os.path.join(os.path.dirname(os.path.dirname(__file__)), "presets.json")
 PARAMS: Final[list[type]] = [float, int, float, int, float, int, float]
@@ -27,7 +28,7 @@ class PresetManager:
             return
 
         try:
-            with open(PRESET_FILE, "r", encoding="utf-8") as json_file:
+            with open(PRESET_FILE, encoding="utf-8") as json_file:
                 cls.presets = load(json_file)
         except Exception:
             logger.error("Failed to load Presets...")
@@ -45,7 +46,7 @@ class PresetManager:
             logger.error(f'Preset "{preset_name}" was not found...')
             return [gr.skip()] * len(PARAMS)
 
-        return [gr.update(value=obj(val)) for obj, val in zip(PARAMS, preset)]
+        return [gr.update(value=obj(val)) for obj, val in zip(PARAMS, preset, strict=True)]
 
     @classmethod
     def save_preset(cls, preset_name: str, *args: float) -> list[str]:

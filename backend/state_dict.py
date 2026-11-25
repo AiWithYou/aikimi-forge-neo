@@ -4,6 +4,19 @@ import torch
 
 
 def load_state_dict(model, sd, ignore_errors=[], log_name=None, ignore_start=None):
+    gguf_targets = dict(model.named_parameters())
+    gguf_targets.update(model.named_buffers())
+    gguf_entries = [(name, tensor) for name, tensor in sd.items() if name in gguf_targets and getattr(tensor, "gguf_cls", None) is not None]
+
+    if gguf_entries:
+        from backend.loader_gguf import dequantize
+        from backend.operations import ForgeOperationsGGUF
+
+        gguf_layers = (ForgeOperationsGGUF.Linear, ForgeOperationsGGUF.Conv2d, ForgeOperationsGGUF.Embedding)
+        for name, tensor in gguf_entries:
+            if not isinstance(model.get_submodule(name.rpartition(".")[0]), gguf_layers):
+                sd[name] = dequantize(tensor, dtype=gguf_targets[name].dtype)
+
     missing, unexpected = model.load_state_dict(sd, strict=False)
     missing = [x for x in missing if x not in ignore_errors]
     unexpected = [x for x in unexpected if x not in ignore_errors]

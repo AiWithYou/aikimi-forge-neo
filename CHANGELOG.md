@@ -5,6 +5,11 @@
 - Forge共通画面の対応系列をSDXL、Anima 3.8B、Krea2に絞りました。SD 1.x、FLUX.1／2、旧Qwen Image、Ernie、Lumina、Chroma、Z-Image、Wan、PiD、MugenとNunchaku／SVDQの読み込みを廃止します。
 - Iris-3B Studio、Jev Sparse Experiments、旧実験アップスケールツールを廃止します。H3 ImageはP-H3 ImageとMiniMax-H3-Imageを使用します。
 
+- Animaでは4チャンネルVAEで透明画像を生成できます。JSON Builderでは領域とキャプションを編集し、MOSS Imageに送れます。
+- オンラインLoRAのステップ別強度、SolAttn、Spectrum、ExtrasのDeGridを追加・更新します。SLGは対象モデルに限って適用します。
+- X/Y/Z plotでLoRAと追加モジュールを比較できます。参照画像のリサイズ、解像度の丸め、モデル一覧の更新、拡張機能の管理画面を改善します。
+- GGUF K-QuantとNVFP4、A8、Attentionと条件のバッチ処理を更新します。起動時にプリセットの表示と並び順を指定できます。
+
 ## v6.1.0 — 2026-11-07
 
 - P-H3 Imageの画像生成と画像編集で、互換LoRAを1件選んで使えるようにしました。強度は−2〜2で、初期値は1です。0では適用せず、LoRA名と強度は生成条件に保存されます。

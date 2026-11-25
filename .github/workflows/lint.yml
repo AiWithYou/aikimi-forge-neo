@@ -3,6 +3,21 @@ name: Lint and workflow validation
 on:
   pull_request:
     paths:
+      - "extensions-builtin/sd_forge_json_builder/**"
+      - "extensions-builtin/sd_forge_lora_schedule/**"
+      - "extensions-builtin/sd_forge_sparse/**"
+      - "extensions-builtin/sd_forge_spectrum/**"
+      - "modules_forge/packages/gguf/**"
+      - "tools/tests/test_stage2_integration.py"
+      - "tools/tests/stage2.test.mjs"
+      - "javascript/dimRounding.js"
+      - "javascript/ui.js"
+      - "scripts/degrid.py"
+      - "scripts/xyz_grid.py"
+      - "modules/processing_scripts/slg.py"
+      - "modules/ui_extensions.py"
+      - "modules_forge/presets.py"
+      - "modules_forge/main_entry.py"
       - ".github/**/*.yml"
       - ".github/**/*.yaml"
       - "**/*.bat"
@@ -161,6 +176,21 @@ on:
   push:
     branches: [neo]
     paths:
+      - "extensions-builtin/sd_forge_json_builder/**"
+      - "extensions-builtin/sd_forge_lora_schedule/**"
+      - "extensions-builtin/sd_forge_sparse/**"
+      - "extensions-builtin/sd_forge_spectrum/**"
+      - "modules_forge/packages/gguf/**"
+      - "tools/tests/test_stage2_integration.py"
+      - "tools/tests/stage2.test.mjs"
+      - "javascript/dimRounding.js"
+      - "javascript/ui.js"
+      - "scripts/degrid.py"
+      - "scripts/xyz_grid.py"
+      - "modules/processing_scripts/slg.py"
+      - "modules/ui_extensions.py"
+      - "modules_forge/presets.py"
+      - "modules_forge/main_entry.py"
       - ".github/**/*.yml"
       - ".github/**/*.yaml"
       - "**/*.bat"
@@ -344,6 +374,14 @@ jobs:
         shell: bash
         run: |
           files=(
+            tools/tests/test_stage2_integration.py
+            scripts/degrid.py
+            modules_forge/packages/gguf
+            extensions-builtin/sd_forge_spectrum
+            modules/processing_scripts/slg.py
+            extensions-builtin/sd_forge_sparse/scripts
+            extensions-builtin/sd_forge_lora_schedule/scripts
+            extensions-builtin/sd_forge_json_builder/scripts
             modules/aikimi_capabilities.py
             modules_forge/image_workspace.py
             tools/tests/test_image_workspace*.py
@@ -502,6 +540,9 @@ jobs:
           python -m ruff check "${files[@]}"
       - name: Check Aikimi UI JavaScript syntax
         run: |
+          node --check javascript/dimRounding.js
+          node --check javascript/ui.js
+          for file in extensions-builtin/sd_forge_json_builder/javascript/*.js; do node --check "$file"; done
           node --check javascript/dragdrop.js
           node --check extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js
           node --check extensions-builtin/aikimi-ui/javascript/aikimi_image_workspace.js

@@ -3,6 +3,21 @@ name: Windows smoke tests
 on:
   pull_request:
     paths:
+      - "extensions-builtin/sd_forge_json_builder/**"
+      - "extensions-builtin/sd_forge_lora_schedule/**"
+      - "extensions-builtin/sd_forge_sparse/**"
+      - "extensions-builtin/sd_forge_spectrum/**"
+      - "modules_forge/packages/gguf/**"
+      - "tools/tests/test_stage2_integration.py"
+      - "tools/tests/stage2.test.mjs"
+      - "javascript/dimRounding.js"
+      - "javascript/ui.js"
+      - "scripts/degrid.py"
+      - "scripts/xyz_grid.py"
+      - "modules/processing_scripts/slg.py"
+      - "modules/ui_extensions.py"
+      - "modules_forge/presets.py"
+      - "modules_forge/main_entry.py"
       - "**/*.bat"
       - "**/*.ps1"
       - "backend/**"
@@ -144,6 +159,21 @@ on:
   push:
     branches: [neo]
     paths:
+      - "extensions-builtin/sd_forge_json_builder/**"
+      - "extensions-builtin/sd_forge_lora_schedule/**"
+      - "extensions-builtin/sd_forge_sparse/**"
+      - "extensions-builtin/sd_forge_spectrum/**"
+      - "modules_forge/packages/gguf/**"
+      - "tools/tests/test_stage2_integration.py"
+      - "tools/tests/stage2.test.mjs"
+      - "javascript/dimRounding.js"
+      - "javascript/ui.js"
+      - "scripts/degrid.py"
+      - "scripts/xyz_grid.py"
+      - "modules/processing_scripts/slg.py"
+      - "modules/ui_extensions.py"
+      - "modules_forge/presets.py"
+      - "modules_forge/main_entry.py"
       - "**/*.bat"
       - "**/*.ps1"
       - "backend/**"
@@ -413,6 +443,7 @@ jobs:
           --module tools.tests.test_patcher_cleanup
           --module tools.tests.test_quant_ops_zero_scale
           --module tools.tests.test_remote_auth_middleware
+          --module tools.tests.test_stage2_integration
           --module tools.tests.test_repository_privacy
           --module tools.tests.test_run_ci_tests
           --module tools.tests.test_safe_image_fetch

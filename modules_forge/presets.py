@@ -17,8 +17,9 @@ class PresetArch(Enum):
     krea = 12  # Krea2
 
     @staticmethod
-    def choices() -> list[str]:
-        return [preset.name for preset in PresetArch]
+    def choices(disabled=(), sort=False) -> list[str]:
+        names = [preset.name for preset in PresetArch if preset.name not in disabled]
+        return sorted(names) if sort else names
 
 
 DEFAULT_CHECKPOINTS = {
@@ -98,10 +99,13 @@ def register(options_templates: dict):
     from gradio import Dropdown, Slider
 
     from modules.options import OptionInfo, OptionRow, options_section
+    from modules.shared import cmd_opts
     from modules.shared_items import list_samplers, list_schedulers
 
     for arch in PresetArch:
         name = arch.name
+        if name in getattr(cmd_opts, "disable_preset", ()):
+            continue
 
         options_templates.update(
             options_section(
@@ -121,12 +125,12 @@ def register(options_templates: dict):
                 (f"ui_{name}", name.upper(), "presets"),
                 {
                     f"{name}_t2i_ss1": OptionRow(),
-                    f"{name}_t2i_sampler": OptionInfo(sampler, "txt2img Sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()]}),
-                    f"{name}_t2i_scheduler": OptionInfo(scheduler, "txt2img Scheduler", Dropdown, lambda: {"choices": list_schedulers()}),
+                    f"{name}_t2i_sampler": OptionInfo(sampler, "txt2img Sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()], "allow_custom_value": True}),
+                    f"{name}_t2i_scheduler": OptionInfo(scheduler, "txt2img Scheduler", Dropdown, lambda: {"choices": list_schedulers(), "allow_custom_value": True}),
                     f"{name}_t2i_ss0": OptionRow(),
                     f"{name}_i2i_ss1": OptionRow(),
-                    f"{name}_i2i_sampler": OptionInfo(sampler, "img2img Sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()]}),
-                    f"{name}_i2i_scheduler": OptionInfo(scheduler, "img2img Scheduler", Dropdown, lambda: {"choices": list_schedulers()}),
+                    f"{name}_i2i_sampler": OptionInfo(sampler, "img2img Sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()], "allow_custom_value": True}),
+                    f"{name}_i2i_scheduler": OptionInfo(scheduler, "img2img Scheduler", Dropdown, lambda: {"choices": list_schedulers(), "allow_custom_value": True}),
                     f"{name}_i2i_ss0": OptionRow(),
                 },
             )

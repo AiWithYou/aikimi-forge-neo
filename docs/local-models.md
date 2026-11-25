@@ -81,3 +81,5 @@ P-H3 Imageは共有モデル保存先の `loras/`（標準は `models/MiniMax-H3
 [abenzerps/Qwen-Image-2.1-Uncensored-GGUF](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF/tree/6b34e59458d3eb7ba6a6f86a116aed5253dc02c3)の `qwen-image-2.1-UC-Q4_K_M.gguf` または `qwen-image-2.1-UC-int8_convrot.safetensors` を `models/Qwen-Image-2.1/checkpoints/` の下へ配置します。共通部品は導入済みの `models/Qwen-Image-2.1/model` を使用できます。
 
 **一覧を更新** して本体を選択します。GGUFは通常版Q4設定、INT8 ConvRotは対応量子化構成を使います。ファイル名だけで形式は判断しません。「Uncensored」は配布元の名称で、通常版との出力差を保証するものではありません。
+
+AnimaのRGBA出力には4チャンネル出力のVAEを選びます。RGB入力を4チャンネルVAEに渡す場合は不透明なアルファを補います。
