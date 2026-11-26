@@ -36,7 +36,7 @@ class WorkspaceRegressionTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        self.root = Path(directory.name)
+        self.root = Path(directory.name).resolve()
         (self.root / "outputs").mkdir()
 
     def test_initialized_app_contracts(self):
@@ -139,7 +139,7 @@ class WorkspaceRegressionTests(unittest.TestCase):
         ):
             for module in (flux, irodori, moss):
                 path = module.Service().outputs
-                self.assertTrue(path.is_relative_to(Path(directory) / "outputs"))
+                self.assertTrue(path.is_relative_to(Path(directory).resolve() / "outputs"))
             self.assertEqual(History().root, flux.Service().outputs)
 
     def test_bounded_scan_and_pagination(self):
