@@ -10,7 +10,7 @@ from secrets import compare_digest
 from typing import Any
 
 from starlette.middleware import Middleware
-from starlette.requests import HTTPConnection
+from starlette.requests import HTTPConnection, Request
 from starlette.responses import JSONResponse
 
 
@@ -159,6 +159,27 @@ async def request_has_gradio_auth_async(app, request) -> bool:
             result = await result
         return result is not None
     return request_has_gradio_auth(app, request)
+
+
+def workspace_auth(options):
+    from fastapi import HTTPException
+
+    credentials = credentials_from_options(options, "api")
+    api_only = bool(getattr(options, "nowebui", False))
+    web_login = bool(getattr(options, "gradio_auth", None) or getattr(options, "gradio_auth_path", None))
+
+    async def authorize(request: Request):
+        if credentials and request_has_basic_auth(request, credentials):
+            return
+        app = request.app
+        if not api_only and (getattr(app, "auth", None) is not None or getattr(app, "auth_dependency", None) is not None):
+            if await request_has_gradio_auth_async(app, request):
+                return
+        elif not credentials and (api_only or not web_login):
+            return
+        raise HTTPException(401, "Authentication required", headers={"WWW-Authenticate": 'Basic charset="UTF-8"'})
+
+    return authorize
 
 
 def require_gradio_auth(app, request) -> None:

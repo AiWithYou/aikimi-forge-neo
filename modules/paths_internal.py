@@ -31,3 +31,7 @@ config_states_dir = os.path.join(script_path, "config_states")
 default_output_dir = os.path.join(data_path, "output")
 
 roboto_ttf_file = os.path.join(modules_path, "Roboto-Regular.ttf")
+
+
+def studio_output_dir(directory: str) -> Path:
+    return Path(data_path).absolute() / "outputs" / directory

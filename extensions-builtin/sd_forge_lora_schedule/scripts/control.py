@@ -97,10 +97,10 @@ class LoRAControl(scripts.Script):
 
     @classmethod
     def adjust_lora(cls, params: CFGDenoiserParams):
-        if not cls.mapping or not params.total_sampling_steps:
+        if not cls.mapping or not params.denoiser.total_steps:
             return
         model: ModelPatcher = shared.sd_model.forge_objects.unet
-        t = params.sampling_step / params.total_sampling_steps
+        t = min(1.0, params.denoiser.step / max(1, params.denoiser.total_steps - 1))
         for wrappers in model.weight_wrapper_patches.values():
             for wrapper in wrappers:
                 if isinstance(wrapper, OnlineLoRAPatch) and wrapper.name in cls.mapping:

@@ -53,10 +53,11 @@ def _log_error(directory, error):
 
 class Service:
     def __init__(self, root=MODEL_ROOT, *, outputs=None):
+        from modules.paths_internal import studio_output_dir
         from modules_forge.resident_worker import ResidentWorker
 
         self.root = Path(root)
-        self.outputs = Path(outputs) if outputs is not None else ROOT / "outputs" / "moss-image"
+        self.outputs = Path(outputs) if outputs is not None else studio_output_dir("moss-image")
         self.worker = ResidentWorker("moss-image", ROOT / "cache" / "moss-image-worker", gpu_safety=True)
         self.jobs = {}
         self._guard = threading.RLock()

@@ -13,6 +13,8 @@ on:
       - "modules_forge/workspace_store.py"
       - "tools/tests/stage3.test.mjs"
       - "tools/tests/test_stage3.py"
+      - "tools/tests/test_stage4.py"
+      - "tools/tests/stage4_app_probe.py"
       - "CHANGELOG.md"
       - "README.en.md"
       - "README.md"
@@ -200,6 +202,8 @@ on:
       - "modules_forge/workspace_store.py"
       - "tools/tests/stage3.test.mjs"
       - "tools/tests/test_stage3.py"
+      - "tools/tests/test_stage4.py"
+      - "tools/tests/stage4_app_probe.py"
       - "CHANGELOG.md"
       - "README.en.md"
       - "README.md"
@@ -507,6 +511,7 @@ jobs:
           --module tools.tests.test_remote_auth_middleware
           --module tools.tests.test_stage2_integration
           --module tools.tests.test_stage3
+          --module tools.tests.test_stage4
           --module tools.tests.test_repository_privacy
           --module tools.tests.test_run_ci_tests
           --module tools.tests.test_safe_image_fetch

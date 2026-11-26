@@ -58,3 +58,16 @@ test("MOSS transfer opens the tab and waits for Gradio to mount its input", asyn
     assert.ok(active);
     assert.ok(field);
 });
+
+test("JSON Builder requests styles under the current WebUI subpath", async () => {
+    for (const suffix of ["/subpath/", "/subpath?view=styles#editor", "/"]) {
+        let requested;
+        const location = new URL("https://example.invalid" + suffix);
+        const ctx = vm.createContext({onUiLoaded() {}, onUiTabChange() {}, URL, window: {location},
+            fetch: url => { requested = new URL(url, location); return {json: () => []}; }});
+        vm.runInContext(script("extensions-builtin/sd_forge_json_builder/javascript/main.js"), ctx);
+        await ctx.fetchBuilderStyles();
+        const prefix = suffix === "/" ? "" : "/subpath";
+        assert.equal(requested.href, "https://example.invalid" + prefix + "/internal/json_builder_prompt_styles");
+    }
+});

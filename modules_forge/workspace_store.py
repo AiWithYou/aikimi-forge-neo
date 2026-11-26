@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import threading
+from contextlib import contextmanager
 from pathlib import Path, PureWindowsPath
 
 from modules_forge.yue2_studio.core import atomic_json
@@ -19,6 +20,27 @@ _DEVICES = {
 }
 LOCK = threading.RLock()
 MAX_BYTES = 2 * 1024 * 1024
+STATE_DIRECTORY = "config_states/aikimi_workspace"
+
+
+@contextmanager
+def state_transaction(root):
+    """Hold the same stable lock file across the complete read/modify/replace."""
+    with LOCK:
+        path = managed_path(root, STATE_DIRECTORY + "/workspace.lock")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a+b") as stream:
+            stream.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(stream, fcntl.LOCK_EX)
+            # Closing the descriptor releases the OS lock, including on exceptions.
+            yield
 
 
 def managed_path(root, relative):

@@ -83,7 +83,7 @@ def save_config_state(name):
 def restore_config_state(confirmed, config_state_name, restore_type):
     if config_state_name == "Current":
         return "<span>Select a Config to Restore from</span>"
-    if not confirmed:
+    if confirmed is not True:
         return "<span>Cancelled</span>"
 
     check_access()
@@ -128,7 +128,7 @@ def check_updates(id_task, disable_list):
             shared.state.textinfo = ext.name
             shared.state.nextjob()
 
-    with ThreadPoolExecutor(max_workers=int(os.cpu_count() / 2)) as executor:
+    with ThreadPoolExecutor(max_workers=max(1, (os.cpu_count() or 1) // 2)) as executor:
         [executor.submit(_check_update, ext) for ext in exts]
 
     return extension_table(), ""
@@ -516,7 +516,7 @@ def refresh_available_extensions_from_data(selected_tags: list[str], showing_typ
                 hidden += 1
                 continue
 
-        if filter_lower := filter_text.strip().lower():
+        if filter_lower := (filter_text or "").strip().lower():
             if filter_lower not in html.escape(name).lower() and filter_lower not in html.escape(description).lower():
                 hidden += 1
                 continue
@@ -610,8 +610,8 @@ def create_ui():
                     refresh_available_extensions_button = gr.Button(value="Load from Index", variant="primary", scale=1)
                     extensions_index_url = os.environ.get("WEBUI_EXTENSIONS_INDEX", "https://raw.githubusercontent.com/AUTOMATIC1111/stable-diffusion-webui-extensions/master/index.json")
                     available_extensions_index = gr.Textbox(value=extensions_index_url, show_label=False, info="Note: This index is maintained by third parties ; Please verify the Extension before installing", scale=4)
-                    extension_to_install = gr.Textbox(elem_id="extension_to_install", visible=False)
-                    install_extension_button = gr.Button(elem_id="install_extension_button", visible=False)
+                    extension_to_install = gr.Textbox(elem_id="extension_to_install", visible="hidden")
+                    install_extension_button = gr.Button(elem_id="install_extension_button", visible="hidden")
 
                 with gr.Group(visible=False) as extensions_filter:
                     with gr.Row():
@@ -688,10 +688,11 @@ def create_ui():
                     outputs=[config_states_list, config_states_info],
                 )
 
+                restore_confirmed = gr.Checkbox(value=False, visible=False)
                 config_restore_button.click(
                     fn=restore_config_state,
                     _js="config_state_confirm_restore",
-                    inputs=[dummy_component, config_states_list, config_restore_type],
+                    inputs=[restore_confirmed, config_states_list, config_restore_type],
                     outputs=[config_states_info],
                 )
 

@@ -188,8 +188,8 @@ MOSS Imageをv4.9.0から更新する場合は、使用中の保存形式でセ�
 
 - FLUX 3 Studioを追加。Klein蒸留版・Base、最大10枚の参照画像編集、配置ボックスを扱う専用ランタイムを導入します。PUPは標準OFFの任意追加です。RTX 30系向けの公式INT8 ConvRotを既定とし、BF16・Blackwell向けNVFP4も選択できます。Hugging Faceのモデルアクセス承認が必要です。[使い方と検証範囲](docs/flux3-klein.md)
 - FLUX 3の永続履歴を追加。再起動後も保存画像を一覧から選び、画像・使用文章・PNG・生成条件JSON・使い方へアクセスできます。未完了・中断・破損した結果を除き、選択時には保存条件と参照画像のSHA-256を再照合します。
-- Iris公式TurboのFull FTを`distill.yaml`から識別し、専用の4ステップ・CFG 1・固定スケジュールと対応サイズで生成します。通常モデルに戻すと元の設定を復元し、INT8・W4A8への変換でも蒸留設定を保持します。コミュニティ製Turbo LoRAとは分けて扱います。[導入と制限](docs/iris-studio.md#公式iris-3b-turbo)
-- Iris公式Turboと通常モデルの差分からrank64・rank128の専用LoRAを抽出するツールを追加。非Linearの差し替えと元モデル・設定のSHA-256を保存し、対応する通常モデルへ強度1で適用します。量子化本体・別のFull FT・img2imgへの誤適用を防ぎます。[抽出と使い方](docs/iris-studio.md#公式turboから抽出したlora)
+- Iris公式TurboのFull FTを`distill.yaml`から識別し、専用の4ステップ・CFG 1・固定スケジュールと対応サイズで生成します。通常モデルに戻すと元の設定を復元し、INT8・W4A8への変換でも蒸留設定を保持します。コミュニティ製Turbo LoRAとは分けて扱います。[導入と制限](https://github.com/AiWithYou/aikimi-forge-neo/blob/v6.1.0/docs/iris-studio.md#公式iris-3b-turbo)
+- Iris公式Turboと通常モデルの差分からrank64・rank128の専用LoRAを抽出するツールを追加。非Linearの差し替えと元モデル・設定のSHA-256を保存し、対応する通常モデルへ強度1で適用します。量子化本体・別のFull FT・img2imgへの誤適用を防ぎます。[抽出と使い方](https://github.com/AiWithYou/aikimi-forge-neo/blob/v6.1.0/docs/iris-studio.md#公式turboから抽出したlora)
 - プロンプト内の括弧による強調をショートカットで変更した際に例外になる問題を修正。Undo／Redoの履歴重複を解消し、新しく編集した後は古いRedo履歴を破棄します。
 - Textual Inversion名や挿入区切りに正規表現の記号が含まれる場合、カード操作で別の文字列を削除したり例外になったりする問題を修正。
 - 追加ネットワーク一覧の作成日・更新日ソートを修正。記号を含むLoRA名でも埋め込みプレビューを取得でき、検索とパスのコピーでも元の文字列を維持します。
@@ -216,7 +216,7 @@ MOSS Imageをv4.9.0から更新する場合は、使用中の保存形式でセ�
 ## v4.5.0 — 2026-10-13
 
 - 画像生成の配置と操作を共通化。モデル選択、txt2img／img2img、プロンプト、左側の入力・設定、右側の結果を揃え、LoRA・ControlNetなどを上部ボタンから開閉できます。閉じても選択・有効状態を保持します。[共通画面の使い方](docs/image-workspace.md)
-- Irisに通常サンプリングのimg2imgを追加。通常版・INT8・W4A8と互換Full FTで変更強度0〜1を指定できます。0は指定サイズの入力画像を保持し、1は同条件・同Seedのtxt2imgと一致します。Turbo LoRAを使うimg2imgには対応しません。[操作と制限](docs/iris-studio.md#入力画像から描き直すimg2img)
+- Irisに通常サンプリングのimg2imgを追加。通常版・INT8・W4A8と互換Full FTで変更強度0〜1を指定できます。0は指定サイズの入力画像を保持し、1は同条件・同Seedのtxt2imgと一致します。Turbo LoRAを使うimg2imgには対応しません。[操作と制限](https://github.com/AiWithYou/aikimi-forge-neo/blob/v6.1.0/docs/iris-studio.md#入力画像から描き直すimg2img)
 - Qwen・SenseNova・H3の参照画像編集を共通画面へ接続。txt2imgでは保持した参照画像を実行へ渡さず、対応画面では生成結果を次のimg2img入力へ送れます。Ming・Nanosaur2はtxt2imgのみです。Outpaint・動画・音楽・評価・深度推定・復元は専用画面を使用します。
 - モデル切替時のimg2img選択を保持し、SenseNovaのモード切替が繰り返される問題と、Animaを開いた直後に有効化が外れる問題を修正。
 - Irisのダウンロード一覧に実行条件JSONを含め、生成・復元モデルのNaN／Inf出力を画像保存前に拒否します。
@@ -225,7 +225,7 @@ MOSS Imageをv4.9.0から更新する場合は、使用中の保存形式でセ�
 ## v4.1.0 — 2026-10-12
 
 - Irisの追加LoRAフォルダーを起動時に用意し、下位フォルダーの重みをそのまま利用できます。
-- Irisの画像生成に任意の互換LoRAの複数選択・強度指定・解除を追加。通常版・INT8・W4A8と互換Full FTに対応し、Iris-3B Turboの蒸留LoRAは専用の少ステップ生成を使います。Turbo切替時に推奨値を設定した後も、Steps・CFGを手動変更できます。[使い方](docs/iris-studio.md#任意のloraとコミュニティ製turbo)
+- Irisの画像生成に任意の互換LoRAの複数選択・強度指定・解除を追加。通常版・INT8・W4A8と互換Full FTに対応し、Iris-3B Turboの蒸留LoRAは専用の少ステップ生成を使います。Turbo切替時に推奨値を設定した後も、Steps・CFGを手動変更できます。[使い方](https://github.com/AiWithYou/aikimi-forge-neo/blob/v6.1.0/docs/iris-studio.md#任意のloraとコミュニティ製turbo)
 - Irisのページ読込中にLoRA操作が無効になる競合と、通常LoRAの操作で直後のSteps・CFG・Negative Promptが古い値に戻る競合を防ぎます。
 
 ## v4.0.1 — 2026-10-11
@@ -248,7 +248,7 @@ MOSS Imageをv4.9.0から更新する場合は、使用中の保存形式でセ�
 - MiniMax H3に写真一枚からの実験的な360°周回モードを追加。Orbit LoRAを固定revision・SHA-256で導入し、同じ整形画像を両端へ渡します。通常側と周回側の設定を分け、推奨768×768・73フレーム・28 Stepsの無音動画を生成する構成です。画面操作とComfyUIへの受け渡しを確認しましたが、実モデルでの動画生成完走・周回品質・生成時間は未検証です。[使い方・確認範囲](docs/minimax-h3-orbit-lora.md)
 - H3の起動失敗時に、このセッションで起動したプロセスを回収します。外部ComfyUIを選んだ場合も、そのモデル保存先でOrbit LoRAの導入・準備状態を確認します。
 - Animaの参照画像を生成サイズへ中央切り抜き・拡縮し、縦横比が異なる場合のlatent連結エラーを修正。生成サイズを変更した場合も参照を再エンコードします。
-- Krea2で生成中のテキスト融合結果を自動再利用。最大2件・64 MiBに限定し、条件や重みの変更時は再計算、終了・中断・例外時は破棄します。RTX 3090の長文条件で生成全体を中央値12.1%短縮し、通常・CFG分岐・複数枚・参照・Hiresの出力一致を確認しました。[動作と確認条件](docs/krea2-jev.md#テキスト融合の再利用)
+- Krea2で生成中のテキスト融合結果を自動再利用。最大2件・64 MiBに限定し、条件や重みの変更時は再計算、終了・中断・例外時は破棄します。RTX 3090の長文条件で生成全体を中央値12.1%短縮し、通常・CFG分岐・複数枚・参照・Hiresの出力一致を確認しました。[動作と確認条件](https://github.com/AiWithYou/aikimi-forge-neo/blob/v6.1.0/docs/krea2-jev.md#テキスト融合の再利用)
 - Krea2の参照付き連続生成で、テキスト条件のキャッシュから戻る際に参照latentが抜ける問題を修正しました。参照処理の再利用も維持します。
 
 ## v3.9.2 — 2026-10-11
@@ -276,7 +276,7 @@ MOSS Imageをv4.9.0から更新する場合は、使用中の保存形式でセ�
 
 - IrisにW4A8を追加。本体3処理と画像生成用Qwen言語decoderをpacked 4bit重み・動的8bit activationで実行し、変換済み配布を取得します。既定はINT8を維持します。
 - CUDA kernelが使えない場合の内部BF16切替を拒否し、対応しないGPU・寸法は操作エラーとして表示します。共有modulation・小さい投影・embedding・正規化は元の精度を保ちます。
-- RTX 3090の12GiB allocator制限で生成・深度・復元を確認。1024×1024生成のピーク確保量は9.50GiBでした。16GB実機の確認とは区別します。[導入・比較条件](docs/iris-studio.md)
+- RTX 3090の12GiB allocator制限で生成・深度・復元を確認。1024×1024生成のピーク確保量は9.50GiBでした。16GB実機の確認とは区別します。[導入・比較条件](https://github.com/AiWithYou/aikimi-forge-neo/blob/v6.1.0/docs/iris-studio.md)
 - 縦長832×1280のアニメ少女とアニメ少女＋実写風背景を通常版・INT8・W4A8で比較。元PNG・プロンプト・測定条件を両量子化モデルの配布ページへ追加しました。
 
 ## v3.8.0 — 2026-10-09

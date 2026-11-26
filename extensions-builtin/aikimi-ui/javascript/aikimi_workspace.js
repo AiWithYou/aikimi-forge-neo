@@ -45,13 +45,23 @@
     function visible(selector, parent = document) {
         return [...parent.querySelectorAll(selector)].find(node => node.getClientRects().length && !node.readOnly);
     }
+    const promptFields = {
+        forge: ["#txt2img_prompt textarea,#img2img_prompt textarea", "#txt2img_neg_prompt textarea,#img2img_neg_prompt textarea"],
+        moss_image: ["#moss-image-prompt textarea", "#moss-image-negative-prompt textarea"],
+        qwen_image21: ["#qwen21-prompt textarea,#qwen21-outpaint-prompt textarea"],
+        minimax_h3_image: ["#ph3-prompt textarea,#official-h3-prompt textarea"],
+        minimax_h3: ["#h3-prompt textarea"],
+        flux3: ["#flux3-prompt textarea"],
+        irodori: ["#irodori-text textarea"]
+    };
     function insert(prompt, negative = "") {
         const parent = window.AikimiTabs?.getActiveContainer() || document;
-        const input = visible("#txt2img_prompt textarea,#img2img_prompt textarea,#qwen21-prompt textarea,#qwen21-outpaint-prompt textarea,#irodori-text textarea,#moss-image-prompt textarea,#flux3-prompt textarea,#h3-prompt textarea,#ph3-prompt textarea,#official-h3-prompt textarea", parent)
+        const [positiveSelector, negativeSelector] = promptFields[window.AikimiTabs?.getActiveFeature()] || promptFields.forge;
+        const input = visible(positiveSelector, parent)
             || [...parent.querySelectorAll("label")].filter(label => /^(プロンプト|テキスト|歌詞)/.test(label.textContent.trim()))
                 .map(label => label.querySelector("textarea")).find(node => node?.getClientRects().length && !node.readOnly);
         setInput(input, prompt);
-        const neg = visible("#txt2img_neg_prompt textarea,#img2img_neg_prompt textarea", parent);
+        const neg = negativeSelector && visible(negativeSelector, parent);
         if (neg) setInput(neg, negative);
     }
     function createDrawer() {
@@ -242,7 +252,7 @@
             if (offset && !result.items.length) { offset = Math.max(0, offset - 24); return refresh(); }
             list.replaceChildren();
             detail.replaceChildren();
-            message.textContent = result.total + " 件";
+            message.textContent = result.total + " 件" + (result.truncated ? "（走査上限に到達）" : "");
             for (const item of result.items) {
                 const button = action(item.id.split("/").pop(), () => show(item), message);
                 if (item.media === "image") {
@@ -289,5 +299,5 @@
     onUiLoaded(mount);
     onUiUpdate(mount);
     document.addEventListener("aikimi:feature-tab-change", () => requestAnimationFrame(mount));
-    window.AikimiWorkspace = {setInput};
+    window.AikimiWorkspace = {insert, setInput};
 })();

@@ -21,6 +21,10 @@ from typing import Any
 
 from modules_forge import local_assets
 
+P_H3_OUTPUT = "minimax_h3/p_h3_images"
+OFFICIAL_H3_OUTPUT = "minimax_h3/official_h3_images"
+H3_IMAGE_OUTPUTS = {P_H3_OUTPUT, OFFICIAL_H3_OUTPUT, "minimax_h3/images"}
+
 SIGMAS = "1.0, 0.984753, 0.967905, 0.951688, 0.925372, 0.881923, 0.810083, 0.528718, 0.0"
 MODEL = "p-h3-image_w4a8.safetensors"
 TEXT_ENCODER = "p-h3-image_text_encoder_w4a8.safetensors"

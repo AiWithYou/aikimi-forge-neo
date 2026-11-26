@@ -134,7 +134,7 @@ class SpectrumForForge(scripts.Script):
             return
 
         unet = p.sd_model.forge_objects.unet
-        steps = p.hr_second_pass_steps if getattr(p, "txt2img_upscale", False) else p.steps
+        steps = (p.hr_second_pass_steps or p.steps) if p.is_hr_pass else p.steps
         p.sd_model.forge_objects.unet = SpectrumNode.patch(unet, steps, *args)
 
         for k, v in zip(["spec_w", "spec_m", "spec_lam", "spec_window_size", "spec_flex_window", "spec_warmup_steps", "spec_stop_caching_step"], args, strict=True):

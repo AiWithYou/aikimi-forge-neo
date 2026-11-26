@@ -19,10 +19,11 @@ from .paths import canonical_path
 
 class Service:
     def __init__(self, root=RUNTIME, *, outputs=None):
+        from modules.paths_internal import studio_output_dir
         from modules_forge.resident_worker import ResidentWorker
 
         self.root = Path(root)
-        self.outputs = Path(outputs) if outputs is not None else ROOT / "outputs" / "flux3-klein"
+        self.outputs = Path(outputs) if outputs is not None else studio_output_dir("flux3-klein")
         self.worker = ResidentWorker("flux3-klein", ROOT / "cache" / "flux3-klein-worker")
         self.jobs = {}
         self._guard = threading.RLock()

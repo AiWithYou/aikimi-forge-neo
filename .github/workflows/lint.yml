@@ -12,6 +12,8 @@ on:
       - "modules_forge/workspace_store.py"
       - "tools/tests/stage3.test.mjs"
       - "tools/tests/test_stage3.py"
+      - "tools/tests/test_stage4.py"
+      - "tools/tests/stage4_app_probe.py"
       - "CHANGELOG.md"
       - "README.en.md"
       - "README.md"
@@ -215,6 +217,8 @@ on:
       - "modules_forge/workspace_store.py"
       - "tools/tests/stage3.test.mjs"
       - "tools/tests/test_stage3.py"
+      - "tools/tests/test_stage4.py"
+      - "tools/tests/stage4_app_probe.py"
       - "CHANGELOG.md"
       - "README.en.md"
       - "README.md"
@@ -442,6 +446,8 @@ jobs:
             modules_forge/prompt_library.py
             modules_forge/workspace_store.py
             tools/tests/test_stage3.py
+            tools/tests/test_stage4.py
+            tools/tests/stage4_app_probe.py
             extensions-builtin/flux3-klein-studio/scripts/flux3_klein_studio.py
             modules/aikimi_security/paths.py
             modules/aikimi_status.py
@@ -615,6 +621,7 @@ jobs:
           python -m ruff check --select E9,F modules/api/api.py webui.py
       - name: Check Aikimi UI JavaScript syntax
         run: |
+          node --check javascript/extensions.js
           node --check javascript/dimRounding.js
           node --check extensions-builtin/aikimi-ui/javascript/aikimi_workspace.js
           node --check javascript/ui.js

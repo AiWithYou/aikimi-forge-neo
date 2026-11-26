@@ -131,4 +131,6 @@ H3動画とP-H3 Imageは固定版の実行環境を共有します。生成方�
 
 管理対象外の任意pathをcleanup対象へ加えません。model、output、cache、log、secretはGit管理外です。
 
-ギャラリーは `output/` と `outputs/` を読み、作品をデータディレクトリからの相対 ID で参照します。認証設定は Forge API と共通です。
+ギャラリーは `output/` と `outputs/` を読み、作品をデータディレクトリからの相対 ID で参照します。WebUI では設定済みの Gradio セッションまたは API Basic 認証を使い、API 専用起動では API 認証設定に従います。JSON Builder のスタイル一覧にも同じ認証を適用します。お気に入りとプロンプト集は `config_states/aikimi_workspace/` に保存します。ギャラリーは1回にディレクトリエントリーを最大8,192件調べ、その範囲から指定順にページを返します。
+
+Extensions の一覧からインストールするときは、DOM に残した非表示の入力欄とボタンを使います。バックアップ復元は確認後に開始します。

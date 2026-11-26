@@ -1,3 +1,9 @@
+async function fetchBuilderStyles() {
+    const root = window.location.pathname.replace(/\/$/, "");
+    const url = root + "/internal/json_builder_prompt_styles";
+    return (await fetch(url)).json();
+}
+
 function writeBuilderPrompt(field, text, insert, notify) {
     if (insert) field.setRangeText(text, field.selectionStart, field.selectionEnd, "end");
     else field.value = text;
@@ -64,7 +70,7 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
 
             let styles;
             try {
-                const req = await (await fetch("/internal/json_builder_prompt_styles")).json();
+                const req = await fetchBuilderStyles();
                 styles = Object.fromEntries(req.map((s) => [s.name, s]));
             } catch (e) {
                 console.error("Failed to fetch Styles:", e.message);

@@ -5,7 +5,6 @@ import os
 import time
 from contextlib import closing
 from io import BytesIO
-from secrets import compare_digest
 from threading import Lock
 from typing import Any, Union, get_args, get_origin
 
@@ -17,7 +16,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.security.http import HTTPBase
 from PIL import PngImagePlugin
 
 import modules.progress as progress_module
@@ -27,7 +26,7 @@ from modules import errors, images, infotext_utils, postprocessing, restart, scr
 from modules.api import models
 from modules.api.script_args import overlay_script_args
 from modules.aikimi_security.api_policy import public_cmd_flags
-from modules.aikimi_security.auth import credentials_from_options
+from modules.aikimi_security.auth import credentials_from_options, request_has_basic_auth
 from modules.aikimi_security.redaction import redact_mapping, safe_error_message
 from modules.aikimi_security.url_fetch import SafeFetchError, fetch_remote_image, validate_decoded_image
 from modules.processing import StableDiffusionProcessingImg2Img, StableDiffusionProcessingTxt2Img, process_extra_images, process_images
@@ -251,14 +250,14 @@ def api_middleware(app: FastAPI):
 
 class Api:
     def __init__(self, app: FastAPI, queue_lock: Lock, *, workspace_only=False):
-        self.credentials = dict(credentials_from_options(shared.cmd_opts, "api"))
+        self.credentials = credentials_from_options(shared.cmd_opts, "api")
 
         self.router = APIRouter()
         self.app = app
         self.queue_lock = queue_lock
         from modules.aikimi_workspace_api import register_workspace_routes
 
-        register_workspace_routes(self)
+        register_workspace_routes(app)
         if workspace_only:
             return
         # api_middleware(self.app)  # FIXME: (legacy) this will have to be fixed
@@ -336,10 +335,9 @@ class Api:
             return self.app.add_api_route(path, endpoint, dependencies=[Depends(self.auth), *kwargs.pop("dependencies", [])], **kwargs)
         return self.app.add_api_route(path, endpoint, **kwargs)
 
-    def auth(self, credentials: HTTPBasicCredentials = Depends(HTTPBasic())):
-        if credentials.username in self.credentials:
-            if compare_digest(credentials.password, self.credentials[credentials.username]):
-                return True
+    def auth(self, request: Request, _scheme=Depends(HTTPBase(scheme="basic", auto_error=False))):
+        if request_has_basic_auth(request, self.credentials):
+            return True
 
         raise HTTPException(status_code=401, detail="Incorrect username or password", headers={"WWW-Authenticate": "Basic"})
 

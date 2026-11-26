@@ -5,12 +5,13 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
-from modules.aikimi_security.auth import request_has_gradio_auth_async
+from modules.aikimi_security.auth import workspace_auth
 from modules_forge.aikimi_gallery import Gallery
 from modules_forge.prompt_library import PromptLibrary, expand_wildcards
 from modules_forge.workspace_store import open_regular
@@ -34,23 +35,61 @@ def _checked():
         raise HTTPException(400, "入力またはローカルファイルを確認してください。") from None
 
 
-def register_workspace_routes(api):
+MAX_REQUEST_BYTES = 64 * 1024
+
+
+async def bounded_json_request(request: Request):
+    if request.headers.get("content-type", "").partition(";")[0].strip().lower() != "application/json":
+        raise HTTPException(415, "Use application/json")
+    length = request.headers.get("content-length")
+    if length is not None:
+        try:
+            size = int(length)
+            if size < 0:
+                raise ValueError
+        except ValueError:
+            raise HTTPException(400, "Invalid Content-Length") from None
+        if size > MAX_REQUEST_BYTES:
+            raise HTTPException(413, "Request body too large")
+
+    received = 0
+
+    async def receive():
+        nonlocal received
+        message = await request.receive()
+        received += len(message.get("body", b""))
+        if received > MAX_REQUEST_BYTES:
+            raise HTTPException(413, "Request body too large")
+        return message
+
+    limited = Request(request.scope, receive)
+    await limited.body()
+    return limited
+
+
+def register_workspace_routes(app):
     from modules import aikimi_diagnostics
     from modules.paths_internal import data_path
+    from modules.shared_cmd_options import cmd_opts
     from modules_forge.gpu_residency import release_idle
     from modules_forge.model_summary import model_summary
 
+    authorize = workspace_auth(cmd_opts)
+
+    class WorkspaceRoute(APIRoute):
+        def get_route_handler(self):
+            handle = super().get_route_handler()
+
+            async def secured(request: Request):
+                await authorize(request)
+                if request.method in {"POST", "DELETE"}:
+                    request = await bounded_json_request(request)
+                return await handle(request)
+
+            return secured
+
     gallery = Gallery(Path(data_path).resolve())
     library = PromptLibrary(gallery.root)
-
-    async def authorize(request: Request):
-        if not api.credentials and not await request_has_gradio_auth_async(request.app, request):
-            raise HTTPException(401, "Authentication required")
-        if (
-            request.method in {"POST", "DELETE"}
-            and request.headers.get("content-type", "").split(";")[0] != "application/json"
-        ):
-            raise HTTPException(415, "Use application/json")
 
     def browse(
         studio: str = "",
@@ -115,8 +154,8 @@ def register_workspace_routes(api):
     def model_summary_api():
         return model_summary()
 
-    dependencies = [Depends(authorize)]
-    aikimi_diagnostics.register_api_routes(api, dependencies=dependencies)
+    router = APIRouter(route_class=WorkspaceRoute)
+    aikimi_diagnostics.register_api_routes(router)
     for suffix, method, handler in (
         ("gallery", "GET", browse),
         ("gallery/media", "GET", preview),
@@ -129,4 +168,5 @@ def register_workspace_routes(api):
         ("models/summary", "GET", model_summary_api),
         ("gpu/release", "POST", release),
     ):
-        api.add_api_route("/aikimi/api/v1/" + suffix, handler, methods=[method], dependencies=dependencies)
+        router.add_api_route("/aikimi/api/v1/" + suffix, handler, methods=[method])
+    app.include_router(router)

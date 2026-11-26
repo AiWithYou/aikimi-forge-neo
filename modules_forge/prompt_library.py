@@ -7,7 +7,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 
-from modules_forge.workspace_store import LOCK, managed_path, read_json, write_json
+from modules_forge.workspace_store import STATE_DIRECTORY, managed_path, read_json, state_transaction, write_json
 
 LIMIT = 16384
 MAX_ENTRIES = 512
@@ -91,34 +91,37 @@ class PromptLibrary:
 
     @property
     def path(self):
-        return managed_path(self.root, "config_states/prompt_library.json")
+        return managed_path(self.root, STATE_DIRECTORY + "/prompt_library.json")
 
     def entries(self):
-        with LOCK:
-            try:
-                values = read_json(self.path)
-            except FileNotFoundError:
-                values = [
-                    validate(
-                        {
-                            "id": "landscape",
-                            "title": "風景",
-                            "prompt": "{朝|夕暮れ}の海",
-                            "updated_at": datetime.now(UTC).isoformat(),
-                        }
-                    )
-                ]
-                write_json(self.path, values)
-            if not isinstance(values, list) or len(values) > MAX_ENTRIES:
-                raise ValueError("プロンプト集の形式が不正です。")
-            return [validate(value) for value in values]
+        with state_transaction(self.root):
+            return self._entries()
+
+    def _entries(self):
+        try:
+            values = read_json(self.path)
+        except FileNotFoundError:
+            values = [
+                validate(
+                    {
+                        "id": "landscape",
+                        "title": "風景",
+                        "prompt": "{朝|夕暮れ}の海",
+                        "updated_at": datetime.now(UTC).isoformat(),
+                    }
+                )
+            ]
+            write_json(self.path, values)
+        if not isinstance(values, list) or len(values) > MAX_ENTRIES:
+            raise ValueError("プロンプト集の形式が不正です。")
+        return [validate(value) for value in values]
 
     def save(self, entry):
-        with LOCK:
+        with state_transaction(self.root):
             updated = validate(
                 {**entry, "id": entry.get("id", uuid.uuid4().hex), "updated_at": datetime.now(UTC).isoformat()}
             )
-            values = [e for e in self.entries() if e["id"] != updated["id"]]
+            values = [e for e in self._entries() if e["id"] != updated["id"]]
             if len(values) >= MAX_ENTRIES:
                 raise ValueError("保存件数の上限です。")
             write_json(self.path, [*values, updated])
@@ -127,8 +130,8 @@ class PromptLibrary:
     def delete(self, entry_id):
         if not ID.fullmatch(entry_id):
             raise ValueError("無効な ID です。")
-        with LOCK:
-            values = self.entries()
+        with state_transaction(self.root):
+            values = self._entries()
             remaining = [entry for entry in values if entry["id"] != entry_id]
             if len(remaining) == len(values):
                 raise ValueError("テンプレートが見つかりません。")

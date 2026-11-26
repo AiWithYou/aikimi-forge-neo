@@ -1,5 +1,6 @@
 """Browse managed media without exposing server file names outside the output roots."""
 
+import heapq
 import json
 import os
 import re
@@ -9,7 +10,17 @@ from functools import lru_cache
 from pathlib import Path
 
 from modules.aikimi_security.redaction import redact_text
-from modules_forge.workspace_store import LOCK, managed_path, open_regular, read_json, write_json
+from modules_forge.p_h3_image import H3_IMAGE_OUTPUTS
+from modules_forge.workspace_store import (
+    STATE_DIRECTORY,
+    managed_path,
+    open_regular,
+    read_json,
+    state_transaction,
+    write_json,
+)
+
+MAX_SCAN_ENTRIES = 8192
 
 MEDIA = {
     suffix: kind
@@ -164,6 +175,13 @@ def _png_fields(path, size, modified):
     return fields
 
 
+@lru_cache(maxsize=256)
+def _sidecar_fields(path, identity):
+    fields = {}
+    _collect(read_json(path, 262144), fields)
+    return fields
+
+
 class Gallery:
     def __init__(self, root):
         self.root = Path(root).resolve()
@@ -180,7 +198,7 @@ class Gallery:
 
     @property
     def favorites_path(self):
-        return managed_path(self.root, "config_states/gallery_favorites.json")
+        return managed_path(self.root, STATE_DIRECTORY + "/gallery_favorites.json")
 
     def _favorites(self):
         try:
@@ -196,7 +214,7 @@ class Gallery:
         return set(values)
 
     def favorite(self, identifier, enabled):
-        with LOCK:
+        with state_transaction(self.root):
             self.media_path(identifier)
             values = self._favorites()
             (values.add if enabled else values.discard)(identifier)
@@ -205,7 +223,7 @@ class Gallery:
             write_json(self.favorites_path, sorted(values))
 
     def quarantine(self, identifier):
-        with LOCK:
+        with state_transaction(self.root):
             path = self.media_path(identifier)
             destination = managed_path(
                 self.root, "tmp/aikimi-gallery/quarantine/" + uuid.uuid4().hex + "/" + identifier
@@ -232,7 +250,8 @@ class Gallery:
         ):
             try:
                 safe = managed_path(self.root, sidecar.relative_to(self.root).as_posix())
-                _collect(read_json(safe, 262144), fields)
+                info_json = safe.stat()
+                fields.update(_sidecar_fields(safe, (info_json.st_mtime_ns, info_json.st_ctime_ns, info_json.st_size, info_json.st_ino)))
             except (OSError, ValueError):
                 continue
         if path.suffix.lower() == ".png":
@@ -243,6 +262,27 @@ class Gallery:
         if not fields.get("prompt"):
             fields["prompt"] = fields.get("lyrics") or fields.get("text", "")
         return fields
+
+    def _scan(self):
+        # Count every directory entry, including ignored files and directories.
+        remaining = MAX_SCAN_ENTRIES
+        directories = ["output", "outputs"]
+        while directories:
+            try:
+                parent = managed_path(self.root, directories.pop())
+                with os.scandir(parent) as entries:
+                    for entry in entries:
+                        if remaining == 0:
+                            yield None
+                            return
+                        remaining -= 1
+                        path = parent / entry.name
+                        if entry.is_dir(follow_symlinks=False):
+                            directories.append(path.relative_to(self.root).as_posix())
+                        elif path.suffix.lower() in MEDIA:
+                            yield path
+            except (OSError, ValueError):
+                continue
 
     def list_items(self, studio="", media="", query="", favorites=False, order="newest", offset=0, limit=40):
         if (
@@ -255,57 +295,45 @@ class Gallery:
         ):
             raise ValueError("検索条件が不正です。")
         starred = self._favorites()
-        items = []
-        for name in ("outputs", "output"):
-            try:
-                root = managed_path(self.root, name)
-            except ValueError:
-                continue
-            for directory, dirs, files in os.walk(root):
-                parent = Path(directory)
-                safe_dirs = []
-                for sub in dirs:
-                    try:
-                        managed_path(self.root, (parent / sub).relative_to(self.root).as_posix())
-                        safe_dirs.append(sub)
-                    except (ValueError, OSError):
-                        pass
-                dirs[:] = safe_dirs
-                for file in files:
-                    path = parent / file
-                    kind = MEDIA.get(path.suffix.lower())
-                    if not kind or media and media != kind:
-                        continue
-                    relative = path.relative_to(self.root)
-                    identifier = relative.as_posix()
-                    owner = STUDIOS.get(relative.parts[1], "forge")
-                    if relative.parts[1:3] == ("minimax_h3", "images"):
-                        owner = "minimax_h3_image"
-                    if (studio and studio != owner) or (favorites and identifier not in starred):
-                        continue
-                    try:
-                        info = self.media_path(identifier).stat()
-                        fields = self._metadata(path, info) if query else {}
-                    except (OSError, ValueError):
-                        continue
-                    if query.casefold() in (" ".join([file, *fields.values()])).casefold():
-                        items.append(
-                            dict(
-                                id=identifier,
-                                studio=owner,
-                                media=kind,
-                                metadata=fields,
-                                favorite=identifier in starred,
-                                modified=info.st_mtime,
-                            )
-                        )
-        items.sort(key=lambda item: (item["modified"], item["id"]), reverse=order == "newest")
-        page = items[offset : offset + limit]
-        if not query:
-            for item in page:
+        total = 0
+        truncated = False
+        keyword = query.casefold()
+
+        def matches():
+            nonlocal total, truncated
+            for path in self._scan():
+                if path is None:
+                    truncated = True
+                    break
+                relative = path.relative_to(self.root)
+                identifier = relative.as_posix()
+                kind = MEDIA[path.suffix.lower()]
+                owner = STUDIOS.get(relative.parts[1], "forge")
+                if "/".join(relative.parts[1:3]) in H3_IMAGE_OUTPUTS:
+                    owner = "minimax_h3_image"
+                if (studio and studio != owner) or (media and media != kind) or (favorites and identifier not in starred):
+                    continue
                 try:
-                    path = self.media_path(item["id"])
-                    item["metadata"] = self._metadata(path, path.stat())
+                    info = self.media_path(identifier).stat()
+                    if keyword and keyword not in path.name.casefold():
+                        fields = self._metadata(path, info)
+                        if keyword not in " ".join((path.name, *fields.values())).casefold():
+                            continue
                 except (OSError, ValueError):
                     continue
-        return {"items": page, "total": len(items)}
+                total += 1
+                yield info.st_mtime_ns, identifier, kind, owner
+
+        select = heapq.nlargest if order == "newest" else heapq.nsmallest
+        candidates = select(min(offset + limit, MAX_SCAN_ENTRIES), matches())
+        page = []
+        for _, identifier, kind, owner in candidates[offset:]:
+            try:
+                path = self.media_path(identifier)
+                info = path.stat()
+                fields = self._metadata(path, info)
+            except (OSError, ValueError):
+                continue
+            page.append(dict(id=identifier, studio=owner, media=kind, metadata=fields,
+                             favorite=identifier in starred, modified=info.st_mtime))
+        return {"items": page, "total": total, "truncated": truncated}

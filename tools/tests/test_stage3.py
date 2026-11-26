@@ -2,7 +2,6 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
 
 from PIL import Image, PngImagePlugin
 
@@ -114,12 +113,10 @@ class WorkspaceTests(unittest.TestCase):
         app.auth = True
         app.tokens = {"test-session": "operator"}
         app.cookie_id = "workspace"
-        api = Mock(credentials={})
-        api.add_api_route = app.add_api_route
         from unittest.mock import patch
 
         with patch("modules.paths_internal.data_path", str(self.root)):
-            register_workspace_routes(api)
+            register_workspace_routes(app)
         with TestClient(app) as client:
             base = "/aikimi/api/v1/"
             for route in ("gallery", "prompt-library", "models/summary", "status"):
@@ -187,11 +184,13 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(len(report["features"]), 13)
 
     def test_routes(self):
+        from fastapi import FastAPI
+
         from modules.aikimi_workspace_api import register_workspace_routes
 
-        api = Mock()
-        register_workspace_routes(api)
-        routes = {(call.args[0], call.kwargs["methods"][0]) for call in api.add_api_route.call_args_list}
+        app = FastAPI()
+        register_workspace_routes(app)
+        routes = {(path, method.upper()) for path, methods in app.openapi()["paths"].items() for method in methods}
         for suffix, method in [
             ("gallery", "GET"),
             ("prompt-library", "GET"),

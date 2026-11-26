@@ -16,8 +16,11 @@ class JsonBuilder(ExtraNetworksPage):
 
 
 def json_builder_api(demo, app):
+    from fastapi import Depends
 
-    @app.get("/internal/json_builder_prompt_styles")
+    from modules.aikimi_security.auth import workspace_auth
+
+    @app.get("/internal/json_builder_prompt_styles", dependencies=[Depends(workspace_auth(shared.cmd_opts))])
     async def get_prompt_styles():
         return [{"name": name, "prompt": style.prompt} for name, style in shared.prompt_styles.styles.items()]
 

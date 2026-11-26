@@ -258,11 +258,14 @@ def hires_controls(enabled, width, height, scale):
         return visibility, str(error)
 
 
+SLG_LABEL = "負条件の指定層をスキップ"
+
+
 def cfg_controls(cfg):
     suffix = "（CFG 1では不使用）" if cfg == 1 else ""
     return (
         gr.update(label="ネガティブプロンプト" + suffix),
-        gr.update(label="負条件の22層をスキップ" + suffix, interactive=cfg != 1),
+        gr.update(label=SLG_LABEL + suffix, interactive=cfg != 1),
     )
 
 
@@ -383,7 +386,7 @@ def on_ui_tabs():
             loras.do_not_save_to_config = True
             lora_rows.do_not_save_to_config = True
         prompt = gr.Textbox(elem_id="moss-image-prompt", label="プロンプト", lines=4, placeholder="生成したい画像を自然文、タグ列、JSONで記述")
-        negative = gr.Textbox(label="ネガティブプロンプト", lines=2)
+        negative = gr.Textbox(elem_id="moss-image-negative-prompt", label="ネガティブプロンプト", lines=2)
         with gr.Column() as reference_controls:
             images = gr.Gallery(
                 label="参照画像（1枚）",
@@ -446,7 +449,7 @@ def on_ui_tabs():
             seed = gr.Number(value=-1, precision=0, label="Seed")
             from modules import shared
 
-            skip_layer = gr.Checkbox(value=getattr(getattr(shared, "opts", None), "slg_enable", True), label="負条件の指定層をスキップ", elem_id="moss-image-skip-layer")
+            skip_layer = gr.Checkbox(value=getattr(getattr(shared, "opts", None), "slg_enable", True), label=SLG_LABEL, elem_id="moss-image-skip-layer")
             with gr.Accordion("高解像度の構図調整（RoPE）", open=False):
                 rope_x = gr.Slider(0.25, 4, value=1, step=0.05, label="横スケール · 1で標準", elem_id="moss-image-rope-x")
                 rope_y = gr.Slider(0.25, 4, value=1, step=0.05, label="縦スケール · 1で標準", elem_id="moss-image-rope-y")

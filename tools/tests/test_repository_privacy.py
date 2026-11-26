@@ -63,6 +63,19 @@ class RepositoryPrivacyTests(unittest.TestCase):
             and (ROOT / path).is_file()
         ]
 
+    def test_local_guide_links(self):
+        from urllib.parse import unquote, urlsplit
+
+        for document in self.documents:
+            parts = document.relative_to(ROOT).parts
+            if len(parts) > 1 and (parts[0] != "docs" or parts[1] == "hf-qwen-release"):
+                continue
+            for target in re.findall(r"\]\(([^)\n]+)\)", document.read_text("utf8")):
+                url = urlsplit(target)
+                if not url.scheme and not url.netloc and url.path:
+                    with self.subTest(document=document.name, target=target):
+                        self.assertTrue((document.parent / unquote(url.path)).exists())
+
     def test_private_work_records_are_not_tracked(self):
         findings = [path for path in self.tracked if private_record(path)]
         self.assertEqual(findings, [], "private records must remain outside the published tree")

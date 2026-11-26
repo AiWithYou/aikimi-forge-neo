@@ -219,10 +219,10 @@ def _generate(runtime, profile, mode, prompt, target, references, width, height,
     try:
         request = make_request(mode, prompt, target, references, width, height, seed, use_upsampler, checkpoint,
                                lora, lora_strength, official=official)
-        output_name = "official_h3_images" if official else "p_h3_images"
+        output_name = ph3.OFFICIAL_H3_OUTPUT if official else ph3.P_H3_OUTPUT
         data = Path(data_directory)
         for event in ph3.run_generation(request, managed_runtime_root(ROOT), SERVER_URL, data / "logs/minimax_h3",
-                                         data / "outputs/minimax_h3" / output_name, runtime_profile=profile):
+                                         data / "outputs" / output_name, runtime_profile=profile):
             complete = event["stage"] == "complete"
             job = {"prompt_id": event["prompt_id"], "server_url": SERVER_URL} if event.get("prompt_id") and not complete else {}
             message = event["message"]

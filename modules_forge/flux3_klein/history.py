@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from .core import ROOT, Flux3Error, validate_request
+from .core import Flux3Error, validate_request
 from .paths import canonical_path
 from .service import Service
 
@@ -30,8 +30,10 @@ def _json(path):
 
 
 class History:
-    def __init__(self, root=ROOT / "outputs" / "flux3-klein"):
-        self.root = Path(root).absolute()
+    def __init__(self, root=None):
+        from modules.paths_internal import studio_output_dir
+
+        self.root = Path(root).absolute() if root is not None else studio_output_dir("flux3-klein")
 
     def _root(self):
         root = canonical_path(self.root)

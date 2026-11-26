@@ -179,7 +179,7 @@ class StageTwoTests(unittest.TestCase):
         fake = SimpleNamespace(sd_model=SimpleNamespace(forge_objects=SimpleNamespace(unet=unet)))
         mod.LoRAControl.mapping["a"] = [(1, 0), (0, 1)]
         with patch.object(mod, "shared", fake):
-            mod.LoRAControl.adjust_lora(SimpleNamespace(sampling_step=5, total_sampling_steps=10))
+            mod.LoRAControl.adjust_lora(SimpleNamespace(denoiser=SimpleNamespace(step=5, total_steps=11)))
         self.assertEqual(wrap.patch[0][0], 0.5)
         mod.LoRAControl().postprocess(Mock(), None)
         self.assertEqual(wrap.patch[0][0], 0.25)
@@ -198,6 +198,7 @@ class StageTwoTests(unittest.TestCase):
         fn = next(node for node in ast.parse(path.read_text("utf8")).body if getattr(node, "name", "") == "json_builder_api")
         shared = Mock()
         shared.prompt_styles.styles = {"example": SimpleNamespace(prompt="tree")}
+        shared.cmd_opts = options(remote=True, api_only=True, api_auth="reader:example")
         namespace = {"shared": shared}
         exec(compile(ast.Module([fn], type_ignores=[]), str(path), "exec"), namespace)  # noqa: S102
         app = FastAPI()

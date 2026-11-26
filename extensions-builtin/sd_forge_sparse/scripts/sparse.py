@@ -126,6 +126,11 @@ def make_attention_override(patch: "SparseAttnPatch", prev_attn: Callable) -> Ca
     return override
 
 
+MAX_BLOCK_INDEX = 256
+MAX_BLOCK_RANGES = 128
+MAX_EXPANDED_BLOCKS = 512
+
+
 class SparseAttentionForForge(scripts.Script):
 
     def title(self):
@@ -152,6 +157,7 @@ class SparseAttentionForForge(scripts.Script):
         if not enable:
             return
 
+        blocks = self._parse_block_list(dense_blocks)
         if ck is None:
             logger.warning("SolAttn requires comfy-kitchen")
             return
@@ -170,7 +176,7 @@ class SparseAttentionForForge(scripts.Script):
             end_percent=end / 100,
             min_tokens=min_tokens,
             extra_tokens=extra_tokens,
-            dense_blocks=self._parse_block_list(dense_blocks),
+            dense_blocks=blocks,
             verbose=verbose,
         )
 
@@ -200,13 +206,20 @@ class SparseAttentionForForge(scripts.Script):
 
     @staticmethod
     def _parse_block_list(text: str) -> set[int]:
-        blocks = set()
-
-        for part in re.findall(r"\d+\s*-\s*\d+|\d+", text or ""):
-            if "-" in part:
-                a, b = (int(x) for x in part.split("-"))
-                blocks.update(range(min(a, b), max(a, b) + 1))
-            else:
-                blocks.add(int(part))
-
-        return blocks
+        if not isinstance(text, str) or len(text) > 2048 or text.count(",") >= MAX_BLOCK_RANGES:
+            raise ValueError("Dense Blocks exceeds the input limit")
+        if not text.strip():
+            return set()
+        ranges = []
+        count = 0
+        for part in text.split(","):
+            match = re.fullmatch(r"([0-9]{1,3})(?:\s*-\s*([0-9]{1,3}))?", part.strip())
+            if not match:
+                raise ValueError("Use comma-separated block numbers or ascending ranges")
+            start = int(match[1])
+            end = int(match[2]) if match[2] else start
+            count += end - start + 1
+            if not start <= end <= MAX_BLOCK_INDEX or count > MAX_EXPANDED_BLOCKS:
+                raise ValueError("Dense Blocks range exceeds the supported limits")
+            ranges.append((start, end))
+        return {block for start, end in ranges for block in range(start, end + 1)}

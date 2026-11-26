@@ -16,7 +16,7 @@ You can select a compatible full fine-tuned model in the shared Forge workspace 
 
 ## What you can do
 
-Search images, videos and audio in Gallery. Save prompts to the library, expand choices such as `{day|night}` with a seed and insert them into the active studio. Use `aikimi-setup.bat -Status` to inspect installed studios, Settings → Diagnostics for local model counts and sizes, and the assistant details to release idle GPU models.
+Search images, videos and audio in Gallery. Favorites and prompt templates are stored under `config_states/aikimi_workspace/` in the data directory. Save prompts to the library, expand choices such as `{day|night}` with a seed and insert them into the active studio. Use `aikimi-setup.bat -Status` to inspect installed studios, Settings → Diagnostics for local model counts and sizes, and the assistant details to release idle GPU models.
 
 - **Generate and edit images:** choose MiniMax-H3-Image, P-H3 Image, MOSS Image, Qwen Image 2.1, FLUX 3, or another supported model. P-H3 accepts up to eight images including the image being edited.
 - **Finish large images:** use Krea2 high-resolution workflows, MOSS Hires.fix, and upscalers.

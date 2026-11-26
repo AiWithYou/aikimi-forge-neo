@@ -28,10 +28,11 @@ from .core import (
 
 class Service:
     def __init__(self, root=RUNTIME, models=MODELS, outputs=None, worker=None):
+        from modules.paths_internal import studio_output_dir
         from modules_forge.resident_worker import ResidentWorker
 
         self.root, self.models = Path(root), Path(models)
-        self.outputs = Path(outputs or ROOT / "outputs/irodori")
+        self.outputs = Path(outputs) if outputs is not None else studio_output_dir("irodori")
         self.worker = worker or ResidentWorker("irodori", ROOT / "cache/irodori-worker")
         self.jobs = {}
         self.guard = threading.Lock()
