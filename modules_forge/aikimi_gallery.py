@@ -83,7 +83,7 @@ def _is_gallery_result(relative):
     parts = tuple(part.casefold() for part in relative.parts)
     if len(parts) < 2 or relative.parts[0] not in {"output", "outputs"} or relative.suffix.lower() not in MEDIA:
         return False
-    if any(part.startswith(".") or part.endswith(".partial") or part in {"input", "inputs", "references"}
+    if any(part.startswith(".") or part.endswith(".partial") or part in {"input", "inputs", "references", "init-images"}
            for part in parts[1:]):
         return False
     studio = parts[1]
@@ -93,7 +93,7 @@ def _is_gallery_result(relative):
         return parts[-1] == "image.png"
     if studio == "minimax_h3" and "/".join(parts[1:3]) not in H3_IMAGE_OUTPUTS:
         return parts[-1].startswith(("minimax_h3_", "imported_")) and MEDIA[relative.suffix.lower()] == "video"
-    return not parts[-1].startswith("reference-")
+    return True
 
 
 def _public(value):

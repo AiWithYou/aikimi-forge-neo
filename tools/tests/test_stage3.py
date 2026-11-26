@@ -90,6 +90,48 @@ class WorkspaceTests(unittest.TestCase):
         gallery.favorites_path.write_text(json.dumps(["outputs/moss-image/job/reference-0.png"]))
         self.assertEqual(gallery.list_items(favorites=True)["total"], 0)
 
+    def test_gallery_excludes_forge_init_images_and_keeps_reference_named_outputs(self):
+        from unittest.mock import patch
+
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from modules.aikimi_workspace_api import register_workspace_routes
+        from modules_forge.aikimi_gallery import Gallery
+
+        init_img = self.root / "output/init-images/abc123.png"
+        forge_ref = self.root / "output/txt2img-images/reference-1.png"
+        init_img.parent.mkdir(parents=True, exist_ok=True)
+        forge_ref.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (1, 1)).save(init_img)
+        Image.new("RGB", (1, 1)).save(forge_ref)
+
+        gallery = Gallery(self.root)
+        listed = gallery.list_items()
+        self.assertEqual(listed["total"], 1)
+        self.assertEqual(listed["items"][0]["id"], "output/txt2img-images/reference-1.png")
+
+        init_key = "output/init-images/abc123.png"
+        original_init = init_img.read_bytes()
+        for operation in (gallery.media_path, lambda key: gallery.favorite(key, True), gallery.quarantine):
+            with self.subTest(operation=operation), self.assertRaises(ValueError):
+                operation(init_key)
+            self.assertEqual(init_img.read_bytes(), original_init)
+
+        app = FastAPI()
+        with patch("modules.paths_internal.data_path", str(self.root)):
+            register_workspace_routes(app)
+        with TestClient(app) as client:
+            base = "/aikimi/api/v1/gallery"
+            self.assertEqual(client.get(base + "/media", params={"id": init_key}).status_code, 400)
+            self.assertEqual(client.post(base + "/favorite", json={"id": init_key, "enabled": True}).status_code, 400)
+            self.assertEqual(client.post(base + "/quarantine", json={"id": init_key}).status_code, 400)
+            self.assertEqual(init_img.read_bytes(), original_init)
+            self.assertEqual(
+                client.get(base + "/media", params={"id": "output/txt2img-images/reference-1.png"}).status_code,
+                200,
+            )
+
     def test_gallery_excludes_directory_links_and_metadata_paths(self):
         import os
 
