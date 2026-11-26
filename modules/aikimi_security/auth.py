@@ -53,17 +53,17 @@ def _credential_lines(value: str) -> Iterable[str]:
 
 
 def parse_credentials(value: str) -> tuple[tuple[str, str], ...]:
-    result: list[tuple[str, str]] = []
+    result: dict[str, str] = {}
     for line in _credential_lines(value):
         if ":" not in line:
             raise AuthenticationConfigError("Each authentication entry must use the username:password format.")
         username, password = line.split(":", 1)
         if not username or not password:
             raise AuthenticationConfigError("Authentication usernames and passwords must not be empty.")
-        result.append((username, password))
+        result[username] = password
     if not result:
         raise AuthenticationConfigError("The authentication source is empty.")
-    return tuple(result)
+    return tuple(result.items())
 
 
 def read_credentials_file(path: str | Path) -> tuple[tuple[str, str], ...]:
@@ -81,12 +81,12 @@ def read_credentials_file(path: str | Path) -> tuple[tuple[str, str], ...]:
 def credentials_from_options(options: Any, kind: str) -> tuple[tuple[str, str], ...]:
     inline = getattr(options, f"{kind}_auth", None)
     path = getattr(options, f"{kind}_auth_path", None)
-    result: list[tuple[str, str]] = []
+    result: dict[str, str] = {}
     if inline:
-        result.extend(parse_credentials(inline))
+        result.update(parse_credentials(inline))
     if path:
-        result.extend(read_credentials_file(path))
-    return tuple(result)
+        result.update(read_credentials_file(path))
+    return tuple(result.items())
 
 
 def validate_auth_configuration(options: Any) -> None:

@@ -62,6 +62,29 @@ class ApplicationTests(unittest.TestCase):
                         )
                         self.assertEqual(client.get("/basic-only").status_code, 401)
 
+    def test_password_replacement(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from modules import shared
+        from modules.api.api import Api
+
+        for inline, file_content in (("user:old,user:new", ""), ("", "user:old\nuser:new"), ("user:old", "user:new")):
+            path = self.root / "auth.txt"
+            path.write_text(file_content)
+            with (
+                patch.object(shared.cmd_opts, "api_auth", inline),
+                patch.object(shared.cmd_opts, "api_auth_path", str(path) if file_content else None),
+            ):
+                app = FastAPI()
+                api = Api(app, None, workspace_only=True)
+                api.add_api_route("/basic-only", lambda: {}, methods=["GET"])
+                with TestClient(app) as client:
+                    for route in ("/basic-only", "/aikimi/api/v1/gallery"):
+                        for password, status in (("new", 200), ("old", 401)):
+                            with self.subTest(route=route, inline=bool(inline), file=bool(file_content), status=status):
+                                self.assertEqual(client.get(route, auth=("user", password)).status_code, status)
+
     def test_workspace_body_limit(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
@@ -184,30 +207,34 @@ class ApplicationTests(unittest.TestCase):
         from modules.api.api import Api
         from tools.tests.chromium_helpers import cdp_page, find_chromium, reserve_local_port
         from tools.tests.test_moss_image_ui import UITests
+        from tools.tests.test_stage2_integration import load
 
         chromium = find_chromium()
         if not chromium:
             self.skipTest("Chromium unavailable")
-        folder = self.root / "outputs/moss-image"
+        folder = self.root / "outputs/moss-image/job"
         folder.mkdir(parents=True)
-        (folder / "scene.png").touch()
-        (folder / "scene.json").write_text(json.dumps({"prompt": "sunrise", "negative_prompt": "rain"}))
+        (folder / "output.png").touch()
+        (folder / "output.json").write_text(json.dumps({"prompt": "sunrise", "negative_prompt": "rain"}))
         for name in ("p_h3_images", "official_h3_images"):
             images = self.root / "outputs/minimax_h3" / name
             images.mkdir(parents=True)
-            (images / f"{name}.png").touch()
+            (images / "image.png").touch()
             (images / "parameters.json").write_text(json.dumps({"prompt": name}))
+        h3 = load("extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py").on_ui_tabs()[0][0]
+        self.addCleanup(h3.close)
         blocks = UITests().load_screen().on_ui_tabs()[0][0]
         self.addCleanup(blocks.close)
         with blocks:
             gr.HTML(
                 '<nav id="aikimi-feature-nav"><button id="aikimi-tab-moss-image">MOSS</button><button id="aikimi-tab-h3-image">H3 Image</button></nav><div id="aikimi-gallery-workspace"></div>'
             )
-            gr.Textbox(elem_id="ph3-prompt")
+            h3.render()
         app, address, _ = blocks.launch(server_port=reserve_local_port(), prevent_thread_lock=True, quiet=True)
         Api(app, None, workspace_only=True)
         with cdp_page(chromium, address) as page:
             self.assertTrue(page.wait_for("#aikimi-feature-nav", "true"))
+            page.evaluate(Path("script.js").read_text("utf8") + "\nwindow.get_uiTabButton = get_uiTabButton;")
             page.evaluate(
                 """
                 window.feature='gallery'; window.AikimiTabs={getActiveFeature:()=>feature, getActiveContainer:()=>document};
@@ -219,7 +246,7 @@ class ApplicationTests(unittest.TestCase):
             )
             self.assertTrue(page.wait_for(".aikimi-gallery-results", "element.children.length===3"))
             page.evaluate(
-                "[...document.querySelectorAll('.aikimi-gallery-results button')].find(b=>b.textContent==='scene.png').click()"
+                "[...document.querySelectorAll('.aikimi-gallery-results button')].find(b=>b.textContent==='output.png').click()"
             )
             page.evaluate("""window.clickText = name => [...document.querySelectorAll('button')].find(e=>e.textContent===name).click();
                 clickText('プロンプト集へ保存')""")
@@ -231,18 +258,30 @@ class ApplicationTests(unittest.TestCase):
             self.assertTrue(page.wait_for("#moss-image-negative-prompt textarea", "element.value==='rain'"))
             page.evaluate("document.querySelector('#aikimi-library-open').click()")
             self.assertTrue(
-                page.wait_for("#aikimi-prompt-library select", "[...element.options].some(o=>o.text==='scene.png')")
+                page.wait_for("#aikimi-prompt-library select", "[...element.options].some(o=>o.text==='output.png')")
             )
             page.evaluate("""const d=document.querySelector('#aikimi-prompt-library');const s=d.querySelector('select');
-                s.value=[...s.options].find(o=>o.text==='scene.png').value;s.onchange();
+                s.value=[...s.options].find(o=>o.text==='output.png').value;s.onchange();
                 d.querySelectorAll('textarea')[1].value='';clickText('スタジオへ挿入')""")
             self.assertTrue(page.wait_for("#moss-image-negative-prompt textarea", "element.value===''"))
             page.evaluate("""const filter = document.querySelector('#aikimi-gallery-workspace select');
                 filter.value='minimax_h3_image'; filter.onchange()""")
             self.assertTrue(page.wait_for(".aikimi-gallery-results", "element.children.length===2"))
-            for name in ("p_h3_images", "official_h3_images"):
-                page.evaluate(f"clickText('{name}.png'); clickText('H3 Image へ送る')")
-                self.assertTrue(page.wait_for("#ph3-prompt textarea", f"element.value==='{name}'"))
+            self.assertTrue(page.wait_for("#ph3-prompt textarea", "element.getClientRects().length"))
+            page.evaluate("""window.h3Writes = []; document.addEventListener('input', e => {
+                if (e.target.closest('#ph3-prompt, #official-h3-prompt')) h3Writes.push(e.target.closest('[id$=prompt]').id);
+            });""")
+            for name, field in (("official_h3_images", "official-h3-prompt"), ("p_h3_images", "ph3-prompt")):
+                page.evaluate(f"""{{const query=document.querySelector('#aikimi-gallery-workspace input');
+                    query.value='{name}'; query.onchange()}}""")
+                self.assertTrue(page.wait_for(".aikimi-gallery-results", "element.children.length===1"))
+                self.assertTrue(page.wait_for(".aikimi-gallery-detail", "!element.children.length"))
+                page.evaluate("h3Writes.length=0; clickText('image.png'); clickText('H3 Image へ送る')")
+                self.assertTrue(page.wait_for("#" + field + " textarea", f"element.getClientRects().length && element.value==='{name}'"))
+                self.assertEqual(page.evaluate("h3Writes"), [field])
+            page.evaluate("get_uiTabButton(document.querySelector('#h3-image-tabs'), 'official_h3_image').click()")
+            self.assertTrue(page.wait_for("#official-h3-prompt textarea", "element.value==='official_h3_images'"))
+
 
 
 if __name__ == "__main__":

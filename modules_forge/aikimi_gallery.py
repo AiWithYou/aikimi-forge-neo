@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from modules.aikimi_security.redaction import redact_text
-from modules_forge.p_h3_image import H3_IMAGE_OUTPUTS
+from modules_forge.p_h3_image import H3_IMAGE_OUTPUTS, OFFICIAL_H3_OUTPUT, P_H3_OUTPUT
 from modules_forge.workspace_store import (
     STATE_DIRECTORY,
     managed_path,
@@ -41,6 +41,21 @@ STUDIOS = {
     "irodori": "irodori",
     "yue2": "yue2",
 }
+# Job directories also contain uploaded media. Only publish Studio result names.
+STUDIO_RESULTS = {
+    "moss-image": {"output.png"},
+    "flux3-klein": {"output.png"},
+    "qwen-image-2.1": {"output.png", "output-preserved.png"},
+    "irodori": {"audio.wav"},
+    "yue2": {"audio.wav", "audio.flac"},
+}
+
+H3_SUBTABS = {
+    P_H3_OUTPUT: "p_h3_image",
+    OFFICIAL_H3_OUTPUT: "official_h3_image",
+    "p-h3-image": "p_h3_image",
+    "minimax-h3-image": "official_h3_image",
+}
 FIELDS = {
     "prompt",
     "negative_prompt",
@@ -62,6 +77,23 @@ FIELDS = {
     "precision",
 }
 ABSOLUTE = re.compile(r"(?:[a-zA-Z]:[/\\]|\\\\|(?:^|[\s\"'=:(\[])/[^\s/])")
+
+
+def _is_gallery_result(relative):
+    parts = tuple(part.casefold() for part in relative.parts)
+    if len(parts) < 2 or relative.parts[0] not in {"output", "outputs"} or relative.suffix.lower() not in MEDIA:
+        return False
+    if any(part.startswith(".") or part.endswith(".partial") or part in {"input", "inputs", "references"}
+           for part in parts[1:]):
+        return False
+    studio = parts[1]
+    if studio in STUDIO_RESULTS:
+        return parts[-1] in STUDIO_RESULTS[studio]
+    if "/".join(parts[1:3]) in {P_H3_OUTPUT, OFFICIAL_H3_OUTPUT}:
+        return parts[-1] == "image.png"
+    if studio == "minimax_h3" and "/".join(parts[1:3]) not in H3_IMAGE_OUTPUTS:
+        return parts[-1].startswith(("minimax_h3_", "imported_")) and MEDIA[relative.suffix.lower()] == "video"
+    return not parts[-1].startswith("reference-")
 
 
 def _public(value):
@@ -188,11 +220,7 @@ class Gallery:
 
     def media_path(self, identifier):
         path = managed_path(self.root, identifier)
-        if (
-            identifier.split("/")[0] not in {"output", "outputs"}
-            or path.suffix.lower() not in MEDIA
-            or not path.is_file()
-        ):
+        if not _is_gallery_result(path.relative_to(self.root)) or not path.is_file():
             raise ValueError("作品が見つかりません。")
         return path
 
@@ -207,11 +235,7 @@ class Gallery:
             return set()
         if not isinstance(values, list) or len(values) > 4096:
             raise ValueError("お気に入りの形式が不正です。")
-        for key in values:
-            path = managed_path(self.root, key)
-            if key.split("/")[0] not in {"outputs", "output"} or path.suffix.lower() not in MEDIA:
-                raise ValueError("お気に入りの ID が不正です。")
-        return set(values)
+        return {key for key in values if _is_gallery_result(managed_path(self.root, key).relative_to(self.root))}
 
     def favorite(self, identifier, enabled):
         with state_transaction(self.root):
@@ -279,7 +303,7 @@ class Gallery:
                         path = parent / entry.name
                         if entry.is_dir(follow_symlinks=False):
                             directories.append(path.relative_to(self.root).as_posix())
-                        elif path.suffix.lower() in MEDIA:
+                        elif _is_gallery_result(path.relative_to(self.root)):
                             yield path
             except (OSError, ValueError):
                 continue
@@ -334,6 +358,12 @@ class Gallery:
                 fields = self._metadata(path, info)
             except (OSError, ValueError):
                 continue
-            page.append(dict(id=identifier, studio=owner, media=kind, metadata=fields,
+            subtab = None
+            if owner == "minimax_h3_image":
+                parts = path.relative_to(self.root).parts
+                subtab = H3_SUBTABS.get("/".join(parts[1:3])) or H3_SUBTABS.get(parts[1])
+                if not subtab:
+                    subtab = {"P-H3 Image": "p_h3_image", "MiniMax-H3-Image": "official_h3_image"}.get(fields.get("model_family"))
+            page.append(dict(id=identifier, studio=owner, studio_subtab=subtab, media=kind, metadata=fields,
                              favorite=identifier in starred, modified=info.st_mtime))
         return {"items": page, "total": total, "truncated": truncated}

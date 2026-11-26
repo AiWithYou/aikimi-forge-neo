@@ -40,6 +40,8 @@ secrets/api-auth.txt
 
 各行は`username:password`形式です。複数利用者は1行ずつ記載できます。空のusername、空のpassword、64 KiBを超えるファイルは拒否します。`secrets/`はGit管理外です。
 
+API 認証と Gradio 認証はそれぞれ、インライン設定、認証ファイルの順に読み込みます。同じユーザー名が複数回ある場合、最後に記載したパスワードだけが有効です。
+
 Basic認証のusernameとpasswordは、UTF-8として比較します。日本語を含む認証情報も使用できます。ギャラリー、プロンプト集、JSON Builder のスタイル一覧は WebUI のログインセッションまたは API Basic 認証で開けます。API 専用起動では API 認証設定に従います。
 
 ```powershell

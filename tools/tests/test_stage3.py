@@ -15,7 +15,7 @@ class WorkspaceTests(unittest.TestCase):
     def test_gallery_actions_and_metadata(self):
         from modules_forge.aikimi_gallery import Gallery
 
-        file = self.root / "outputs/moss-image/sample.png"
+        file = self.root / "outputs/moss-image/job/output.png"
         file.parent.mkdir(parents=True)
         metadata = PngImagePlugin.PngInfo()
         metadata.add_text("parameters", "sky\nNegative prompt: noise\nSteps: 20, Seed: 7, Model: blue")
@@ -29,6 +29,66 @@ class WorkspaceTests(unittest.TestCase):
         gallery.quarantine(item["id"])
         self.assertFalse(file.exists())
         self.assertEqual(gallery.list_items()["total"], 0)
+
+    def test_gallery_rejects_job_inputs_and_intermediates(self):
+        import wave
+
+        from modules_forge.aikimi_gallery import Gallery
+        from modules_forge.irodori.core import stage_references
+        from modules_forge.moss_image.references import snapshot
+
+        moss = self.root / "outputs/moss-image/job"
+        voice = self.root / "outputs/irodori/job"
+        moss.mkdir(parents=True)
+        voice.mkdir(parents=True)
+        snapshot(moss, {"images": [Image.new("RGB", (16, 16))]})
+        source = self.root / "voice.wav"
+        with wave.open(str(source), "wb") as stream:
+            stream.setparams((1, 2, 16000, 0, "NONE", ""))
+            stream.writeframes(bytes([1, 0]) * 160)
+        stage_references([source], voice)
+        private = [moss / "reference-0.png", voice / "reference-01.wav"]
+        for name in (
+            "flux3-klein/job/output.tmp.png", "qwen-image-2.1/job/control.png",
+            "qwen-image-2.1/job/annotation-01-layer-01.png", "irodori/job/audio.pending.wav",
+            "minimax_h3/p_h3_images/.p-h3-job/image.png", "minimax_h3/inputs/personal.png",
+            "yue2/job/.take-1.partial/audio.wav", "yue2/job/take-1.partial/audio.wav",
+            "moss-image/job/references/output.png",
+        ):
+            path = self.root / "outputs" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"private")
+            private.append(path)
+        gallery = Gallery(self.root)
+        self.assertEqual(gallery.list_items()["total"], 0)
+        for path in private:
+            key = path.relative_to(self.root).as_posix()
+            original = path.read_bytes()
+            for operation in (gallery.media_path, lambda key: gallery.favorite(key, True), gallery.quarantine):
+                with self.subTest(key=key, operation=operation), self.assertRaises(ValueError):
+                    operation(key)
+                self.assertEqual(path.read_bytes(), original)
+        from unittest.mock import patch
+
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from modules.aikimi_workspace_api import register_workspace_routes
+
+        app = FastAPI()
+        with patch("modules.paths_internal.data_path", str(self.root)):
+            register_workspace_routes(app)
+        with TestClient(app) as client:
+            base = "/aikimi/api/v1/gallery"
+            for path in private[:2]:
+                key = path.relative_to(self.root).as_posix()
+                original = path.read_bytes()
+                self.assertEqual(client.get(base + "/media", params={"id": key}).status_code, 400)
+                self.assertEqual(client.post(base + "/favorite", json={"id": key, "enabled": True}).status_code, 400)
+                self.assertEqual(client.post(base + "/quarantine", json={"id": key}).status_code, 400)
+                self.assertEqual(path.read_bytes(), original)
+        gallery.favorites_path.write_text(json.dumps(["outputs/moss-image/job/reference-0.png"]))
+        self.assertEqual(gallery.list_items(favorites=True)["total"], 0)
 
     def test_gallery_excludes_directory_links_and_metadata_paths(self):
         import os
@@ -95,7 +155,7 @@ class WorkspaceTests(unittest.TestCase):
         gallery = Gallery(self.root)
         for studio, directory, media, sidecar in (
             ("minimax_h3_image", "minimax_h3/images", "result.png", "parameters.json"),
-            ("yue2", "yue2", "song.wav", "studio-result.json"),
+            ("yue2", "yue2", "audio.flac", "studio-result.json"),
         ):
             folder = self.root / "outputs" / directory / "job"
             folder.mkdir(parents=True)

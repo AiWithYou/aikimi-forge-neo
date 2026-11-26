@@ -3,7 +3,7 @@
 
     const studios = {forge: "Forge", qwen_image21: "Qwen Image 2.1", minimax_h3_image: "H3 Image",
         minimax_h3: "MiniMax H3", flux3: "FLUX 3", moss_image: "MOSS Image", irodori: "Irodori TTS", yue2: "YuE2 Music"};
-    const endpoint = (name) => new URL("./aikimi/api/v1/" + name, window.location.href);
+    const endpoint = (name) => window.location.pathname.replace(/\/$/, "") + "/aikimi/api/v1/" + name;
     function element(tag, text) {
         const node = document.createElement(tag);
         if (text !== undefined) node.textContent = text;
@@ -124,9 +124,9 @@
         };
     }
     let openDrawer;
-    async function waitFor(selector) {
+    async function waitFor(selector, visibleOnly = false) {
         for (let attempt = 0; attempt < 50; attempt++) {
-            const input = document.querySelector(selector);
+            const input = visibleOnly ? visible(selector) : document.querySelector(selector);
             if (input) return input;
             await new Promise(resolve => setTimeout(resolve, 60));
         }
@@ -228,7 +228,16 @@
                     (await waitFor("#aikimi-tab-" + target)).click();
                     for (let attempt = 0; attempt < 80; attempt++) {
                         if (window.AikimiTabs?.getActiveFeature() === item.studio) {
-                            insert(item.metadata.prompt, item.metadata.negative_prompt);
+                            if (item.studio === "minimax_h3_image") {
+                                const selector = {p_h3_image: "#ph3-prompt", official_h3_image: "#official-h3-prompt"}[item.studio_subtab];
+                                const tabs = await waitFor("#h3-image-tabs", true);
+                                const button = get_uiTabButton(tabs, item.studio_subtab);
+                                if (!selector || !button) throw new Error("生成元の H3 Image タブを特定できません。");
+                                if (button.getAttribute("aria-selected") !== "true") button.click();
+                                setInput(await waitFor(selector + " textarea", true), item.metadata.prompt);
+                            } else {
+                                insert(item.metadata.prompt, item.metadata.negative_prompt);
+                            }
                             return;
                         }
                         await new Promise(resolve => setTimeout(resolve, 50));

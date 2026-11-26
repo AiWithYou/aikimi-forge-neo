@@ -29,3 +29,18 @@ test("MOSS transfer overwrites and clears both bound fields", () => {
         assert.equal(negative.value, value);
     }
 });
+
+for (const suffix of ["/", "/subpath", "/subpath/", "/subpath?view=styles", "/subpath/?view=styles"]) {
+    test("gallery request from " + suffix, () => {
+        const location = new URL("https://example.invalid" + suffix);
+        let requested;
+        const root = {dataset: {}, append() {}};
+        const document = {addEventListener() {}, createElement: () => ({append() {}, add() {}, addEventListener() {}}),
+            getElementById: id => id === "aikimi-gallery-workspace" ? root : null};
+        const context = {window: {location, AikimiTabs: {getActiveFeature: () => "gallery"}}, document,
+            URL, URLSearchParams, Option: class {}, onUiUpdate() {}, onUiLoaded(fn) { fn(); },
+            fetch(url) { requested = new URL(url, location); return new Promise(() => {}); }};
+        runInNewContext(readFileSync("extensions-builtin/aikimi-ui/javascript/aikimi_workspace.js", "utf8"), context);
+        assert.equal(requested.pathname, (suffix === "/" ? "" : "/subpath") + "/aikimi/api/v1/gallery");
+    });
+}

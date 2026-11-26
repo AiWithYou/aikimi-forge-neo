@@ -105,7 +105,7 @@ class WorkspaceRegressionTests(unittest.TestCase):
         for name in ("images", "p_h3_images", "official_h3_images"):
             directory = self.root / "outputs/minimax_h3" / name
             directory.mkdir(parents=True)
-            (directory / "frame.png").touch()
+            (directory / "image.png").touch()
         gallery = Gallery(self.root)
         self.assertEqual(gallery.list_items(studio="minimax_h3_image")["total"], 3)
         self.assertEqual(gallery.list_items(studio="minimax_h3")["total"], 0)
@@ -122,7 +122,7 @@ class WorkspaceRegressionTests(unittest.TestCase):
                     path = module.Service().outputs
                     self.assertTrue(path.is_relative_to(self.root / "outputs"))
                     path.mkdir()
-                    (path / "output.wav").touch()
+                    (path / ("audio.wav" if owner == "irodori" else "output.png")).touch()
                     self.assertEqual(aikimi_gallery.Gallery(self.root).list_items(studio=owner)["total"], 1)
 
     def test_relative_data_directory_keeps_absolute_worker_output_paths(self):
