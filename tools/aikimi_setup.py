@@ -20,6 +20,10 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import TextIO
 
+HUB_FEATURES = {"krea2": "krea2", "anima38": "anima38", "h3": "minimax_h3",
+                "h3-image": "minimax_h3_image", "p-h3": "minimax_h3_image", "qwen21": "qwen_image21",
+                "flux3": "flux3", "moss": "moss_image", "irodori": "irodori", "yue2": "yue2", "clef": "clef"}
+
 SCHEMA_VERSION = 1
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DOWNLOAD_CHUNK_BYTES = 1024 * 1024
@@ -1067,6 +1071,11 @@ class Installer:
 
 def _print_human(report: Mapping[str, object], stdout: TextIO) -> None:
     command = report.get("command")
+    if command == "status":
+        for profile in report["profiles"]:
+            state = {"ready": "導入済み", "warning": "要確認", "blocked": "未導入・不足"}[profile["state"]]
+            print(f"{profile['model']} [{state}] {profile['summary']}", file=stdout)
+        return
     if command == "list":
         for profile in report["profiles"]:  # type: ignore[index]
             print(
@@ -1099,6 +1108,7 @@ def _print_human(report: Mapping[str, object], stdout: TextIO) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Install and verify pinned Aikimi Forge Neo model profiles safely.")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("status", help="Inspect installed studios offline").add_argument("--json", action="store_true")
 
     list_parser = subparsers.add_parser("list", help="List available profiles")
     list_parser.add_argument("--json", action="store_true", help="Emit JSON")
@@ -1131,7 +1141,30 @@ def main(
     json_mode = bool(getattr(args, "json", False))
     installer = Installer(repository_root, profiles, json_mode=json_mode)
     try:
-        if args.command == "list":
+        if args.command == "status":
+            if str(REPOSITORY_ROOT) not in sys.path:
+                sys.path.insert(0, str(REPOSITORY_ROOT))
+            from modules.aikimi_capabilities import feature_check, h3_image_files
+            from modules.aikimi_diagnostics import DiagnosticPaths
+
+            paths = DiagnosticPaths(repository_root, repository_root / "models", repository_root / "outputs")
+            ph3, official, _ = h3_image_files(paths)
+            variants = {"h3-image": official, "p-h3": ph3}
+            rows = []
+            for model, feature in HUB_FEATURES.items():
+                if model in variants:
+                    available = variants[model]
+                    state = "ready" if available else "blocked"
+                    summary = "必要なモデルファイルを確認しました。" if available else "モデルまたは実行環境が不足しています。"
+                else:
+                    try:
+                        check = feature_check(feature, paths)
+                        available, summary, state = bool(check.available), check.summary, check.state.value
+                    except ImportError:
+                        available, summary, state = False, "実行環境を確認できません。", "blocked"
+                rows.append({"model": model, "available": available, "state": state, "summary": summary})
+            report = {"command": "status", "ok": True, "profiles": rows}
+        elif args.command == "list":
             report = installer.list_profiles()
         elif args.command == "verify":
             names = [args.profile] if args.profile else list(profiles)

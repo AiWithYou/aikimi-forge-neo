@@ -97,6 +97,8 @@ Aikimi画像assetの権利noticeを確認できないreleaseは、配布条件�
 
 ## 6. 実機確認
 
+- ギャラリーの検索・プレビュー・隔離、プロンプト集から各スタジオへの挿入、同一 Seed の展開結果、セットアップの -Status と -DryRun、Diagnostics の容量表示、待機モデルの解放を確認する。
+
 - [ ] Local SafeでWebUIとAPIを起動した
 - [ ] browserから`127.0.0.1`だけで開ける
 - [ ] Forge由来の上部タブが表示され、FLUX 3・Irodori TTSなどの専用Studioでは使用しないCheckpoint・VAE設定を隠し、GPU解放と機能切替を残す

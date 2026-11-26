@@ -83,3 +83,8 @@ P-H3 Imageは共有モデル保存先の `loras/`（標準は `models/MiniMax-H3
 **一覧を更新** して本体を選択します。GGUFは通常版Q4設定、INT8 ConvRotは対応量子化構成を使います。ファイル名だけで形式は判断しません。「Uncensored」は配布元の名称で、通常版との出力差を保証するものではありません。
 
 AnimaのRGBA出力には4チャンネル出力のVAEを選びます。RGB入力を4チャンネルVAEに渡す場合は不透明なアルファを補います。
+
+`aikimi-setup.bat -Status` で導入状態を確認できます。Settings → Diagnostics にはモデルの件数と容量、ちびあいきみの詳細には GPU の所有者と待機モデルの解放ボタンが表示されます。`-Model` と `-DryRun` を組み合わせると導入コマンドを事前に確認できます。
+
+Diagnostics の Checkpoint と LoRA は管理フォルダーにある重みファイルの件数です。分割モデルはファイル単位で数え、容量にはエンコーダーや VAE を含めません。共通の Stable-diffusion と Lora は Forge として集計します。
+MiniMax H3 の共有フォルダーでは、名前が `p-h3-image` または `minimax_h3_image` で始まる重みを H3 Image に集計します。

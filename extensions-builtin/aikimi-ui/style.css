@@ -457,3 +457,16 @@ body:has(#aikimi-feature-nav:is(
     .aikimi-status__summary-body, .aikimi-status__details { border-color: CanvasText; }
     .aikimi-status__summary:focus-visible { outline-color: Highlight; }
 }
+
+#aikimi-prompt-library { margin: auto; width: min(36rem, 94vw); max-height: 85vh; overflow: auto; padding: 1rem; color: var(--body-text-color); background: var(--background-fill-primary); border: 1px solid var(--border-color-primary); border-radius: .6rem; }
+#aikimi-prompt-library::backdrop { background: rgb(0 0 0 / 50%); }
+#aikimi-prompt-library label { display: grid; gap: .25rem; margin-block: .5rem; }
+#aikimi-prompt-library textarea { min-height: 4rem; }
+#aikimi-gallery-workspace .aikimi-gallery-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(9rem,100%), 1fr)); gap: .6rem; margin-block: .75rem; }
+#aikimi-gallery-workspace img { object-fit: contain; max-width: 100%; }
+#aikimi-gallery-workspace .aikimi-gallery-results img { width: 100%; height: 6rem; }
+#aikimi-gallery-workspace .aikimi-gallery-detail :is(img,video) { max-height: 55vh; max-width: 100%; }
+#aikimi-gallery-workspace pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+#aikimi-gallery-workspace label { display: inline-grid; gap: .2rem; }
+.aikimi-workspace-actions { display: flex; flex-wrap: wrap; gap: .45rem; align-items: end; }
+:is(#aikimi-gallery-workspace,#aikimi-prompt-library,#aikimi-status .aikimi-status__details) button, #aikimi-library-open { padding: .35rem .6rem; border-radius: .4rem; border: 1px solid var(--border-color-primary); overflow-wrap: anywhere; }

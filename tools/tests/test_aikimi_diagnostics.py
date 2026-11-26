@@ -253,7 +253,9 @@ class AikimiDiagnosticsTests(unittest.TestCase):
     def test_api_constructor_registers_diagnostics_through_authenticated_helper(self):
         source = (ROOT / "modules" / "api" / "api.py").read_text(encoding="utf-8")
 
-        self.assertIn("aikimi_diagnostics.register_api_routes(self)", source)
+        self.assertLess(source.index("register_workspace_routes(self)"), source.index("if workspace_only:"))
+        workspace = (ROOT / "modules" / "aikimi_workspace_api.py").read_text(encoding="utf-8")
+        self.assertIn("aikimi_diagnostics.register_api_routes(api, dependencies=dependencies)", workspace)
         self.assertNotIn('self.app.add_api_route("/aikimi/api/', source)
 
     def test_settings_contains_refreshable_diagnostics_tab(self):

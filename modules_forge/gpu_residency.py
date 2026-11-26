@@ -15,6 +15,25 @@ RELEASE = "release"
 IDLE_SECONDS = 300
 _engine = contextvars.ContextVar("gpu_engine", default="forge")
 _resources = {}
+_state_lock = threading.RLock()
+_current_engine = None
+_PUBLIC_ENGINES = {"forge", "qwen", "qwen_image21", "moss_image", "moss-image", "h3", "irodori", "clef", "flux3-klein", "yue2"}
+
+
+def residency_snapshot():
+    with _state_lock:
+        mode = policy()
+        countdown = None
+        if mode == AUTO and _resources and not _active and _idle_since is not None:
+            countdown = max(0, round(IDLE_SECONDS - (time.monotonic() - _idle_since)))
+        return {"policy": mode, "active": _active,
+                "current_engine": _current_engine if _current_engine in _PUBLIC_ENGINES else "studio" if _active else None,
+                "residents": [{"engine": owner if owner in _PUBLIC_ENGINES else "studio",
+                               "name": name if name in _PUBLIC_ENGINES else "model"}
+                              for name, (owner, _) in _resources.items()],
+                "idle_seconds_remaining": countdown, "fault_blocked": gpu_fault.STATE.blocked()}
+
+
 _timer = None
 _idle_since = None
 _active = False
@@ -49,17 +68,19 @@ def release_resource(name):
             if reason:
                 gpu_fault.STATE.trip(reason, "residency")
             raise
-        _resources.pop(name, None)
+        with _state_lock:
+            _resources.pop(name, None)
         gpu_fault.STATE.ensure_available()
 
 
 def register(name, cleanup, engine):
     """呼び出し側はqueue_lockを保持し、cleanupはGPU待機をしない。"""
-    _resources[name] = (engine, cleanup)
+    with _state_lock:
+        _resources[name] = (engine, cleanup)
 
 
 def begin(engine):
-    global _active, _timer
+    global _active, _timer, _current_engine
     gpu_fault.STATE.ensure_available()
     policy()
     if _timer is not None:
@@ -72,16 +93,20 @@ def begin(engine):
         from modules_forge.gpu_ownership import release_forge_vram
 
         register("forge", release_forge_vram, "forge")
-    _active = True
+    with _state_lock:
+        _active = True
+        _current_engine = engine
 
 
 def stop_after_fault():
     """Forget CPU scheduling state without unloading models or touching CUDA."""
-    global _active, _timer
+    global _active, _timer, _current_engine
     if _timer is not None:
         _timer.cancel()
         _timer = None
-    _active = False
+    with _state_lock:
+        _active = False
+        _current_engine = None
 
 
 def finish():
@@ -89,7 +114,8 @@ def finish():
     stop_after_fault()
     if gpu_fault.STATE.blocked():
         return
-    _idle_since = time.monotonic()
+    with _state_lock:
+        _idle_since = time.monotonic()
     if policy() == RELEASE:
         for name in list(_resources):
             release_resource(name)

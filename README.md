@@ -16,6 +16,8 @@ AnimaのRGBA出力、JSON BuilderからMOSS Imageへの転送、LoRAのステッ
 
 ## できること
 
+ギャラリーで画像・動画・音声を検索し、作品のプロンプトをプロンプト集に保存できます。プロンプト集では `{朝|夕暮れ}` のような選択肢を Seed で展開し、開いているスタジオに挿入できます。`aikimi-setup.bat -Status` で導入状態を確認できます。Settings → Diagnostics にはモデルの件数と容量、ちびあいきみの詳細には GPU の所有者と待機モデルの解放ボタンが表示されます。
+
 - **画像を作る・編集する**：MiniMax-H3-Image、P-H3 Image、MOSS Image、Qwen Image 2.1、FLUX 3などを目的に合わせて選択できます。P-H3は編集対象と参照画像を合わせて最大8枚まで使えます。
 - **大きな画像を仕上げる**：Krea2の高解像度ワークフローやMOSSのHires.fix、各種アップスケーラーを使えます。
 - **動画・音声を作る**：MiniMax H3で音声付き動画、YuE2で音楽、Irodori TTSで日本語音声を生成できます。
@@ -53,7 +55,7 @@ cd aikimi-forge-neo
 
 ### モデルを選んで導入する
 
-Krea2・Anima・H3動画は、次を実行してメニュー番号（1〜3）を選びます。P-H3は起動後の画面から準備できます。Qwen・YuE2・Irodori TTS・Clef・FLUX 3・MOSS Imageは表にある専用BATを実行してください。
+次のセットアップハブでモデルを番号選択できます。1〜3 は Krea2・Anima・H3 動画、4〜5 は公式 H3 Image・P-H3、6〜11 は Qwen・FLUX 3・MOSS・Irodori・YuE2・Clef です。表の専用 BAT でも各スタジオを導入できます。
 
 ```powershell
 .\aikimi-setup.bat

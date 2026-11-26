@@ -17,6 +17,11 @@ RETIRED = ("sensenova", "nanosaur2", "ming_image", "iris", "jev_sparse", "jev")
 
 
 class RetiredImageFeaturesTests(unittest.TestCase):
+    def test_setup_hub_excludes_retired_choices(self):
+        from tools.aikimi_setup import HUB_FEATURES
+
+        self.assertFalse(set(HUB_FEATURES).intersection((*RETIRED, "ming-image", "nanosaur2")))
+
     def test_forge_families_and_presets(self):
         from modules_forge.presets import PresetArch
 

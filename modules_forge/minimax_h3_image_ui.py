@@ -46,7 +46,7 @@ def render(*, data_directory):
         setup_status = gr.Markdown()
     with gr.Row():
         with gr.Column(min_width=300):
-            prompt = gr.Textbox(label="プロンプト", lines=5)
+            prompt = gr.Textbox(elem_id="official-h3-prompt", label="プロンプト", lines=5)
             images = gr.File(label="入力画像（最大16枚）", file_count="multiple", type="filepath",
                              file_types=[".png", ".jpg", ".jpeg", ".webp"], allow_reordering=True)
             gr.Markdown("画像編集では先頭が編集対象の `<Picture 1>` です。参照番号は表示順で決まります。")

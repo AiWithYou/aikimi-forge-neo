@@ -44,17 +44,10 @@ def _environment_snapshot(feature: str) -> dict[str, Any] | None:
             "available": available,
             "summary": "モデルを選択してください。" if not available else "モデルが選択されています。",
         }
-    if feature not in {
-        "krea2",
-        "anima38",
-        "minimax_h3",
-        "minimax_h3_image",
-        "qwen_image21",
-        "yue2",
-        "irodori",
-    }:
+    from modules.aikimi_capabilities import FEATURES, feature_check
+
+    if feature not in FEATURES:
         return None
-    from modules.aikimi_capabilities import feature_check
     from modules.aikimi_diagnostics import default_paths
 
     # The snapshot endpoint is polled frequently. Bound filesystem inspection
@@ -191,6 +184,7 @@ def snapshot(feature: str = "") -> dict[str, Any]:
 
     from modules import shared
     from modules.aikimi_version import VERSION
+    from modules_forge.gpu_residency import residency_snapshot
 
     server_start = shared.state.server_start or time.time()
     return {
@@ -198,6 +192,7 @@ def snapshot(feature: str = "") -> dict[str, Any]:
         "generation": _generation_snapshot(),
         "memory": _memory_snapshot(),
         "environment": _environment_snapshot(feature),
+        "gpu_residency": residency_snapshot(),
         "backend": {
             "ready": True,
             "version": VERSION,

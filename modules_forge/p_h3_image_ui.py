@@ -284,7 +284,7 @@ def render(root=None, *, data_directory=ROOT):
     mode = gr.Radio([("画像生成", "text"), ("画像編集", "edit")], value="text", label="使い方")
     with gr.Row():
         with gr.Column(scale=1, min_width=300):
-            prompt = gr.Textbox(label="プロンプト", lines=5, placeholder="作りたい画像や、編集で変えたい部分を入力")
+            prompt = gr.Textbox(elem_id="ph3-prompt", label="プロンプト", lines=5, placeholder="作りたい画像や、編集で変えたい部分を入力")
             with gr.Group(visible=False) as edit_group:
                 with gr.Row():
                     target = gr.Image(label="編集する画像 · Picture 1", type="filepath", height=155, min_width=150)
@@ -307,7 +307,7 @@ def render(root=None, *, data_directory=ROOT):
                 cancel = gr.Button("中断", interactive=False)
             status = gr.Markdown("未実行。")
         with gr.Column(scale=1, min_width=300):
-            result = gr.Image(label="生成画像", type="filepath", format="png", interactive=False)
+            result = gr.Image(elem_id="h3-image-result", label="生成画像", type="filepath", format="png", interactive=False)
             reuse = gr.Button("この画像を編集", interactive=False)
             files = gr.File(label="PNG・生成条件", file_count="multiple", interactive=False)
             with gr.Accordion("生成条件", open=False):

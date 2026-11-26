@@ -481,6 +481,21 @@ def status_payload(snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
             "uptime_seconds": _finite_number(backend.get("uptime_seconds")),
         },
     }
+    residency = snapshot.get("gpu_residency") if isinstance(snapshot, Mapping) else None
+    if isinstance(residency, dict):
+        from modules_forge.gpu_residency import _PUBLIC_ENGINES
+
+        names = _PUBLIC_ENGINES | {"studio", "model"}
+        residents = residency.get("residents")
+        result["gpu_residency"] = {
+            "policy": residency.get("policy") if residency.get("policy") in ("keep", "release", "auto") else None,
+            "active": bool(residency.get("active")), "fault_blocked": bool(residency.get("fault_blocked")),
+            "current_engine": residency.get("current_engine") if residency.get("current_engine") in tuple(names) else None,
+            "residents": [{"engine": item["engine"], "name": item["name"]} for item in residents[:64]
+                          if isinstance(item, dict) and item.get("engine") in tuple(names) and item.get("name") in tuple(names)]
+                         if isinstance(residents, list) else [],
+            "idle_seconds_remaining": _finite_number(residency.get("idle_seconds_remaining")),
+        }
     if result["memory"]["available"]:
         for key in ("used", "free", "total", "allocated", "reserved", "oom_count"):
             result["memory"][key] = _finite_number(memory.get(key))
@@ -523,6 +538,13 @@ def render_diagnostics_html(
             f"<p>{html.escape(_public_line(check.summary))}</p>"
             f"{action}</article>"
         )
+    if checks is None:
+        from modules_forge.model_summary import inventory
+
+        counts_local = inventory(default_paths().models_root)
+        rows.append('<article class="aikimi-diagnostic-card"><h4>ローカルモデル</h4>'
+                    f'<p>Checkpoint {counts_local["checkpoints"]} 件 · LoRA {counts_local["loras"]} 件 · '
+                    f'{counts_local["total_bytes"] / (1024 ** 3):.2f} GiB</p></article>')
     generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     return (
         f'<section class="aikimi-diagnostics is-{state.value}" aria-labelledby="aikimi-diagnostics-title">'
@@ -543,7 +565,7 @@ def render_diagnostics_html(
     )
 
 
-def register_api_routes(api: Any) -> None:
+def register_api_routes(api: Any, *, dependencies=None) -> None:
     """Register read-only endpoints through Api.add_api_route authentication."""
 
     def api_status() -> dict[str, Any]:
@@ -556,16 +578,19 @@ def register_api_routes(api: Any) -> None:
         "/aikimi/api/v1/health",
         health_payload,
         methods=["GET"],
+        dependencies=dependencies,
     )
     api.add_api_route(
         "/aikimi/api/v1/status",
         api_status,
         methods=["GET"],
+        dependencies=dependencies,
     )
     api.add_api_route(
         "/aikimi/api/v1/capabilities",
         api_capabilities,
         methods=["GET"],
+        dependencies=dependencies,
     )
 
 

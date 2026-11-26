@@ -309,17 +309,7 @@ def _qwen_image21_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     )
 
 
-def _minimax_h3_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
-    implementation = all((paths.root / name).is_file() for name in (
-        "modules_forge/p_h3_image.py",
-        "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py",
-    ))
-    if not implementation:
-        return DiagnosticCheck(
-            "minimax_h3_image", "MiniMax H3 Image", CheckState.BLOCKED,
-            "H3 Imageの画面または実行部品が見つかりません。", "H3 Imageの組み込みファイルを復元してください。", available=False,
-        )
-
+def h3_image_files(paths: DiagnosticPaths) -> tuple[bool, bool, bool]:
     ph3_ready = official_ready = upsampler_ready = False
     try:
         from modules_forge import local_assets, p_h3_image
@@ -345,6 +335,21 @@ def _minimax_h3_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     except (OSError, ValueError, TypeError, ImportError):
         pass
 
+    return ph3_ready, official_ready, upsampler_ready
+
+
+def _minimax_h3_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
+    implementation = all((paths.root / name).is_file() for name in (
+        "modules_forge/p_h3_image.py",
+        "extensions-builtin/minimax-h3-studio/scripts/minimax_h3_image_studio.py",
+    ))
+    if not implementation:
+        return DiagnosticCheck(
+            "minimax_h3_image", "MiniMax H3 Image", CheckState.BLOCKED,
+            "H3 Imageの画面または実行部品が見つかりません。", "H3 Imageの組み込みファイルを復元してください。", available=False,
+        )
+
+    ph3_ready, official_ready, upsampler_ready = h3_image_files(paths)
     summary = f"P-H3: {'必要ファイルあり' if ph3_ready else '未確認'} / MiniMax-H3-Image: {'必要ファイルあり' if official_ready else '未確認'}。"
     if ph3_ready and not upsampler_ready:
         summary += "プロンプト補助はオフで使用できます。"
@@ -354,15 +359,13 @@ def _minimax_h3_image_check(paths: DiagnosticPaths) -> DiagnosticCheck:
 
 
 def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | None:
-    check = {
-        "krea2": _krea2_check,
-        "anima38": _anima38_check,
-        "minimax_h3": _minimax_h3_check,
-        "minimax_h3_image": _minimax_h3_image_check,
-        "qwen_image21": _qwen_image21_check,
-        "yue2": _yue2_check,
-        "irodori": _irodori_check,
-    }.get(feature)
+    if feature in _IMPLEMENTATIONS:
+        label, files = _IMPLEMENTATIONS[feature]
+        return _implementation_check(paths, check_id=feature, label=label, relative_files=files,
+                                     summary=f"{label} is installed.", missing_action=f"Restore the built-in {label} files.")
+    if feature in {"moss_image", "flux3", "clef"}:
+        return _studio_files(feature, paths)
+    check = _CHECKS.get(feature)
     return check(paths) if check else None
 
 
@@ -405,37 +408,49 @@ def _yue2_check(paths: DiagnosticPaths) -> DiagnosticCheck:
     )
 
 
+_CHECKS = {"krea2": _krea2_check, "anima38": _anima38_check, "qwen_image21": _qwen_image21_check,
+           "minimax_h3_image": _minimax_h3_image_check, "minimax_h3": _minimax_h3_check,
+           "irodori": _irodori_check, "yue2": _yue2_check}
+_IMPLEMENTATIONS = {
+    "forge_canvas": ("Forge Canvas", ("modules_forge/forge_canvas/canvas.py", "modules_forge/forge_canvas/canvas.js")),
+    "hyperweave": ("HyperWeave", ("extensions-builtin/hyperweave/hyperweave/engine.py", "extensions-builtin/hyperweave/scripts/hyperweave.py")),
+    "gallery": ("ギャラリー", ("modules_forge/aikimi_gallery.py", "extensions-builtin/aikimi-gallery/scripts/aikimi_gallery_studio.py")),
+}
+FEATURES = (*_CHECKS, "flux3", "moss_image", "clef", *_IMPLEMENTATIONS)
+
+
+def _studio_files(feature, paths):
+    from modules_forge.clef.bundle import bundle_manifest
+    from modules_forge.clef.core import PROFILES, ClefError
+    from modules_forge.flux3_klein import core as flux
+    from modules_forge.moss_image import core as moss
+
+    label, directory = {"flux3": ("FLUX 3", "Flux-3-Klein"), "moss_image": ("MOSS Image", "MOSS-Image"),
+                        "clef": ("Clef", "Clef")}[feature]
+    root = paths.models_root / directory
+    available = False
+    if root.is_dir():
+        if feature == "clef":
+            for profile in PROFILES:
+                try:
+                    bundle_manifest(root, profile)
+                    available = True
+                    break
+                except ClefError:
+                    continue
+        elif feature == "flux3":
+            available = flux.python_path(root).is_file() and any(
+                all((root / spec["path"]).is_file() for key, spec in flux.model_specs({"model": mode, "precision": precision}).items()
+                    if key not in {"pup", "pup_prompts"})
+                for mode in ("distilled", "base") for precision in ("int8", "bf16", "nvfp4"))
+        else:
+            available = moss.python_path(root).is_file() and any(
+                all((root / spec["path"]).is_file() for spec in moss.model_specs({"precision": precision, "text_precision": text}))
+                for precision in ("int8", "bf16") for text in ("int8", "bf16", "w4a8"))
+    return DiagnosticCheck(feature, label, CheckState.WARNING if available else CheckState.BLOCKED,
+                           "標準モデルのファイルを確認しました。" if available else "標準モデルの準備を確認できません。",
+                           "セットアップでモデルと実行環境を確認できます。", available=available)
+
+
 def feature_checks(paths: DiagnosticPaths) -> tuple[DiagnosticCheck, ...]:
-    """Return capability state without downloads, full hashes, or network calls."""
-
-    return (
-        _krea2_check(paths),
-        _anima38_check(paths),
-        _minimax_h3_check(paths),
-        _qwen_image21_check(paths),
-        _implementation_check(
-            paths,
-            check_id="forge_canvas",
-            label="Forge Canvas",
-            relative_files=(
-                "modules_forge/forge_canvas/canvas.py",
-                "modules_forge/forge_canvas/canvas.js",
-            ),
-            summary="Forge Canvas assets and integration code are installed.",
-            missing_action="Restore the built-in Forge Canvas files.",
-        ),
-        _implementation_check(
-            paths,
-            check_id="hyperweave",
-            label="HyperWeave",
-            relative_files=(
-                "extensions-builtin/hyperweave/hyperweave/engine.py",
-                "extensions-builtin/hyperweave/scripts/hyperweave.py",
-            ),
-            summary="HyperWeave 4K/8K is installed and will validate the loaded model at run time.",
-            missing_action="Restore the built-in HyperWeave extension files.",
-        ),
-    )
-
-
-__all__ = ["feature_checks"]
+    return tuple(feature_check(feature, paths) for feature in FEATURES)

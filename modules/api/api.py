@@ -250,12 +250,17 @@ def api_middleware(app: FastAPI):
 
 
 class Api:
-    def __init__(self, app: FastAPI, queue_lock: Lock):
+    def __init__(self, app: FastAPI, queue_lock: Lock, *, workspace_only=False):
         self.credentials = dict(credentials_from_options(shared.cmd_opts, "api"))
 
         self.router = APIRouter()
         self.app = app
         self.queue_lock = queue_lock
+        from modules.aikimi_workspace_api import register_workspace_routes
+
+        register_workspace_routes(self)
+        if workspace_only:
+            return
         # api_middleware(self.app)  # FIXME: (legacy) this will have to be fixed
         self.add_api_route("/sdapi/v1/txt2img", self.text2imgapi, methods=["POST"], response_model=models.TextToImageResponse)
         self.add_api_route("/sdapi/v1/img2img", self.img2imgapi, methods=["POST"], response_model=models.ImageToImageResponse)
@@ -298,10 +303,6 @@ class Api:
         self.add_api_route("/sdapi/v1/script-info", self.get_script_info, methods=["GET"], response_model=list[models.ScriptInfo])
         self.add_api_route("/sdapi/v1/extensions", self.get_extensions_list, methods=["GET"], response_model=list[models.ExtensionItem])
 
-        from modules import aikimi_diagnostics
-
-        aikimi_diagnostics.register_api_routes(self)
-
         if shared.cmd_opts.api_server_stop:
             self.add_api_route("/sdapi/v1/server-kill", self.kill_webui, methods=["POST"])
             self.add_api_route("/sdapi/v1/server-restart", self.restart_webui, methods=["POST"])
@@ -332,7 +333,7 @@ class Api:
 
     def add_api_route(self, path: str, endpoint, **kwargs):
         if self.credentials:
-            return self.app.add_api_route(path, endpoint, dependencies=[Depends(self.auth)], **kwargs)
+            return self.app.add_api_route(path, endpoint, dependencies=[Depends(self.auth), *kwargs.pop("dependencies", [])], **kwargs)
         return self.app.add_api_route(path, endpoint, **kwargs)
 
     def auth(self, credentials: HTTPBasicCredentials = Depends(HTTPBasic())):

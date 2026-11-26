@@ -2,6 +2,8 @@
 
 ## v7.0.0 — 未リリース
 
+- ギャラリーで画像・動画・音声を検索し、作品のプロンプトをプロンプト集に保存できます。プロンプト集では `{朝|夕暮れ}` のような選択肢を Seed で展開し、開いているスタジオに挿入できます。`aikimi-setup.bat -Status` で導入状態を確認できます。Settings → Diagnostics にはモデルの件数と容量、ちびあいきみの詳細には GPU の所有者と待機モデルの解放ボタンが表示されます。
+
 - Forge共通画面の対応系列をSDXL、Anima 3.8B、Krea2に絞りました。SD 1.x、FLUX.1／2、旧Qwen Image、Ernie、Lumina、Chroma、Z-Image、Wan、PiD、MugenとNunchaku／SVDQの読み込みを廃止します。
 - Iris-3B Studio、Jev Sparse Experiments、旧実験アップスケールツールを廃止します。H3 ImageはP-H3 ImageとMiniMax-H3-Imageを使用します。
 

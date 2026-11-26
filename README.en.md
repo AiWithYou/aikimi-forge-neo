@@ -16,6 +16,8 @@ You can select a compatible full fine-tuned model in the shared Forge workspace 
 
 ## What you can do
 
+Search images, videos and audio in Gallery. Save prompts to the library, expand choices such as `{day|night}` with a seed and insert them into the active studio. Use `aikimi-setup.bat -Status` to inspect installed studios, Settings → Diagnostics for local model counts and sizes, and the assistant details to release idle GPU models.
+
 - **Generate and edit images:** choose MiniMax-H3-Image, P-H3 Image, MOSS Image, Qwen Image 2.1, FLUX 3, or another supported model. P-H3 accepts up to eight images including the image being edited.
 - **Finish large images:** use Krea2 high-resolution workflows, MOSS Hires.fix, and upscalers.
 - **Create video and audio:** generate video with sound using MiniMax H3, music with YuE2, and Japanese speech with Irodori TTS.
@@ -49,7 +51,7 @@ Choose a model and follow the setup method in the table below. For P-H3, launch 
 
 ### Choose and install models
 
-For Krea2, Anima, or H3 video, run the following and choose a menu entry (1–3). P-H3 is prepared from the WebUI after launch. Use the dedicated BAT files in the table for Qwen, YuE2, Irodori TTS, Clef, FLUX 3, and MOSS Image.
+Run the setup hub and choose a model. Entries 1–3 install Krea2, Anima and H3 video. Entries 4–5 install official H3 Image and P-H3. Entries 6–11 install Qwen, FLUX 3, MOSS, Irodori, YuE2 and Clef. The dedicated installers in the table are also available.
 
 ```powershell
 .\aikimi-setup.bat

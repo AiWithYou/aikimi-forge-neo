@@ -78,6 +78,12 @@
             label: "MOSS Image",
             kind: "native",
         }),
+        gallery: Object.freeze({
+            buttonId: "aikimi-tab-gallery",
+            containerId: "tab_aikimi_gallery",
+            label: "ギャラリー",
+            kind: "native",
+        }),
     });
     const FEATURE_ORDER = Object.freeze([
         "krea2",
@@ -90,6 +96,7 @@
         "clef",
         "flux3",
         "moss_image",
+        "gallery",
     ]);
 
     if (window.AikimiTabs?.apiVersion === API_VERSION) {

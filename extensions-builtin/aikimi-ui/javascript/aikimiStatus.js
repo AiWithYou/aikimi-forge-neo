@@ -445,6 +445,7 @@
             createMetricRow("環境", "environment"),
             createMetricRow("バージョン", "version"),
             createMetricRow("保持設定", "retention"),
+            createMetricRow("GPU 所有者・常駐", "residents"),
             createMetricRow("読込時間", "load-time"),
             createMetricRow("進捗", "progress"),
             createMetricRow("残り時間", "eta"),
@@ -453,7 +454,22 @@
             createMetricRow("接続", "backend"),
             createMetricRow("詳細", "error"),
         );
-        detailPanel.append(detailHeading, metrics);
+        const release = document.createElement("button");
+        release.type = "button";
+        release.textContent = "待機中モデルを解放 (VRAM解放)";
+        const releaseStatus = document.createElement("output");
+        release.addEventListener("click", async () => {
+            release.disabled = true;
+            try {
+                const response = await fetch(appUrl("./aikimi/api/v1/gpu/release"), {
+                    method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"},
+                });
+                if (!response.ok) throw new Error("VRAM解放に失敗しました (" + response.status + ")");
+                releaseStatus.textContent = (await response.json()).message;
+            } catch (error) { releaseStatus.textContent = error.message; }
+            finally { release.disabled = false; }
+        });
+        detailPanel.append(detailHeading, metrics, release, releaseStatus);
         bindPetActions(summary, detailPanel);
         details.append(summary, detailPanel);
         panel.appendChild(details);
@@ -756,6 +772,9 @@
         field("environment").parentElement.hidden = !activeFeature;
         setText(field("version"), backend.version ? `v${backend.version}` : "—");
         field("version").parentElement.hidden = !backend.version;
+        const residency = snapshot?.gpu_residency;
+        setText(field("residents"), residency?.fault_blocked ? "GPU 異常停止中" :
+            [residency?.current_engine || "待機中", ...(residency?.residents || []).map(item => item.name)].join(" · "));
         setText(field("retention"), { keep: "保持（手動で解放）", auto: "自動（5分後に解放）", release: "毎回解放" }[backend.model_retention]);
         field("retention").parentElement.hidden = !backend.model_retention;
         setText(field("load-time"), formatSeconds(model.last_load_seconds));

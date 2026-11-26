@@ -29,7 +29,7 @@ def inline_javascript(path):
     return f"<script>\n{source}\n</script>"
 
 
-def probe_navigation_with_cdp(chromium, url, *, blocked_urls=(), timeout=60):
+def probe_navigation_with_cdp(chromium, url, *, blocked_urls=(), timeout=60, expression=None):
     """Wait for the real top navigation without relying on virtual-time timers."""
 
     debugging_port = reserve_local_port()
@@ -121,7 +121,7 @@ def probe_navigation_with_cdp(chromium, url, *, blocked_urls=(), timeout=60):
                 response_timeout=max(5, deadline - time.monotonic()),
             )
 
-            expression = """
+            expression = expression or """
                 new Promise((resolve) => {
                     const started = performance.now();
                     const check = () => {
@@ -1068,6 +1068,36 @@ class GradioFullUiChromiumTests(unittest.TestCase):
         cls.chromium = find_chromium()
         if not cls.chromium:
             raise RuntimeError("Chrome or Chromium is required when AIKIMI_FULL_UI_URL is set")
+
+    def test_gallery_and_library_render_and_insert(self):
+        expression = """(async () => {
+            const find = async (selector, predicate = () => true) => {
+                for (let i = 0; i < 500; ++i) {
+                    const node = [...document.querySelectorAll(selector)].find(predicate);
+                    if (node) return node;
+                    await new Promise(resolve => setTimeout(resolve, 80));
+                }
+                throw Error("Missing " + selector);
+            };
+            (await find("#aikimi-tab-gallery")).click();
+            await find("#aikimi-gallery-workspace output", el => /件/.test(el.textContent));
+            window.switch_to_txt2img();
+            (await find("#aikimi-library-open")).click();
+            const dialog = await find("#aikimi-prompt-library[open]");
+            await find("#aikimi-prompt-library select option", el => el.textContent === "新規");
+            const prompt = dialog.querySelector("textarea");
+            prompt.value = "{day|day}";
+            const click = label => [...dialog.querySelectorAll("button")].find(el => el.textContent === label).click();
+            click("展開");
+            await find("#aikimi-prompt-library textarea", el => el.value === "day");
+            click("スタジオへ挿入");
+            const inserted = await find("#txt2img_prompt textarea", el => el.value === "day");
+            return {prompt: inserted.value, closed: !dialog.open, drawers: document.querySelectorAll("#aikimi-library-open").length};
+        })().catch(error => ({error: String(error)}))"""
+        result = probe_navigation_with_cdp(self.chromium, self.url, timeout=120, expression=expression)
+        self.assertEqual(result.get("prompt"), "day", result)
+        self.assertTrue(result["closed"])
+        self.assertEqual(result["drawers"], 1)
 
     def test_full_config_keeps_lazy_components_unmounted(self):
         with urlopen(urljoin(self.url, "config"), timeout=10) as response:  # noqa: S310

@@ -52,7 +52,20 @@ component constructorと通常のcallbackが返す`visible=False`は、lazyな�
 /aikimi/api/v1/capabilities
 ```
 
-API routeは共通の認証処理を使います。healthは最小情報、statusとcapabilitiesはredaction済みの状態だけを返します。
+通常の WebUI 起動でもこの3つの API を利用できます。各ルートは共通の認証処理を使います。healthは最小情報、statusとcapabilitiesはredaction済みの状態だけを返します。
+
+ワークスペース API の基底パスは `/aikimi/api/v1` です。WebUI の通常起動でも利用できます。変更操作の Content-Type は `application/json` を指定します。
+
+| メソッド | パス | 用途 |
+| --- | --- | --- |
+| GET | `/gallery` | `studio`、`media`、`query`、`favorites`、`order` で絞り込み、`offset` と `limit`（1〜100）でページを取得 |
+| GET | `/gallery/media` | 一覧で取得した `id` の画像・動画・音声を取得 |
+| POST | `/gallery/favorite`、`/gallery/quarantine` | 相対 ID でお気に入りの登録・解除、作品の隔離 |
+| GET / POST | `/prompt-library` | テンプレートの一覧・保存。同じ ID の保存で更新 |
+| DELETE | `/prompt-library/{entry_id}` | 指定したテンプレートを削除 |
+| POST | `/prompt-library/expand` | `text` と任意の `seed` を渡し、展開したプロンプトと使用した Seed を取得 |
+| GET | `/models/summary` | スタジオの準備状態、管理フォルダーの Checkpoint・LoRA 件数と容量 |
+| POST | `/gpu/release` | GPU が待機中なら常駐モデルを解放 |
 
 ## Aikimi UIとStatus
 
@@ -105,7 +118,7 @@ H3動画とP-H3 Imageは固定版の実行環境を共有します。生成方�
 
 ## model setup
 
-`tools/aikimi_setup.py`はstdlibだけで動作し、固定manifest、download、resume、size、SHA-256、path containment、disk preflight、verify、repairを共通化します。Anima conversionだけは、準備済みForge venvとCUDAを使って既存converterを実行します。
+`tools/aikimi_setup.py` のインストーラーは標準ライブラリで動作し、固定manifest、download、resume、size、SHA-256、path containment、disk preflight、verify、repairを共通化します。Anima conversionだけは、準備済みForge venvとCUDAを使って既存converterを実行します。
 
 既存のKrea2、Anima用batとPowerShell scriptは互換入口として残します。詳しい契約は[model-installation.md](model-installation.md)を参照してください。
 
@@ -117,3 +130,5 @@ H3動画とP-H3 Imageは固定版の実行環境を共有します。生成方�
 - repairで隔離したファイルは`tmp/aikimi-setup/quarantine`
 
 管理対象外の任意pathをcleanup対象へ加えません。model、output、cache、log、secretはGit管理外です。
+
+ギャラリーは `output/` と `outputs/` を読み、作品をデータディレクトリからの相対 ID で参照します。認証設定は Forge API と共通です。

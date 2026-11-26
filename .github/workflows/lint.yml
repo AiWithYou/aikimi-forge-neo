@@ -3,6 +3,36 @@ name: Lint and workflow validation
 on:
   pull_request:
     paths:
+      - "modules_forge/minimax_h3_image_ui.py"
+      - "extensions-builtin/aikimi-ui/javascript/aikimi_workspace.js"
+      - "modules/aikimi_workspace_api.py"
+      - "modules_forge/aikimi_gallery.py"
+      - "modules_forge/model_summary.py"
+      - "modules_forge/prompt_library.py"
+      - "modules_forge/workspace_store.py"
+      - "tools/tests/stage3.test.mjs"
+      - "tools/tests/test_stage3.py"
+      - "CHANGELOG.md"
+      - "README.en.md"
+      - "README.md"
+      - "aikimi-setup.ps1"
+      - "docs/architecture.md"
+      - "docs/image-workspace.md"
+      - "docs/local-models.md"
+      - "docs/release-checklist.md"
+      - "docs/security-model.md"
+      - "extensions-builtin/aikimi-ui/javascript/aikimiStatus.js"
+      - "extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js"
+      - "extensions-builtin/aikimi-ui/style.css"
+      - "extensions-builtin/flux3-klein-studio/scripts/flux3_klein_studio.py"
+      - "modules/aikimi_security/paths.py"
+      - "modules/aikimi_status.py"
+      - "modules/api/api.py"
+      - "modules_forge/p_h3_image_ui.py"
+      - "tools/tests/test_model_setup_launcher.py"
+      - "tools/tests/test_retired_image_features.py"
+      - "webui.py"
+      - "extensions-builtin/aikimi-gallery/**"
       - "extensions-builtin/sd_forge_json_builder/**"
       - "extensions-builtin/sd_forge_lora_schedule/**"
       - "extensions-builtin/sd_forge_sparse/**"
@@ -176,6 +206,36 @@ on:
   push:
     branches: [neo]
     paths:
+      - "modules_forge/minimax_h3_image_ui.py"
+      - "extensions-builtin/aikimi-ui/javascript/aikimi_workspace.js"
+      - "modules/aikimi_workspace_api.py"
+      - "modules_forge/aikimi_gallery.py"
+      - "modules_forge/model_summary.py"
+      - "modules_forge/prompt_library.py"
+      - "modules_forge/workspace_store.py"
+      - "tools/tests/stage3.test.mjs"
+      - "tools/tests/test_stage3.py"
+      - "CHANGELOG.md"
+      - "README.en.md"
+      - "README.md"
+      - "aikimi-setup.ps1"
+      - "docs/architecture.md"
+      - "docs/image-workspace.md"
+      - "docs/local-models.md"
+      - "docs/release-checklist.md"
+      - "docs/security-model.md"
+      - "extensions-builtin/aikimi-ui/javascript/aikimiStatus.js"
+      - "extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js"
+      - "extensions-builtin/aikimi-ui/style.css"
+      - "extensions-builtin/flux3-klein-studio/scripts/flux3_klein_studio.py"
+      - "modules/aikimi_security/paths.py"
+      - "modules/aikimi_status.py"
+      - "modules/api/api.py"
+      - "modules_forge/p_h3_image_ui.py"
+      - "tools/tests/test_model_setup_launcher.py"
+      - "tools/tests/test_retired_image_features.py"
+      - "webui.py"
+      - "extensions-builtin/aikimi-gallery/**"
       - "extensions-builtin/sd_forge_json_builder/**"
       - "extensions-builtin/sd_forge_lora_schedule/**"
       - "extensions-builtin/sd_forge_sparse/**"
@@ -374,6 +434,20 @@ jobs:
         shell: bash
         run: |
           files=(
+            modules_forge/minimax_h3_image_ui.py
+            extensions-builtin/aikimi-gallery/scripts/aikimi_gallery_studio.py
+            modules/aikimi_workspace_api.py
+            modules_forge/aikimi_gallery.py
+            modules_forge/model_summary.py
+            modules_forge/prompt_library.py
+            modules_forge/workspace_store.py
+            tools/tests/test_stage3.py
+            extensions-builtin/flux3-klein-studio/scripts/flux3_klein_studio.py
+            modules/aikimi_security/paths.py
+            modules/aikimi_status.py
+            modules_forge/p_h3_image_ui.py
+            tools/tests/test_model_setup_launcher.py
+            tools/tests/test_retired_image_features.py
             tools/tests/test_stage2_integration.py
             scripts/degrid.py
             modules_forge/packages/gguf
@@ -538,9 +612,11 @@ jobs:
             tools/tests/test_upstream_20261008.py
           )
           python -m ruff check "${files[@]}"
+          python -m ruff check --select E9,F modules/api/api.py webui.py
       - name: Check Aikimi UI JavaScript syntax
         run: |
           node --check javascript/dimRounding.js
+          node --check extensions-builtin/aikimi-ui/javascript/aikimi_workspace.js
           node --check javascript/ui.js
           for file in extensions-builtin/sd_forge_json_builder/javascript/*.js; do node --check "$file"; done
           node --check javascript/dragdrop.js

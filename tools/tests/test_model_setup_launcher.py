@@ -15,6 +15,12 @@ PWSH = shutil.which("pwsh")
 
 @unittest.skipUnless(os.name == "nt" and PWSH, "Windows PowerShell 7 test")
 class ModelSetupLauncherTests(unittest.TestCase):
+    def test_extended_menu_plans(self):
+        for model in ("h3-image", "p-h3", "qwen21", "flux3", "moss", "irodori", "yue2", "clef"):
+            with self.subTest(model=model):
+                result = self.run_ps(f"& './aikimi-setup.ps1' -Model {model} -DryRun -NoPause")
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_h3_download_batch_returns_from_python_cmd_launcher(self):
         with tempfile.TemporaryDirectory(prefix="python launcher ") as directory:
             launcher = Path(directory) / "python.cmd"

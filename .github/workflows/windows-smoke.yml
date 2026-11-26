@@ -3,6 +3,37 @@ name: Windows smoke tests
 on:
   pull_request:
     paths:
+      - "tools/tests/test_aikimi_setup.py"
+      - "modules_forge/minimax_h3_image_ui.py"
+      - "extensions-builtin/aikimi-ui/javascript/aikimi_workspace.js"
+      - "modules/aikimi_workspace_api.py"
+      - "modules_forge/aikimi_gallery.py"
+      - "modules_forge/model_summary.py"
+      - "modules_forge/prompt_library.py"
+      - "modules_forge/workspace_store.py"
+      - "tools/tests/stage3.test.mjs"
+      - "tools/tests/test_stage3.py"
+      - "CHANGELOG.md"
+      - "README.en.md"
+      - "README.md"
+      - "aikimi-setup.ps1"
+      - "docs/architecture.md"
+      - "docs/image-workspace.md"
+      - "docs/local-models.md"
+      - "docs/release-checklist.md"
+      - "docs/security-model.md"
+      - "extensions-builtin/aikimi-ui/javascript/aikimiStatus.js"
+      - "extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js"
+      - "extensions-builtin/aikimi-ui/style.css"
+      - "extensions-builtin/flux3-klein-studio/scripts/flux3_klein_studio.py"
+      - "modules/aikimi_security/paths.py"
+      - "modules/api/api.py"
+      - "modules_forge/gpu_residency.py"
+      - "modules_forge/p_h3_image_ui.py"
+      - "tools/aikimi_setup.py"
+      - "tools/tests/test_model_setup_launcher.py"
+      - "tools/tests/test_retired_image_features.py"
+      - "extensions-builtin/aikimi-gallery/**"
       - "extensions-builtin/sd_forge_json_builder/**"
       - "extensions-builtin/sd_forge_lora_schedule/**"
       - "extensions-builtin/sd_forge_sparse/**"
@@ -159,6 +190,37 @@ on:
   push:
     branches: [neo]
     paths:
+      - "tools/tests/test_aikimi_setup.py"
+      - "modules_forge/minimax_h3_image_ui.py"
+      - "extensions-builtin/aikimi-ui/javascript/aikimi_workspace.js"
+      - "modules/aikimi_workspace_api.py"
+      - "modules_forge/aikimi_gallery.py"
+      - "modules_forge/model_summary.py"
+      - "modules_forge/prompt_library.py"
+      - "modules_forge/workspace_store.py"
+      - "tools/tests/stage3.test.mjs"
+      - "tools/tests/test_stage3.py"
+      - "CHANGELOG.md"
+      - "README.en.md"
+      - "README.md"
+      - "aikimi-setup.ps1"
+      - "docs/architecture.md"
+      - "docs/image-workspace.md"
+      - "docs/local-models.md"
+      - "docs/release-checklist.md"
+      - "docs/security-model.md"
+      - "extensions-builtin/aikimi-ui/javascript/aikimiStatus.js"
+      - "extensions-builtin/aikimi-ui/javascript/aikimi_tabs.js"
+      - "extensions-builtin/aikimi-ui/style.css"
+      - "extensions-builtin/flux3-klein-studio/scripts/flux3_klein_studio.py"
+      - "modules/aikimi_security/paths.py"
+      - "modules/api/api.py"
+      - "modules_forge/gpu_residency.py"
+      - "modules_forge/p_h3_image_ui.py"
+      - "tools/aikimi_setup.py"
+      - "tools/tests/test_model_setup_launcher.py"
+      - "tools/tests/test_retired_image_features.py"
+      - "extensions-builtin/aikimi-gallery/**"
       - "extensions-builtin/sd_forge_json_builder/**"
       - "extensions-builtin/sd_forge_lora_schedule/**"
       - "extensions-builtin/sd_forge_sparse/**"
@@ -444,6 +506,7 @@ jobs:
           --module tools.tests.test_quant_ops_zero_scale
           --module tools.tests.test_remote_auth_middleware
           --module tools.tests.test_stage2_integration
+          --module tools.tests.test_stage3
           --module tools.tests.test_repository_privacy
           --module tools.tests.test_run_ci_tests
           --module tools.tests.test_safe_image_fetch

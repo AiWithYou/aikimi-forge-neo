@@ -228,6 +228,11 @@ def webui_worker():
 
             if launch_api:
                 create_api(app)
+            else:
+                from modules.api.api import Api
+                from modules.call_queue import queue_lock
+
+                Api(app, queue_lock, workspace_only=True)
 
             ui_extra_networks.add_pages_to_demo(app)
 

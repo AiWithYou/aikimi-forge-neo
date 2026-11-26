@@ -107,6 +107,21 @@ def ample_disk(_path: Path) -> SimpleNamespace:
 
 
 class AikimiSetupTests(unittest.TestCase):
+    def test_status_reports_h3_image_profiles_independently(self):
+        import json
+        from contextlib import redirect_stdout
+
+        from tools.aikimi_setup import main
+
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as folder, redirect_stdout(output), mock.patch(
+            "modules.aikimi_capabilities.h3_image_files", return_value=(False, True, False)
+        ):
+            self.assertEqual(main(["status", "--json"], repository_root=Path(folder)), 0)
+        states = {item["model"]: item["available"] for item in json.loads(output.getvalue())["profiles"]}
+        self.assertTrue(states["h3-image"])
+        self.assertFalse(states["p-h3"])
+
     def make_installer(
         self,
         root: Path,

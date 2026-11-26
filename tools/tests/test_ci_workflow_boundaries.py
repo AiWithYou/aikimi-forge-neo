@@ -25,6 +25,12 @@ H3_LINT_TARGETS = (
 
 
 class CiWorkflowBoundaryTests(unittest.TestCase):
+    def test_workspace_changes_trigger_ci(self):
+        for name in ("unit-tests.yml", "lint.yml", "windows-smoke.yml", "installer-tests.yml"):
+            workflow = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
+            for path in ("extensions-builtin/aikimi-gallery/**", "modules_forge/prompt_library.py", "tools/tests/test_stage3.py"):
+                self.assertGreaterEqual(workflow.count(path), 2, (name, path))
+
     def test_yue2_checkpoint_validator_runs_in_windows_cpu_suite(self):
         workflow = self.workflow("windows-smoke.yml")
         self.assertIn("--module tools.tests.test_yue2_checkpoint_validation", workflow)

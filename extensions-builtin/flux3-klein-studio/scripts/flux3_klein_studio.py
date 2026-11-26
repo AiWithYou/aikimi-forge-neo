@@ -286,7 +286,7 @@ def on_ui_tabs():
             lora.do_not_save_to_config = True
             lora_strength = gr.Slider(0, 2, value=1, step=0.05, label="LoRA強度", interactive=False)
             lora_refresh = gr.Button("更新", size="sm", scale=0, min_width=60)
-        prompt = gr.Textbox(label="プロンプト", lines=4, placeholder="生成したい完成画像や、参照画像への変更を記述")
+        prompt = gr.Textbox(elem_id="flux3-prompt", label="プロンプト", lines=4, placeholder="生成したい完成画像や、参照画像への変更を記述")
         run = gr.Button("生成", variant="primary", interactive=False)
         cancel = gr.Button("中断", interactive=True)
         with gr.Column() as settings:

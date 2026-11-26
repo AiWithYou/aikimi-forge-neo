@@ -237,6 +237,7 @@ def build_gradio_blocked_paths(script_path: str | Path, data_path: str | Path) -
         ".credentials.json",
         "config.json",
         "config_states",
+        "tmp/aikimi-gallery/quarantine",
         "ui-config.json",
         "forge_neo_model_paths.yaml",
         "cache",

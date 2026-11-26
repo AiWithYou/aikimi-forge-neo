@@ -194,3 +194,7 @@ Transformers 5.10.0は修正境界の比較に使いましたが、PyPIでは公
 - ローカル管理者や同じWindows accountを制御した攻撃者は、想定するsecurity boundaryの外側です。
 - third-party extension、model、custom runtimeは、導入者が個別に安全性を確認します。
 - model licenseと生成物の権利は、利用者が配布元の原文から判断してください。
+
+ギャラリーは管理された `output/` と `outputs/` の作品を相対 ID で扱います。パス区切りの偽装、親ディレクトリの参照、リンク、ジャンクションを拒否します。PNG テキストと隣接 JSON の読み取りにはサイズ上限があります。隔離先の `tmp/aikimi-gallery/quarantine/` は Gradio のファイル配信から除外します。
+
+お気に入りは `config_states/gallery_favorites.json` に最大4,096件、プロンプト集は `config_states/prompt_library.json` に最大512件保存します。各ファイルは最大2 MiBで、更新は一時ファイルから置き換えます。テンプレート本文・ネガティブプロンプトは各16,384文字までです。

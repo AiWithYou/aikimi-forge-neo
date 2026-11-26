@@ -61,6 +61,7 @@ class AikimiTabsFixtureHandler(BaseHTTPRequestHandler):
             ("irodori_studio", "Irodori TTS"),
             ("flux3_klein_studio", "FLUX 3"),
             ("moss_image_studio", "MOSS Image"),
+            ("aikimi_gallery", "ギャラリー"),
             ("settings", "Settings"),
             ("extensions", "Extensions"),
         ]
@@ -455,7 +456,7 @@ setTimeout(() => uiLoadedCallbacks.forEach((callback) => callback()), 0);
         return null;
     }};
     const aliasesReady = await waitFor(() =>
-        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 10
+        document.querySelectorAll("#aikimi-feature-nav > .aikimi-feature-nav__button").length === 11
     );
     const eventCounts = {{ krea2: 0, anima38: 0, cleared: 0 }};
     document.addEventListener("aikimi:feature-tab-change", (event) => {{
@@ -854,6 +855,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "Clef",
                 "FLUX 3",
                 "MOSS Image",
+                "ギャラリー",
             ],
         )
         self.assertTrue(result["externalRowBeforeTabs"])
@@ -1061,6 +1063,7 @@ class AikimiTabsChromiumTests(unittest.TestCase):
                 "Clef",
                 "FLUX 3",
                 "MOSS Image",
+                "ギャラリー",
             ],
         )
         self.assertEqual(result["nativeCountAfter"], result["nativeCountBefore"])
