@@ -2,31 +2,20 @@
 
 [English](README.en.md) · 日本語
 
-**v7.0.0（開発中）** · [最新リリース v6.1.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v6.1.0) · [変更履歴](CHANGELOG.md)
-
-Forge共通画面で選べる系列はSDXL、Anima 3.8B、Krea2です。専用Studioでは各画面のモデル選択欄を使います。
-
-AnimaのRGBA出力、JSON BuilderからMOSS Imageへの転送、LoRAのステップ別制御、SolAttn、DeGrid、Spectrum、SLG、X/Y/Z plotの追加軸を利用できます。プリセットの表示は `--disable-preset` と `--sort-preset` で指定できます。[操作と対応条件](docs/upstream-sync.md)
+**[v7.0.0](https://github.com/AiWithYou/aikimi-forge-neo/tree/v7.0.0)** · [最新リリース v7.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v7.0.0) · [変更履歴](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="ちびあいきみ" width="112" align="right">
 
 **画像の生成・編集、音声付き動画の作成、作曲、画像や文章の評価をひとつのWebUIで扱える、Windows向けのForge Neo派生版です。** モデルの導入や高解像度化、画像の仕上げ機能も備えています。
 
-同じ系列を追加学習したモデル本体（Full FT）も選べます。画像生成ではForgeの共通画面、P-H3 Image、MOSS Image、Qwen Image 2.1、FLUX 3に対応しています。H3動画、Clef、Irodori TTS、YuE2でも互換の本体を選べます。LoRAはモデル本体に重ねて使う追加データです。通常版・INT8・W4A8など、選べる保存形式や必要な共通部品は系列ごとに異なります。[モデル・LoRAの配置と対応形式](docs/local-models.md)
-
-## できること
-
-ギャラリーで画像・動画・音声を検索し、作品のプロンプトをプロンプト集に保存できます。お気に入りとプロンプト集はデータディレクトリの `config_states/aikimi_workspace/` に保存します。プロンプト集では `{朝|夕暮れ}` のような選択肢を Seed で展開し、開いているスタジオに挿入できます。`aikimi-setup.bat -Status` で導入状態を確認できます。Settings → Diagnostics にはモデルの件数と容量、ちびあいきみの詳細には GPU の所有者と待機モデルの解放ボタンが表示されます。
-
-- **画像を作る・編集する**：MiniMax-H3-Image、P-H3 Image、MOSS Image、Qwen Image 2.1、FLUX 3などを目的に合わせて選択できます。P-H3は編集対象と参照画像を合わせて最大8枚まで使えます。
-- **大きな画像を仕上げる**：Krea2の高解像度ワークフローやMOSSのHires.fix、各種アップスケーラーを使えます。
-- **動画・音声を作る**：MiniMax H3で音声付き動画、YuE2で音楽、Irodori TTSで日本語音声を生成できます。
-- **画像を整理する**：Clefで画像や文章の評価・仕分けを行えます。
-
-P-H3の初回セットアップは、WebUIの **H3 Image → P-H3 Image → 準備を開く → 環境とモデルを準備** から行います。標準モデル4ファイルの合計サイズは約29.8 GBです。モデルおよび生成物には地域制限が適用されるため、SNSへ公開する前に利用条件を確認してください。[使い方と利用条件](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)
-
-
 [セットアップ方法](#セットアップ方法) · [主な機能](#主な機能) · [LoRAの使い方](#手動でダウンロードしたloraを使う) · [更新方法](#更新方法) · [困ったとき](#トラブルシューティング)
+
+## v7.0.0 のハイライト
+
+- **作品を探して条件を再利用する**　統合ギャラリーで画像・動画・音声を検索し、生成条件を確認できます。プロンプトをプロンプト集に保存し、`{朝|夕暮れ}` のような選択肢を指定した Seed で展開して、開いている Studio に挿入できます。お気に入りとプロンプト集の保存先はデータディレクトリの `config_states/aikimi_workspace/` です。
+- **導入状態と GPU を確認する**　セットアップハブの1〜11番から使いたいモデルを選べます。`aikimi-setup.bat -Status` は導入状態、**Settings → Diagnostics** はモデル件数と容量を表示します。ちびあいきみの詳細では GPU を使用中の Studio を確認し、待機中のモデルを解放できます。
+- **用途に合う画面を選ぶ**　Forge 共通画面は SDXL、Anima 3.8B、Krea2 に対応します。専用 Studio は画像用の H3 Image（P-H3 Image／MiniMax-H3-Image）、MOSS Image、Qwen Image 2.1、FLUX 3 と、動画用の MiniMax H3、読み上げ用の Irodori TTS、作曲用の YuE2 Music、評価・仕分け用の Clef の8種類です。
+- **生成と仕上げを調整する**　本家 Forge Neo（`6d5aa3bc`）から、Anima の4チャンネル RGBA VAE による透過画像生成、JSON Builder から MOSS Image への転送、LoRA 強度のステップ別制御を取り込みました。SolAttn、DeGrid、Spectrum、対応モデル限定の SLG、X/Y/Z plot の追加軸、プリセットの表示・並べ替え（`--disable-preset`／`--sort-preset`）も使えます。[各機能の操作と対応条件](docs/upstream-sync.md)
 
 ## セットアップ方法
 
@@ -42,38 +31,38 @@ P-H3の初回セットアップは、WebUIの **H3 Image → P-H3 Image → 準�
 
 必要なGPUメモリと、モデルの保存・変換に使う空き容量はモデルごとに異なります。**YuE2 Musicには別途Python 3.12が必要です。**
 
-### はじめて使う場合
+### 1. リポジトリをクローンする
 
 ```powershell
 git clone --branch neo https://github.com/AiWithYou/aikimi-forge-neo.git
 cd aikimi-forge-neo
 ```
 
-使いたいモデルを選び、下の表の方法で準備します。P-H3は先にWebUIを起動し、画面から準備します。**最初は使うモデルだけ導入すれば始められます。** モデル本体はリポジトリに含まれません。
-
 <a id="model-setup"></a>
 
-### モデルを選んで導入する
+### 2. 使いたいモデルだけ導入する
 
-次のセットアップハブでモデルを番号選択できます。1〜3 は Krea2・Anima・H3 動画、4〜5 は公式 H3 Image・P-H3、6〜11 は Qwen・FLUX 3・MOSS・Irodori・YuE2・Clef です。表の専用 BAT でも各スタジオを導入できます。
+セットアップハブを開き、表の番号を選びます。モデル本体は別途ダウンロードします。
 
 ```powershell
 .\aikimi-setup.bat
 ```
 
-| モデル | できること・使う画面 | セットアップ操作 |
-|---|---|---|
-| Krea2 | 画像生成・4K/8K処理。上部 **Krea2** から使用 | `.\aikimi-setup.bat` → **1** |
-| [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | 画像生成。上部 **Anima** から使用 | `.\aikimi-setup.bat` → **2** |
-| [MiniMax-H3-Image](extensions-builtin/minimax-h3-studio/OFFICIAL_IMAGE_GUIDE.md) | 約16 MPの直接生成と最大16枚の入力を使う画像編集 | **H3 Image → MiniMax-H3-Image → 環境とモデルを準備** |
-| [P-H3 Image](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) | 画像生成・最大8枚の画像を使う編集。**H3 Image** を使用 | 起動後に **P-H3 Image → 準備を開く** |
-| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | 音声付き動画と写真一枚からの無音360°周回。**H3 Studio** を使用 | `.\aikimi-setup.bat` → **3** |
-| [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | 画像生成・編集・透過PNG・拡張。専用画面を使用 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
-| [YuE2 Music](extensions-builtin/yue2-studio/README.md) | 作曲・ABC楽譜編集。**YuE2 Music** タブを使用 | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1：公式Python** |
-| [Irodori TTS](docs/irodori-tts.md) | 日本語読み上げ、声の説明によるVoice Design、参照音声からの声の再現。**Irodori TTS** タブを使用 | [`aikimi-irodori-setup.bat`](aikimi-irodori-setup.bat) |
-| [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
-| [FLUX 3 Image Klein](docs/flux3-klein.md) | 蒸留版／Baseの画像生成、最大10枚の参照編集、配置ボックス。PUPは任意の追加機能。**FLUX 3** タブを使用 | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
-| [MOSS-Image-SFT](docs/moss-image.md) | 自然文・タグ・JSONレイアウトから画像生成、Hires.fix、元画像からの再描画、編集用LoRAによる最大3枚の参照入力。**MOSS Image** タブを使用 | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
+| ハブ番号 | モデル | できること・使う画面 | 個別の導入方法 |
+|---:|---|---|---|
+| 1 | Krea2 | 画像生成・4K/8K処理。上部 **Krea2** から使用 | — |
+| 2 | [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | 画像生成。上部 **Anima** から使用 | — |
+| 3 | [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | 音声付き動画と写真一枚からの無音360°周回。**H3 Studio** を使用 | — |
+| 4 | [MiniMax-H3-Image](extensions-builtin/minimax-h3-studio/OFFICIAL_IMAGE_GUIDE.md) | 約16 MPの直接生成と最大16枚の入力を使う画像編集 | **H3 Image → MiniMax-H3-Image → 環境とモデルを準備** |
+| 5 | [P-H3 Image](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) | 画像生成・最大8枚の画像を使う編集。**H3 Image** を使用 | 起動後に **P-H3 Image → 準備を開く** |
+| 6 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | 画像生成・編集・透過PNG・拡張。専用画面を使用 | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
+| 7 | [FLUX 3 Image Klein](docs/flux3-klein.md) | 蒸留版／Baseの画像生成、最大10枚の参照編集、配置ボックス。PUPは任意の追加機能。**FLUX 3** タブを使用 | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
+| 8 | [MOSS-Image-SFT](docs/moss-image.md) | 自然文・タグ・JSONレイアウトから画像生成、Hires.fix、元画像からの再描画、編集用LoRAによる最大3枚の参照入力。**MOSS Image** タブを使用 | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
+| 9 | [Irodori TTS](docs/irodori-tts.md) | 日本語読み上げ、声の説明によるVoice Design、参照音声からの声の再現。**Irodori TTS** タブを使用 | [`aikimi-irodori-setup.bat`](aikimi-irodori-setup.bat) |
+| 10 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | 作曲・ABC楽譜編集。**YuE2 Music** タブを使用 | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1：公式Python** |
+| 11 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
+
+P-H3の初回セットアップは、WebUIの **H3 Image → P-H3 Image → 準備を開く → 環境とモデルを準備** から行います。標準モデル4ファイルの合計サイズは約29.8 GBです。モデルおよび生成物には地域制限が適用されるため、SNSへ公開する前に利用条件を確認してください。[使い方と利用条件](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)
 
 ### MiniMax-H3-Image の参照編集作例
 
@@ -114,9 +103,9 @@ Qwen公式フルモデル（INT8／W4A8／BF16）は `.\aikimi-qwen-image21-setu
 
 </details>
 
-### 起動して生成する
+### 3. 起動して生成する
 
-1. `aikimi-launch.bat`をダブルクリックします。普段の起動もこのBATを使います。P-H3は起動後に画面から準備します。
+1. `aikimi-launch.bat`をダブルクリックします。普段の起動もこのBATを使います。
 2. ログにURLが表示されたら、ブラウザーで [http://127.0.0.1:7861](http://127.0.0.1:7861) を開きます。
 3. 使いたい画面を開き、生成条件を設定して生成します。詳しい操作や作例は、上の表のモデル名から確認できます。
 
@@ -174,6 +163,8 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 <a id="手動でダウンロードしたloraを使う"></a>
 
 ### 手元のLoRAを使う
+
+同じ系列を追加学習したモデル本体（Full FT）も選べます。画像生成ではForgeの共通画面、P-H3 Image、MOSS Image、Qwen Image 2.1、FLUX 3に対応しています。H3動画、Clef、Irodori TTS、YuE2でも互換の本体を選べます。LoRAはモデル本体に重ねて使う追加データです。通常版・INT8・W4A8など、選べる保存形式や必要な共通部品は系列ごとに異なります。[モデル・LoRAの配置と対応形式](docs/local-models.md)
 
 対応LoRAを下記フォルダーに配置します。画面によっては選択欄へのフルパス入力も使えます。
 
@@ -248,7 +239,7 @@ v4.9.0でMOSS Imageを導入した場合は、使用中の保存形式を指定�
 
 [Stable Diffusion WebUI Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo) を基盤とし、各モデルStudio・セットアップ支援・仕上げ機能・UIナビゲーションを追加しています。
 
-Krea2・Animaの基本対応や量子化モデルの読み込みはForgeから引き継いでいます。既定ブランチは`neo`、次の上流機能取り込みに使う比較基準は `6d5aa3bc0c9316a0764a4b61ea76835fb4d82fb1` です。対応モデルの整理後に上流機能を取り込み、続いて新機能を追加します。[上流との同期](docs/upstream-sync.md)
+Krea2・Animaの基本対応や量子化モデルの読み込みはForgeから引き継いでいます。既定ブランチは `neo` です。v7.0.0 では同期基準 `6d5aa3bc0c9316a0764a4b61ea76835fb4d82fb1` から必要な機能を選んで取り込みました。[上流との同期](docs/upstream-sync.md)
 
 <a id="documentation"></a>
 <a id="test"></a>

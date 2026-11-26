@@ -1,16 +1,25 @@
 # 変更履歴
 
-## v7.0.0 — 未リリース
+## v7.0.0 — 2026-11-26
 
-- ギャラリーで画像・動画・音声を検索し、作品のプロンプトをプロンプト集に保存できます。プロンプト集では `{朝|夕暮れ}` のような選択肢を Seed で展開し、開いているスタジオに挿入できます。`aikimi-setup.bat -Status` で導入状態を確認できます。Settings → Diagnostics にはモデルの件数と容量、ちびあいきみの詳細には GPU の所有者と待機モデルの解放ボタンが表示されます。
+### 制作ワークスペース
 
-- Forge共通画面の対応系列をSDXL、Anima 3.8B、Krea2に絞りました。SD 1.x、FLUX.1／2、旧Qwen Image、Ernie、Lumina、Chroma、Z-Image、Wan、PiD、MugenとNunchaku／SVDQの読み込みを廃止します。
-- Iris-3B Studio、Jev Sparse Experiments、旧実験アップスケールツールを廃止します。H3 ImageはP-H3 ImageとMiniMax-H3-Imageを使用します。
+- 統合ギャラリーで画像・動画・音声を検索し、生成条件を確認できます。作品のプロンプトをプロンプト集へ保存し、`{朝|夕暮れ}` のような選択肢を Seed で展開して Studio に挿入できます。
+- セットアップハブで11種類の導入先を選べます。`aikimi-setup.bat -Status` で導入状態、Settings → Diagnostics でモデルの件数と容量を確認できます。ちびあいきみの詳細から GPU の使用者を確認し、待機モデルを解放できます。
 
-- Animaでは4チャンネルVAEで透明画像を生成できます。JSON Builderでは領域とキャプションを編集し、MOSS Imageに送れます。
-- オンラインLoRAのステップ別強度、SolAttn、Spectrum、ExtrasのDeGridを追加・更新します。SLGは対象モデルに限って適用します。
-- X/Y/Z plotでLoRAと追加モジュールを比較できます。参照画像のリサイズ、解像度の丸め、モデル一覧の更新、拡張機能の管理画面を改善します。
-- GGUF K-QuantとNVFP4、A8、Attentionと条件のバッチ処理を更新します。起動時にプリセットの表示と並び順を指定できます。
+### モデルと Studio
+
+- Forge 共通画面の対応系列を SDXL、Anima 3.8B、Krea2 に絞りました。H3 Image では P-H3 Image と MiniMax-H3-Image を選べます。
+- Forge 共通画面での SD 1.x、FLUX.1／2、旧 Qwen Image、Ernie、Lumina、Chroma、Z-Image、Wan、PiD、Mugen、および Nunchaku／SVDQ の読み込みを廃止しました。Iris-3B Studio、Jev Sparse Experiments、旧実験アップスケールツールも廃止しました。
+
+### 本家 Forge Neo から取り込んだ機能（`6d5aa3bc`）
+
+- Anima の4チャンネル VAE で透過画像を生成できます。JSON Builder で編集した領域とキャプションを MOSS Image に送れます。
+- オンライン LoRA のステップ別強度、SolAttn、Spectrum、Extras の DeGrid に対応しました。SLG は対応モデルで使用できます。
+- X/Y/Z plot に LoRA と追加モジュールの比較軸を追加しました。参照画像のリサイズ、解像度の丸め、モデル一覧の更新、拡張機能の管理画面を改善しました。
+- GGUF K-Quant と NVFP4 の復号、A8、Attention、条件のバッチ処理を更新しました。起動時に `--disable-preset` でプリセットを非表示にし、`--sort-preset` で名前順に並べられます。
+
+更新後は `aikimi-setup.bat -Status` で必要なモデルの導入状態を確認し、WebUI を再起動してください。廃止された系列や Studio は v7.0.0 の画面から使用できません。
 
 ## v6.1.0 — 2026-11-07
 

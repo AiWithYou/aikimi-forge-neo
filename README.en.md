@@ -2,31 +2,20 @@
 
 English · [日本語](README.md)
 
-**v7.0.0 (in development)** · [Latest release v6.1.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v6.1.0) · [Changelog (Japanese)](CHANGELOG.md)
-
-The Forge checkpoint selector supports SDXL, Anima 3.8B and Krea2. Dedicated Studios provide their own model selectors.
-
-Anima supports RGBA output with a four-channel VAE. JSON Builder sends regional prompts to MOSS Image. Generation controls include step-wise LoRA, SolAttn, Spectrum and model-specific SLG. Use DeGrid in Extras and compare LoRAs or additional modules in X/Y/Z plot. Use `--disable-preset` and `--sort-preset` to customize the preset selector.
+**[v7.0.0](https://github.com/AiWithYou/aikimi-forge-neo/tree/v7.0.0)** · [Latest release v7.0.0](https://github.com/AiWithYou/aikimi-forge-neo/releases/tag/v7.0.0) · [Changelog (Japanese)](CHANGELOG.md)
 
 <img src="assets/aikimi/pet.png" alt="Chibi Aikimi" width="112" align="right">
 
 **A Windows-focused Forge Neo fork for image generation and editing, video with audio, music composition, and image or text evaluation in one WebUI.** It also provides model setup, high-resolution workflows, and image finishing tools.
 
-You can select a compatible full fine-tuned model in the shared Forge workspace and the P-H3 Image, MOSS Image, Qwen Image 2.1 and FLUX 3 Studios. H3 video, Clef, Irodori TTS and YuE2 also accept compatible models. A LoRA is separate data applied on top of a base model. Available formats, such as standard weights, INT8 and W4A8, and the required shared components depend on the model family. See [model and LoRA layout and supported formats (Japanese)](docs/local-models.md).
-
-## What you can do
-
-Search images, videos and audio in Gallery. Favorites and prompt templates are stored under `config_states/aikimi_workspace/` in the data directory. Save prompts to the library, expand choices such as `{day|night}` with a seed and insert them into the active studio. Use `aikimi-setup.bat -Status` to inspect installed studios, Settings → Diagnostics for local model counts and sizes, and the assistant details to release idle GPU models.
-
-- **Generate and edit images:** choose MiniMax-H3-Image, P-H3 Image, MOSS Image, Qwen Image 2.1, FLUX 3, or another supported model. P-H3 accepts up to eight images including the image being edited.
-- **Finish large images:** use Krea2 high-resolution workflows, MOSS Hires.fix, and upscalers.
-- **Create video and audio:** generate video with sound using MiniMax H3, music with YuE2, and Japanese speech with Irodori TTS.
-- **Organize images:** use Clef to evaluate and sort images or text.
-
-To prepare P-H3, open **H3 Image → P-H3 Image → 準備を開く**, then select **環境とモデルを準備** in the WebUI. Its four standard model files total approximately 29.8 GB. The model and its outputs are subject to territorial restrictions; review the terms before publishing on social media. See the [guide and license conditions](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md).
-
-
 [Setup](#setup) · [Features](#features) · [Local LoRAs](#using-local-loras) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
+
+## Highlights in v7.0.0
+
+- **Find a work and reuse its settings.** Search images, video and audio in Gallery, inspect generation settings and save a prompt to the library. Expand choices such as `{dawn|dusk}` with a seed and insert the result into the active Studio. Favorites and saved prompts live under `config_states/aikimi_workspace/` in the data directory.
+- **Check your setup and GPU.** Choose entries 1–11 in the setup hub and run `aikimi-setup.bat -Status` to check installation status. **Settings → Diagnostics** shows model counts and disk usage. Open Chibi Aikimi’s details to see which Studio owns the GPU and release idle models.
+- **Choose a workspace.** Use SDXL, Anima 3.8B or Krea2 in the shared Forge interface. Eight dedicated Studios cover image generation and editing (H3 Image with P-H3 Image or MiniMax-H3-Image, MOSS Image, Qwen Image 2.1 and FLUX 3), video (MiniMax H3), speech (Irodori TTS), music (YuE2 Music) and evaluation (Clef).
+- **Control generation and finishing.** Features from Forge Neo (`6d5aa3bc`) include transparent Anima output with a four-channel RGBA VAE, layout transfer from JSON Builder to MOSS Image, and step-wise LoRA strength. SolAttn, DeGrid, Spectrum, model-specific SLG, new X/Y/Z plot axes and the preset options `--disable-preset` and `--sort-preset` are also available. [Controls and supported configurations](docs/upstream-sync.md)
 
 ## Setup
 
@@ -40,36 +29,36 @@ Prepare the following first. Run the commands below in PowerShell 7 (`pwsh`).
 
 GPU memory and disk space for model downloads and conversion depend on the model. **YuE2 Music also requires Python 3.12.**
 
-### First-time installation
+### 1. Clone the repository
 
 ```powershell
 git clone --branch neo https://github.com/AiWithYou/aikimi-forge-neo.git
 cd aikimi-forge-neo
 ```
 
-Choose a model and follow the setup method in the table below. For P-H3, launch the WebUI first and prepare it from the interface. **You only need to install the models you plan to use.** Model weights are not included in this repository.
+### 2. Install the models you want
 
-### Choose and install models
-
-Run the setup hub and choose a model. Entries 1–3 install Krea2, Anima and H3 video. Entries 4–5 install official H3 Image and P-H3. Entries 6–11 install Qwen, FLUX 3, MOSS, Irodori, YuE2 and Clef. The dedicated installers in the table are also available.
+Open the setup hub and choose a number from the table. Model weights are downloaded separately.
 
 ```powershell
 .\aikimi-setup.bat
 ```
 
-| Model | Capabilities and interface | Setup |
-|---|---|---|
-| Krea2 | Image generation and 4K/8K workflows; open **Krea2** in the top navigation | `.\aikimi-setup.bat` → **1** |
-| [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | Image generation; open **Anima** in the top navigation | `.\aikimi-setup.bat` → **2** |
-| [MiniMax-H3-Image](extensions-builtin/minimax-h3-studio/OFFICIAL_IMAGE_GUIDE.md) | Native generation at about 16 MP and editing with up to 16 input images | **H3 Image → MiniMax-H3-Image → 環境とモデルを準備** |
-| [P-H3 Image](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) | Image generation and editing with up to eight images in **H3 Image** | After launch, open **P-H3 Image → 準備を開く** |
-| [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | Videos with audio and silent 360° orbits from one photo in **H3 Studio**; see the [Orbit guide](docs/minimax-h3-orbit-lora.md) | `.\aikimi-setup.bat` → **3** |
-| [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | Image generation, editing, transparent PNG, and outpainting | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
-| [YuE2 Music](extensions-builtin/yue2-studio/README.md) | Music composition and ABC score editing in **YuE2 Music** | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1: Official Python** |
-| [Irodori TTS](docs/irodori-tts.md) | Japanese speech, caption-based voice design, and reference voice conditioning in **Irodori TTS** | [`aikimi-irodori-setup.bat`](aikimi-irodori-setup.bat) |
-| [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | Image, text, and JSON evaluation; image curation and per-criterion probabilities | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
-| [FLUX 3 Image Klein](docs/flux3-klein.md) | Distilled/Base generation, editing with up to 10 references, bounding boxes, and separately installed optional prompt upsampling in **FLUX 3** | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
-| [MOSS-Image-SFT](docs/moss-image.md) | Natural-language, tag and JSON-layout generation, Hires.fix, image-to-image redraw, and up to 3 references with an edit-trained LoRA in **MOSS Image** | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
+| Hub no. | Model | Capabilities and interface | Alternative setup |
+|---:|---|---|---|
+| 1 | Krea2 | Image generation and 4K/8K workflows; open **Krea2** in the top navigation | — |
+| 2 | [Anima 3.8B v1.1](extensions-builtin/anima-3-8b/README.md) | Image generation; open **Anima** in the top navigation | — |
+| 3 | [MiniMax H3](extensions-builtin/minimax-h3-studio/README.md) | Videos with audio and silent 360° orbits from one photo in **H3 Studio**; see the [Orbit guide](docs/minimax-h3-orbit-lora.md) | — |
+| 4 | [MiniMax-H3-Image](extensions-builtin/minimax-h3-studio/OFFICIAL_IMAGE_GUIDE.md) | Native generation at about 16 MP and editing with up to 16 input images | **H3 Image → MiniMax-H3-Image → 環境とモデルを準備** |
+| 5 | [P-H3 Image](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md) | Image generation and editing with up to eight images in **H3 Image** | After launch, open **P-H3 Image → 準備を開く** |
+| 6 | [Qwen Image 2.1](extensions-builtin/qwen-image21-studio/README.md) | Image generation, editing, transparent PNG, and outpainting | [`aikimi-qwen-image21-setup.bat`](aikimi-qwen-image21-setup.bat) |
+| 7 | [FLUX 3 Image Klein](docs/flux3-klein.md) | Distilled/Base generation, editing with up to 10 references, bounding boxes, and separately installed optional prompt upsampling in **FLUX 3** | [`aikimi-flux3-klein-setup.bat`](aikimi-flux3-klein-setup.bat) |
+| 8 | [MOSS-Image-SFT](docs/moss-image.md) | Natural-language, tag and JSON-layout generation, Hires.fix, image-to-image redraw, and up to 3 references with an edit-trained LoRA in **MOSS Image** | [`aikimi-moss-image-setup.bat`](aikimi-moss-image-setup.bat) |
+| 9 | [Irodori TTS](docs/irodori-tts.md) | Japanese speech, caption-based voice design, and reference voice conditioning in **Irodori TTS** | [`aikimi-irodori-setup.bat`](aikimi-irodori-setup.bat) |
+| 10 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | Music composition and ABC score editing in **YuE2 Music** | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1: Official Python** |
+| 11 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | Image, text, and JSON evaluation; image curation and per-criterion probabilities | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
+
+To prepare P-H3, open **H3 Image → P-H3 Image → 準備を開く**, then select **環境とモデルを準備** in the WebUI. Its four standard model files total approximately 29.8 GB. The model and its outputs are subject to territorial restrictions; review the terms before publishing on social media. See the [guide and license conditions](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md).
 
 ### MiniMax-H3-Image reference editing samples
 
@@ -112,9 +101,9 @@ Preconverted Official Turbo [INT8](https://huggingface.co/Aikimi/Forge-Neo-Image
 
 </details>
 
-### Launch and generate
+### 3. Launch and generate
 
-1. Double-click `aikimi-launch.bat`. Use this file for everyday launches too. Prepare P-H3 from its interface after launch.
+1. Double-click `aikimi-launch.bat`. Use this file for everyday launches too.
 2. When the log displays the URL, open [http://127.0.0.1:7861](http://127.0.0.1:7861) in a browser.
 3. Open the desired interface, set generation parameters, and generate. The model links above lead to instructions and examples.
 
@@ -168,6 +157,8 @@ Copy-Item .\webui-user.example.bat .\webui-user.local.bat
 - Click **Chibi Aikimi** to view progress and the queue. Drag it to move it, and use the top menu to toggle its visibility.
 
 ### Using local LoRAs
+
+You can select a compatible full fine-tuned model in the shared Forge workspace and the P-H3 Image, MOSS Image, Qwen Image 2.1 and FLUX 3 Studios. H3 video, Clef, Irodori TTS and YuE2 also accept compatible models. A LoRA is separate data applied on top of a base model. Available formats, such as standard weights, INT8 and W4A8, and the required shared components depend on the model family. See [model and LoRA layout and supported formats (Japanese)](docs/local-models.md).
 
 Place compatible LoRAs in the directories below. Some interfaces also accept a full path in the selector.
 
@@ -236,7 +227,7 @@ Before sharing logs or generation parameters, check for passwords, personal dire
 
 This project is based on [Stable Diffusion WebUI Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo), with additional model Studios, setup tools, finishing features, and UI navigation.
 
-Basic Krea2 and Anima support and quantized model loading are inherited from Forge. The default branch is `neo`; the reference for the upcoming upstream integration is `6d5aa3bc0c9316a0764a4b61ea76835fb4d82fb1`. Upstream integration and new features are planned after model consolidation. [Upstream integration](docs/upstream-sync.md).
+Basic Krea2 and Anima support and quantized model loading are inherited from Forge. The default branch is `neo`. Version 7.0.0 incorporates selected features from upstream commit `6d5aa3bc0c9316a0764a4b61ea76835fb4d82fb1`. [Upstream integration](docs/upstream-sync.md).
 
 - [Development environment and tests](CONTRIBUTING.md)
 - [Architecture](docs/architecture.md)
