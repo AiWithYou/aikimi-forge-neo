@@ -328,6 +328,7 @@
             krea2: "Krea2",
             anima38: "Anima 3.8B",
             minimax_h3: "MiniMax H3",
+            ming_image: "Ming Image",
             qwen_image21: "Qwen Image 2.1",
             minimax_h3_image: "MiniMax H3 Image",
             yue2: "YuE2 Music",
@@ -723,7 +724,7 @@
         const progressPercent = Number.isFinite(progress) ? Math.round(Math.min(Math.max(progress, 0), 1) * 100) : null;
         const stateMessage = candidate.message || stateConfig.message || STATUS_LABELS[state] || state;
         const portraitDescriptor = resolvePortrait(state);
-        const nativeFeature = ["qwen_image21", "minimax_h3", "minimax_h3_image", "yue2", "irodori", "clef"].includes(activeFeature);
+        const nativeFeature = ["ming_image", "qwen_image21", "minimax_h3", "minimax_h3_image", "yue2", "irodori", "clef"].includes(activeFeature);
         const modelName = candidate.modelName || (nativeFeature ? featureLabel(activeFeature) : model.loaded_name || model.selected_name) || "未選択";
         const modelLabel =
             !candidate.modelName && !nativeFeature && model.loaded_name && model.reload_pending && model.selected_name

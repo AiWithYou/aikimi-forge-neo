@@ -116,6 +116,10 @@ H3動画とP-H3 Imageは固定版の実行環境を共有します。生成方�
 テキストの計算精度は、読み込んだComfyUIテキストモデルが宣言するdtypeから記録します。保存形式と計算精度、出力されたテキスト特徴の精度はそれぞれ分けて保存します。
 配布ファイルの`language_model.*`形式は、量子化情報を保持したまま標準ローダーの`model.language_model.*`へ揃えます。Qwen3.5-9BとMOSSのトークナイザーを確認し、別のエンコーダーへフォールバックしません。
 
+## Ming Image 0.2 Studio
+
+専用の Python 3.13 プロセスで ComfyUI のモデルと編集ノードを直接読み込みます。常駐ワーカーは選択した DiT、テキストエンコーダー、VAE をジョブ間で再利用し、Forge の GPU 解放操作で終了します。参照画像の順序、内容のハッシュ、シードと生成条件をジョブごとに保存します。[使い方と制限](ming-image.md)
+
 ## model setup
 
 `tools/aikimi_setup.py` のインストーラーは標準ライブラリで動作し、固定manifest、download、resume、size、SHA-256、path containment、disk preflight、verify、repairを共通化します。Anima conversionだけは、準備済みForge venvとCUDAを使って既存converterを実行します。

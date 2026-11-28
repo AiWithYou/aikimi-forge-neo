@@ -1,0 +1,22 @@
+#ming-image-preview img {
+    background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 / 16px 16px;
+}
+#ming-image-workspace button, #ming-image-actions button { white-space: nowrap; }
+
+#ming-image-references-gallery { counter-reset: reference; }
+#ming-image-references-gallery .thumbnail-item { counter-increment: reference; position: relative; }
+#ming-image-references-gallery .thumbnail-item::after {
+    content: counter(reference);
+    position: absolute;
+    inset: 4px auto auto 4px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: white;
+    background: #252525;
+    pointer-events: none;
+}
+
+@media (max-width: 760px) {
+    #ming-image-actions { flex-flow: row nowrap; }
+    #ming-image-actions > button { flex: 1 1 0; min-width: 0 !important; }
+}

@@ -5,7 +5,7 @@
 ## 生成と編集
 
 - **txt2img**：文章から新しい画像を生成します。前に使った参照画像を保持していても、このモードの生成には渡しません。
-- **img2img**：入力画像と文章から編集します。Qwen Image 2.1、FLUX 3、H3 Imageでは、参照画像を用いるモデル固有の編集方式を使います。
+- **img2img**：入力画像と文章から編集します。Ming Image、Qwen Image 2.1、FLUX 3、H3 Imageでは、参照画像を用いるモデル固有の編集方式を使います。
 - SDXL・Anima 3.8B・Krea2はForgeのtxt2img／img2imgを使います。
 
 H3 Imageでは、P-H3 ImageとMiniMax-H3-Imageを選べます。
@@ -27,3 +27,5 @@ Outpaint、動画、音楽、画像評価はそれぞれの専用画面を使い
 ナビゲーションの「プロンプト集」または Alt+P でテンプレートを開きます。「展開」に使った Seed は再利用できます。ギャラリーで作品を選ぶと生成条件を確認でき、画像は img2img や Extras に送れます。
 
 隔離した作品を戻すには、`tmp/aikimi-gallery/quarantine/` の各フォルダーに残る `output/` または `outputs/` 以下の位置を確認し、元の出力フォルダーへ移動して「検索・更新」を押します。
+
+[Ming Image 0.2 Studio](ming-image.md) — 専用ワーカーによる画像生成・編集。

@@ -363,7 +363,7 @@ def feature_check(feature: str, paths: DiagnosticPaths) -> DiagnosticCheck | Non
         label, files = _IMPLEMENTATIONS[feature]
         return _implementation_check(paths, check_id=feature, label=label, relative_files=files,
                                      summary=f"{label} is installed.", missing_action=f"Restore the built-in {label} files.")
-    if feature in {"moss_image", "flux3", "clef"}:
+    if feature in {"ming_image", "moss_image", "flux3", "clef"}:
         return _studio_files(feature, paths)
     check = _CHECKS.get(feature)
     return check(paths) if check else None
@@ -416,16 +416,17 @@ _IMPLEMENTATIONS = {
     "hyperweave": ("HyperWeave", ("extensions-builtin/hyperweave/hyperweave/engine.py", "extensions-builtin/hyperweave/scripts/hyperweave.py")),
     "gallery": ("ギャラリー", ("modules_forge/aikimi_gallery.py", "extensions-builtin/aikimi-gallery/scripts/aikimi_gallery_studio.py")),
 }
-FEATURES = (*_CHECKS, "flux3", "moss_image", "clef", *_IMPLEMENTATIONS)
+FEATURES = (*_CHECKS, "flux3", "ming_image", "moss_image", "clef", *_IMPLEMENTATIONS)
 
 
 def _studio_files(feature, paths):
     from modules_forge.clef.bundle import bundle_manifest
     from modules_forge.clef.core import PROFILES, ClefError
     from modules_forge.flux3_klein import core as flux
+    from modules_forge.ming_image import core as ming
     from modules_forge.moss_image import core as moss
 
-    label, directory = {"flux3": ("FLUX 3", "Flux-3-Klein"), "moss_image": ("MOSS Image", "MOSS-Image"),
+    label, directory = {"ming_image": ("Ming Image", "Ming-Image"), "flux3": ("FLUX 3", "Flux-3-Klein"), "moss_image": ("MOSS Image", "MOSS-Image"),
                         "clef": ("Clef", "Clef")}[feature]
     root = paths.models_root / directory
     available = False
@@ -438,6 +439,10 @@ def _studio_files(feature, paths):
                     break
                 except ClefError:
                     continue
+        elif feature == "ming_image":
+            available = ming.python_path(root).is_file() and any(
+                all((root / item["path"]).is_file() for item in ming.model_specs({"profile": profile}))
+                for profile, spec in ming.manifest()["profiles"].items() if spec["status"] == "published")
         elif feature == "flux3":
             available = flux.python_path(root).is_file() and any(
                 all((root / spec["path"]).is_file() for key, spec in flux.model_specs({"model": mode, "precision": precision}).items()

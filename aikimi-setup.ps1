@@ -1,7 +1,8 @@
 #requires -Version 7.0
 param(
-    [ValidateSet('krea2', 'anima38', 'h3', 'h3-image', 'p-h3', 'qwen21', 'flux3', 'moss', 'irodori', 'yue2', 'clef')]
+    [ValidateSet('krea2', 'anima38', 'h3', 'h3-image', 'p-h3', 'qwen21', 'flux3', 'ming', 'moss', 'irodori', 'yue2', 'clef')]
     [string]$Model,
+    [ValidateSet('comfy_org_w4a8', 'comfy_org_int8', 'vram24g_hq', 'vram16g_hq')][string]$MingProfile = 'vram24g_hq',
     [switch]$DryRun,
     [switch]$Status,
     [switch]$KeepSource,
@@ -38,7 +39,8 @@ function Assert-SetupIdle {
 function Invoke-AikimiModelSetup {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
-        [Parameter(Mandatory)][ValidateSet('krea2', 'anima38', 'h3', 'h3-image', 'p-h3', 'qwen21', 'flux3', 'moss', 'irodori', 'yue2', 'clef')][string]$SelectedModel,
+        [Parameter(Mandatory)][ValidateSet('krea2', 'anima38', 'h3', 'h3-image', 'p-h3', 'qwen21', 'flux3', 'ming', 'moss', 'irodori', 'yue2', 'clef')][string]$SelectedModel,
+        [string]$Profile = 'vram24g_hq',
         [switch]$PlanOnly,
         [switch]$PreserveSource
     )
@@ -69,6 +71,7 @@ function Invoke-AikimiModelSetup {
         'qwen21' = 'tools\setup_qwen_image21.py'
         'flux3' = 'tools\setup_flux3_klein.py'
         'moss' = 'tools\setup_moss_image.py'
+        'ming' = 'tools\setup_ming_image.py'
         'irodori' = 'tools\setup_irodori.py'
         'yue2' = 'modules_forge\yue2_studio\setup.py'
         'clef' = 'tools\setup_clef.py'
@@ -82,6 +85,7 @@ function Invoke-AikimiModelSetup {
         $modelPython = 'py'
         $modelArguments = @('-3.12', '-X', 'utf8') + $modelArguments
     }
+    if ($SelectedModel -eq 'ming') { $modelArguments += @('--profile', $Profile) }
     if ($PreserveSource) { $modelArguments += '--keep-source' }
 
     Write-Host "Aikimi Forge Neo / $SelectedModel"
@@ -146,6 +150,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 'irodori' = 'Irodori TTS · 読み上げ'
                 'yue2' = 'YuE2 Music · 作曲'
                 'clef' = 'Clef · 画像・文章の評価'
+                'ming' = 'Ming Image'
             }
             $choices = @($labels.Keys)
             Write-Host 'Aikimi Forge Neo モデルセットアップ'
@@ -157,8 +162,19 @@ if ($MyInvocation.InvocationName -ne '.') {
                 throw "1〜$($choices.Count)の番号を選択してください。"
             }
             $Model = $choices[$index - 1]
+            if ($Model -eq 'ming') {
+                $profiles = @('vram24g_hq', 'vram16g_hq', 'comfy_org_w4a8', 'comfy_org_int8')
+                $notes = @('VRAM 24 GB 以上（推奨）', 'VRAM 16 GB', 'Comfy-Org 配布（比較・互換用）', 'Comfy-Org 配布（比較・互換用）')
+                for ($i = 0; $i -lt $profiles.Count; $i++) { Write-Host "$($i + 1)  $($profiles[$i])  $($notes[$i])" }
+                $selection = Read-Host 'プロファイル番号を選択（Enterで終了）'
+                if (-not $selection) { exit 0 }
+                if (-not [int]::TryParse($selection, [ref]$index) -or $index -lt 1 -or $index -gt $profiles.Count) {
+                    throw '1〜4の番号を選択してください。'
+                }
+                $MingProfile = $profiles[$index - 1]
+            }
         }
-        Invoke-AikimiModelSetup -RepositoryRoot $PSScriptRoot -SelectedModel $Model -PlanOnly:$DryRun -PreserveSource:$KeepSource
+        Invoke-AikimiModelSetup -RepositoryRoot $PSScriptRoot -SelectedModel $Model -Profile $MingProfile -PlanOnly:$DryRun -PreserveSource:$KeepSource
     }
     catch {
         Write-Host ("準備を完了できませんでした: " + $_.Exception.Message) -ForegroundColor Red

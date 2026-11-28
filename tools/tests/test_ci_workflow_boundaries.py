@@ -433,7 +433,7 @@ class CiWorkflowBoundaryTests(unittest.TestCase):
         import yaml
 
         security = yaml.safe_load(self.workflow("security.yml"))
-        for name, lock in (("moss-image", "moss-image"), ("minimax-h3", "minimax-h3")):
+        for name, lock in (("ming-image", "ming-image"), ("moss-image", "moss-image"), ("minimax-h3", "minimax-h3")):
             with self.subTest(runtime=name):
                 job = security["jobs"].get(name + "-pip-audit")
                 self.assertIsNotNone(job, name + " needs an independent complete-lock audit")

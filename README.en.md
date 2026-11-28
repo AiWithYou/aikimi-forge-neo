@@ -14,7 +14,7 @@ English · [日本語](README.md)
 
 - **Find a work and reuse its settings.** Search images, video and audio in Gallery, inspect generation settings and save a prompt to the library. Expand choices such as `{dawn|dusk}` with a seed and insert the result into the active Studio. Favorites and saved prompts live under `config_states/aikimi_workspace/` in the data directory.
 - **Check your setup and GPU.** Choose entries 1–11 in the setup hub and run `aikimi-setup.bat -Status` to check installation status. **Settings → Diagnostics** shows model counts and disk usage. Open Chibi Aikimi’s details to see which Studio owns the GPU and release idle models.
-- **Choose a workspace.** Use SDXL, Anima 3.8B or Krea2 in the shared Forge interface. Eight dedicated Studios cover image generation and editing (H3 Image with P-H3 Image or MiniMax-H3-Image, MOSS Image, Qwen Image 2.1 and FLUX 3), video (MiniMax H3), speech (Irodori TTS), music (YuE2 Music) and evaluation (Clef).
+- **Choose a workspace.** Use SDXL, Anima 3.8B or Krea2 in the shared Forge interface. Nine dedicated Studios cover image generation and editing (H3 Image with P-H3 Image or MiniMax-H3-Image, MOSS Image, Ming Image, Qwen Image 2.1 and FLUX 3), video (MiniMax H3), speech (Irodori TTS), music (YuE2 Music) and evaluation (Clef).
 - **Control generation and finishing.** Features from Forge Neo (`6d5aa3bc`) include transparent Anima output with a four-channel RGBA VAE, layout transfer from JSON Builder to MOSS Image, and step-wise LoRA strength. SolAttn, DeGrid, Spectrum, model-specific SLG, new X/Y/Z plot axes and the preset options `--disable-preset` and `--sort-preset` are also available. [Controls and supported configurations](docs/upstream-sync.md)
 
 ## Setup
@@ -57,6 +57,7 @@ Open the setup hub and choose a number from the table. Model weights are downloa
 | 9 | [Irodori TTS](docs/irodori-tts.md) | Japanese speech, caption-based voice design, and reference voice conditioning in **Irodori TTS** | [`aikimi-irodori-setup.bat`](aikimi-irodori-setup.bat) |
 | 10 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | Music composition and ABC score editing in **YuE2 Music** | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1: Official Python** |
 | 11 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | Image, text, and JSON evaluation; image curation and per-criterion probabilities | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
+| 12 | [Ming Image 0.2 Studio](docs/ming-image.md) | Generate RGBA designs and edit with up to eight reference images. Use `vram24g_hq` for 24 GB GPUs and `vram16g_hq` for 16 GB GPUs | [`aikimi-ming-image-setup.bat --profile vram24g_hq`](aikimi-ming-image-setup.bat) |
 
 To prepare P-H3, open **H3 Image → P-H3 Image → 準備を開く**, then select **環境とモデルを準備** in the WebUI. Its four standard model files total approximately 29.8 GB. The model and its outputs are subject to territorial restrictions; review the terms before publishing on social media. See the [guide and license conditions](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md).
 
@@ -67,6 +68,29 @@ Three edits of the same reference image change the lighting, composition, or med
 | Night lighting | Portrait recomposition | Watercolor |
 | --- | --- | --- |
 | [![Night lighting](docs/assets/minimax-h3-image/night.webp)](docs/assets/minimax-h3-image/night.webp) | [![Portrait recomposition](docs/assets/minimax-h3-image/portrait.webp)](docs/assets/minimax-h3-image/portrait.webp) | [![Watercolor](docs/assets/minimax-h3-image/watercolor.webp)](docs/assets/minimax-h3-image/watercolor.webp) |
+
+### Ming Image 0.2 quantized models
+
+The [BF16 original](https://huggingface.co/inclusionAI/Ming-Image-0.2-Design) targets 80 GB-class GPUs. Aikimi publishes quantized versions on [Hugging Face](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant). **Pick one according to your GPU's VRAM.**
+
+| GPU VRAM | Model | Diffusion model (DiT) | Text encoder | VAE | Total size | Setup command |
+|---|---|---|---|---|---:|---|
+| **24 GB or more** | `vram24g_hq` | 8/16-bit, 8.98 GB | MoE 5/6-bit, 17.50 GB | BF16, 0.26 GB | **about 26.7 GB** | `aikimi-ming-image-setup.bat --profile vram24g_hq` |
+| **16 GB** | `vram16g_hq` | 8/16-bit, 6.50 GB | MoE 3/4-bit, 11.45 GB | BF16, 0.26 GB | **about 18.2 GB** | `aikimi-ming-image-setup.bat --profile vram16g_hq` |
+| Reference: original | BF16 | 16-bit, 12.3 GB | 16-bit, about 40 GB | BF16, 0.25 GB | about 52.9 GB | — |
+
+Bit widths vary per layer; sensitive layers such as embeddings and the final layer stay in BF16. From left: BF16 original, `vram24g_hq`, `vram16g_hq` (512×512, 12 steps, same seed).
+
+[![Ming Image 0.2 original vs quantized models (cover design)](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant/resolve/main/comparisons/final_vs_original_0.png)](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant)
+
+| Example | `vram24g_hq` PSNR / SSIM | `vram16g_hq` PSNR / SSIM |
+|---|---|---|
+| Cover design (Japanese headline) | 30.74 dB / 0.984 | 25.06 dB / 0.937 |
+| Portrait photo | 21.33 dB / 0.876 | 19.12 dB / 0.783 |
+| Transparent sticker | 29.49 dB / 0.963 | 21.10 dB / 0.867 |
+| Reference-image edit | 36.61 dB / 0.988 | 29.89 dB / 0.960 |
+
+Higher values are closer to the original. `vram24g_hq` keeps composition, color, and text placement nearly identical in all four examples; `vram16g_hq` shows differences in fine texture. These four examples do not guarantee quality for every prompt. More images and metrics are on the [model card](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant).
 
 The initial download and runtime setup or conversion can take time. Qwen defaults to the standard Q4_K_M model.
 

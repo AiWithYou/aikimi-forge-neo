@@ -33,6 +33,7 @@ MEDIA = {
 }
 STUDIOS = {
     "moss-image": "moss_image",
+    "ming-image": "ming_image",
     "qwen-image-2.1": "qwen_image21",
     "minimax_h3": "minimax_h3",
     "p-h3-image": "minimax_h3_image",
@@ -44,6 +45,7 @@ STUDIOS = {
 # Job directories also contain uploaded media. Only publish Studio result names.
 STUDIO_RESULTS = {
     "moss-image": {"output.png"},
+    "ming-image": {"output.png"},
     "flux3-klein": {"output.png"},
     "qwen-image-2.1": {"output.png", "output-preserved.png"},
     "irodori": {"audio.wav"},
@@ -195,7 +197,7 @@ def _png_fields(path, size, modified):
                         dict(pair.split(": ", 1) for pair in ("Steps:" + options).strip().split(", ") if ": " in pair),
                         fields,
                     )
-            elif key in {"hyperweave", "moss_image", "qwen", "qwen_image21", "prompt", "flux3_klein"}:
+            elif key in {"hyperweave", "ming_image", "moss_image", "qwen", "qwen_image21", "prompt", "flux3_klein"}:
                 try:
                     parsed = json.loads(data)
                 except (ValueError, RecursionError):

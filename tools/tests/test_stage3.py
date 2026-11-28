@@ -278,12 +278,17 @@ class WorkspaceTests(unittest.TestCase):
         diffusion.mkdir(parents=True)
         (diffusion / "p-h3-image_w4a8.safetensors").write_bytes(b"12")
         (diffusion / "minimax_h3_ref2va.safetensors").write_bytes(b"1")
+        ming = models / "Ming-Image/checkpoints"
+        ming.mkdir(parents=True)
+        (ming / "design.safetensors").write_bytes(b"ming")
         report = model_summary(DiagnosticPaths(self.root, models, self.root / "outputs"))
         self.assertEqual(report["loras"], 1)
-        self.assertEqual(report["total_bytes"], 6)
+        self.assertEqual(report["total_bytes"], 10)
         self.assertEqual(report["features"]["minimax_h3_image"]["checkpoints"], 1)
         self.assertEqual(report["features"]["minimax_h3"]["checkpoints"], 1)
-        self.assertEqual(len(report["features"]), 13)
+        self.assertEqual(report["features"]["ming_image"]["checkpoints"], 1)
+        self.assertEqual(report["features"]["ming_image"]["total_bytes"], 4)
+        self.assertEqual(len(report["features"]), 14)
 
     def test_routes(self):
         from fastapi import FastAPI

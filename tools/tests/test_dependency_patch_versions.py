@@ -13,7 +13,7 @@ DIRECT = (
     "tools/requirements-clef.txt",
     "tools/requirements-qwen-image21.txt",
 )
-LOCKED = tuple(f"tools/requirements-{name}.lock" for name in ("moss-image", "flux3-klein", "minimax-h3"))
+LOCKED = tuple(f"tools/requirements-{name}.lock" for name in ("ming-image", "moss-image", "flux3-klein", "minimax-h3"))
 
 
 class DependencyPatchVersionsTests(unittest.TestCase):

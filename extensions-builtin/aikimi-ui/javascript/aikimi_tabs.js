@@ -78,6 +78,12 @@
             label: "MOSS Image",
             kind: "native",
         }),
+        ming_image: Object.freeze({
+            buttonId: "aikimi-tab-ming-image",
+            containerId: "tab_ming_image_studio",
+            label: "Ming Image",
+            kind: "native",
+        }),
         gallery: Object.freeze({
             buttonId: "aikimi-tab-gallery",
             containerId: "tab_aikimi_gallery",
@@ -96,6 +102,7 @@
         "clef",
         "flux3",
         "moss_image",
+        "ming_image",
         "gallery",
     ]);
 

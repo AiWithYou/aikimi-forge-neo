@@ -13,7 +13,7 @@ from modules_forge import model_catalog
 from tools.aikimi_setup import PROFILES
 
 ROOT = Path(__file__).resolve().parents[2]
-RETIRED = ("sensenova", "nanosaur2", "ming_image", "iris", "jev_sparse", "jev")
+RETIRED = ("sensenova", "nanosaur2", "iris", "jev_sparse", "jev")
 
 
 class RetiredImageFeaturesTests(unittest.TestCase):
@@ -76,7 +76,7 @@ class RetiredImageFeaturesTests(unittest.TestCase):
                 model_catalog.prepare_directories()
             self.assertEqual(old_model.read_bytes(), b"existing model")
             self.assertFalse((root / "models/Nanosaur2").exists())
-            for family in ("Ming-Image", "Iris-3B", "SD", "Flux", "Flux.2", "Wan", "PiD"):
+            for family in ("Iris-3B", "SD", "Flux", "Flux.2", "Wan", "PiD"):
                 self.assertFalse((root / "models" / family).exists(), family)
             self.assertTrue((root / "models/MiniMax-H3/checkpoints").is_dir())
 

@@ -15,6 +15,23 @@ PWSH = shutil.which("pwsh")
 
 @unittest.skipUnless(os.name == "nt" and PWSH, "Windows PowerShell 7 test")
 class ModelSetupLauncherTests(unittest.TestCase):
+    def test_ming_interactive_menu_and_documented_profile(self):
+        for name in ("README.md", "README.en.md"):
+            rows = (ROOT / name).read_text(encoding="utf-8").splitlines()
+            for index, label in enumerate(("Irodori", "YuE2", "Clef", "Ming Image"), 9):
+                self.assertTrue(any(row.startswith(f"| {index} | [{label}") for row in rows))
+            self.assertTrue(any("aikimi-ming-image-setup.bat --profile vram24g_hq" in row for row in rows))
+        for index, profile in enumerate(("vram24g_hq", "vram16g_hq", "comfy_org_w4a8", "comfy_org_int8"), 1):
+            with self.subTest(profile=profile):
+                result = self.run_ps(
+                    f"$answers = [Collections.Queue]::new(@('12','{index}','')); "
+                    "function Read-Host { $answers.Dequeue() }; & './aikimi-setup.ps1' -DryRun"
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"setup_ming_image.py --profile {profile}", result.stdout)
+                for number, label in enumerate(("Irodori", "YuE2", "Clef", "Ming Image"), 9):
+                    self.assertRegex(result.stdout, rf"(?m)^{number}  {label}")
+
     def test_extended_menu_plans(self):
         for model in ("h3-image", "p-h3", "qwen21", "flux3", "moss", "irodori", "yue2", "clef"):
             with self.subTest(model=model):

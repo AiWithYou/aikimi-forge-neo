@@ -121,3 +121,7 @@ The patches under `patches/minimax-h3/` modify [ComfyUI](https://github.com/Comf
 ## H3 lightweight VAEs
 
 Optional weights are downloaded separately and are not bundled. [LightVAE Lite](https://huggingface.co/lightx2v/LightVAE/tree/4925ea978147b9de492d7a5fd4f9c6d1854ca1cc) by ModelTC / Lightx2v is distributed under Apache-2.0. [LynnReal Onmi Light VAE](https://huggingface.co/stdstu123/LynnReal-Onmi-light-vae) and [Kijai’s Comfy conversion](https://huggingface.co/Kijai/MiniMax-H3-experimental/tree/137541ff66fbe22d35beb73e09bca5d663b70cc5) follow their model cards and the MiniMax H3 Community License. Fixed revisions, file sizes, and hashes are in `tools/h3_lightvae_manifest.json`.
+
+## Ming Image 0.2 Design
+
+Copyright (c) 2026 inclusionAI. The model weights are distributed separately under the [MIT License](https://huggingface.co/inclusionAI/Ming-Image-0.2-Design/blob/3538f4c311cf8f5256d631ddb7f47793f741aa2e/LICENSE). The standard quantizations are distributed by [Comfy-Org](https://huggingface.co/Comfy-Org/Ming-Image/tree/23e15275f1e8d9ba50e36d596f584327071be444).

@@ -1,0 +1,47 @@
+"""Resident Ming Image entry point; GPU/model imports remain in the worker."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+_runner = None
+_root = None
+
+
+def resident_run(payload):
+    global _runner, _root
+
+    from modules_forge.ming_image.core import safe_model_root
+    from modules_forge.ming_image.inference import Runner
+
+    try:
+        root = safe_model_root(payload["root"])
+        directory = safe_model_root(payload["job_dir"])
+        work_dir = safe_model_root(payload["work_dir"])
+        request = json.loads((work_dir / "request.json").read_text(encoding="utf-8"))
+        if _runner is not None and root != _root:
+            _runner.close()
+            _runner = None
+        if _runner is None:
+            _runner = Runner(root)
+            _root = root
+        return _runner.run(directory, request, work_dir=work_dir)
+    except BaseException as exc:
+        from modules_forge import gpu_fault
+
+        if gpu_fault.classify(exc):
+            # Keep model references alive until the resident host writes the
+            # failure response and exits without running CUDA destructors.
+            raise
+        try:
+            if _runner is not None:
+                _runner.close()
+        finally:
+            _runner = None
+            _root = None
+        raise

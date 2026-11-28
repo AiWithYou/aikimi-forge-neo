@@ -1,5 +1,10 @@
 # 変更履歴
 
+## Unreleased
+
+- Ming Image 0.2 Studio で画像生成、最大8枚の参照編集、透過 PNG の保存に対応しました。
+- Ming Image 0.2 の量子化モデルを [Hugging Face](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant) で公開しました。VRAM 24 GB 以上は `vram24g_hq`、16 GB は `vram16g_hq` を使います。BF16 原本との比較画像と評価値は[使い方](docs/ming-image.md#原本との比較)にあります。
+
 ## v7.0.0 — 2026-11-26
 
 ### 制作ワークスペース

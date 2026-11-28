@@ -13,6 +13,7 @@ STUDIO_FAMILIES = (
     "Qwen-Image-2.1",
     "Flux-3-Klein",
     "MOSS-Image",
+    "Ming-Image",
     "Clef",
     "MiniMax-H3",
     "YuE2",

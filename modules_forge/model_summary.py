@@ -14,6 +14,7 @@ FAMILIES = {
     "Qwen-Image-2.1": "qwen_image21",
     "Flux-3-Klein": "flux3",
     "MOSS-Image": "moss_image",
+    "Ming-Image": "ming_image",
     "Clef": "clef",
     "MiniMax-H3": "minimax_h3",
     "YuE2": "yue2",

@@ -1,0 +1,112 @@
+{
+  "repo_id": "inclusionAI/Ming-Image-0.2-Design",
+  "revision": "3538f4c311cf8f5256d631ddb7f47793f741aa2e",
+  "runtime": {
+    "comfy_repository": "https://github.com/Comfy-Org/ComfyUI.git",
+    "comfy_revision": "7c78b5641ab2d6cb7f7766a183a8a43a59de0a8b"
+  },
+  "uv": {
+    "artifact_id": "flux3-uv",
+    "relative_path": "bootstrap/uv.whl",
+    "url": "https://files.pythonhosted.org/packages/2f/b9/b526eab6c72eacc705a58378f6850fde046b28c86fed01bd42da61367c6b/uv-0.13.4-py3-none-win_amd64.whl",
+    "size": 15331833,
+    "sha256": "b2ff80397273fff0e02c20eacae6882834c811827d6fc08f658db156fe754386",
+    "license_url": "https://github.com/astral-sh/uv/blob/0.13.4/LICENSE-MIT"
+  },
+  "profiles": {
+    "vram24g_hq": {
+      "status": "published",
+      "repo_id": "Aikimi/Ming-Image-0.2-Design-HQ-Quant",
+      "files": [
+        {
+          "path": "diffusion_models/ming_image_0.2_design_vram24g_hq.safetensors",
+          "filename": "diffusion_models/ming_image_0.2_design_vram24g_hq.safetensors",
+          "size": 8977960856,
+          "sha256": "103f29bc9759115289000a23e48a01c54dfaa2fc50c2f4414ef84d481444f962"
+        },
+        {
+          "path": "text_encoders/ming_image_0.2_ling_mini_2.0_vram24g_hq.safetensors",
+          "filename": "text_encoders/ming_image_0.2_ling_mini_2.0_vram24g_hq.safetensors",
+          "size": 17501724301,
+          "sha256": "6ab207127bf0998e2ac769d6410e259ed63109e7ba1c5c90cbfa409745a15d39"
+        },
+        {
+          "path": "vae/ming_image_vae_bf16.safetensors",
+          "filename": "vae/ming_image_vae_bf16.safetensors",
+          "size": 255892592,
+          "sha256": "c56b38fdc3e26be9675baed4e504adf6260121c4befc27c2fc9752f1eef3da05"
+        }
+      ],
+      "revision": "e2cc58d5f2de008f9b517145c00c3da48ec9b182"
+    },
+    "vram16g_hq": {
+      "status": "published",
+      "repo_id": "Aikimi/Ming-Image-0.2-Design-HQ-Quant",
+      "files": [
+        {
+          "path": "diffusion_models/ming_image_0.2_design_vram16g_hq.safetensors",
+          "filename": "diffusion_models/ming_image_0.2_design_vram16g_hq.safetensors",
+          "size": 6497634032,
+          "sha256": "e9e39e8bb23426b74f3a165a322d4ff4ed5bbf719eb310b232f00f96cc2b5c26"
+        },
+        {
+          "path": "text_encoders/ming_image_0.2_ling_mini_2.0_vram16g_hq.safetensors",
+          "filename": "text_encoders/ming_image_0.2_ling_mini_2.0_vram16g_hq.safetensors",
+          "size": 11451972143,
+          "sha256": "7547266684e811c14b135739c8bdf554e8a9f2a0b5f2066142aa45c3c16b323e"
+        },
+        {
+          "path": "vae/ming_image_vae_bf16.safetensors",
+          "filename": "vae/ming_image_vae_bf16.safetensors",
+          "size": 255892592,
+          "sha256": "c56b38fdc3e26be9675baed4e504adf6260121c4befc27c2fc9752f1eef3da05"
+        }
+      ],
+      "revision": "e2cc58d5f2de008f9b517145c00c3da48ec9b182"
+    },
+    "comfy_org_w4a8": {
+      "status": "published",
+      "repo_id": "Comfy-Org/Ming-Image",
+      "files": [
+        {
+          "path": "diffusion_models/ming_image_0.2_design_int8_convrot.safetensors",
+          "size": 6175239953,
+          "sha256": "40732a86d99e47df8decc99acdee45ee42fd5d7ea6d3c70d5b6d40ec999a55a1"
+        },
+        {
+          "path": "text_encoders/ming_image_0.2_ling_mini_2.0_w4a8.safetensors",
+          "size": 12813574339,
+          "sha256": "568f398909e5333877f8eae6167f97550541b6b568cf130da7b6900083c20cb0"
+        },
+        {
+          "path": "vae/ming_image_vae_bf16.safetensors",
+          "size": 253816696,
+          "sha256": "7f5bed402dc8c77dc2e0ab1929a85d4df433b7cf7b599dfa8c353da98db0b90a"
+        }
+      ],
+      "revision": "23e15275f1e8d9ba50e36d596f584327071be444"
+    },
+    "comfy_org_int8": {
+      "status": "published",
+      "repo_id": "Comfy-Org/Ming-Image",
+      "files": [
+        {
+          "path": "diffusion_models/ming_image_0.2_design_int8_convrot.safetensors",
+          "size": 6175239953,
+          "sha256": "40732a86d99e47df8decc99acdee45ee42fd5d7ea6d3c70d5b6d40ec999a55a1"
+        },
+        {
+          "path": "text_encoders/ming_image_0.2_ling_mini_2.0_int8_convrot.safetensors",
+          "size": 19507670525,
+          "sha256": "ea4403f8b20a46585273e277ea3ce505e0b96469e0b6ff3e9884654691fd9310"
+        },
+        {
+          "path": "vae/ming_image_vae_bf16.safetensors",
+          "size": 253816696,
+          "sha256": "7f5bed402dc8c77dc2e0ab1929a85d4df433b7cf7b599dfa8c353da98db0b90a"
+        }
+      ],
+      "revision": "23e15275f1e8d9ba50e36d596f584327071be444"
+    }
+  }
+}

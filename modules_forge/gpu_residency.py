@@ -17,7 +17,7 @@ _engine = contextvars.ContextVar("gpu_engine", default="forge")
 _resources = {}
 _state_lock = threading.RLock()
 _current_engine = None
-_PUBLIC_ENGINES = {"forge", "qwen", "qwen_image21", "moss_image", "moss-image", "h3", "irodori", "clef", "flux3-klein", "yue2"}
+_PUBLIC_ENGINES = {"forge", "qwen", "qwen_image21", "ming_image", "ming-image", "moss_image", "moss-image", "h3", "irodori", "clef", "flux3-klein", "yue2"}
 
 
 def residency_snapshot():

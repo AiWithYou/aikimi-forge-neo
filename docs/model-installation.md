@@ -142,6 +142,10 @@ python .\tools\aikimi_setup.py repair krea2
 
 隔離は同じvolume内のrenameであり、空き容量を増やしません。再取得用の空き容量が不足する場合は、隔離内容を確認してから利用者自身が整理してください。
 
+## Ming Image 0.2
+
+VRAM 24 GB 以上は `aikimi-ming-image-setup.bat --profile vram24g_hq`、16 GB は `--profile vram16g_hq` で Aikimi の量子化モデルを準備できます。セットアップは専用環境に Python 3.13、固定版 ComfyUI と依存パッケージを導入し、重みのサイズと SHA-256 を確認します。[プロファイルの選び方](ming-image.md)
+
 ## 認証とlicense
 
 現在の固定artifactはpublicで、Hugging Face tokenを必要としません。CLIはtoken引数を受け付けず、query string付きartifact URLも拒否します。tokenをcommand、URL、logへ書かないでください。

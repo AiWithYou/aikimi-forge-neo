@@ -2,7 +2,7 @@
     "use strict";
 
     const studios = {forge: "Forge", qwen_image21: "Qwen Image 2.1", minimax_h3_image: "H3 Image",
-        minimax_h3: "MiniMax H3", flux3: "FLUX 3", moss_image: "MOSS Image", irodori: "Irodori TTS", yue2: "YuE2 Music"};
+        minimax_h3: "MiniMax H3", flux3: "FLUX 3", ming_image: "Ming Image", moss_image: "MOSS Image", irodori: "Irodori TTS", yue2: "YuE2 Music"};
     const endpoint = (name) => window.location.pathname.replace(/\/$/, "") + "/aikimi/api/v1/" + name;
     function element(tag, text) {
         const node = document.createElement(tag);
@@ -48,6 +48,7 @@
     const promptFields = {
         forge: ["#txt2img_prompt textarea,#img2img_prompt textarea", "#txt2img_neg_prompt textarea,#img2img_neg_prompt textarea"],
         moss_image: ["#moss-image-prompt textarea", "#moss-image-negative-prompt textarea"],
+        ming_image: ["#ming-image-prompt textarea", "#ming-image-negative-prompt textarea"],
         qwen_image21: ["#qwen21-prompt textarea,#qwen21-outpaint-prompt textarea"],
         minimax_h3_image: ["#ph3-prompt textarea,#official-h3-prompt textarea"],
         minimax_h3: ["#h3-prompt textarea"],
@@ -222,7 +223,7 @@
                     }, message));
             }
             if (item.metadata.prompt && item.studio !== "forge") {
-                const target = {moss_image: "moss-image", flux3: "flux3", minimax_h3: "minimax-h3",
+                const target = {ming_image: "ming-image", moss_image: "moss-image", flux3: "flux3", minimax_h3: "minimax-h3",
                     minimax_h3_image: "h3-image", qwen_image21: "qwen-image21", irodori: "irodori", yue2: "yue2"}[item.studio];
                 buttons.append(action(studios[item.studio] + " へ送る", async () => {
                     (await waitFor("#aikimi-tab-" + target)).click();

@@ -14,7 +14,7 @@
 
 - **作品を探して条件を再利用する**　統合ギャラリーで画像・動画・音声を検索し、生成条件を確認できます。プロンプトをプロンプト集に保存し、`{朝|夕暮れ}` のような選択肢を指定した Seed で展開して、開いている Studio に挿入できます。お気に入りとプロンプト集の保存先はデータディレクトリの `config_states/aikimi_workspace/` です。
 - **導入状態と GPU を確認する**　セットアップハブの1〜11番から使いたいモデルを選べます。`aikimi-setup.bat -Status` は導入状態、**Settings → Diagnostics** はモデル件数と容量を表示します。ちびあいきみの詳細では GPU を使用中の Studio を確認し、待機中のモデルを解放できます。
-- **用途に合う画面を選ぶ**　Forge 共通画面は SDXL、Anima 3.8B、Krea2 に対応します。専用 Studio は画像用の H3 Image（P-H3 Image／MiniMax-H3-Image）、MOSS Image、Qwen Image 2.1、FLUX 3 と、動画用の MiniMax H3、読み上げ用の Irodori TTS、作曲用の YuE2 Music、評価・仕分け用の Clef の8種類です。
+- **用途に合う画面を選ぶ**　Forge 共通画面は SDXL、Anima 3.8B、Krea2 に対応します。専用 Studio は画像用の H3 Image（P-H3 Image／MiniMax-H3-Image）、MOSS Image、Ming Image、Qwen Image 2.1、FLUX 3 と、動画用の MiniMax H3、読み上げ用の Irodori TTS、作曲用の YuE2 Music、評価・仕分け用の Clef の9種類です。
 - **生成と仕上げを調整する**　本家 Forge Neo（`6d5aa3bc`）から、Anima の4チャンネル RGBA VAE による透過画像生成、JSON Builder から MOSS Image への転送、LoRA 強度のステップ別制御を取り込みました。SolAttn、DeGrid、Spectrum、対応モデル限定の SLG、X/Y/Z plot の追加軸、プリセットの表示・並べ替え（`--disable-preset`／`--sort-preset`）も使えます。[各機能の操作と対応条件](docs/upstream-sync.md)
 
 ## セットアップ方法
@@ -61,6 +61,7 @@ cd aikimi-forge-neo
 | 9 | [Irodori TTS](docs/irodori-tts.md) | 日本語読み上げ、声の説明によるVoice Design、参照音声からの声の再現。**Irodori TTS** タブを使用 | [`aikimi-irodori-setup.bat`](aikimi-irodori-setup.bat) |
 | 10 | [YuE2 Music](extensions-builtin/yue2-studio/README.md) | 作曲・ABC楽譜編集。**YuE2 Music** タブを使用 | [`aikimi-yue2-setup.bat`](aikimi-yue2-setup.bat) → **1：公式Python** |
 | 11 | [Clef / Clef-Flash](extensions-builtin/clef-studio/README.md) | 画像・文章・JSONの評価と画像の仕分け。上部 **Clef** で判断項目ごとの確率を確認 | [`aikimi-clef-setup.bat`](aikimi-clef-setup.bat) |
+| 12 | [Ming Image 0.2 Studio](docs/ming-image.md) | 透過PNGの生成と最大8枚の参照画像を使った編集。VRAM 24 GBは `vram24g_hq`、16 GBは `vram16g_hq` を使用 | [`aikimi-ming-image-setup.bat --profile vram24g_hq`](aikimi-ming-image-setup.bat) |
 
 P-H3の初回セットアップは、WebUIの **H3 Image → P-H3 Image → 準備を開く → 環境とモデルを準備** から行います。標準モデル4ファイルの合計サイズは約29.8 GBです。モデルおよび生成物には地域制限が適用されるため、SNSへ公開する前に利用条件を確認してください。[使い方と利用条件](extensions-builtin/minimax-h3-studio/P_H3_IMAGE_GUIDE.md)
 
@@ -71,6 +72,29 @@ P-H3の初回セットアップは、WebUIの **H3 Image → P-H3 Image → 準�
 | 夜景化 | 縦長への再構成 | 水彩風 |
 | --- | --- | --- |
 | [![夜景化](docs/assets/minimax-h3-image/night.webp)](docs/assets/minimax-h3-image/night.webp) | [![縦長への再構成](docs/assets/minimax-h3-image/portrait.webp)](docs/assets/minimax-h3-image/portrait.webp) | [![水彩風](docs/assets/minimax-h3-image/watercolor.webp)](docs/assets/minimax-h3-image/watercolor.webp) |
+
+### Ming Image 0.2 の量子化モデル
+
+80 GB 級 GPU 向けの [BF16 原本](https://huggingface.co/inclusionAI/Ming-Image-0.2-Design)（約 52.9 GB）を、24 GB / 16 GB の GPU 向けに量子化して [Hugging Face](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant) で公開しています。**GPU の VRAM に合わせて、次のどちらか一方を使います。**
+
+| GPU の VRAM | 使うモデル | 画像生成本体（DiT） | テキストエンコーダー | VAE | 合計サイズ | 導入コマンド |
+|---|---|---|---|---|---:|---|
+| **24 GB 以上** | `vram24g_hq` | 8/16 bit・8.98 GB | MoE 5/6 bit・17.50 GB | BF16・0.26 GB | **約 26.7 GB** | `aikimi-ming-image-setup.bat --profile vram24g_hq` |
+| **16 GB** | `vram16g_hq` | 8/16 bit・6.50 GB | MoE 3/4 bit・11.45 GB | BF16・0.26 GB | **約 18.2 GB** | `aikimi-ming-image-setup.bat --profile vram16g_hq` |
+| 参考：原本 | BF16 | 16 bit・12.3 GB | 16 bit・約 40 GB | BF16・0.25 GB | 約 52.9 GB | — |
+
+ビット数は層ごとに使い分けた量子化の幅です。埋め込みや最終層など影響の大きい層は BF16 のまま残しています。下の画像は左から BF16 原本、`vram24g_hq`、`vram16g_hq` です（512×512、12ステップ、同一 seed）。
+
+[![Ming Image 0.2 の原本と量子化モデルの比較（表紙デザイン）](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant/resolve/main/comparisons/final_vs_original_0.png)](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant)
+
+| 評価例 | `vram24g_hq` PSNR / SSIM | `vram16g_hq` PSNR / SSIM |
+|---|---|---|
+| 表紙デザイン（日本語見出し） | 30.74 dB / 0.984 | 25.06 dB / 0.937 |
+| 人物写真 | 21.33 dB / 0.876 | 19.12 dB / 0.783 |
+| 透過ステッカー | 29.49 dB / 0.963 | 21.10 dB / 0.867 |
+| 参照画像による編集 | 36.61 dB / 0.988 | 29.89 dB / 0.960 |
+
+数値が高いほど原本に近い結果です。`vram24g_hq` は4例とも構図・色・文字配置が原本とほぼ一致し、`vram16g_hq` は細部の質感に差が出ます。4例での比較のため、すべてのプロンプトでの画質は保証しません。[全比較画像と詳細](docs/ming-image.md#原本との比較)
 
 初回はモデルと必要な実行環境のダウンロード・変換に時間がかかります。Qwenの既定モデルは通常版Q4_K_Mです。
 

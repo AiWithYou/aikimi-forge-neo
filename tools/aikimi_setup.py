@@ -22,7 +22,7 @@ from typing import TextIO
 
 HUB_FEATURES = {"krea2": "krea2", "anima38": "anima38", "h3": "minimax_h3",
                 "h3-image": "minimax_h3_image", "p-h3": "minimax_h3_image", "qwen21": "qwen_image21",
-                "flux3": "flux3", "moss": "moss_image", "irodori": "irodori", "yue2": "yue2", "clef": "clef"}
+                "flux3": "flux3", "moss": "moss_image", "ming": "ming_image", "irodori": "irodori", "yue2": "yue2", "clef": "clef"}
 
 SCHEMA_VERSION = 1
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

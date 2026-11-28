@@ -43,13 +43,19 @@ on:
       - "download_*.ps1"
       - "aikimi-setup.*"
       - "aikimi-moss-image-setup.bat"
+      - "aikimi-ming-image-setup.bat"
       - "tools/setup_moss_image.py"
+      - "tools/setup_ming_image.py"
       - "tools/moss_image_manifest.json"
+      - "tools/ming_image_manifest.json"
       - "tools/requirements-moss-image.*"
+      - "tools/requirements-ming-image.*"
       - "modules_forge/moss_image/core.py"
+      - "modules_forge/ming_image/core.py"
       - "modules/aikimi_security/redaction.py"
       - "modules_forge/yue2_studio/core.py"
       - "tools/tests/test_moss_image_setup.py"
+      - "tools/tests/test_ming_image_setup.py"
       - "tools/tests/test_model_setup_launcher.py"
       - "tools/aikimi_setup.py"
       - "tools/tests/test_aikimi_setup.py"
@@ -98,13 +104,19 @@ on:
       - "download_*.ps1"
       - "aikimi-setup.*"
       - "aikimi-moss-image-setup.bat"
+      - "aikimi-ming-image-setup.bat"
       - "tools/setup_moss_image.py"
+      - "tools/setup_ming_image.py"
       - "tools/moss_image_manifest.json"
+      - "tools/ming_image_manifest.json"
       - "tools/requirements-moss-image.*"
+      - "tools/requirements-ming-image.*"
       - "modules_forge/moss_image/core.py"
+      - "modules_forge/ming_image/core.py"
       - "modules/aikimi_security/redaction.py"
       - "modules_forge/yue2_studio/core.py"
       - "tools/tests/test_moss_image_setup.py"
+      - "tools/tests/test_ming_image_setup.py"
       - "tools/tests/test_model_setup_launcher.py"
       - "tools/aikimi_setup.py"
       - "tools/tests/test_aikimi_setup.py"
@@ -143,6 +155,7 @@ jobs:
           tools.tests.test_retired_image_features
           tools.tests.test_krea2_download_script
           tools.tests.test_moss_image_setup
+          tools.tests.test_ming_image_setup
       - name: Parse downloader PowerShell scripts
         if: runner.os == 'Windows'
         shell: pwsh
