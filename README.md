@@ -73,7 +73,13 @@ P-H3の初回セットアップは、WebUIの **H3 Image → P-H3 Image → 準�
 | --- | --- | --- |
 | [![夜景化](docs/assets/minimax-h3-image/night.webp)](docs/assets/minimax-h3-image/night.webp) | [![縦長への再構成](docs/assets/minimax-h3-image/portrait.webp)](docs/assets/minimax-h3-image/portrait.webp) | [![水彩風](docs/assets/minimax-h3-image/watercolor.webp)](docs/assets/minimax-h3-image/watercolor.webp) |
 
-### Ming Image 0.2 の量子化モデル
+### Ming Image 0.2 を Aikimi Forge Neo で使う
+
+Aikimi Forge Neo の **Ming Image** タブで、Ming Image 0.2 Design による画像生成、最大8枚の参照画像を使った編集、透過 PNG の保存ができます。
+
+1. VRAM に合うモデルを導入します（`.\aikimi-setup.bat` の12番、または下表の導入コマンド）。タブ内の **モデルを準備** ボタンからも導入できます。
+2. WebUI を起動し、上部の **Ming Image** タブを開きます。
+3. **モデルプロファイル** で「24GB 高画質 (Aikimi HQ)」（`vram24g_hq`、既定）か「16GB 省メモリ高画質 (Aikimi HQ)」（`vram16g_hq`）を選び、プロンプトを入力して **生成** を押します。
 
 80 GB 級 GPU 向けの [BF16 原本](https://huggingface.co/inclusionAI/Ming-Image-0.2-Design)（約 52.9 GB）を、24 GB / 16 GB の GPU 向けに量子化して [Hugging Face](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant) で公開しています。**GPU の VRAM に合わせて、次のどちらか一方を使います。**
 

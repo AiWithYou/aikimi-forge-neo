@@ -4,7 +4,7 @@ Ming Image タブでデザイン画像を生成・編集します。プロンプ
 
 ## 使うモデル
 
-**VRAM 24 GB 以上なら `vram24g_hq`、16 GB なら `vram16g_hq` を使います。** どちらも [inclusionAI の BF16 原本](https://huggingface.co/inclusionAI/Ming-Image-0.2-Design)（80 GB 級 GPU 向け）を Aikimi が量子化し、[Aikimi/Ming-Image-0.2-Design-HQ-Quant](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant) で公開したモデルです。Studio とセットアップの既定は `vram24g_hq` です。
+**VRAM 24 GB 以上なら `vram24g_hq`、16 GB なら `vram16g_hq` を使います。** Ming Image タブの **モデルプロファイル** では「24GB 高画質 (Aikimi HQ)」「16GB 省メモリ高画質 (Aikimi HQ)」と表示されます。 どちらも [inclusionAI の BF16 原本](https://huggingface.co/inclusionAI/Ming-Image-0.2-Design)（80 GB 級 GPU 向け）を Aikimi が量子化し、[Aikimi/Ming-Image-0.2-Design-HQ-Quant](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant) で公開したモデルです。Studio とセットアップの既定は `vram24g_hq` です。
 
 ```powershell
 aikimi-ming-image-setup.bat --profile vram24g_hq   # 24 GB 以上（約 26.7 GB）

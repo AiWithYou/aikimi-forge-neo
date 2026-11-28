@@ -69,7 +69,13 @@ Three edits of the same reference image change the lighting, composition, or med
 | --- | --- | --- |
 | [![Night lighting](docs/assets/minimax-h3-image/night.webp)](docs/assets/minimax-h3-image/night.webp) | [![Portrait recomposition](docs/assets/minimax-h3-image/portrait.webp)](docs/assets/minimax-h3-image/portrait.webp) | [![Watercolor](docs/assets/minimax-h3-image/watercolor.webp)](docs/assets/minimax-h3-image/watercolor.webp) |
 
-### Ming Image 0.2 quantized models
+### Using Ming Image 0.2 in Aikimi Forge Neo
+
+The **Ming Image** tab in Aikimi Forge Neo generates images with Ming Image 0.2 Design, edits with up to eight reference images, and saves transparent PNGs.
+
+1. Install the model that fits your VRAM (option 12 in `.\aikimi-setup.bat`, or the setup command in the table below). The **モデルを準備** button in the tab also installs it.
+2. Start the WebUI and open the **Ming Image** tab.
+3. Under **モデルプロファイル**, choose "24GB 高画質 (Aikimi HQ)" (`vram24g_hq`, default) or "16GB 省メモリ高画質 (Aikimi HQ)" (`vram16g_hq`), enter a prompt, and press **生成**.
 
 The [BF16 original](https://huggingface.co/inclusionAI/Ming-Image-0.2-Design) targets 80 GB-class GPUs. Aikimi publishes quantized versions on [Hugging Face](https://huggingface.co/Aikimi/Ming-Image-0.2-Design-HQ-Quant). **Pick one according to your GPU's VRAM.**
 
